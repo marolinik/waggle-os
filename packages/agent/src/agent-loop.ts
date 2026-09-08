@@ -1584,6 +1584,33 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         && isEmptyModelPlaceholder(content)
         && !explicitlyRequestsExactContent(userRequest, content);
       if (content.trim().length === 0 || (emptyPlaceholder && emptyPlaceholderCorrectionUsed)) {
+        const preservedAnswer = gateState.preservedAnswerForDistillation;
+        if (preservedAnswer) {
+          const finalized = appendFetchedSourceFooter(
+            preservedAnswer,
+            citationIntent,
+            successfullyFetchedCitationUrls,
+            unusableFetchedCitationUrls,
+          );
+          if ((!requestUsesStream || bufferCurrentStream) && onToken && finalized.content) {
+            onToken(finalized.content);
+          } else if (requestUsesStream && onToken && finalized.suffix) {
+            onToken(finalized.suffix);
+          }
+          logTurnEvent(turnId, {
+            stage: 'agent-loop.exit',
+            reason: 'empty-distillation-response-preserved-answer',
+            contentChars: finalized.content.length,
+            toolsUsed,
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+          });
+          return {
+            content: finalized.content,
+            toolsUsed,
+            usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          };
+        }
         throw emptyModelResponseError(
           { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
           toolsUsed,

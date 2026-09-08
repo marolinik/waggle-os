@@ -81,7 +81,8 @@ type GateMessage = {
   tool_call_id?: string;
 };
 
-const STRUCTURED_DRAFT_REQUEST = /\b(?:draft|create|prepare|produce|write|build)\b[\s\S]{0,160}\b(?:agenda|plan|memo|report|brief|checklist|schedule|table|outline)\b/i;
+const STRUCTURED_DRAFT_ACTION = /\b(?:draft|create|prepare|produce|write|build)\b/gi;
+const STRUCTURED_DRAFT_OBJECT = /\b(?:agenda|plan|memo|report|brief|checklist|schedule|table|outline)\b/i;
 const OPENING_METADATA_FIELD = /^\s*(?:title|duration|participants?|audience|purpose|date|owner|prepared\s+(?:for|by))\s*:/i;
 const MARKDOWN_HEADING = /^#{1,6}\s+\S/;
 const EXACT_OUTPUT_CONTRACT = /^\s*(?:please[,\t ]+)?(?:reply|respond|return|output|print|say|provide|give)(?:[\t ]+with)?[\t ]+exactly[\t ]+(?:(?:these|the[\t ]+following)[\t ]+(?:tokens?|words?|characters?|text|string|sequence|payload|content|output)|this[\t ]+(?:text|string|payload|content|output))(?<qualifier>[^:"'“”‘’\r\n]{0,240}):[\t ]*(?<payload>\S(?:[^\r\n]*\S)?)\s*$/i;
@@ -369,12 +370,118 @@ function explicitlyScopesDraftToOpening(userRequest: string): boolean {
 }
 
 function hasMultipleTimeBlocks(content: string): boolean {
-  const blocks = content.match(/(?:^|\n)\s*(?:[-*]\s*)?(?:\d{1,3}\s*[–—-]\s*)?\d{1,3}\s*(?:min(?:ute)?s?)\b/gim);
-  return (blocks?.length ?? 0) >= 2;
+  const minuteBlocks = content.match(/(?:^|\n)\s*(?:(?:[-*+]|\d+[.)])\s+|\|\s*)?(?:\d{1,3}\s*(?:[–—-]|\bto\b)\s*)?\d{1,3}\s*(?:min(?:ute)?s?)\b/gim);
+  const clockBlocks = content.match(/\b\d{1,2}:\d{2}\s*(?:am|pm)?\s*(?:[–—-]|\bto\b)\s*\d{1,2}:\d{2}\s*(?:am|pm)?\b/gi);
+  return (minuteBlocks?.length ?? 0) + (clockBlocks?.length ?? 0) >= 2;
+}
+
+function withoutQuotedText(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/```[\s\S]*$/g, ' ')
+    .replace(/^\s*>.*$/gm, ' ')
+    .replace(/`[^`\r\n]+`/g, ' ')
+    .replace(/`[\s\S]*$/g, ' ')
+    .replace(/“[\s\S]*?”|‘[\s\S]*?’/g, ' ')
+    .replace(/"(?:\\.|[^"\\])*"/g, ' ')
+    .replace(/(^|[\s:(])'[^'\r\n]+'(?=$|[\s.,;:!?])/g, '$1 ')
+    .replace(/["“][\s\S]*$/g, ' ')
+    .replace(/(^|[\s:(])['‘][\s\S]*$/g, '$1 ');
+}
+
+function directStructuredDraftScope(userRequest: string): string | null {
+  const sanitized = withoutQuotedText(userRequest);
+  for (const match of sanitized.matchAll(STRUCTURED_DRAFT_ACTION)) {
+    const index = match.index ?? 0;
+    const sentenceStart = Math.max(
+      sanitized.lastIndexOf('.', index - 1),
+      sanitized.lastIndexOf('!', index - 1),
+      sanitized.lastIndexOf('?', index - 1),
+      sanitized.lastIndexOf('\n', index - 1),
+    ) + 1;
+    const negative = /\b(?:do\s+not|does\s+not|did\s+not|must\s+not|should\s+not|cannot|can't|never|avoid(?:ing)?|without)\b/i;
+    const prefixClause = sanitized.slice(sentenceStart, index).split(/;|\b(?:but|instead|however)\b/i).at(-1) ?? '';
+    const governingPrefix = prefixClause.trim();
+    const directRequestPrefix = /^(?:|(?:(?:please|kindly)(?:\s+now)?|now)|(?:please\s+)?help\s+me|(?:can|could|would|will)\s+you(?:\s+(?:please|kindly))?|i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to(?:\s+please)?|i(?:'d|\s+would)\s+like\s+you\s+to|for\s+[^,]{1,80},(?:\s+(?:please|kindly))?|let(?:'s|\s+us)|your\s+task\s+is\s+to|i\s+am\s+asking\s+you\s+to)$/i;
+    if (!directRequestPrefix.test(governingPrefix) || negative.test(governingPrefix)) continue;
+    const ending = sanitized.slice(index).search(/[.!?;\n]|\b(?:but|instead|however)\b/i);
+    const sentenceEnd = ending === -1 ? sanitized.length : index + ending;
+    const candidateClause = sanitized.slice(index, sentenceEnd);
+    const object = STRUCTURED_DRAFT_OBJECT.exec(candidateClause);
+    if (!object) continue;
+    const candidateAction = candidateClause.slice(0, (object.index ?? 0) + object[0].length);
+    const bridge = candidateClause.slice(match[0].length, object.index).trim();
+    const directObjectBridge = /^(?:(?:me|us)\s+)?(?:(?:a|an|the|this|that|my|our|one)\s+)?(?:(?!(?:about|of|why|whether|how|to|for|regarding|concerning)\b)[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*\s*){0,6}$/iu;
+    const trailingClause = candidateClause.slice((object.index ?? 0) + object[0].length);
+    if (!directObjectBridge.test(bridge) || negative.test(candidateAction) || negative.test(trailingClause)) continue;
+    return candidateClause;
+  }
+  return null;
+}
+
+function requestedAgendaMinutes(userRequest: string): number | null {
+  const beforeAgenda = /\b(?<minutes>\d{1,3})[- ](?:mins?|minutes?)\b[\s\S]{0,120}\bagenda\b/i.exec(userRequest);
+  const afterAgenda = /\bagenda\b[\s\S]{0,120}\b(?<minutes>\d{1,3})[- ](?:mins?|minutes?)\b/i.exec(userRequest);
+  const value = Number(beforeAgenda?.groups?.minutes ?? afterAgenda?.groups?.minutes);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function agendaTimelineMatches(content: string, requestedMinutes: number): boolean {
+  const intervals: Array<{ kind: 'clock' | 'offset'; start: number; end: number }> = [];
+  const durations: number[] = [];
+  for (const line of content.replace(/\r\n?/g, '\n').split('\n')) {
+    const clock = /^\s*(?:(?:[-*+]|\d+[.)])\s+|\|\s*)?(?:\*\*)?(?<startHour>\d{1,2}):(?<startMinute>\d{2})\s*(?<startMeridiem>am|pm)?\s*(?:[–—-]|\bto\b)\s*(?<endHour>\d{1,2}):(?<endMinute>\d{2})\s*(?<endMeridiem>am|pm)?\b/i.exec(line);
+    if (clock?.groups) {
+      const startHour = Number(clock.groups.startHour);
+      const endHour = Number(clock.groups.endHour);
+      const startMinute = Number(clock.groups.startMinute);
+      const endMinute = Number(clock.groups.endMinute);
+      const startMeridiem = (clock.groups.startMeridiem || clock.groups.endMeridiem)?.toLowerCase();
+      const endMeridiem = (clock.groups.endMeridiem || clock.groups.startMeridiem)?.toLowerCase();
+      if (startMinute > 59 || endMinute > 59
+        || (startMeridiem ? startHour < 1 || startHour > 12 : startHour > 23)
+        || (endMeridiem ? endHour < 1 || endHour > 12 : endHour > 23)) return false;
+      const normalizedStartHour = startMeridiem
+        ? (startHour % 12) + (startMeridiem === 'pm' ? 12 : 0)
+        : startHour;
+      const normalizedEndHour = endMeridiem
+        ? (endHour % 12) + (endMeridiem === 'pm' ? 12 : 0)
+        : endHour;
+      intervals.push({
+        kind: 'clock',
+        start: (normalizedStartHour * 60) + startMinute,
+        end: (normalizedEndHour * 60) + endMinute,
+      });
+      continue;
+    }
+    const range = /^\s*(?:(?:[-*+]|\d+[.)])\s+|\|\s*)?(?:\*\*)?(?<start>\d{1,3})\s*(?:[–—-]|\bto\b)\s*(?<end>\d{1,3})\s*min(?:ute)?s?\b/i.exec(line);
+    if (range?.groups) {
+      intervals.push({ kind: 'offset', start: Number(range.groups.start), end: Number(range.groups.end) });
+      continue;
+    }
+    const duration = /^\s*(?:(?:[-*+]|\d+[.)])\s+|\|\s*)?(?:\*\*)?(?<duration>\d{1,3})\s*min(?:ute)?s?\b/i.exec(line);
+    if (duration?.groups) durations.push(Number(duration.groups.duration));
+  }
+  if (intervals.length > 0) {
+    const kind = intervals[0]?.kind;
+    if (durations.length > 0 || intervals.length < 2 || intervals.some(interval => interval.kind !== kind)) return false;
+    const contiguous = intervals.every((interval, index) => interval.end > interval.start
+      && (index === 0 || interval.start === intervals[index - 1]?.end));
+    if (!contiguous) return false;
+    const first = intervals[0];
+    const last = intervals[intervals.length - 1];
+    return kind === 'clock'
+      ? last!.end - first!.start === requestedMinutes
+      : first!.start === 0 && last!.end === requestedMinutes;
+  }
+  return durations.length >= 2
+    && durations.every(duration => duration > 0)
+    && durations.reduce((total, duration) => total + duration, 0) === requestedMinutes;
 }
 
 function missingStructuredDraftComponents(userRequest: string, content: string): string[] {
-  if (!STRUCTURED_DRAFT_REQUEST.test(userRequest) || explicitlyScopesDraftToOpening(userRequest)) return [];
+  const requestScope = directStructuredDraftScope(userRequest);
+  if (!requestScope || explicitlyScopesDraftToOpening(userRequest)) return [];
   const components: Array<{ label: string; requested: RegExp; present: (value: string) => boolean }> = [
     { label: 'time blocks', requested: /\btime blocks?\b/i, present: hasMultipleTimeBlocks },
     { label: 'desired decisions', requested: /\bdesired decisions?\b/i, present: value => /\bdesired decisions?\b|\bdecision\s*:/i.test(value) },
@@ -386,9 +493,14 @@ function missingStructuredDraftComponents(userRequest: string, content: string):
     { label: 'decision table', requested: /\bdecision table\b/i, present: value => /\|[^\n]+\|[\s\S]*\|\s*:?-{3,}/m.test(value) },
     { label: 'recommendation', requested: /\brecommendation\b/i, present: value => /\brecommend(?:ation|ed)?\b/i.test(value) },
   ];
-  const requested = components.filter(component => component.requested.test(userRequest));
+  const requested = components.filter(component => component.requested.test(requestScope));
   if (requested.length < 3) return [];
-  return requested.filter(component => !component.present(content)).map(component => component.label);
+  const missing = requested.filter(component => !component.present(content)).map(component => component.label);
+  const agendaMinutes = requestedAgendaMinutes(requestScope);
+  if (agendaMinutes !== null && !agendaTimelineMatches(content, agendaMinutes)) {
+    missing.push(`exact ${agendaMinutes}-minute duration`);
+  }
+  return missing;
 }
 
 function endsAfterOpeningMetadataScaffold(content: string): boolean {
@@ -555,8 +667,12 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const missingDraftComponents = finishReason === 'stop'
     ? missingStructuredDraftComponents(userRequest, content)
     : [];
-  const structuredDraftIncomplete = missingDraftComponents.length >= 2
-    && endsAfterOpeningScaffold(content);
+  const draftRequestScope = directStructuredDraftScope(userRequest);
+  const agendaMinutes = draftRequestScope ? requestedAgendaMinutes(draftRequestScope) : null;
+  const timedAgendaIncomplete = agendaMinutes !== null
+    && missingDraftComponents.length > 0;
+  const structuredDraftIncomplete = timedAgendaIncomplete
+    || (missingDraftComponents.length >= 2 && endsAfterOpeningScaffold(content));
   const danglingLeadInIncomplete = finishReason === 'stop'
     && endsAfterDanglingLeadIn(content);
   const literalSuffix = exactOutputIncomplete && atomicRepairAvailable
@@ -608,7 +724,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       : structuredDraftIncomplete
         ? 'structured draft ended after its opening scaffold'
         : 'answer ended after an unfinished lead-in';
-    const repairLimit = taggedEnvelopeIncomplete ? 2 : 1;
+    const repairLimit = taggedEnvelopeIncomplete || timedAgendaIncomplete ? 2 : 1;
     if (state.completionIntegrityRepairAttempts >= repairLimit || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };
     }
@@ -637,8 +753,11 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       : structuredDraftIncomplete
         ? [
           '# Internal completion-integrity correction',
-          'The prior candidate stopped after its opening metadata scaffold and was not shown to the user.',
+          'The prior candidate did not satisfy the complete structured-draft contract and was not shown to the user.',
           `Redraft the answer from the beginning and include every explicit requirement, especially: ${missingDraftComponents.join(', ')}.`,
+          ...(timedAgendaIncomplete
+            ? [`Use contiguous time blocks totaling exactly ${agendaMinutes} minutes. Include explicit Pre-read checklist, Desired decisions, and Participants sections when the user requested them.`]
+            : []),
           'Do not mention this correction and do not call tools.',
         ].join('\n')
         : [

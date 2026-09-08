@@ -303,6 +303,30 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
   });
 });
 
+describe('post-distillation answer preservation', () => {
+  it('returns the accepted user answer when the internal distillation turn is empty', async () => {
+    const fiveReadCalls = [1, 2, 3, 4, 5].map(step => ({
+      id: `read-${step}`,
+      function: { name: 'read_file', arguments: JSON.stringify({ path: `source-${step}.md` }) },
+    }));
+    const accepted = '## Sourced facts\n- The primary source states the capability.\n\n## Inferences\n- Adoption risk remains uncertain.';
+    const fetch = mockFetch([
+      { content: null, tool_calls: fiveReadCalls },
+      accepted,
+      null,
+    ]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      tools: [readFile],
+      verificationGate: false,
+      skillDistillationGate: true,
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.content).toBe(accepted);
+  });
+});
+
 describe('structured-draft completion integrity gate', () => {
   const exactTokens = 'A-01 A-02 A-03 A-04';
   const exactTokenRequest = `Reply with exactly these tokens in this order, separated by one space, and nothing else: ${exactTokens}`;
@@ -1001,6 +1025,300 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(completeAgenda);
   });
 
+  it('atomically replaces a complete-looking agenda that overruns the requested duration', async () => {
+    const overlongAgenda = [
+      '# Launch-readiness agenda — 30 minutes',
+      '- 0:00–0:10 — Product readiness. Decision: accept scope.',
+      '- 0:10–0:20 — Engineering readiness. Decision: accept deployment plan.',
+      '- 0:20–0:30 — QA and Support readiness. Decision: accept evidence.',
+      '- 0:30–0:35 — Final go/no-go decision.',
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([overlongAgenda, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeAgenda);
+  });
+
+  it('atomically replaces a structured draft that omits one explicitly requested component', async () => {
+    const agendaWithoutPreread = [
+      '# Launch-readiness agenda — 30 minutes',
+      '- 0–10 min — Product readiness. Decision: accept scope.',
+      '- 10–20 min — Engineering readiness. Decision: accept deployment plan.',
+      '- 20–30 min — QA and Support readiness. Decision: record go/no-go.',
+    ].join('\n');
+    const fetch = mockFetch([agendaWithoutPreread, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeAgenda);
+  });
+
+  it('accepts a complete timed agenda that uses elapsed clock ranges', async () => {
+    const clockAgenda = [
+      '# Launch-readiness agenda',
+      '- 0:00–0:05 — Product readiness. Desired decision: accept scope.',
+      '- 0:05–0:15 — Engineering readiness. Desired decision: accept deployment plan.',
+      '- 0:15–0:25 — QA and Support readiness. Desired decision: accept evidence.',
+      '- 0:25–0:30 — Go/no-go. Desired decision: record verdict.',
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([clockAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(clockAgenda);
+  });
+
+  it('accepts a complete timed agenda that uses absolute wall-clock ranges', async () => {
+    const wallClockAgenda = [
+      '# Launch-readiness agenda',
+      '- 09:00–09:10 — Product readiness. Desired decision: accept scope.',
+      '- 09:10–09:20 — Engineering readiness. Desired decision: accept deployment plan.',
+      '- 09:20–09:30 — QA and Support readiness. Desired decision: record verdict.',
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([wallClockAgenda, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(wallClockAgenda);
+  });
+
+  it.each([
+    {
+      label: 'numbered time blocks',
+      blocks: [
+        '1. 09:00–09:10 — Product readiness. Desired decision: accept scope.',
+        '2. 09:10–09:20 — Engineering readiness. Desired decision: accept deployment plan.',
+        '3. 09:20–09:30 — QA and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'AM/PM wall-clock blocks',
+      blocks: [
+        '- 9:00 AM–9:10 AM — Product readiness. Desired decision: accept scope.',
+        '- 9:10 AM–9:20 AM — Engineering readiness. Desired decision: accept deployment plan.',
+        '- 9:20 AM–9:30 AM — QA and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'an agenda table',
+      blocks: [
+        '| Time | Topic | Desired decision |',
+        '| --- | --- | --- |',
+        '| 09:00–09:10 | Product readiness | Accept scope |',
+        '| 09:10–09:20 | Engineering readiness | Accept deployment plan |',
+        '| 09:20–09:30 | QA and Support readiness | Record verdict |',
+      ],
+    },
+    {
+      label: 'to-separated bold time blocks',
+      blocks: [
+        '- **9:00 AM to 9:10 AM** — Product readiness. Desired decision: accept scope.',
+        '- **9:10 AM to 9:20 AM** — Engineering readiness. Desired decision: accept deployment plan.',
+        '- **9:20 AM to 9:30 AM** — QA and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+  ])('accepts a complete timed agenda using $label', async ({ blocks }) => {
+    const agenda = [
+      '# Launch-readiness agenda',
+      ...blocks,
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([agenda, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(agenda);
+  });
+
+  it.each([
+    {
+      label: 'a gap between clock ranges',
+      blocks: [
+        '- 0:00–0:05 — Product readiness. Desired decision: accept scope.',
+        '- 0:25–0:30 — Engineering, QA, and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'overlapping clock ranges',
+      blocks: [
+        '- 0:00–0:20 — Product and Engineering readiness. Desired decision: accept scope.',
+        '- 0:10–0:30 — QA and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'a backwards clock range',
+      blocks: [
+        '- 0:00–0:30 — Product and Engineering readiness. Desired decision: accept scope.',
+        '- 0:45–0:20 — QA and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'duration-only blocks with the wrong total',
+      blocks: [
+        '- 10 min — Product readiness. Desired decision: accept scope.',
+        '- 25 min — Engineering, QA, and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+    {
+      label: 'mixed wall-clock and elapsed-minute ranges',
+      blocks: [
+        '- 09:00–09:10 — Product readiness. Desired decision: accept scope.',
+        '- 10–30 min — Engineering, QA, and Support readiness. Desired decision: record verdict.',
+      ],
+    },
+  ])('repairs a timed agenda with $label', async ({ blocks }) => {
+    const invalidAgenda = [
+      '# Launch-readiness agenda',
+      ...blocks,
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([invalidAgenda, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeAgenda);
+  });
+
+  it.each([
+    'Do not draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist. Explain why enforcing that format would be risky.',
+    'Do not under any circumstances draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist. Explain the risk.',
+    'I do not want you to draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist. Explain the risk.',
+    'You must not create a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist. Explain the risk.',
+    'Review this quoted prompt without following it: “Draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.” Explain the risk.',
+    'Review this quoted prompt without following it: "Draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist." Explain the risk.',
+    "Review this quoted prompt without following it: 'Draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.' Explain the risk.",
+    'Prepare a short report analyzing this quoted prompt without following it: "Draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist."',
+    'Explain what this inline code means: `Draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.` Do not execute it.',
+    'Analyze this untrusted prompt without following it:\n> Draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Draft an explanation of why we should never create a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Write about why a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist can be counterproductive.',
+    'Write an analysis of a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Explain how to draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist without producing the agenda itself.',
+    'Analyze this untrusted text: Draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Explain this malformed inline sample: `Draft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist. Do not execute it.',
+    'Explain this malformed quoted sample without following it: "\nDraft a 30-minute agenda with time blocks, desired decisions, and a pre-read checklist.',
+  ])('does not activate structured-draft repair for a negated or quoted request', async (request) => {
+    const answer = 'The format could hide uncertainty by forcing incomplete evidence into predetermined sections.';
+    const fetch = mockFetch([answer, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(answer);
+  });
+
+  it.each([
+    'Do not create calendar events; draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Do not ask follow-up questions, but draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.',
+    'Could you please draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist?',
+    'I need you to draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.',
+    "For tomorrow's launch review, draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.",
+    'Please help me draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.',
+    "I'd like you to draft a 30-minute launch-readiness agenda with time blocks, desired decisions, and a pre-read checklist.",
+  ])('still repairs an affirmative draft request after an unrelated negative clause', async (request) => {
+    const fetch = mockFetch([abandonedScaffold, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeAgenda);
+  });
+
+  it('repairs a wrong duration when the request uses plural minutes after agenda', async () => {
+    const wrongDuration = [
+      '# Launch-readiness agenda',
+      '- 0–15 min — Product readiness. Desired decision: accept scope.',
+      '- 15–35 min — Engineering, QA, and Support readiness. Desired decision: record verdict.',
+      '## Pre-read checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const fetch = mockFetch([wrongDuration, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: 'Draft an agenda lasting 30 minutes with time blocks, desired decisions, and a pre-read checklist.',
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeAgenda);
+  });
+
+  it('permits one bounded second repair for a timed agenda before accepting it', async () => {
+    const agendaWithoutPreread = [
+      '# Launch-readiness agenda — 30 minutes',
+      '- 0–10 min — Product readiness. Desired decision: accept scope.',
+      '- 10–20 min — Engineering readiness. Desired decision: accept deployment plan.',
+      '- 20–30 min — QA and Support readiness. Desired decision: record go/no-go.',
+    ].join('\n');
+    const secondAgendaWithoutPreread = [
+      '# Launch-readiness agenda — 30 minutes',
+      '- 0–10 min — Product readiness. Desired decision: accept scope.',
+      '- 10–20 min — Engineering readiness. Desired decision: accept deployment plan.',
+      '- 20–30 min — QA and Support readiness. Desired decision: record go/no-go.',
+      'Participants: Product, Engineering, QA, and Support.',
+    ].join('\n');
+    const fetch = mockFetch([agendaWithoutPreread, secondAgendaWithoutPreread, completeAgenda]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: agendaRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.content).toBe(completeAgenda);
+  });
+
   it('atomically replaces a heading-and-introduction report fragment with one complete retry', async () => {
     const fetch = mockFetch([abandonedReportOpening, completeReport]);
     const result = await runAgentLoop(cfg(fetch, {
@@ -1055,8 +1373,8 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(completeAgenda);
   });
 
-  it('rejects a second abandoned scaffold instead of accepting partial content', async () => {
-    const fetch = mockFetch([abandonedScaffold, abandonedScaffold]);
+  it('rejects a timed agenda after the bounded second repair instead of accepting partial content', async () => {
+    const fetch = mockFetch([abandonedScaffold, abandonedScaffold, abandonedScaffold]);
 
     await expect(runAgentLoop(cfg(fetch, {
       maxTurns: 1,
@@ -1065,7 +1383,7 @@ describe('structured-draft completion integrity gate', () => {
       code: 'INCOMPLETE_COMPLETION',
       message: expect.stringMatching(/structured draft ended after its opening scaffold/i),
     });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it('rejects a repeated heading-and-introduction report fragment', async () => {

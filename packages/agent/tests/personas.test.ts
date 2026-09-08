@@ -52,6 +52,21 @@ describe('Agent Personas', () => {
     }
   });
 
+  it('keeps high-variance response contracts in the canonical persona rails', () => {
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/named production bug[\s\S]*active[\s\S]*explicitly supplies containment[\s\S]*rank its investigation first/i);
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/Basis:[\s\S]*standalone[\s\S]*unconditional/i);
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/do not separate[\s\S]*order[\s\S]*rationale[\s\S]*immediately[\s\S]*Basis:/i);
+    expect(getPersona('researcher')!.systemPrompt)
+      .toMatch(/## Sourced facts[\s\S]*## Inferences/i);
+    expect(getPersona('executive-assistant')!.systemPrompt)
+      .toMatch(/Pre-read checklist[\s\S]*Desired decisions[\s\S]*Participants/i);
+    expect(getPersona('coder')!.systemPrompt)
+      .toMatch(/No files were found in the current workspace/i);
+  });
+
   it('covers the 8 original roles', () => {
     const ids = PERSONAS.map(p => p.id);
     expect(ids).toContain('researcher');
