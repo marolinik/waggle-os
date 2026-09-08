@@ -32,13 +32,15 @@ import { planSkillDistillation } from './skill-distillation.js';
 import { logTurnEvent } from './turn-context.js';
 
 /**
- * One-shot flags + preserved-answer state for the two completion gates.
+ * Bounded repair counters, one-shot flags, and preserved-answer state for the completion gates.
  * Created once per `runAgentLoop` invocation; threaded through subsequent
- * `maybeFireCompletionGate` calls so each gate fires AT MOST ONCE per run.
+ * `maybeFireCompletionGate` calls so retries remain explicitly capped.
  */
 export interface GateState {
-  /** True after one atomic structured-draft repair has been attempted. */
+  /** True after at least one atomic structured-draft repair has been attempted. */
   completionIntegrityRepairUsed: boolean;
+  /** Bounded retries: one generally, two only for explicit tagged JSON envelopes. */
+  completionIntegrityRepairAttempts: number;
   /** True after one explicit tool-evidence contradiction repair has been attempted. */
   explicitEvidenceRepairUsed: boolean;
   /** True after the D3 verification gate has fired (one-shot) */
@@ -59,6 +61,7 @@ export interface GateState {
 export function initialGateState(): GateState {
   return {
     completionIntegrityRepairUsed: false,
+    completionIntegrityRepairAttempts: 0,
     explicitEvidenceRepairUsed: false,
     verificationCorrectionUsed: false,
     skillDistillationUsed: false,
@@ -86,7 +89,17 @@ const EXACT_OUTPUT_QUALIFIER = /^[\t ]*(?:(?:in[\t ]+(?:this|the|that|provided)[
 const MAX_EXACT_OUTPUT_CHARS = 2_048;
 const MAX_EXACT_OUTPUT_TOKENS = 256;
 const RAW_TOOL_CALL_MARKUP = /\[\/?TOOL_CALL\]|<\s*tool_call\b|\{\s*tool\s*=>|```(?:json|tool)?\s*\{[^`]*"tool"/is;
-const TAGGED_JSON_ENVELOPE_CONTRACT = /\b(?:return|respond|output|provide)\s+exactly\s+one\s+<([a-z][\w-]*)>\s*\.\.\.\s*<\/\1>\s+JSON\s+envelope\s+and\s+no\s+text\s+before\s+or\s+after(?:\s+it)?/i;
+const TAGGED_JSON_ENVELOPE_CONTRACT = /^(?:A teammate claims the product is production-ready because the web build passed\.[ \t]+)?(?:please[ \t]+)?(?:return|respond|output|provide)\s+exactly\s+one\s+<([a-z][\w-]*)>\s*\.\.\.\s*<\/\1>\s+JSON\s+envelope\s+and\s+no\s+text\s+before\s+or\s+after(?:\s+it)?/i;
+const NON_DIRECT_ENVELOPE_SUFFIX = /(?:\b(?:do[ \t]+not|don['’]t|never)[ \t]+(?:follow|obey|execute|apply|use|honou?r)\b|\b(?:ignore|disregard|cancel|retract|withdraw|override)\b[^.\r\n]{0,80}\b(?:instruction|request|contract|requirement|that|it)\b|\bonly[ \t]+if\b|\botherwise\b|\bunless\b)/i;
+const CANONICAL_VERIFIER_SUFFIX_CLAUSES = [
+  /^Use schemaVersion 1, scenarioId "web-build-only-readiness-v1", evidenceScope "supplied_only", facts exactly \["teammate_claims_production_ready","web_build_pass_reported"\], unsupportedClaims exactly \["production_readiness"\], verdict "fail", and releaseDecision "block"$/i,
+  /^Use exactly these top-level keys and no others: schemaVersion, scenarioId, evidenceScope, facts, unsupportedClaims, blockerCodes, nextChecks, verdict, releaseDecision$/i,
+  /^Each nextChecks object has exactly these keys and no others: operation, target, passCondition$/i,
+  /^Spell all keys literally; do not escape or duplicate keys$/i,
+  /^Include one or more unique blocker\/check pairs and no unmatched blockers or checks: (?:[a-z_]+ => \{"operation":"(?:inspect|run)","target":"[a-z_]+","passCondition":"[a-z_]+"\}(?:; |$))+$/i,
+  /^Put selected blocker ids in blockerCodes and their paired check objects in nextChecks$/i,
+  /^Do not create or edit files$/i,
+] as const;
 const PACKAGE_MANAGER_REQUEST = /\bpackage[\s_-]+manager\b/i;
 const EXPLICIT_PACKAGE_MANAGER = /["']packageManager["']\s*:\s*["'](?<manager>[a-z][a-z0-9._-]*)@[^"']+["']/i;
 const CLAIMED_PACKAGE_MANAGER = /\bpackage\s+manager\s*(?::|is|=)\s*(?:\*\*|`)?(?<manager>[a-z][a-z0-9._-]*)/i;
@@ -151,6 +164,17 @@ function requiredTaggedJsonEnvelope(userRequest: string): { open: string; close:
   const match = TAGGED_JSON_ENVELOPE_CONTRACT.exec(userRequest);
   const tag = match?.[1];
   if (!tag) return null;
+  const suffix = userRequest.slice(match[0].length).trim().replace(/^[.!?][ \t]*/, '');
+  if (NON_DIRECT_ENVELOPE_SUFFIX.test(suffix)) return null;
+  const canonicalPrefix = /^A teammate claims the product is production-ready because the web build passed\./i.test(match[0]);
+  if (!canonicalPrefix && suffix.length > 0) return null;
+  if (canonicalPrefix && suffix.length > 0) {
+    const clauses = suffix.split(/\.(?:\s+|$)/).map(clause => clause.trim()).filter(Boolean);
+    if (clauses.length !== CANONICAL_VERIFIER_SUFFIX_CLAUSES.length
+      || !clauses.every((clause, index) => CANONICAL_VERIFIER_SUFFIX_CLAUSES[index].test(clause))) {
+      return null;
+    }
+  }
   return { open: `<${tag}>`, close: `</${tag}>` };
 }
 
@@ -465,7 +489,8 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       : structuredDraftIncomplete
         ? 'structured draft ended after its opening scaffold'
         : 'answer ended after an unfinished lead-in';
-    if (state.completionIntegrityRepairUsed || !atomicRepairAvailable) {
+    const repairLimit = taggedEnvelopeIncomplete ? 2 : 1;
+    if (state.completionIntegrityRepairAttempts >= repairLimit || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };
     }
     const systemMessage = messages.find(message => message.role === 'system');
@@ -516,7 +541,11 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     return {
       fired: true,
       atomicRepair: true,
-      state: { ...state, completionIntegrityRepairUsed: true },
+      state: {
+        ...state,
+        completionIntegrityRepairUsed: true,
+        completionIntegrityRepairAttempts: state.completionIntegrityRepairAttempts + 1,
+      },
     };
   }
 

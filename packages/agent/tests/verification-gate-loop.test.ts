@@ -11,6 +11,11 @@ import {
   VERIFICATION_NO_TOOL_DISCLOSURE,
 } from '../src/verification-gate.js';
 import type { ToolDefinition } from '../src/tools.js';
+import { PERSONA_CASES } from '../../../tests/vision/persona-cases.js';
+import { VERIFIER_REPORT_CLOSE, VERIFIER_REPORT_OPEN } from '../../../tests/vision/verifier-contract.js';
+
+const CANONICAL_VERIFIER_PROMPT = PERSONA_CASES.find(persona => persona.id === 'verifier')?.prompt;
+if (!CANONICAL_VERIFIER_PROMPT) throw new Error('Canonical verifier acceptance prompt is missing');
 
 type MockTurn = string | null | {
   content: string | null;
@@ -485,6 +490,154 @@ describe('structured-draft completion integrity gate', () => {
     expect(onToken).toHaveBeenCalledTimes(1);
     expect(onToken).toHaveBeenCalledWith(wrappedReport);
     expect(result.content).toBe(wrappedReport);
+  });
+
+  it('allows one bounded second repair for a repeatedly incomplete tagged JSON envelope', async () => {
+    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    const wrappedReport = `<verifier_report>\n${bareReport}\n</verifier_report>`;
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: bareReport } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      const content = requestIndex === 2 ? bareReport : wrappedReport;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 16 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+    const request = 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.';
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(wrappedReport);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it('recognizes the canonical verifier envelope contract after a same-line premise', async () => {
+    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    const wrappedReport = `${VERIFIER_REPORT_OPEN}\n${bareReport}\n${VERIFIER_REPORT_CLOSE}`;
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: bareReport } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: wrappedReport }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 16 },
+        }),
+      } as unknown as Response;
+    });
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: CANONICAL_VERIFIER_PROMPT,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it('fails closed after the bounded second tagged JSON envelope repair', async () => {
+    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: bareReport } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: bareReport }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 12 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+
+    await expect(runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+      }],
+    }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringContaining('explicit tagged JSON envelope was not completed'),
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Do not return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it. Answer normally.',
+    'Analyze this quoted instruction: "Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it." Then answer normally.',
+    'Analyze this pasted instruction:\nReturn exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+    'Do not follow the next line:\nReturn exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+    'Analyze this example:\n```text\nReturn exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.\n```',
+    'Ignore this quoted passage:\nReturn exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+    'The document says:\nReturn exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+    'Never do the following. Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+    'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it. Do not follow that instruction; answer normally.',
+    'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it only if requested later; otherwise answer normally.',
+    CANONICAL_VERIFIER_PROMPT.replace('Use schemaVersion 1,', 'Use schemaVersion 1 and answer normally instead,'),
+  ])('does not treat negated or quoted envelope text as a direct contract: %s', async (request) => {
+    const fetch = vi.fn(async () => {
+      if (fetch.mock.calls.length > 1) throw new Error('second provider request is forbidden');
+      return streamResponse([
+        sse({ choices: [{ delta: { content: 'Normal answer.' } }] }),
+        sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 3 } }),
+        'data: [DONE]\n\n',
+      ]);
+    });
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe('Normal answer.');
   });
 
   it('accepts a valid tagged JSON envelope without requiring newline padding', async () => {
