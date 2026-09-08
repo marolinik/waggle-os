@@ -4363,7 +4363,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             synthesisReserveTokens: 1_000,
           };
           maxOutputTokens = 512;
-        } else if (toolFreeAdvisory) {
+        } else if (
+          closedWorldRewrite
+          || toolFreeAdvisory
+          || (turnMutationPolicy.contextScope !== 'default' && effectiveTools.length === 0)
+        ) {
           agentRunBudget = {
             ...agentRunBudget,
             maxTurns: 1,
@@ -4437,6 +4441,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
+          skillDistillationGate: allowDerivedPersistence,
           signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 

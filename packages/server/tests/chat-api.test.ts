@@ -3626,6 +3626,8 @@ describe('Chat Streaming API', () => {
       expect(capturedConfig).toBeDefined();
       expect(capturedConfig!.messages).toEqual([{ role: 'user', content: message }]);
       expect(capturedConfig!.tools).toEqual([]);
+      expect(capturedConfig!.maxTurns).toBe(1);
+      expect(capturedConfig!.skillDistillationGate).toBe(false);
       expect(capturedConfig!.systemPrompt).toContain('## Persona: Verifier');
       expect(capturedConfig!.systemPrompt).toContain('# SUPPLIED-ONLY EVIDENCE BOUNDARY');
       expect(capturedConfig!.systemPrompt).not.toContain('AMBIENT_SECRET');
