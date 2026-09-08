@@ -8145,6 +8145,21 @@ describe('Qwen Flash Next exact-response regressions', () => {
     }
   });
 
+  it('scores the post-hardening live Qwen writer memo without accepting its invented risk', () => {
+    const response = [
+      '**MEMO**',
+      '**Subject:** Friday Release Delay Recommendation',
+      'Our planned Friday shipment requires postponement. While API tests pass, two browser test failures remain on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, we recommend delaying the release until all issues are fully addressed and validated.',
+      'Proceeding without closure on these items risks stability.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+  });
+
   it('keeps the current four-month runway separate from projected action scenarios', () => {
     const response = [
       'Runway = Cash / Net Monthly Burn',
