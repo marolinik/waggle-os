@@ -50,6 +50,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/exact source selected from search results/i);
     expect(prompt).toMatch(/never transfer features between compared products/i);
     expect(prompt).toMatch(/distinguish facts from inference.*label both explicitly/i);
+    expect(prompt).toMatch(/once one qualifying primary source per compared item has been fetched.*stop searching and synthesize/i);
     expect(prompt).not.toMatch(/always triangulate across at least 3 sources/i);
   });
 
