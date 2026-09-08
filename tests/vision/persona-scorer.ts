@@ -408,7 +408,7 @@ const FINANCE_SCENARIO_MARKDOWN_HEADING = /^\s*(?:scenario|hypothetical|alternat
 const FINANCE_CURRENT_SCOPE_HEADING = /^\s*(?:baseline|base\s+case|actual|current(?:\s+(?:case|estimate))?)(?:\s*:|\s*$)/i;
 const FINANCE_SCENARIO_SUFFIX = /^\s*(?:,\s*)?(?:if|when|assuming|provided|under\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case)|in\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case))\b/i;
 const FINANCE_NONCURRENT_PREFIX = /\b(?:target|goal|best[- ]case|(?:need|want|require)(?:\s+at\s+least)?)\s*$/i;
-const FINANCE_MARGINAL_DELTA_PREFIX = /\b(?:adds?|added|extends?|extended|increases?|increased|gains?|gained|improves?|improved)\s+(?:by\s+)?(?:approximately|about|around|roughly)?\s*(?:\d+(?:\.\d+)?\s*[-–—]\s*)?$/i;
+const FINANCE_MARGINAL_DELTA_PREFIX = /\b(?:adds?|added|extends?|extended|increases?|increased|gains?|gained|improves?|improved)\s+(?:by\s+)?(?:approximately|about|around|roughly)?\s*[~≈]?\s*(?:\d+(?:\.\d+)?\s*[-–—]\s*)?$/i;
 const FINANCE_RESULT_INVALIDATION = /\b(?:(?:that|this|the)\s+(?:figure|result|answer|calculation)\s+(?:(?:is|was|seems?)\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable)|does\s+not\s+apply)|do\s+not\s+trust\s+(?:that|this|the)\s+(?:figure|result|answer|calculation))\b/i;
 const FINANCE_DENIAL_PREFIX = /\b(?:never|no\s+longer|do\s+not\s+say|don't\s+say|it\s+(?:would|is)\s+be\s+misleading\s+to\s+say|(?:we|I)\s+(?:cannot|can't)\s+(?:conclude|determine|establish)(?:\s+that)?|(?:reject(?:ed|s|ing)?|dispute(?:d|s|ing)?|deny|denied|denies|denying)(?:\s+the)?\s+(?:claim|statement)(?:\s+of|\s+that)?|(?:incorrectly|wrongly)\s+(?:reported|claimed|stated)|it\s+is\s+(?:false|not\s+true)\s+that)\s*$/i;
 const FINANCE_DENIAL_SUFFIX = /^\s*["'”]?\s*(?:,?\s*(?:(?:which|and\s+that|but\s+this)\s+is\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable|(?:the\s+)?runway)|an?\s+example\b|cannot\s+be\s+correct|can't\s+be\s+correct)|(?:cannot|can't)\s+be\s+correct|does\s+not\s+apply|is\s+an?\s+example|is\s+a\s+mistake|is\s+incorrect|is\s+not\s+(?:correct|(?:the\s+)?runway)|is\s+false)/i;
@@ -1629,7 +1629,7 @@ function hasAffirmedAgendaDecision(response: string): boolean {
       const cells = line.slice(1, -1).split('|').map(cell => cell.trim());
       const separator = cells.every(cell => /^:?-{3,}:?$/.test(cell));
       const headerColumn = cells.findIndex(cell => /\b(?:desired\s+)?decision(?:s| required)?\b|\boutcome\b/i.test(cell));
-      if (headerColumn >= 0) {
+      if (decisionColumn < 0 && headerColumn >= 0) {
         decisionColumn = headerColumn;
         continue;
       }
@@ -1644,7 +1644,7 @@ function hasAffirmedAgendaDecision(response: string): boolean {
       .replace(/^\*\*|\*\*$/g, '')
       .replace(/:$/, '')
       .trim();
-    if (/^desired decisions?$/i.test(heading)) {
+    if (/^desired decisions?(?:\s*\([^)]*\))?$/i.test(heading)) {
       inDecisionSection = true;
       decisionColumn = -1;
       continue;
@@ -1654,7 +1654,7 @@ function hasAffirmedAgendaDecision(response: string): boolean {
       decisionColumn = -1;
       continue;
     }
-    if (inDecisionSection && isAffirmedAgendaDecision(line.replace(/^[-*+]\s+|^\d+[.)]\s+/, ''))) {
+    if (inDecisionSection && isAffirmedAgendaDecision(line.replace(/^[-*+]\s+(?:\[[ xX]\]\s*)?|^\d+[.)]\s+/, ''))) {
       return true;
     }
   }
@@ -2352,7 +2352,7 @@ const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
   `^\\s*(?:(?:[-*]|\\d+[.)])\\s*)?(?:and\\s+)?${PRIORITIZATION_CONDITION_MARKER.source}`,
   'i',
 );
-const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|ranks?|ranked|ranking|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
 const PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE = /\b(?:revenue\s+with\s+)?momentum\s+decays?\s+(?:fast|quickly|rapidly)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
@@ -2891,6 +2891,17 @@ function hasSupersedingPrioritizationCorrection(
   return invalidated;
 }
 
+function labeledPrioritizationCriterion(
+  segment: string,
+  criteria: readonly PrioritizationCriterion[],
+): number | null {
+  const label = /^\s*(?:[-*]\s*)?(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+\*\*([^*]+)\*\*/i
+    .exec(segment)?.[1];
+  if (!label) return null;
+  const matches = matchedCriterionIndices(label, criteria, 'topic');
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function hasAffirmedPrioritizationJustification(
   response: string,
   criteria: readonly PrioritizationCriterion[],
@@ -2900,10 +2911,12 @@ function hasAffirmedPrioritizationJustification(
     const affirmed = segments.some((segment) => {
       const tableRationaleIndex = segment.indexOf('\u001fpersona-rationale\u001f');
       const topicScope = tableRationaleIndex >= 0 ? segment.slice(0, tableRationaleIndex) : segment;
-      if (!testPattern(topic, topicScope)) return false;
+      const labeledCriterion = labeledPrioritizationCriterion(segment, criteria);
+      if (labeledCriterion !== null && labeledCriterion !== criterionIndex) return false;
+      if (labeledCriterion === null && !testPattern(topic, topicScope)) return false;
       const clauses = splitPrioritizationClauses(segment, basis);
       return clauses.some((clause) => {
-        const currentTopicIsExplicit = testPattern(topic, clause);
+        const currentTopicIsExplicit = labeledCriterion === criterionIndex || testPattern(topic, clause);
         const segmentLeadTopics = matchedCriterionIndices(topicScope.split('\n', 1)[0], criteria, 'topic');
         const isSinglePriorityContinuation = !currentTopicIsExplicit
           && segmentLeadTopics.length === 1
@@ -2911,7 +2924,7 @@ function hasAffirmedPrioritizationJustification(
         if (!currentTopicIsExplicit
           && !isSinglePriorityContinuation
           && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
-        if (!hasAlignedTopicsAndBases(clause, criteria)) return false;
+        if (labeledCriterion === null && !hasAlignedTopicsAndBases(clause, criteria)) return false;
         return hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex);
       });
     });

@@ -7728,4 +7728,89 @@ describe('Qwen Flash Next exact-response regressions', () => {
       expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
     }
   });
+
+  it('accepts the exact September Qwen plan with modal details and compounding risk', () => {
+    const exactLines = [
+      '1. **Memory bug first (Day 1, time-boxed).** A production leak is compounding: it can destabilize other features, drain engineering capacity with surprise incidents, and a crash during the customer evaluation window could kill the deal outright.',
+      '2. **Customer close second (Days 2–4).** Revenue-generating and time-sensitive, but deliberately ranked below the bug so the close happens on stable infrastructure.',
+      '3. **Onboarding friction last (Day 5, diagnostic).** Important but lowest urgency: the customer onboarding session reveals exactly where the friction lives. Fixing friction against one real funnel is engineering.',
+    ];
+    const baselineLines = [
+      '1. **Memory bug first** — A production leak is a compounding liability and the highest outage risk.',
+      '2. **Customer close second** — Revenue is time-sensitive and the deal is bounded.',
+      '3. **Onboarding repair last** — This is a process problem, and better inputs will make the work cheaper.',
+    ];
+
+    for (const [label, lines] of [
+      ['memory detail', [exactLines[0], baselineLines[1], baselineLines[2]]],
+      ['customer detail', [baselineLines[0], exactLines[1], baselineLines[2]]],
+      ['onboarding detail', [baselineLines[0], baselineLines[1], exactLines[2]]],
+      ['complete answer', exactLines],
+    ] as const) {
+      const response = [
+        '**Order: memory bug → customer close → onboarding repair.**',
+        '**Why this order**',
+        ...lines,
+        "**Today's first action**",
+        'Capture a heap snapshot from the affected production service.',
+      ].join('\n');
+      const result = scoreResponse('general-purpose', response);
+      expect(result.checks.find(check => check.id === 'justification')?.passed, label).toBe(true);
+    }
+  });
+
+  it('accepts qualified decision headings and decision-labelled agenda table cells', () => {
+    const sectionResponse = [
+      '**Launch-Readiness Meeting — 30-Minute Agenda**',
+      'Participants: Product, Engineering, QA, Support',
+      '| Time | Block | Lead | Focus |',
+      '|---|---|---|---|',
+      '| 0:00–0:30 | Readiness | Product | Record go/no-go call |',
+      '**Desired decisions (must be resolved by end):**',
+      '- [ ] Go / no-go call for the launch',
+      '**Pre-read checklist:**',
+      '- [ ] Release evidence',
+    ].join('\n');
+    const tableResponse = [
+      '| Time | Block | Lead | Purpose & Desired Decision |',
+      '|---|---|---|---|',
+      '| 0–5 min | Opening | Product | **Decision:** Shared launch definition is agreed. |',
+      '| 5–30 min | Readiness | Engineering, QA, Support | **Decision:** Confirm final go/no-go. |',
+      '## Pre-read Checklist',
+      '- [ ] Release evidence',
+    ].join('\n');
+
+    for (const response of [sectionResponse, tableResponse]) {
+      const result = scoreResponse('executive-assistant', response);
+      expect(result.checks.find(check => check.id === 'decisions')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts checklist runway actions, secured cash inflow, and scenario projections', () => {
+    const responses = [
+      [
+        '| Metric | Value |', '|---|---|', '| Cash on hand | $40,000.00 |',
+        '| Monthly burn (net) | $10,000.00 |', '| Revenue | $0.00 |', '| **Runway** | **4.00 months** |',
+        '**Formula:** Runway = Cash ÷ Net monthly burn.',
+        '**Biggest assumption:** Burn is constant and revenue remains zero.',
+        '## Actions to Extend Runway',
+        '- [ ] **Reduce monthly burn:** Cut controllable operating expenses. Each $1,000/month removed adds ~0.4 months of runway.',
+        '- [ ] **Generate cash inflow:** Introduce revenue through pre-sales.',
+      ].join('\n'),
+      [
+        'Runway: 4 months',
+        'Formula: Runway = Cash / Net Monthly Burn.',
+        'Biggest assumption: burn remains constant and revenue remains zero.',
+        'Actions that improve runway:',
+        '- Reduce monthly burn by cutting non-essential operating expenses.',
+        '- Secure short-term cash inflows through early invoice collection or advance sales.',
+      ].join('\n'),
+    ];
+
+    for (const response of responses) {
+      const result = scoreResponse('finance-owner', response);
+      expect(result.checks.find(check => check.id === 'runway')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
+    }
+  });
 });
