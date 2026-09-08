@@ -2076,7 +2076,12 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
       || /^\s*(?:[-*#>]\s*)+$/.test(prefix);
     if (hasPositiveLead) return true;
   }
-  return false;
+
+  const adjacentCondition = /\b(?:we|you|the team)\s+recommend(?:ed|ing)?\s+(?:delay(?:ing)?|postpon(?:e|ing)|deferr?ing)\s+(?:the\s+)?(?:planned\s+|scheduled\s+|Friday\s+)?(?:release|shipment)\b[^?\r\n]{0,80}[.!]\s*(?:proceeding|shipping|releasing)\s+without\s+[^?\r\n]{0,180}\b(?:closing|resolving|fixing|addressing|validating)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
+  const match = adjacentCondition.exec(response.replace(/[*_`]/g, ' '));
+  if (!match || match.index === undefined) return false;
+  const prefix = response.slice(Math.max(0, match.index - 40), match.index);
+  return !/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer)\s*$/i.test(prefix);
 }
 
 const NON_AFFIRMATIVE_ACTION_STATUS = String.raw`\b(?:merely reported|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|illustrative only|not (?:selected|approved|endorsed|accepted|chosen)|old memo|consider only|no longer recommend(?:ed|ing)?|not to be implemented|(?:this|that|it) is not an action|decid(?:e[sd]?|ing) against|do not implement)\b`;

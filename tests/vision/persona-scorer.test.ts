@@ -5440,6 +5440,39 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, passed: true });
   });
 
+  it('accepts the official sqliteai raw README as the fetched form of its cited repository', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/sqliteai/sqlite-vector and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Use SQLite vector search for the stated use case.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      durationMs: 10_000,
+      inputTokens: 5_000,
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/sqliteai/sqlite-vector/main/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'sqlite-vector primary README', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/pgvector/pgvector/master/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary README', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(true);
+  });
+
   it('does not count canonical and raw URLs for one GitHub repository as two sources', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const response = [
@@ -6936,6 +6969,22 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it('accepts a Qwen memo that states the delay recommendation and condition in adjacent sentences', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      'We originally planned to ship this Friday. API tests pass, but browser tests still show two failures on Windows. The smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, we recommend delaying the release. Proceeding without closing the browser failures and validating the smart router introduces risk.',
+    ].join('\n');
+
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+  });
+
   it('does not invent a 30-minute agenda from a negated or wrong remainder', () => {
     const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
     const base = [
@@ -7276,6 +7325,20 @@ describe('Qwen Flash Next exact-response regressions', () => {
 
     const result = scoreResponse('project-manager', response);
     expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
+  });
+
+  it('accepts italic Owner labels as explicit role assignments', () => {
+    const response = [
+      '## Milestones',
+      'M2 depends on M1.',
+      '- *Owner*: DevOps Lead',
+      '- *Owner*: Backend Lead',
+      '## Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
     expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
   });
 

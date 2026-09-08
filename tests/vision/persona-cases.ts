@@ -80,6 +80,7 @@ const sqlitePrimaryResearchDomains = [
   'sqlite.org',
   'sqlite.ai',
   'github.com/sqliteai/sqlite-vector',
+  'raw.githubusercontent.com/sqliteai/sqlite-vector',
   'github.com/asg017/sqlite-vec',
   'raw.githubusercontent.com/asg017/sqlite-vec',
 ] as const;
@@ -243,7 +244,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     responseRules: [
       { id: 'milestones', description: 'Defines milestones', kind: 'pattern', pattern: /milestones?/i, points: 10 },
       { id: 'dependencies', description: 'Maps dependencies', kind: 'dependencyMap', points: 10 },
-      { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /(?:\brole\b|(?:^|\n)\s*(?:[-*]\s+)?(?:\*\*)?(?:M\d+\s+)?Owner(?:\*\*)?\s*:)/im], points: 10 },
+      { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /(?:\brole\b|(?:^|\n)\s*(?:[-*]\s+)?(?:\*{0,2}|_{0,2})(?:M\d+\s+)?Owner(?:\*{0,2}|_{0,2})\s*:)/im], points: 10 },
       { id: 'risks-exit', description: 'Includes risks and exit criteria', kind: 'allPatterns', patterns: [/risks?/i, /exit criteria/i], points: 10 },
       {
         id: 'no-invented-requirements',
