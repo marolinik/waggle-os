@@ -69,6 +69,8 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/milestone-plan requests.*directed milestone dependency edges/i);
     expect(prompt).toMatch(/task, approval, resource, and external dependencies.*explicit/i);
     expect(prompt).toMatch(/do not invent.*platforms.*metrics.*requirements/i);
+    expect(prompt).toMatch(/target criteria.*not established current behavior/i);
+    expect(prompt).toMatch(/do not add.*operating systems.*quantified thresholds.*soak periods/i);
   });
 
   it('Executive Assistant completes timed agendas and suppresses prohibited follow-ups', () => {
@@ -76,6 +78,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/before concluding.*each requested element.*time block.*desired decision.*pre-read checklist/i);
     expect(prompt).toMatch(/no follow-up/i);
     expect(prompt).toMatch(/calendar events.*files/i);
+    expect(prompt).toMatch(/pre-read checklist items.*requested materials.*not assertions.*already exist.*completed/i);
   });
 
   it('Business Finance makes runway calculations and actions explicit', () => {
@@ -132,5 +135,6 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('coordinator');
     expect(prompt).toMatch(/forbids agent launches/i);
     expect(prompt).toMatch(/specify.*lanes.*without spawning/i);
+    expect(prompt).toMatch(/use only.*supplied.*requirements.*do not invent.*compliance regimes.*deployment targets/i);
   });
 });
