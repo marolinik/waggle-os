@@ -1892,8 +1892,9 @@ const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
 const NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM = /\b(?:two|2)\s+failures?\s+(?:on|in)\s+(?!Windows\b)[^.;,\r\n]{1,30},?\s*(?:not|rather\s+than|instead\s+of|unlike)\s+(?:(?:on|in|under)\s+)?Windows\b|\bWindows\b\s*(?:[,;:–—-]\s*)?(?:(?:currently|now|still|otherwise)\s+)*(?:(?:is|was|remains?)\s+(?:(?:currently|now|still|otherwise)\s+)*(?:clean|green|passing|unaffected|failure[- ]free)|(?:shows?|reports?|has)\s+(?:no|zero)\s+failures?)\b/i;
 const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser[- ]test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
-const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed|eliminated)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed|eliminated)\b|\b(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,60}\b(?:(?:have|has)\s+(?:now\s+)?been|were|are|is)\s+(?:now\s+)?(?:resolved|fixed|closed|cleared|eliminated|gone)\b|\b(?:Windows\s+)?browser testing\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:now\s+)?(?:clean|green|passing|failure[- ]free)\b|\bneither\s+(?:Windows\s+)?browser[- ]test failure\b[^.\r\n]{0,40}\bremains?\b/i;
-const WRITER_BROWSER_FUTURE_CLEAR_CONDITION = /\b(?:recommend(?:ation|s|ing)?|should|must|need(?:s)?\s+to|(?:will|would)\s+(?:delay|postpone|hold|block)|delay|postpone|hold|block)\b[^.\r\n]{0,140}\buntil\b[^.\r\n]{0,180}\b(?:browser[- ]test failures?|browser testing)\b[^.\r\n]{0,100}\b(?:resolved|fixed|closed|cleared|eliminated|gone|clean|green|passing|failure[- ]free)\b/i;
+const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed|eliminated)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\b(?:there\s+(?:are|were)\s+)?(?:no|zero)\s+(?:outstanding\s+|remaining\s+|open\s+)?(?:Windows\s+)?browser[- ]test failures?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed|eliminated)\b|\b(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,60}\b(?:(?:have|has)\s+(?:now\s+)?been|were|are|is)\s+(?:now\s+)?(?:resolved|fixed|closed|cleared|eliminated|gone)\b|\b(?:Windows\s+)?browser testing\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:now\s+)?(?:clean|green|passing|failure[- ]free)\b|\bneither\s+(?:of\s+)?(?:the\s+)?(?:(?:two|2)\s+)?(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,40}\b(?:remains?|(?:is|are)\s+(?:real|valid|outstanding|unresolved))\b/i;
+const WRITER_BROWSER_FUTURE_CLEAR_CONDITION = /\b(?:recommend(?:ation|s|ing)?|should|must|need(?:s)?\s+to|(?:will|would)\s+(?:delay|postpone|hold|block)|delay|postpone|hold|block)\b[^.\r\n]{0,140}\buntil\b(?:(?:[^.\r\n]{0,180}\b(?:browser[- ]test failures?|browser testing)\b[^.\r\n]{0,100}\b(?:resolved|fixed|closed|cleared|eliminated|gone|clean|green|passing|failure[- ]free)\b)|(?:[^.\r\n]{0,100}\b(?:no|zero)\s+(?:outstanding\s+|remaining\s+|open\s+)?browser[- ]test failures?\b))/i;
+const WRITER_FRIDAY_FUTURE_CONDITION = /(?:\b(?:ship|release|shipment)\b[^.\r\n]{0,60}\bFriday\b[^.\r\n]{0,80}\b(?:if|once|when|after|only\s+after|provided|assuming)\b|\b(?:if|once|when|after|only\s+after|provided|assuming)\b[^.\r\n]{0,100}\b(?:ship|release|shipment|Friday)\b)/i;
 const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
 const WRITER_ROUTER_PRE_QUALIFIER = /\b(?:unverified|unconfirmed|uncertain)\s+smart router(?:\s+(?:behaviou?r|functionality|operation))?\b(?=\s*(?:$|[,.;:!?*(){}[\]–—-]|(?:and|or|nor|&|as|along|together|without|while|but|is|are|was|were|remain(?:s|ed)?|has|have|had)\b))/gi;
 const WRITER_ROUTER_POST_QUALIFIER = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)(\s+(?:(?:is|remains?|was)\s+)?)(?:unverified|unconfirmed|uncertain)\b/gi;
@@ -2013,10 +2014,13 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
       ? /\b(?:browser[- ]test(?:s|ing)?|browser (?:failure )?count)\b/i
       : topic;
     const scopedClause = writerClauseForReleaseTopic(clause, topic, sharedTopic);
-    return sharedTopic.test(scopedClause) && isNonAffirmative(scopedClause, topic);
+    return sharedTopic.test(scopedClause)
+      && isNonAffirmative(scopedClause, topic)
+      && !(/Friday/i.test(topic.source) && WRITER_FRIDAY_FUTURE_CONDITION.test(scopedClause))
+      && !(/browser/i.test(topic.source) && WRITER_BROWSER_FUTURE_CLEAR_CONDITION.test(scopedClause));
   });
   const browserTopic = /\bbrowser[- ]test(?:s|ing)?\b/i;
-  const browserAffirmed = clauses.some((clause) => {
+  const browserAffirmedIndex = clauses.findIndex((clause) => {
     const scopedClause = writerClauseForReleaseTopic(
       clause,
       browserTopic,
@@ -2027,11 +2031,23 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
       && !isNonAffirmative(scopedClause, browserTopic)
       && testPattern(patterns[2], scopedClause);
   });
+  const browserAffirmed = browserAffirmedIndex >= 0;
 
   const browserFailureWasLaterResolved = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\s+on\s+Windows\b[\s\S]{0,180}\b(?:update|correction)\s*:\s*(?:those|these|the)\s+failures?\s+(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
   const browserFailureWasResolvedInClause = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,120}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,100}\b(?:but|however|yet)\b\s*(?:(?:both|those|these|the)\s+(?:failures?\s+)?)?(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
+  const browserFailureWasRetracted = browserAffirmed && clauses
+    .slice(browserAffirmedIndex + 1)
+    .some(clause => !WRITER_BROWSER_FUTURE_CLEAR_CONDITION.test(clause) && (
+      /\b(?:the|those|these)\s+(?:(?:two|2)\s+)?(?:issues?|failures?)\s+(?:(?:turned\s+out|proved)\s+(?:to\s+be\s+)?|(?:were|are|have\s+been)\s+)(?:false positives?|invalid|incorrect|not\s+(?:real|valid))\b/i.test(clause)
+      || /\b(?:the|those|these)\s+(?:two|2)\s+browser(?:[- ]test)?\s+failures?\s+(?:(?:turned\s+out|proved)\s+(?:to\s+be\s+)?|(?:were|are|have\s+been)\s+)(?:false positives?|invalid|incorrect|not\s+(?:real|valid))\b/i.test(clause)
+      || /\bbrowser(?:[- ]test(?:s|ing)?)?\b[^.\r\n]{0,80}\b(?:shows?|reports?|has|have)\s+(?:no|zero)\s+failures?\b/i.test(clause)
+      || /\bbrowser(?:[- ]test)?\s+failures?\b[^.\r\n]{0,60}\b(?:are\s+absent|(?:do|does)\s+not\s+exist|no\s+longer\s+exist|(?:are|is)\s+not\s+(?:real|valid|genuine))\b/i.test(clause)
+      || /\b(?:no|zero)\s+(?:outstanding\s+|remaining\s+|open\s+)?browser(?:[- ]test)?\s+failures?\s+(?:remain|exist)\b/i.test(clause)
+      || /\bnot\s+(?:even\s+)?one\b[^.\r\n]{0,60}\bbrowser[- ]test failures?\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:real|valid|genuine)\b/i.test(clause)
+    ));
   return !browserFailureWasLaterResolved
     && !browserFailureWasResolvedInClause
+    && !browserFailureWasRetracted
     && !hasDeniedFact(/\bFriday\b/i)
     && !hasDeniedFact(/\bAPI tests?\b/i)
     && !hasDeniedFact(/\bbrowser[- ]test(?:s|ing)?\b/i)
@@ -2094,6 +2110,17 @@ function hasAffirmedWriterRouterFact(response: string): boolean {
 }
 
 function hasAffirmedWriterDelayRecommendation(response: string): boolean {
+  const normalized = response.replace(/[*_`]/g, ' ');
+  const decisionWasInvalidated = normalized
+    .split(/\n+|(?<=[.!?])\s+/)
+    .some((clause) => {
+      const decisionRetraction = /\b(?:(?:(?:that|this|the|prior|previous)\s+)?(?:delay\s+)?recommendation|(?:the\s+)?delay)\b[^.\r\n]{0,60}\b(?:(?:(?:is|was)|(?:has|had)\s+(?:since\s+)?been)\s+)?(?:withdrawn|retracted|cancelled|canceled|reversed|invalid|superseded|rejected|rescinded|overruled|no\s+longer\s+(?:valid|applicable|necessary|required|needed))\b|\b(?:(?:that|this|the|prior|previous)\s+)?(?:delay\s+)?recommendation\s+no\s+longer\s+applies\b|\b(?:rescind|reject|withdraw|reverse|cancel|overrule)(?:s|ed|ing)?\b[^.\r\n]{0,60}\b(?:delay|postpon(?:e|ing)|deferr?(?:al|ing)|recommendation)\b/i.test(clause);
+      const positiveShipDecision = /\b(?:(?:we|you|the team|management)\s+(?:now\s+)?(?:(?:recommend(?:s|ed|ing)?\s+(?:proceeding\s+with\s+|shipping|releasing))|(?:(?:should|must|will|intend(?:s)?\s+to|plan(?:s)?\s+to|decid(?:e[sd]?|ing)\s+to)\s+(?:ship|release))|(?:(?:are|is)\s+(?:shipping|releasing)\s+Friday)|(?:(?:are\s+going|will\s+(?:be\s+going|go))\s+ahead\s+with\s+(?:the\s+)?Friday\s+release))|the\s+(?:decision\s+is\s+to\s+(?:ship|release)|release\s+(?:is\s+approved|remains?\s+scheduled)\s+for\s+Friday|ship\s+date\s+remains?\s+Friday)|Friday\s+(?:is|remains?)\s+still\s+(?:the\s+)?ship\s+date|proceed\s+with\s+(?:the\s+)?Friday\s+release)\b|^(?:update\s*:\s*)?(?:ship|release)\s+(?:the\s+)?(?:(?:product|build|version)\s+)?(?:on\s+)?Friday\b/i.test(clause.trim());
+      const nonAffirmative = /\?|\b(?:do\s+not|don't|never|cannot|can't|should\s+not|must\s+not|would\s+not|might|may|could|if|unless|until|once|when|after|hypothetical)\b/i.test(clause);
+      return decisionRetraction || (positiveShipDecision && !nonAffirmative);
+    });
+  if (decisionWasInvalidated) return false;
+
   const delayRecommendation = /\b(?:delay(?:ing)?|postpone|defer)\s+(?:the\s+)?(?:(?:planned|scheduled|Friday)\s+){0,2}(?:release|shipment)\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
   for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
     const line = rawLine.replace(/[*_`]/g, '').trim();
@@ -2111,16 +2138,15 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
     if (hasPositiveLead) return true;
   }
 
-  const pronounCondition = /\b(?:these|those|the)\s+(?:outstanding\s+|unresolved\s+|identified\s+)?(?:gaps?|failures?)\b[^?\r\n]{0,180}\b(?:the\s+recommendation\s+is\s+to|(?:we|you|the team)\s+recommend(?:ed|ing)?)\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\b[^?\r\n]{0,80}\buntil\s+(?:they|these|those)\s+(?:are\s+)?(?:closed|resolved|fixed|addressed)\b/i;
-  const normalized = response.replace(/[*_`]/g, ' ');
+  const pronounCondition = /\b(?:these|those|the)\s+(?:outstanding\s+|unresolved\s+|identified\s+)?(?:gaps?|failures?)\b[^?\r\n]{0,180}\b(?:the\s+recommendation\s+is\s+to|(?:we|you|the team)\s+recommend(?:ed|ing)?)\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\b[^?\r\n]{0,80}\buntil\s+(?:(?:they|these|those)\s+(?:are\s+)?|all\s+(?:the\s+)?identified\s+(?:issues?|gaps?|failures?)\s+(?:are\s+)?)(?:closed|resolved|fixed|addressed)\b/i;
   const pronounMatch = pronounCondition.exec(normalized);
   if (pronounMatch?.index !== undefined) {
     const prefix = normalized.slice(Math.max(0, pronounMatch.index - 40), pronounMatch.index);
     const suffix = normalized.slice(pronounMatch.index + pronounMatch[0].length);
     if (!/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer)\s*$/i.test(prefix)
       && !/\b(?:gaps?|failures?)\s+(?:are|were)\s+(?:not|never)\s+(?:real|outstanding|unresolved|identified|valid)\b/i.test(pronounMatch[0])
-      && !/\b(?:not|never)\s+(?:closed|resolved|fixed|addressed)\b/i.test(pronounMatch[0])
-      && !/\b(?:(?:that|this|the)\s+recommendation\s+(?:(?:is|was)|(?:has|had)\s+(?:since\s+)?been)\s+(?:withdrawn|retracted|cancelled|canceled)|delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\s+is\s+not\s+recommended|(?:we|you|the team)\s+no\s+longer\s+recommend(?:s|ed|ing)?\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment))\b/i.test(suffix)) return true;
+      && !/\b(?:not|never)\s+(?:closed|resolved|fixed|addressed)\b|\b(?:are|remain)\s+(?:not|never)\s+(?:closed|resolved|fixed|addressed)\b/i.test(pronounMatch[0])
+      && !/\b(?:(?:(?:that|this|the|prior|previous)\s+)?(?:delay\s+)?recommendation\s+(?:(?:(?:is|was)|(?:has|had)\s+(?:since\s+)?been)\s+(?:withdrawn|retracted|cancelled|canceled|reversed|invalid|superseded|no\s+longer\s+applicable)|no\s+longer\s+applies)|(?:delaying|postponing|deferring)\s+(?:the\s+)?(?:release|shipment)\s+is\s+not\s+recommended|(?:we|you|the team)\s+no\s+longer\s+recommend(?:s|ed|ing)?\s+(?:delaying|postponing|deferring)\s+(?:the\s+)?(?:release|shipment))\b/i.test(suffix)) return true;
   }
 
   const adjacentCondition = /\b(?:we|you|the team)\s+recommend(?:ed|ing)?\s+(?:delay(?:ing)?|postpon(?:e|ing)|deferr?ing)\s+(?:the\s+)?(?:planned\s+|scheduled\s+|Friday\s+)?(?:release|shipment)\b[^?\r\n]{0,80}[.!]\s*(?:proceeding|shipping|releasing)\s+without\s+[^?\r\n]{0,180}\b(?:closing|resolving|fixing|addressing|validating)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;

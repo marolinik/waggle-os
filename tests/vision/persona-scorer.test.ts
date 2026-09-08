@@ -8071,6 +8071,80 @@ describe('Qwen Flash Next exact-response regressions', () => {
     expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
   });
 
+  it('accepts the latest exact Qwen writer memo without weakening negation handling', () => {
+    const response = [
+      '**MEMORANDUM**',
+      '**Subject:** Release Status Update and Recommendation',
+      'Current planning targets a Friday ship date. API tests have passed successfully.',
+      'However, browser testing reveals two outstanding failures on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, the recommendation is to delay the release until all identified issues are resolved and tested.',
+      'Proceeding as scheduled is not advised until these specific validation criteria are met.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    for (const id of ['release-facts', 'router-fact', 'recommendation', 'no-new-claims']) {
+      expect(result.checks.find(check => check.id === id)?.passed, id).toBe(true);
+    }
+
+    for (const [rejected, failedCheck] of [
+      [response.replace('reveals two outstanding failures', 'does not reveal two outstanding failures'), 'release-facts'],
+      [response.replace('the recommendation is to delay', 'the recommendation is not to delay'), 'recommendation'],
+      [response.replace('until all identified issues are resolved and tested', 'until all identified issues are not resolved'), 'recommendation'],
+      [`${response}\nUpdate: there are no outstanding browser-test failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: there are zero outstanding browser-test failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: the two issues were false positives.`, 'release-facts'],
+      [`${response}\nUpdate: neither of the two browser-test failures is real.`, 'release-facts'],
+      [`${response}\nUpdate: those two issues turned out to be false positives.`, 'release-facts'],
+      [`${response}\nUpdate: the two browser failures proved invalid.`, 'release-facts'],
+      [`${response}\nUpdate: browser testing now shows no failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: browser-test failures are absent on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: the browser failures no longer exist.`, 'release-facts'],
+      [`${response}\nUpdate: no browser failures remain on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: not one of the two browser-test failures is genuine.`, 'release-facts'],
+      [`${response}\nHowever, postponing the release is not recommended.`, 'recommendation'],
+      [`${response}\nHowever, deferring the release is not recommended.`, 'recommendation'],
+      [`${response}\nHowever, that delay recommendation no longer applies.`, 'recommendation'],
+      [`${response}\nHowever, that recommendation is no longer valid.`, 'recommendation'],
+      [`${response}\nUpdate: the prior recommendation was reversed.`, 'recommendation'],
+      [`${response}\nUpdate: the delay recommendation has been rescinded.`, 'recommendation'],
+      [`${response}\nUpdate: the delay was rejected.`, 'recommendation'],
+      [`${response}\nUpdate: we now recommend shipping Friday.`, 'recommendation'],
+      [`${response}\nUpdate: proceed with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we should ship Friday as planned.`, 'recommendation'],
+      [`${response}\nUpdate: the decision is to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: release Friday as planned.`, 'recommendation'],
+      [`${response}\nUpdate: the delay is no longer necessary.`, 'recommendation'],
+      [`${response}\nUpdate: we rescind the delay recommendation.`, 'recommendation'],
+      [`${response}\nUpdate: management rejected postponing the release.`, 'recommendation'],
+      [`${response}\nUpdate: the release is approved for Friday.`, 'recommendation'],
+      [`${response}\nUpdate: we are going ahead with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we will go ahead with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we intend to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the team decided to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the release remains scheduled for Friday.`, 'recommendation'],
+      [`${response}\nUpdate: Friday is still the ship date.`, 'recommendation'],
+      [`${response}\nUpdate: we are shipping Friday.`, 'recommendation'],
+      [`${response}\nUpdate: we are releasing Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the ship date remains Friday.`, 'recommendation'],
+    ] as const) {
+      const rejectedResult = scoreResponse('writer', rejected);
+      expect(rejectedResult.checks.find(check => check.id === failedCheck)?.passed, rejected).toBe(false);
+    }
+
+    for (const valid of [
+      `${response}\nWe will release once the identified issues are resolved.`,
+      `${response}\nProceed with the Friday release only after all identified issues are resolved.`,
+      `${response}\nRelease Friday if all identified issues are resolved.`,
+      response.replace(
+        'Given these unresolved gaps, the recommendation is to delay the release until all identified issues are resolved and tested.',
+        'Recommendation: delay the release until there are no browser-test failures on Windows and the smart router is tested without cloud credentials.',
+      ),
+    ]) {
+      expect(scoreResponse('writer', valid).score, valid).toBe(100);
+    }
+  });
+
   it('keeps the current four-month runway separate from projected action scenarios', () => {
     const response = [
       'Runway = Cash / Net Monthly Burn',
