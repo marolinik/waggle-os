@@ -2414,7 +2414,8 @@ const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
   `^\\s*(?:(?:[-*]|\\d+[.)])\\s*)?(?:and\\s+)?${PRIORITIZATION_CONDITION_MARKER.source}`,
   'i',
 );
-const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|ranks?|ranked|ranking|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD = /^\s*(?:(?:[-*]|\d+[.)])\s*)?(?:and\s+)?once\s+[^,.!?\r\n]{1,100}\b(?:is|are|has been|have been)\s+(?:confirmed|completed|resolved|closed|finished)\s*,\s*/i;
+const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|prevents?|prevented|preventing|minimi[sz](?:e[sd]?|ing)?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|ranks?|ranked|ranking|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
 const PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE = /\b(?:revenue\s+with\s+)?momentum\s+decays?\s+(?:fast|quickly|rapidly)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
@@ -2733,6 +2734,7 @@ function hasAffirmedPrioritizationBasis(
 ): boolean {
   const normalized = clause.replace(/[*_`]/g, '').trim();
   const assertedRationale = normalized.replace(/^Rationale:\s*/i, '');
+  const unconditionalRationale = assertedRationale.replace(PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD, '');
   if (prioritizationWordCount(normalized) < 4) return false;
   if (/\b(?:no|not(?:\s+actually)?)\s+(?:a\s+)?(?:rationale|reason|basis|justification)\b|\b(?:does|do|did|should|would|could|may|might|must|can|will)\s+not\s+(?:justify|support|explain)\b|\b(?:tbd|tbc|placeholder)\b|^\s*(?:maybe|perhaps|probably|possibly|tentatively|supposedly)\b/i.test(assertedRationale)) {
     return false;
@@ -2742,7 +2744,7 @@ function hasAffirmedPrioritizationBasis(
   if (PRIORITIZATION_REJECTED_ASSERTION.test(normalized)) return false;
   if (PRIORITIZATION_DEPENDENT_REJECTION.test(normalized)) return false;
   if (PRIORITIZATION_QUOTED_CLAUSE.test(normalized)) return false;
-  if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(normalized)) return false;
+  if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(unconditionalRationale)) return false;
   const boundedMomentumDecay = PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE.exec(normalized);
   const hasAffirmedBoundedMomentumDecay = boundedMomentumDecay !== null
     && !PRIORITIZATION_TRAILING_REPORT_HEDGE.test(
@@ -2781,6 +2783,10 @@ function hasAffirmedPrioritizationBasis(
       before,
       PRIORITIZATION_INDEPENDENT_BOUNDARY,
     );
+    const unconditionalIndependentBefore = independentBefore.replace(
+      PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD,
+      '',
+    );
     const independentAfter = prioritizationConditionScope(
       after,
       criteria,
@@ -2811,9 +2817,9 @@ function hasAffirmedPrioritizationBasis(
     if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(independentBefore)) continue;
     if (PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)) continue;
     if (PRIORITIZATION_NEGATION_SUFFIX.test(after)) continue;
-    if (PRIORITIZATION_CONDITION_MARKER.test(independentBefore) && !conditionalActionConsequence) continue;
-    if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(independentBefore)) continue;
-    if (PRIORITIZATION_MODAL_PREFIX.test(independentBefore)) continue;
+    if (PRIORITIZATION_CONDITION_MARKER.test(unconditionalIndependentBefore) && !conditionalActionConsequence) continue;
+    if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(unconditionalIndependentBefore)) continue;
+    if (PRIORITIZATION_MODAL_PREFIX.test(unconditionalIndependentBefore)) continue;
     if (PRIORITIZATION_CONDITION_SUFFIX.test(independentAfter)) continue;
     return true;
   }
@@ -2991,6 +2997,9 @@ function hasAffirmedPrioritizationJustification(
       if (labeledCriterion === null && !testPattern(topic, topicScope)) return false;
       const clauses = splitPrioritizationClauses(segment, basis);
       return clauses.some((clause) => {
+        const alignmentClause = clause
+          .replace(/[*_`]/g, '')
+          .replace(PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD, '');
         const currentTopicIsExplicit = labeledCriterion === criterionIndex || testPattern(topic, clause);
         const segmentLeadTopics = matchedCriterionIndices(topicScope.split('\n', 1)[0], criteria, 'topic');
         const isSinglePriorityContinuation = !currentTopicIsExplicit
@@ -2999,7 +3008,7 @@ function hasAffirmedPrioritizationJustification(
         if (!currentTopicIsExplicit
           && !isSinglePriorityContinuation
           && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
-        if (labeledCriterion === null && !hasAlignedTopicsAndBases(clause, criteria)) return false;
+        if (labeledCriterion === null && !hasAlignedTopicsAndBases(alignmentClause, criteria)) return false;
         return hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex);
       });
     });

@@ -159,6 +159,7 @@ describe('Prompt composition', () => {
     const writer = composePersonaPrompt(corePrompt, getPersona('writer')!);
     expect(writer).toMatch(/compare every factual clause/i);
     expect(writer).toMatch(/remove any new risk, assurance, consequence/i);
+    expect(writer).toMatch(/do not append a benefit, risk, stability, or assurance sentence/i);
 
     const finance = composePersonaPrompt(corePrompt, getPersona('finance-owner')!);
     expect(finance).toMatch(/one-time cash receipt/i);

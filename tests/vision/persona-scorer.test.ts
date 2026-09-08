@@ -8011,6 +8011,27 @@ describe('Qwen Flash Next exact-response regressions', () => {
     expect(falseOnboardingPremise.checks.find(check => check.id === 'justification')?.passed).toBe(false);
   });
 
+  it('accepts the exact Qwen rationale when the second priority follows a completed first priority', () => {
+    const response = [
+      '1. Investigate the production memory bug',
+      '2. Close the customer',
+      '3. Repair onboarding friction',
+      'Prioritizing the production bug first minimizes operational risk and prevents the issue from affecting existing customers or consuming engineering bandwidth unexpectedly.',
+      'Once stability is confirmed, closing the customer takes precedence over onboarding because it directly impacts immediate revenue and validates the current product state.',
+      'Onboarding friction is important for retention but is typically a process improvement that can be addressed after immediate revenue and stability risks are mitigated.',
+      'First Action for Today: Reproduce the production memory bug in a controlled environment.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const speculativeSequence = scoreResponse(
+      'general-purpose',
+      response.replace('Once stability is confirmed,', 'If stability might be confirmed,'),
+    );
+    expect(speculativeSequence.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+  });
+
   it('accepts the latest Qwen writer phrasing for two persistent Windows failures', () => {
     const response = [
       'We had planned to ship on Friday. API tests currently pass.',
@@ -8034,6 +8055,20 @@ describe('Qwen Flash Next exact-response regressions', () => {
       const retracted = scoreResponse('writer', `${response}\n${update}`);
       expect(retracted.checks.find(check => check.id === 'release-facts')?.passed, update).toBe(false);
     }
+  });
+
+  it('classifies the exact Qwen writer phrasing without hiding its unsupported assurance', () => {
+    const response = [
+      'We originally planned to ship this Friday. Current status indicates API tests are passing.',
+      'However, browser tests are currently failing two cases on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved technical gaps, the recommendation is to delay the release until all issues are closed.',
+      'This ensures stability and prevents potential failures in unsupported environments.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
   });
 
   it('keeps the current four-month runway separate from projected action scenarios', () => {
