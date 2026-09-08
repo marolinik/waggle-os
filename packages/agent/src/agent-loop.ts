@@ -1645,7 +1645,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         continue;
       }
 
-      const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
+      const acceptedContent = gate.contentReplacement ?? `${content}${gate.contentSuffix ?? ''}`;
       // Once D1 has fired, surface the preserved user answer instead of the
       // internal skill-distillation summary produced by the current turn.
       const finalized = appendFetchedSourceFooter(

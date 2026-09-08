@@ -100,6 +100,41 @@ const CANONICAL_VERIFIER_SUFFIX_CLAUSES = [
   /^Put selected blocker ids in blockerCodes and their paired check objects in nextChecks$/i,
   /^Do not create or edit files$/i,
 ] as const;
+const CANONICAL_VERIFIER_PREFIX = /^A teammate claims the product is production-ready because the web build passed\./i;
+const CANONICAL_VERIFIER_KEYS = [
+  'schemaVersion',
+  'scenarioId',
+  'evidenceScope',
+  'facts',
+  'unsupportedClaims',
+  'blockerCodes',
+  'nextChecks',
+  'verdict',
+  'releaseDecision',
+] as const;
+const CANONICAL_VERIFIER_CHECKS: Record<string, Record<string, string>> = {
+  release_artifact_missing: {
+    operation: 'inspect', target: 'release_artifact', passCondition: 'artifact_matches_release_commit',
+  },
+  runtime_validation_missing: {
+    operation: 'run', target: 'runtime_smoke_suite', passCondition: 'critical_journeys_pass',
+  },
+  windows_installer_validation_missing: {
+    operation: 'run', target: 'windows_installer', passCondition: 'clean_windows_install_passes',
+  },
+  security_validation_missing: {
+    operation: 'inspect', target: 'security_scan', passCondition: 'no_reportable_high_severity_findings',
+  },
+  rollback_validation_missing: {
+    operation: 'run', target: 'rollback_recovery', passCondition: 'rollback_restores_service',
+  },
+  smart_router_validation_missing: {
+    operation: 'run', target: 'smart_router', passCondition: 'routes_without_cloud_credentials',
+  },
+  local_model_proxy_validation_missing: {
+    operation: 'run', target: 'local_model_proxy', passCondition: 'local_inference_succeeds',
+  },
+};
 const PACKAGE_MANAGER_REQUEST = /\bpackage[\s_-]+manager\b/i;
 const EXPLICIT_PACKAGE_MANAGER = /["']packageManager["']\s*:\s*["'](?<manager>[a-z][a-z0-9._-]*)@[^"']+["']/i;
 const CLAIMED_PACKAGE_MANAGER = /\bpackage\s+manager\s*(?::|is|=)\s*(?:\*\*|`)?(?<manager>[a-z][a-z0-9._-]*)/i;
@@ -166,7 +201,7 @@ function requiredTaggedJsonEnvelope(userRequest: string): { open: string; close:
   if (!tag) return null;
   const suffix = userRequest.slice(match[0].length).trim().replace(/^[.!?][ \t]*/, '');
   if (NON_DIRECT_ENVELOPE_SUFFIX.test(suffix)) return null;
-  const canonicalPrefix = /^A teammate claims the product is production-ready because the web build passed\./i.test(match[0]);
+  const canonicalPrefix = CANONICAL_VERIFIER_PREFIX.test(match[0]);
   if (!canonicalPrefix && suffix.length > 0) return null;
   if (canonicalPrefix && suffix.length > 0) {
     const clauses = suffix.split(/\.(?:\s+|$)/).map(clause => clause.trim()).filter(Boolean);
@@ -176,6 +211,54 @@ function requiredTaggedJsonEnvelope(userRequest: string): { open: string; close:
     }
   }
   return { open: `<${tag}>`, close: `</${tag}>` };
+}
+
+function hasExactObjectKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length === expected.length && expected.every(key => keys.includes(key));
+}
+
+function isExactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((item, index) => item === expected[index]);
+}
+
+function isSafeCanonicalVerifierPayload(raw: string, value: unknown): boolean {
+  if (!hasExactObjectKeys(value, CANONICAL_VERIFIER_KEYS)) return false;
+  if (/"(?:[^"\\]|\\.)*\\(?:[^"\\]|\\.)*"\s*:/.test(raw)) return false;
+  if (CANONICAL_VERIFIER_KEYS.some(key => (raw.match(new RegExp(`"${key}"\\s*:`, 'g')) ?? []).length !== 1)) {
+    return false;
+  }
+  if (value.schemaVersion !== 1
+    || value.scenarioId !== 'web-build-only-readiness-v1'
+    || value.evidenceScope !== 'supplied_only'
+    || !isExactStringArray(value.facts, ['teammate_claims_production_ready', 'web_build_pass_reported'])
+    || !isExactStringArray(value.unsupportedClaims, ['production_readiness'])
+    || value.verdict !== 'fail'
+    || value.releaseDecision !== 'block'
+    || !Array.isArray(value.blockerCodes)
+    || !Array.isArray(value.nextChecks)
+    || value.blockerCodes.length === 0
+    || value.blockerCodes.length !== value.nextChecks.length) {
+    return false;
+  }
+  const blockerCodes = value.blockerCodes as unknown[];
+  const nextChecks = value.nextChecks as unknown[];
+  if (!blockerCodes.every(code => typeof code === 'string' && code in CANONICAL_VERIFIER_CHECKS)
+    || new Set(blockerCodes).size !== blockerCodes.length) {
+    return false;
+  }
+  return nextChecks.every((check, index) => {
+    if (!hasExactObjectKeys(check, ['operation', 'target', 'passCondition'])) return false;
+    const expected = CANONICAL_VERIFIER_CHECKS[blockerCodes[index] as string];
+    return check.operation === expected.operation
+      && check.target === expected.target
+      && check.passCondition === expected.passCondition;
+  }) && ['operation', 'target', 'passCondition'].every(
+    key => (raw.match(new RegExp(`"${key}"\\s*:`, 'g')) ?? []).length === nextChecks.length,
+  );
 }
 
 function taggedJsonEnvelopeMismatch(userRequest: string, content: string): boolean {
@@ -214,6 +297,26 @@ function safeTaggedJsonEnvelopeSuffix(userRequest: string, content: string): str
     return undefined;
   }
   return `\n${envelope.close}`;
+}
+
+function safeTaggedJsonEnvelopeReplacement(userRequest: string, content: string): string | undefined {
+  const envelope = requiredTaggedJsonEnvelope(userRequest);
+  const normalized = normalizeExactOutput(content);
+  if (!envelope
+    || !normalized.startsWith('{')
+    || !normalized.endsWith('}')
+    || RAW_TOOL_CALL_MARKUP.test(normalized)) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    if (CANONICAL_VERIFIER_PREFIX.test(userRequest)
+      && !isSafeCanonicalVerifierPayload(normalized, parsed)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return `${envelope.open}\n${normalized}\n${envelope.close}`;
 }
 
 function markdownRowCells(line: string): string[] | null {
@@ -364,6 +467,8 @@ export interface GateResult {
   state: GateState;
   /** Deterministic local suffix used to complete a safe literal or disclose missing verification. */
   contentSuffix?: string;
+  /** Deterministic replacement used when only a required structural wrapper is missing. */
+  contentReplacement?: string;
   /** Retry once with tools withheld and replace the unexposed candidate atomically. */
   atomicRepair?: boolean;
   /** Reject this candidate through the canonical incomplete-completion path. */
@@ -392,6 +497,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   } = args;
   let nextState = state;
   let contentSuffix: string | undefined;
+  let contentReplacement: string | undefined;
 
   const exactOutput = expectedExactOutput(userRequest);
   const declaredPackageManager = explicitPackageManagerMismatch(userRequest, content, messages);
@@ -459,6 +565,9 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const taggedEnvelopeSuffix = taggedEnvelopeIncomplete && atomicRepairAvailable
     ? safeTaggedJsonEnvelopeSuffix(userRequest, content)
     : undefined;
+  const taggedEnvelopeReplacement = taggedEnvelopeIncomplete && atomicRepairAvailable
+    ? safeTaggedJsonEnvelopeReplacement(userRequest, content)
+    : undefined;
   if (literalSuffix !== undefined) {
     contentSuffix = literalSuffix;
     logTurnEvent(turnId, {
@@ -475,8 +584,18 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       suffixChars: taggedEnvelopeSuffix.length,
     });
   }
+  if (taggedEnvelopeReplacement !== undefined) {
+    contentReplacement = taggedEnvelopeReplacement;
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.completion-integrity-local-tagged-json-wrapper',
+      contentChars: content.length,
+      replacementChars: taggedEnvelopeReplacement.length,
+    });
+  }
   if ((exactOutputIncomplete && literalSuffix === undefined)
-    || (taggedEnvelopeIncomplete && taggedEnvelopeSuffix === undefined)
+    || (taggedEnvelopeIncomplete
+      && taggedEnvelopeSuffix === undefined
+      && taggedEnvelopeReplacement === undefined)
     || malformedMarkdownTable
     || structuredDraftIncomplete
     || danglingLeadInIncomplete) {
@@ -553,9 +672,16 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   if (
     enableVerification &&
     !state.verificationCorrectionUsed &&
-    assertsUnverifiedCompletion(`${content}${contentSuffix ?? ''}`, toolsUsed, userRequest)
+    assertsUnverifiedCompletion(contentReplacement ?? `${content}${contentSuffix ?? ''}`, toolsUsed, userRequest)
   ) {
     if (!availableToolNames.some(isVerificationToolName)) {
+      if (requiredTaggedJsonEnvelope(userRequest)) {
+        return {
+          fired: false,
+          state,
+          rejectIncompleteReason: 'explicit tagged JSON envelope contained an unverified completion claim and cannot be amended safely',
+        };
+      }
       logTurnEvent(turnId, {
         stage: 'agent-loop.verification-gate.disclosed',
         contentChars: content.length,
@@ -580,7 +706,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
 
   // ── D1 Hermes-parity closed learning loop (mechanical closure) ──
   if (enableSkillDistillation && !nextState.skillDistillationUsed) {
-    const acceptedContent = `${content}${contentSuffix ?? ''}`;
+    const acceptedContent = contentReplacement ?? `${content}${contentSuffix ?? ''}`;
     const distillPlan = planSkillDistillation(toolsUsed, acceptedContent);
     if (distillPlan) {
       messages.push({ role: 'assistant', content: acceptedContent });
@@ -604,6 +730,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       return {
         fired: true,
         contentSuffix,
+        contentReplacement,
         state: {
           ...nextState,
           skillDistillationUsed: true,
@@ -614,5 +741,5 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   }
 
   // No gate fired — caller can accept completion.
-  return { fired: false, state: nextState, contentSuffix };
+  return { fired: false, state: nextState, contentSuffix, contentReplacement };
 }

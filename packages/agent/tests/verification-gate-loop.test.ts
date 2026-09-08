@@ -16,6 +16,21 @@ import { VERIFIER_REPORT_CLOSE, VERIFIER_REPORT_OPEN } from '../../../tests/visi
 
 const CANONICAL_VERIFIER_PROMPT = PERSONA_CASES.find(persona => persona.id === 'verifier')?.prompt;
 if (!CANONICAL_VERIFIER_PROMPT) throw new Error('Canonical verifier acceptance prompt is missing');
+const CANONICAL_VERIFIER_JSON = JSON.stringify({
+  schemaVersion: 1,
+  scenarioId: 'web-build-only-readiness-v1',
+  evidenceScope: 'supplied_only',
+  facts: ['teammate_claims_production_ready', 'web_build_pass_reported'],
+  unsupportedClaims: ['production_readiness'],
+  blockerCodes: ['release_artifact_missing'],
+  nextChecks: [{
+    operation: 'inspect',
+    target: 'release_artifact',
+    passCondition: 'artifact_matches_release_commit',
+  }],
+  verdict: 'fail',
+  releaseDecision: 'block',
+});
 
 type MockTurn = string | null | {
   content: string | null;
@@ -453,8 +468,8 @@ describe('structured-draft completion integrity gate', () => {
   });
 
   it('atomically repairs a missing explicitly required tagged JSON envelope', async () => {
-    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
-    const wrappedReport = `<verifier_report>\n${bareReport}\n</verifier_report>`;
+    const bareReport = '["invalid-envelope-payload"]';
+    const wrappedReport = '<verifier_report>\n{"schemaVersion":1,"verdict":"fail"}\n</verifier_report>';
     let requestIndex = 0;
     const fetch = vi.fn(async () => {
       if (requestIndex++ === 0) {
@@ -492,9 +507,39 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(wrappedReport);
   });
 
-  it('allows one bounded second repair for a repeatedly incomplete tagged JSON envelope', async () => {
+  it('locally wraps a complete bare JSON object for an explicit tagged envelope contract', async () => {
     const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
     const wrappedReport = `<verifier_report>\n${bareReport}\n</verifier_report>`;
+    const fetch = vi.fn(async () => {
+      if (fetch.mock.calls.length > 1) throw new Error('provider retry is forbidden');
+      return streamResponse([
+        sse({ choices: [{ delta: { content: bareReport } }] }),
+        sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+        'data: [DONE]\n\n',
+      ]);
+    });
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(wrappedReport);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it('allows one bounded second repair for a repeatedly incomplete tagged JSON envelope', async () => {
+    const bareReport = '["invalid-envelope-payload"]';
+    const wrappedReport = '<verifier_report>\n{"schemaVersion":1,"verdict":"fail"}\n</verifier_report>';
     let requestIndex = 0;
     const fetch = vi.fn(async () => {
       if (requestIndex++ === 0) {
@@ -532,7 +577,7 @@ describe('structured-draft completion integrity gate', () => {
   });
 
   it('recognizes the canonical verifier envelope contract after a same-line premise', async () => {
-    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    const bareReport = CANONICAL_VERIFIER_JSON;
     const wrappedReport = `${VERIFIER_REPORT_OPEN}\n${bareReport}\n${VERIFIER_REPORT_CLOSE}`;
     let requestIndex = 0;
     const fetch = vi.fn(async () => {
@@ -563,12 +608,64 @@ describe('structured-draft completion integrity gate', () => {
       }],
     }));
 
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it.each([
+    CANONICAL_VERIFIER_JSON.replace('"verdict":"fail","releaseDecision":"block"', '"verdict":"pass","releaseDecision":"go"'),
+    '{"schemaVersion":1,"scenarioId":"web-build-only-readiness-v1","verdict":"fail","releaseDecision":"block"}',
+    CANONICAL_VERIFIER_JSON.replace('"schemaVersion":1', '"schemaVersion":1,"schemaVersion":1'),
+    CANONICAL_VERIFIER_JSON.replace(
+      '"verdict":"fail","releaseDecision":"block"',
+      '"verdict":"p\\u0061ss","\\u0076erdict":"fail","releaseDecision":"g\\u006f","\\u0072eleaseDecision":"block"',
+    ),
+    CANONICAL_VERIFIER_JSON.replace(
+      '"operation":"inspect"',
+      '"operation":"run","\\u006fperation":"inspect"',
+    ),
+  ])('does not locally wrap an unsafe canonical verifier payload: %s', async (unsafeReport) => {
+    const wrappedReport = `${VERIFIER_REPORT_OPEN}\n${CANONICAL_VERIFIER_JSON}\n${VERIFIER_REPORT_CLOSE}`;
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      const content = requestIndex++ === 0 ? unsafeReport : wrappedReport;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 16 },
+        }),
+      } as unknown as Response;
+    });
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: CANONICAL_VERIFIER_PROMPT }],
+    }));
+
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(result.content).toBe(wrappedReport);
   });
 
+  it('fails closed when a locally wrapped exact envelope would hide an unverified-success disclosure', async () => {
+    const fetch = mockFetch(['{"summary":"All tests pass"}']);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.',
+      }],
+    }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringContaining('unverified completion claim'),
+    });
+  });
+
   it('fails closed after the bounded second tagged JSON envelope repair', async () => {
-    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    const bareReport = '["invalid-envelope-payload"]';
     let requestIndex = 0;
     const fetch = vi.fn(async () => {
       if (requestIndex++ === 0) {
