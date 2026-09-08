@@ -72,6 +72,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/do not invent.*platforms.*metrics.*requirements/i);
     expect(prompt).toMatch(/target criteria.*not established current behavior/i);
     expect(prompt).toMatch(/do not add.*operating systems.*quantified thresholds.*soak periods/i);
+    expect(prompt).toMatch(/bounded milestone-plan requests.*at most four milestones.*under 500 words/i);
   });
 
   it('Executive Assistant completes timed agendas and suppresses prohibited follow-ups', () => {
@@ -104,6 +105,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/each requested dimension once.*one minimal complete example/i);
     expect(prompt).toMatch(/omit optional extensions.*unless.*requested/i);
     expect(prompt).toMatch(/retry behavior.*executable bounded retry.*(?:backoff|busy_timeout)/i);
+    expect(prompt).toMatch(/place the retry loop inside try.*attach finally to try.*never attach finally to (?:a )?(?:for|while)/i);
   });
 
   it('Verifier never upgrades an attributed claim into verified evidence', () => {

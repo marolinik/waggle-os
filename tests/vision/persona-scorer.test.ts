@@ -2303,6 +2303,28 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, passed: true });
   });
 
+  it('rejects invented quantified release requirements in a project plan', () => {
+    const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
+    const response = [
+      '## Milestones',
+      'M2 depends on M1.',
+      '## Owners by Role',
+      'Release Manager owns coordination; QA Lead owns acceptance.',
+      '## Risks and Exit Criteria',
+      'Risk: packaging failure.',
+      'Exit criteria: test at least 3 Windows versions, start in under 30 seconds, and pass a 24-hour soak test.',
+    ].join('\n');
+    const result = scorePersonaTrial(projectManager, evidence({
+      prompt: projectManager.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: projectManager.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'no-invented-requirements')?.passed).toBe(false);
+    expect(result.passed).toBe(false);
+  });
+
   it.each([
     [
       'populated depends-on table',

@@ -245,7 +245,13 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'dependencies', description: 'Maps dependencies', kind: 'dependencyMap', points: 10 },
       { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /(?:\brole\b|(?:^|\n)\s*(?:[-*]\s+)?(?:\*\*)?(?:M\d+\s+)?Owner(?:\*\*)?\s*:)/im], points: 10 },
       { id: 'risks-exit', description: 'Includes risks and exit criteria', kind: 'allPatterns', patterns: [/risks?/i, /exit criteria/i], points: 10 },
-      { id: 'no-invented-schedule', description: 'Does not invent a calendar schedule', kind: 'notPattern', pattern: /(?:week\s*\d+|\d+[ -]?week effort|target date:)/i, points: 10 },
+      {
+        id: 'no-invented-requirements',
+        description: 'Does not invent calendar, platform-count, startup-time, or soak requirements',
+        kind: 'notPattern',
+        pattern: /(?:week\s*\d+|\d+[ -]?week effort|target date:|(?:at least\s+)?(?:three|3)\s+(?:recent\s+)?Windows versions?|(?:start|startup|launch)\w*[^.\r\n]{0,30}(?:within|under|<)\s*\d+\s*(?:seconds?|secs?|s)\b|\b\d+[ -]?hour\s+(?:stability\s+)?soak)/i,
+        points: 10,
+      },
     ],
   },
   {
