@@ -106,6 +106,7 @@ const windowsBrowserFailuresPattern = new RegExp([
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:have|exhibit)\s+(?:two|2)\s+failures?\b[^.\r\n]{0,60}\bWindows\b`}`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,80}\bremain(?:s|ing)?\b[^.\r\n]{0,60}\bfail(?:ure|ing)\b[^.\r\n]{0,80}\b(?:two|2)\s+(?:specific\s+)?(?:issues?|failures?)\b[^.\r\n]{0,60}\bpersist(?:s|ing)?\b[^.\r\n]{0,40}\bWindows\b`}`,
   `${affirmedFactClause}${String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser[- ]test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
 ].join('|'), 'i');
 const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\[[ xX]\][ \t]*)?(?:\*\*)?(?:(?:(?:cost reduction|cash inflow|revenue growth)(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*)|(?:(?:we|you|the team)[ \t]+should[ \t]+))?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
@@ -148,7 +149,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         kind: 'prioritizationJustification',
         criteria: [
           {
-            topic: /\b(?:(?:production(?: memory)?|memory) (?:bugs?|issues?)|production defect|memory leak)\b/i,
+            topic: /\b(?:(?:production(?: memory)?|memory) (?:bugs?|issues?)|production defect|memory leak|the bug)\b/i,
             basis: /(?:\b(?:live|active) in production\b[^.!?\r\n]{0,220}\b(?:may|might|could|would)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,140}\b(?:degrad(?:e[ds]?|ation)|outage)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,180}\bcompounding (?:downside )?risk if delayed\b|\b(?:risk|churn|data loss|instabil(?:ity|ities)|reliab(?:ility|le)|stabil(?:ity|ize)|stable|outage|trust|blast radius|unbounded downside|compounding|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b)/i,
             basisFamilies: [
               /\b(?:data loss|instabil(?:ity|ities)|reliab(?:ility|le)|stabil(?:ity|ize)|stable|trust)\b/i,
@@ -157,11 +158,12 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
             ],
           },
           {
-            topic: /\b(?:customer|deal)s?\b/i,
-            basis: /\b(?:revenue|pipeline|cash|commercial|near[- ]term|short[- ]cycle|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|sales timing|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+            topic: /\b(?:customer|deal|sale)s?\b/i,
+            basis: /(?:\b(?:revenue|pipeline|cash|commercial|near[- ]term|short[- ]cycle|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|sales timing|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b|\b(?:procurement|legal|sign[- ]?off)\b[^.!?\r\n]{0,140}\b(?:long(?:est)?\s+(?:real\s+)?timeline|long(?:er)?\s+(?:lead|cycle)\s*time)\b)/i,
             basisFamilies: [
               /\b(?:revenue|cash|commercial|near[- ]term|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage))\b/i,
               /\b(?:pipeline|short[- ]cycle|closable|proof points?|de-risk|signature|close date|deadline|time[- ](?:sensitive|boxed)|sales timing|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+              /\b(?:procurement|legal|sign[- ]?off)\b[^.!?\r\n]{0,140}\b(?:long(?:est)?\s+(?:real\s+)?timeline|long(?:er)?\s+(?:lead|cycle)\s*time)\b/i,
             ],
           },
           {
@@ -226,7 +228,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
-      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?(?:all\s+)?pass(?:ed|ing)?|have\s+passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
+      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?(?:all\s+)?(?:currently\s+)?pass(?:ed|ing)?|have\s+(?:currently\s+)?passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'writerRouterFact', points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'writerDelayRecommendation', points: 10 },
       { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:platform\s+)?stability\b|\bacross\s+all\s+environments\b)/i, points: 10 },
@@ -351,7 +353,16 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 3_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im], points: 10 },
+      {
+        id: 'two-lanes',
+        description: 'Defines researcher and coder lanes',
+        kind: 'allPatterns',
+        patterns: [
+          /(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*(?![^\r\n]{0,80}\bnot\s+(?:a\s+)?researcher\b)[^\r\n()]{1,80}\(researcher\)[ \t]*(?:\*\*)?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im,
+          /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*(?![^\r\n]{0,80}\bnot\s+(?:a\s+)?coder\b)[^\r\n()]{1,80}\(coder\)[ \t]*(?:\*\*)?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im,
+        ],
+        points: 10,
+      },
       { id: 'lane-contracts', description: 'Provides objectives, inputs, and deliverables', kind: 'allPatterns', patterns: [/objectives?/i, /inputs?/i, /deliverables?/i], points: 10 },
       { id: 'dependencies', description: 'Defines dependencies', kind: 'pattern', pattern: /dependenc(?:y|ies)/i, points: 10 },
       { id: 'merge', description: 'Defines merge criteria', kind: 'pattern', pattern: /merge criteria/i, points: 10 },

@@ -113,7 +113,7 @@ const EMPTY_WORKSPACE_CONTRADICTION_TOOL = /^read_file$/i;
 const EMPTY_WORKSPACE_TOOL_RESULT = /^\s*(?:no files?(?:\s+(?:were\s+)?found)?\.?|\[\]\s*)$/i;
 const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such file\b|enoent\b|permission denied\b|access denied\b|unable to read\b|could not read\b)/i;
 const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
-const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\b(?:the|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
+const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\b(?:the|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
 const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
 const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\b(?:the\s+)?workspace\s+(?:is|was)\s+(?:actually\s+)?not\s+empty\b|\b(?:correction|update)\s*:[^.!?\r\n]{0,120}\b(?:empty[- ]workspace|workspace[- ]empty|workspace\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b[^.!?\r\n]{0,80}\b(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:that|this)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result)|(?:the\s+)?(?:earlier|prior|previous)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\s+(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:I|we)\s+)?(?:retract|withdraw|disavow|reject)\s+(?:(?:that|this)(?:\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))?|(?:the\s+)?(?:(?:earlier|prior|previous)\s+)?(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b|\b(?:correction\s*:|actually\b)[^.!?\r\n]{0,140}(?:\bthere\s+(?:are|were)\s+(?:one\s+or\s+more\s+)?files?\b|(?<!no )(?<!zero )\bfiles?\s+(?:(?:were|are)\s+)?found\b|\b(?:README(?:\.md)?|package\.json|pyproject\.toml)\s+(?:exists?|is\s+present)\b|\bworkspace\s+(?:contains?|includes?|has)\s+files?\b)/i;
 const WORKSPACE_FILE_REFERENCE = String.raw`(?:README(?:\.md)?|(?:[\w.-]+[\\/])+[\w.-]+|[\w-]+\.(?:md|txt|json|ya?ml|toml|tsx?|jsx?|mjs|cjs|py|rs|go|java|cs|cpp|c|h|html|css|scss|sh|ps1|lock))`;
@@ -411,7 +411,7 @@ const FINANCE_NONCURRENT_PREFIX = /\b(?:target|goal|best[- ]case|(?:need|want|re
 const FINANCE_MARGINAL_DELTA_PREFIX = /\b(?:adds?|added|extends?|extended|increases?|increased|gains?|gained|improves?|improved)\s+(?:by\s+)?(?:approximately|about|around|roughly)?\s*[~≈]?\s*(?:\d+(?:\.\d+)?\s*[-–—]\s*)?$/i;
 const FINANCE_RESULT_INVALIDATION = /\b(?:(?:that|this|the)\s+(?:figure|result|answer|calculation)\s+(?:(?:is|was|seems?)\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable)|does\s+not\s+apply)|do\s+not\s+trust\s+(?:that|this|the)\s+(?:figure|result|answer|calculation))\b/i;
 const FINANCE_DENIAL_PREFIX = /\b(?:never|no\s+longer|do\s+not\s+say|don't\s+say|it\s+(?:would|is)\s+be\s+misleading\s+to\s+say|(?:we|I)\s+(?:cannot|can't)\s+(?:conclude|determine|establish)(?:\s+that)?|(?:reject(?:ed|s|ing)?|dispute(?:d|s|ing)?|deny|denied|denies|denying)(?:\s+the)?\s+(?:claim|statement)(?:\s+of|\s+that)?|(?:incorrectly|wrongly)\s+(?:reported|claimed|stated)|it\s+is\s+(?:false|not\s+true)\s+that)\s*$/i;
-const FINANCE_DENIAL_SUFFIX = /^\s*["'”]?\s*(?:,?\s*(?:(?:which|and\s+that|but\s+this)\s+is\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable|(?:the\s+)?runway)|an?\s+example\b|cannot\s+be\s+correct|can't\s+be\s+correct)|(?:cannot|can't)\s+be\s+correct|does\s+not\s+apply|is\s+an?\s+example|is\s+a\s+mistake|is\s+incorrect|is\s+not\s+(?:correct|(?:the\s+)?runway)|is\s+false)/i;
+const FINANCE_DENIAL_SUFFIX = /^\s*["'”]?\s*(?:,?\s*(?:(?:which|and\s+that|but\s+this)\s+is\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable|(?:the\s+)?runway)|an?\s+example\b|cannot\s+be\s+correct|can't\s+be\s+correct)|(?:cannot|can't)\s+be\s+correct|does\s+not\s+apply|is\s+an?\s+example|is\s+a\s+mistake|is\s+incorrect|is\s+not\s+(?:correct|(?:the\s+)?runway)|is\s+false|(?:the\s+)?(?:calculation|result|figure|answer)\s+is\s+not\s+(?:the\s+)?(?:current\s+)?runway)/i;
 
 const FINANCE_WORD_VALUES: Readonly<Record<string, number>> = {
   zero: 0,
@@ -601,6 +601,36 @@ function hasAffirmedCurrentRunway(response: string): boolean {
         && closeTo(equation.result, 4);
       const denied = financeAssertionDenied(clause, start, start + match[0].length);
       if (denied) return false;
+      if (!matchesSuppliedInputs) return false;
+      positiveCurrentResult = true;
+    }
+
+    for (const match of clause.matchAll(FINANCE_EXPANDED_RUNWAY_EQUATION)) {
+      const start = match.index ?? 0;
+      const hasRunwayEquationContext = /\brunway\b/i.test(clause)
+        || previousClauseHasRunwayHeading
+        || /^\s*(?:calculation|result)\s*:/i.test(clause);
+      if (!hasRunwayEquationContext) continue;
+      const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
+      const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      clauseHasRunwayContext = true;
+      if (scenario || nonCurrent) continue;
+      clauseHasCurrentRunwayContext = true;
+      const equation = {
+        numerator: financeAmount(match[1]),
+        burn: financeAmount(match[2]),
+        revenue: financeAmount(match[3]),
+        result: financeNumber(match[4]),
+      };
+      const denominator = equation.burn - equation.revenue;
+      const mathematicallyValid = denominator !== 0
+        && closeTo(equation.numerator / denominator, equation.result);
+      if (!mathematicallyValid) return false;
+      const matchesSuppliedInputs = closeTo(equation.numerator, 40_000)
+        && closeTo(equation.burn, 10_000)
+        && closeTo(equation.revenue, 0)
+        && closeTo(equation.result, 4);
+      if (financeAssertionDenied(clause, start, start + match[0].length)) return false;
       if (!matchesSuppliedInputs) return false;
       positiveCurrentResult = true;
     }
@@ -1862,7 +1892,8 @@ const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
 const NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM = /\b(?:two|2)\s+failures?\s+(?:on|in)\s+(?!Windows\b)[^.;,\r\n]{1,30},?\s*(?:not|rather\s+than|instead\s+of|unlike)\s+(?:(?:on|in|under)\s+)?Windows\b|\bWindows\b\s*(?:[,;:–—-]\s*)?(?:(?:currently|now|still|otherwise)\s+)*(?:(?:is|was|remains?)\s+(?:(?:currently|now|still|otherwise)\s+)*(?:clean|green|passing|unaffected|failure[- ]free)|(?:shows?|reports?|has)\s+(?:no|zero)\s+failures?)\b/i;
 const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser[- ]test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
-const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed)\b/i;
+const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed|eliminated)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed|eliminated)\b|\b(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,60}\b(?:(?:have|has)\s+(?:now\s+)?been|were|are|is)\s+(?:now\s+)?(?:resolved|fixed|closed|cleared|eliminated|gone)\b|\b(?:Windows\s+)?browser testing\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:now\s+)?(?:clean|green|passing|failure[- ]free)\b|\bneither\s+(?:Windows\s+)?browser[- ]test failure\b[^.\r\n]{0,40}\bremains?\b/i;
+const WRITER_BROWSER_FUTURE_CLEAR_CONDITION = /\b(?:recommend(?:ation|s|ing)?|should|must|need(?:s)?\s+to|(?:will|would)\s+(?:delay|postpone|hold|block)|delay|postpone|hold|block)\b[^.\r\n]{0,140}\buntil\b[^.\r\n]{0,180}\b(?:browser[- ]test failures?|browser testing)\b[^.\r\n]{0,100}\b(?:resolved|fixed|closed|cleared|eliminated|gone|clean|green|passing|failure[- ]free)\b/i;
 const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
 const WRITER_ROUTER_PRE_QUALIFIER = /\b(?:unverified|unconfirmed|uncertain)\s+smart router(?:\s+(?:behaviou?r|functionality|operation))?\b(?=\s*(?:$|[,.;:!?*(){}[\]–—-]|(?:and|or|nor|&|as|along|together|without|while|but|is|are|was|were|remain(?:s|ed)?|has|have|had)\b))/gi;
 const WRITER_ROUTER_POST_QUALIFIER = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)(\s+(?:(?:is|remains?|was)\s+)?)(?:unverified|unconfirmed|uncertain)\b/gi;
@@ -1966,7 +1997,8 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     || (/browser/i.test(topic.source) && (
       NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM.test(clause)
       || AFFIRMATIVE_WRITER_BROWSER_PASS.test(clause)
-      || NON_AFFIRMATIVE_WRITER_BROWSER_STATUS.test(clause)
+      || (NON_AFFIRMATIVE_WRITER_BROWSER_STATUS.test(clause)
+        && !WRITER_BROWSER_FUTURE_CLEAR_CONDITION.test(clause))
     ))
   );
 
@@ -2162,6 +2194,17 @@ const RETRACTS_ALL_ACTIONS = new RegExp([
 ].join('|'), 'i');
 const NEGATED_RUNWAY_SCENARIO_DESCRIPTOR = new RegExp(
   String.raw`\b(?:neither\s+(?:of\s+(?:the|these|those)\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:is|are|was|were)|(?:(?:both|all|the|these|those)\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:is|are|was|were)\s+(?:not|never))\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b`,
+  'gi',
+);
+const FINANCE_EXPANDED_RUNWAY_EQUATION = new RegExp(
+  FINANCE_AMOUNT
+    + /\s*(?:\/|÷|divided by)\s*\(\s*/.source
+    + FINANCE_AMOUNT
+    + /\s*(?:-|−|minus)\s*/.source
+    + FINANCE_AMOUNT
+    + /\s*\)\s*(?:=|equals?|gives?|yields?|produces?|works\s+out\s+to)\s*/.source
+    + '(' + FINANCE_NUMBER + ')'
+    + /(?:\s*months?)?\b/.source,
   'gi',
 );
 const NON_ACTIONABLE_RUNWAY_LINE = new RegExp([
@@ -2744,6 +2787,19 @@ function hasAffirmedPrioritizationBasis(
       criterionIndex,
       match[0],
     );
+    const conditionalActionConsequence = (() => {
+      const becauseIf = /\bbecause\s+if\b/i.exec(before);
+      if (!becauseIf || !testPattern(criteria[criterionIndex].topic, before)) return false;
+      const consequenceBoundary = before.lastIndexOf(',');
+      if (consequenceBoundary < becauseIf.index + becauseIf[0].length) return false;
+      const consequenceLead = before.slice(consequenceBoundary + 1);
+      const trailingPremiseDenial = /\b(?:but|however|yet)\b[^.!?\r\n]{0,120}(?:(?:\b(?:the\s+)?(?:leak|bug|issue|condition|premise|assumption|it|this|that)\b[^.!?\r\n]{0,40}\b(?:(?:does|do|did|is|are|was|were)\s+not|never)\b[^.!?\r\n]{0,40}\b(?:touch|affect|involve|apply|hold|true)\b)|(?:\b(?:this|that|the)\s+(?:premise|condition|assumption)\b[^.!?\r\n]{0,24}\b(?:is|was)\s+(?:false|invalid|untrue|incorrect|not\s+true)\b))/i.test(
+        normalized.slice(match.index + match[0].length),
+      );
+      return /\b(?:fixing|repairing|addressing|resolving|removing|reducing|improving|stabilizing)\b/i.test(consequenceLead)
+        && !/\b(?:may|might|could|would|perhaps|possibly|not|never|unlikely)\b/i.test(consequenceLead)
+        && !trailingPremiseDenial;
+    })();
     const rejectionBefore = suffixAfterLastPrioritizationBoundary(
       suffixAfterLastPrioritizationBoundary(
         before,
@@ -2755,7 +2811,7 @@ function hasAffirmedPrioritizationBasis(
     if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(independentBefore)) continue;
     if (PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)) continue;
     if (PRIORITIZATION_NEGATION_SUFFIX.test(after)) continue;
-    if (PRIORITIZATION_CONDITION_MARKER.test(independentBefore)) continue;
+    if (PRIORITIZATION_CONDITION_MARKER.test(independentBefore) && !conditionalActionConsequence) continue;
     if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(independentBefore)) continue;
     if (PRIORITIZATION_MODAL_PREFIX.test(independentBefore)) continue;
     if (PRIORITIZATION_CONDITION_SUFFIX.test(independentAfter)) continue;

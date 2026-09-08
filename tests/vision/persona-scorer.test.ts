@@ -7956,4 +7956,152 @@ describe('Qwen Flash Next exact-response regressions', () => {
       expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
     }
   });
+
+  it('accepts the latest Qwen prioritization rationale for a deliberately deferred sale', () => {
+    const response = [
+      '## Order',
+      '1. **Production memory bug**',
+      '2. **Onboarding friction**',
+      '3. **Close one customer**',
+      '## Why this order',
+      '**The bug goes first** because it is the only priority with compounding downside and can degrade toward a crash.',
+      '**Onboarding friction is second** because if the leak touches the onboarding path, fixing it removes friction and stabilizes production in one motion.',
+      '**The sale closes third** because procurement, legal, and sign-off usually give it the longest real timeline, so a day of slack rarely kills it.',
+      '## First action today',
+      'Reproduce the memory bug under a profiler.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const deniedSaleBasis = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'because procurement, legal, and sign-off usually give it the longest real timeline, so a day of slack rarely kills it.',
+        'but there is no rationale or decision basis for placing it third.',
+      ),
+    );
+    expect(deniedSaleBasis.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const speculativeOnboardingBasis = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'the result might possibly improve onboarding.',
+      ),
+    );
+    expect(speculativeOnboardingBasis.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const contradictedOnboardingPremise = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'fixing it removes friction and stabilizes production, but the leak does not touch onboarding.',
+      ),
+    );
+    expect(contradictedOnboardingPremise.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const falseOnboardingPremise = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'fixing it removes friction and stabilizes production in one motion, but this premise is false.',
+      ),
+    );
+    expect(falseOnboardingPremise.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+  });
+
+  it('accepts the latest Qwen writer phrasing for two persistent Windows failures', () => {
+    const response = [
+      'We had planned to ship on Friday. API tests currently pass.',
+      'However, browser tests remain in a state of failure, with two specific issues persisting on Windows.',
+      'The smart router has not been exercised without cloud credentials.',
+      'Recommendation: Delay the release until these technical gaps are fully closed.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    for (const update of [
+      'Update: both Windows browser-test failures have now been resolved.',
+      'Update: both Windows browser-test failures have now been eliminated.',
+      'Update: both Windows browser-test failures are gone.',
+      'Update: Windows browser testing is now clean.',
+      'Update: neither Windows browser-test failure remains.',
+      'Update: We waited until the Windows browser-test failures were resolved.',
+      'Update: Release was delayed until browser testing was clean.',
+    ]) {
+      const retracted = scoreResponse('writer', `${response}\n${update}`);
+      expect(retracted.checks.find(check => check.id === 'release-facts')?.passed, update).toBe(false);
+    }
+  });
+
+  it('keeps the current four-month runway separate from projected action scenarios', () => {
+    const response = [
+      'Runway = Cash / Net Monthly Burn',
+      'Runway = 40,000 / (10,000 - 0) = 4.00 months',
+      'Biggest assumption: Monthly burn remains constant at $10,000 and revenue stays at $0.00.',
+      'Actions to improve runway:',
+      '| Action | Expected Result |',
+      '|---|---|',
+      '| Cut discretionary spending by $2,000/mo | Burn drops to $8,000 and runway extends to 5.00 months |',
+      '| Generate $3,000/mo in early revenue | Net burn drops to $7,000 and runway extends to 5.71 months |',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    const wrongInputs = scoreResponse(
+      'finance-owner',
+      response.replace('(10,000 - 0) = 4.00', '(10,000 - 2,000) = 5.00'),
+    );
+    expect(wrongInputs.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+
+    const deniedEquation = scoreResponse(
+      'finance-owner',
+      `${response}\nCorrection: the 40,000 / (10,000 - 0) = 4.00 calculation is not the current runway.`,
+    );
+    expect(deniedEquation.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+  });
+
+  it('accepts the latest Qwen empty-workspace wording with an exhaustive receipt', () => {
+    const response = [
+      'The workspace inspection succeeded: an exhaustive search of the workspace (`**/*`) returned no files.',
+      'The workspace at the specified root is empty.',
+      'Recommended next engineering step: determine where the actual code lives.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const missingReceipt = scoreResponse('coder', response, { toolsUsed: [], sseEvents: [] });
+    expect(missingReceipt.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('accepts descriptive Qwen lane headings with canonical roles in parentheses', () => {
+    const response = [
+      '### Lane 1: Production-Readiness Auditor (Researcher)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '### Lane 2: Production Readiness Remediator (Coder)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+
+    const result = scoreResponse('coordinator', response);
+    expect(result.checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+
+    const denied = scoreResponse(
+      'coordinator',
+      response.replace('(Researcher)', '(Not a Researcher)'),
+    );
+    expect(denied.checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+  });
 });
