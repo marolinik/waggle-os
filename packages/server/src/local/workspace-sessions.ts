@@ -173,6 +173,14 @@ export class WorkspaceSessionManager {
       existing.lastActivity = Date.now();
       return existing;
     }
+    // Release an idle resident session before mindFactory pins a replacement.
+    // Waiting for create() would briefly exceed the MultiMindCache budget and
+    // emit an "all cached minds pinned" warning on every workspace after 20.
+    // At the configured hard cap, preserve the existing fail-closed path so
+    // the newly acquired pin is still rolled back by the catch below.
+    if (this.sessions.size < this.maxSessions && this.sessions.size >= RESIDENT_SESSION_BUDGET) {
+      this.trimResidentSessions(RESIDENT_SESSION_BUDGET - 1);
+    }
     // `mindFactory` may pin the shared cache handle (session-lifetime refcount).
     // If anything downstream throws before the session is registered (e.g. the
     // max-sessions cap in create()), roll the pin back via `release` so a failed

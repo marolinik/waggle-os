@@ -266,6 +266,43 @@ describe('WorkspaceSessionManager', () => {
   });
 
   describe('resident session pressure', () => {
+    it('releases the oldest idle session before acquiring a replacement mind', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        const order: string[] = [];
+
+        for (let i = 0; i < 20; i += 1) {
+          vi.setSystemTime(1_700_000_000_000 + i);
+          manager.create(
+            `ws-${i}`,
+            createMockMind(),
+            createMockOrchestrator(),
+            createMockTools(),
+            undefined,
+            () => order.push(`release-${i}`),
+          );
+        }
+
+        manager.getOrCreate(
+          'replacement',
+          () => {
+            order.push('acquire-replacement');
+            return createMockMind();
+          },
+          () => createMockOrchestrator(),
+          () => createMockTools(),
+          undefined,
+          () => order.push('release-replacement'),
+        );
+
+        expect(order.slice(0, 2)).toEqual(['release-0', 'acquire-replacement']);
+        expect(manager.size).toBe(20);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('trims sequential idle sessions to the 20-mind cache budget', () => {
       vi.useFakeTimers();
       try {
