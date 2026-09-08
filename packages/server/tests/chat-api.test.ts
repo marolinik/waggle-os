@@ -2394,7 +2394,7 @@ describe('Chat Streaming API', () => {
     ],
     [
       'proxied transport failure',
-      'Server error retry cap exceeded (3 consecutive 502 errors): {"error":{"message":"openai-compatible API request failed: fetch failed"}}',
+      'Server error retry cap exceeded after 3 retries (latest 502): {"error":{"message":"openai-compatible API request failed: fetch failed"}}',
     ],
   ])('maps %s to one actionable endpoint outage without raw transport or API-key advice', async (
     _case,

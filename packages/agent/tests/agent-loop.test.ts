@@ -1292,7 +1292,7 @@ describe('runAgentLoop', () => {
     expect(callCount).toBe(3);
   });
 
-  it('terminates with error after 3 consecutive 502 server errors', async () => {
+  it('terminates after the initial 502 plus three bounded retries', async () => {
     let callCount = 0;
     const fetch = vi.fn(async () => {
       callCount++;
@@ -1306,9 +1306,9 @@ describe('runAgentLoop', () => {
 
     await expect(
       runAgentLoop(makeConfig({ fetch }))
-    ).rejects.toThrow('Server error retry cap exceeded (3 consecutive 502 errors)');
+    ).rejects.toThrow('Server error retry cap exceeded after 3 retries (latest 502)');
 
-    expect(callCount).toBe(3);
+    expect(callCount).toBe(4);
   });
 
   it('bounds one logical model operation across slow 503 retries and backoff', async () => {

@@ -16,7 +16,8 @@
  * Both counters reset on a successful response (caller's responsibility).
  */
 
-const MAX_RETRIES = 3;
+const MAX_RATE_LIMIT_ATTEMPTS = 3;
+const MAX_TRANSIENT_RETRIES = 3;
 const MAX_RATE_LIMIT_WAIT_MS = 60_000;
 const MAX_SERVER_ERROR_WAIT_MS = 30_000;
 const RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS = 5;
@@ -81,9 +82,9 @@ export function parseRetryAfterSeconds(
  * Decide what to do with a non-OK LLM response.
  *
  * 429 (rate limit): honour Retry-After header (default 5s), cap at 60s.
- *   Throws when MAX_RETRIES consecutive 429s reached.
- * 5xx (502/503/504): exponential backoff (1s, 2s, 4s, …), cap at 30s.
- *   Throws when MAX_RETRIES consecutive 5xx reached.
+ *   Throws when MAX_RATE_LIMIT_ATTEMPTS consecutive 429s reached.
+ * 5xx (502/503/504): exponential backoff (2s, 4s, 8s, …), cap at 30s.
+ *   Retries three times after the initial request, then throws.
  * Any other non-OK status: throws unconditionally with the response body.
  */
 export async function handleNonOkResponse(
@@ -92,11 +93,11 @@ export async function handleNonOkResponse(
 ): Promise<RetryAction> {
   if (response.status === 429) {
     const next = state.rateLimitRetries + 1;
-    if (next >= MAX_RETRIES) {
+    if (next >= MAX_RATE_LIMIT_ATTEMPTS) {
       return {
         kind: 'fatal',
         error: new Error(
-          `Rate limit retry cap exceeded (${MAX_RETRIES} consecutive 429 responses). Try again later.`,
+          `Rate limit retry cap exceeded (${MAX_RATE_LIMIT_ATTEMPTS} consecutive 429 responses). Try again later.`,
         ),
       };
     }
@@ -106,7 +107,7 @@ export async function handleNonOkResponse(
     return {
       kind: 'retry',
       waitMs,
-      notice: `\n[Rate limited — waiting ${displayedWaitSec}s (retry ${next}/${MAX_RETRIES})...]\n`,
+      notice: `\n[Rate limited — waiting ${displayedWaitSec}s (retry ${next}/${MAX_RATE_LIMIT_ATTEMPTS})...]\n`,
       state: { ...state, rateLimitRetries: next },
     };
   }
@@ -116,11 +117,11 @@ export async function handleNonOkResponse(
 
   if (response.status === 502 || response.status === 503 || response.status === 504) {
     const next = state.serverErrorRetries + 1;
-    if (next >= MAX_RETRIES) {
+    if (next > MAX_TRANSIENT_RETRIES) {
       return {
         kind: 'fatal',
         error: new Error(
-          `Server error retry cap exceeded (${MAX_RETRIES} consecutive ${response.status} errors): ${errorBody}`,
+          `Server error retry cap exceeded after ${MAX_TRANSIENT_RETRIES} retries (latest ${response.status}): ${errorBody}`,
         ),
       };
     }
@@ -128,7 +129,7 @@ export async function handleNonOkResponse(
     return {
       kind: 'retry',
       waitMs,
-      notice: `\n[Server error ${response.status} — retrying in ${waitMs / 1000}s (retry ${next}/${MAX_RETRIES})...]\n`,
+      notice: `\n[Server error ${response.status} — retrying in ${waitMs / 1000}s (retry ${next}/${MAX_TRANSIENT_RETRIES})...]\n`,
       state: { ...state, serverErrorRetries: next },
     };
   }
@@ -153,11 +154,11 @@ export async function handleNonOkResponse(
 export function handleNetworkError(err: unknown, state: RetryState): RetryAction {
   const next = state.networkErrorRetries + 1;
   const detail = err instanceof Error ? err.message : String(err);
-  if (next >= MAX_RETRIES) {
+  if (next > MAX_TRANSIENT_RETRIES) {
     return {
       kind: 'fatal',
       error: new Error(
-        `Could not reach the model endpoint after ${MAX_RETRIES} attempts (${detail}). ` +
+        `Could not reach the model endpoint after ${MAX_TRANSIENT_RETRIES + 1} attempts (${MAX_TRANSIENT_RETRIES} retries; ${detail}). ` +
           `It may be down or restarting — try again in a moment.`,
       ),
     };
@@ -166,7 +167,7 @@ export function handleNetworkError(err: unknown, state: RetryState): RetryAction
   return {
     kind: 'retry',
     waitMs,
-    notice: `\n[Connection to the model failed — retrying in ${waitMs / 1000}s (retry ${next}/${MAX_RETRIES})...]\n`,
+    notice: `\n[Connection to the model failed — retrying in ${waitMs / 1000}s (retry ${next}/${MAX_TRANSIENT_RETRIES})...]\n`,
     state: { ...state, networkErrorRetries: next },
   };
 }

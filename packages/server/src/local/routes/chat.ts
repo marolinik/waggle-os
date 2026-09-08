@@ -5639,7 +5639,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } else if (
           /ECONNREFUSED|fetch failed|ENETUNREACH|EHOSTUNREACH|socket hang up/i.test(err.message)
           || /Could not reach (?:the )?(?:AI )?model endpoint/i.test(err.message)
-          || /Server error retry cap exceeded \(\d+ consecutive (?:502|503|504) errors\)/i.test(err.message)
+          || /Server error retry cap exceeded (?:\(\d+ consecutive (?:502|503|504) errors\)|after \d+ retries \(latest (?:502|503|504)\))/i.test(err.message)
         ) {
           errorMessage = 'The model endpoint is not responding. It may be down or restarting. Check Settings > Models, then try again.';
         } else if (err.message.includes('timeout') || err.message.includes('ETIMEDOUT')) {

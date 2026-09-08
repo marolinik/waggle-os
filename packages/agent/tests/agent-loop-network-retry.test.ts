@@ -130,6 +130,27 @@ describe('runAgentLoop — network-failure resilience (#2)', () => {
     }
   });
 
+  it('recovers on the fourth attempt after three consecutive transient server errors', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const fetchFn = vi.fn(async () => {
+      calls++;
+      if (calls <= 3) return new Response('model warming', { status: 503 });
+      return okResponse('warm and ready');
+    });
+
+    try {
+      const run = runAgentLoop(baseConfig({ fetch: fetchFn as unknown as typeof fetch }));
+      await vi.advanceTimersByTimeAsync(14_000);
+      const result = await run;
+
+      expect(calls).toBe(4);
+      expect(result.content).toBe('warm and ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps retry notices on onToken for legacy callers without onRetry', async () => {
     vi.useFakeTimers();
     const legacyTokens: string[] = [];
@@ -175,8 +196,8 @@ describe('handleNetworkError (#2)', () => {
     }
   });
 
-  it('at the retry cap → clean, user-facing fatal error', () => {
-    const atCap: RetryState = { rateLimitRetries: 0, serverErrorRetries: 0, networkErrorRetries: 2 };
+  it('after three retries → clean, user-facing fatal error', () => {
+    const atCap: RetryState = { rateLimitRetries: 0, serverErrorRetries: 0, networkErrorRetries: 3 };
     const action = handleNetworkError(new Error('ECONNREFUSED'), atCap);
     expect(action.kind).toBe('fatal');
     if (action.kind === 'fatal') {
