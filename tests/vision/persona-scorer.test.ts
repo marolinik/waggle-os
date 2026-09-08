@@ -8624,4 +8624,134 @@ describe('Qwen Flash Next exact-response regressions', () => {
       ).checks.find(check => check.id === 'empty-result')?.passed,
     ).toBe(false);
   });
+
+  it('accepts exact 53db46aa Qwen persona answers without weakening negative controls', () => {
+    const prioritization = [
+      '## Justification Plan',
+      '| Priority | Why this position |',
+      '|---|---|',
+      '| **1. Production memory bug** | Production incidents risk reliability, customer trust, and downstream work. |',
+      '| **2. Close one customer** | Revenue should not wait on a non-blocking engineering investigation. |',
+      '| **3. Onboarding friction** | This is valuable but usually not as time-sensitive as production risk or a deal closing this week. |',
+    ].join('\n');
+    expect(
+      scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritization.replace(
+          'This is valuable but usually not as time-sensitive as production risk or a deal closing this week.',
+          'Is it not as time-sensitive?',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+
+    const agenda = [
+      '**Desired Decisions**',
+      '- Go/no-go determination with named approvers from each group',
+      '- Acceptance or rejection of open defects against launch criteria',
+      '- Approval of the support escalation path and runbook',
+      '- Assignment of owners for any conditional (non-blocking) items',
+    ].join('\n');
+    expect(
+      scoreResponse('executive-assistant', agenda).checks.find(check => check.id === 'decisions')?.passed,
+    ).toBe(true);
+    for (const validDecision of [
+      'Approval of launch criteria with missing evidence documented',
+      'Assignment of owners for unavailable dependencies',
+      'Assignment of owners for dependencies currently unavailable',
+      'Approval of launch criteria despite evidence missing',
+    ]) {
+      expect(
+        scoreResponse('executive-assistant', `**Desired Decisions**\n- ${validDecision}`).checks.find(check => check.id === 'decisions')?.passed,
+        validDecision,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse('executive-assistant', '**Desired Decisions**\n- No decision required').checks.find(check => check.id === 'decisions')?.passed,
+    ).toBe(false);
+    for (const deniedDecision of [
+      'No approval of launch criteria',
+      'No acceptance or rejection of defects',
+      'Not an assignment of owners',
+      'No determination on launch readiness',
+      'Approval for launch is not granted',
+      'Assignment of owners was not made',
+      'Determination on readiness was not reached',
+      'Lack of approval of launch criteria',
+      'Absence of approval on launch criteria',
+      'Approval of launch criteria is not required',
+      'Approval for launch was denied',
+      'Assignment of owners was rejected',
+      "Approval for launch isn't granted",
+      'Confirmation of launch readiness was withheld',
+      'Selection of the launch date was revoked',
+      'Approval for launch failed',
+      'Assignment of owners failed',
+      'The approval for launch failed',
+      'Final approval for launch failed',
+      'Approval of launch criteria denied.',
+      'Assignment of owners rejected.',
+    ]) {
+      expect(
+        scoreResponse('executive-assistant', `**Desired Decisions**\n- ${deniedDecision}`).checks.find(check => check.id === 'decisions')?.passed,
+        deniedDecision,
+      ).toBe(false);
+    }
+
+    const actions = [
+      '## Actions That Extend Runway',
+      '- [ ] **Reduce cost base.** Renegotiate vendor contracts and cut discretionary spend to lower monthly burn.',
+      '- [ ] **Add recurring monthly revenue.** Convert one-time sales into subscriptions so net burn shrinks.',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', actions).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        actions.replace('Add recurring monthly revenue.', 'Do not add recurring monthly revenue.'),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const artifactAction of [
+      'Add recurring revenue estimate to the forecast.',
+      'Add recurring revenue target to the dashboard.',
+      'Add recurring revenue metric to the report.',
+      'Add recurring revenue assumption to the model.',
+      'Add recurring revenue estimates to the forecast.',
+      'Add recurring revenue targets to the dashboard.',
+      'Add recurring revenue metrics to the report.',
+      'Add recurring revenue assumptions to the model.',
+      'Add recurring revenue to the forecast.',
+      'Add recurring revenue data to the report.',
+      'Add recurring revenue figures on the dashboard.',
+      'Add recurring revenue rows in the model.',
+      'Add recurring revenue to our forecast.',
+      'Add recurring revenue into the dashboard.',
+      "Add recurring revenue to the company's report.",
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          actions.replace('**Add recurring monthly revenue.** Convert one-time sales into subscriptions so net burn shrinks.', artifactAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        artifactAction,
+      ).toBe(false);
+    }
+
+    const runway = [
+      '**Runway Calculation**',
+      'Cash / net monthly burn. In this case: 40,000 / 10,000 = 4.00 months.',
+      '',
+      '**Runway**',
+      '4.00 months',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', runway).checks.find(check => check.id === 'runway')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse('finance-owner', runway.replaceAll('4.00', '5.00')).checks.find(check => check.id === 'runway')?.passed,
+    ).toBe(false);
+  });
 });

@@ -674,6 +674,16 @@ function hasAffirmedCurrentRunway(response: string): boolean {
       positiveCurrentResult = true;
     }
 
+    if (previousClauseHasRunwayHeading && !clauseScenarioScope) {
+      const bareDuration = new RegExp(`^(${FINANCE_NUMBER})\\s*months?$`, 'i').exec(clause);
+      if (bareDuration) {
+        const value = financeNumber(bareDuration[1]);
+        if (!closeTo(value, 4)) return false;
+        positiveCurrentResult = true;
+        clauseHasCurrentRunwayContext = true;
+      }
+    }
+
     const canUseCurrentRunwayCoreference = !clauseScenarioScope
       && (clauseHasCurrentRunwayContext
         || (!clauseHasRunwayContext && previousClauseHasCurrentRunwayContext));
@@ -1677,10 +1687,21 @@ function isAffirmedAgendaDecision(value: string): boolean {
   if (!normalized || /\b(?:tbd|tbc|undecided|not decided|pending|decide later|approve later|no\s+(?:final\s+)?choice)\b|^(?:none|n\/?a|not applicable|no decision(?: required)?|decision required)$/i.test(normalized)) {
     return false;
   }
+  if (/\b(?:no|without)\s+(?:final\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b|\bnot\s+(?:an?\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b/i.test(normalized)) {
+    return false;
+  }
+  if (/\b(?:lack|absence)\s+of\s+(?:final\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b|\b(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b[^.\r\n]{0,80}\b(?:is|are|was|were|has|have|had)(?:(?:n't|\s+(?:not|never|no\s+longer))(?:\s+been)?\s+(?:granted|made|reached|required|given|obtained|needed|approved|confirmed|assigned|determined|denied|rejected|refused|withheld|withdrawn|revoked|cancelled|canceled)|(?:\s+been)?\s+(?:denied|rejected|refused|withheld|withdrawn|revoked|cancelled|canceled))\b/i.test(normalized)) {
+    return false;
+  }
+  if (/^\s*(?:(?:an?|the)\s+)?(?:final\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\s+(?:of|on|for|with)\s+[^.\r\n]{1,60}\s+(?:failed|denied|rejected|refused|withheld|withdrawn|revoked|cancelled|canceled|lapsed|expired)\s*[.!]?$/i.test(normalized)) {
+    return false;
+  }
   if (/\?|\b(?:if|unless|maybe|perhaps|possibly|hypothetical|do not|don't|did not|never|cannot|can't|could|would|may|might|should|not approved|not decided|no decision)\b/i.test(normalized)) {
     return false;
   }
   return /\b(?:approve|confirm|decide|select|choose|agree|sign[- ]?off|assign|make)\b/i.test(normalized)
+    || /\b(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination)\s+(?:of|on|for|with)\b/i.test(normalized)
+    || /\bacceptance\s+or\s+rejection\s+of\b/i.test(normalized)
     || /\b(?:final\s+)?(?:launch|go\/?no-go)\s+decision\b/i.test(normalized)
     || /\bgo\s+(?:or|\/)\s+no[- ]?go\b/i.test(normalized)
     || /\bfinal\s+confirmation\s+of\b/i.test(normalized);
@@ -2881,6 +2902,7 @@ function hasAffirmedPrioritizationBasis(
   const normalized = clause.replace(/[*_`]/g, '').trim();
   const assertedRationale = normalized.replace(/^Rationale:\s*/i, '');
   const unconditionalRationale = assertedRationale.replace(PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD, '');
+  if (/\?\s*$/.test(normalized)) return false;
   if (prioritizationWordCount(normalized) < 4) return false;
   if (/\b(?:no|not(?:\s+actually)?)\s+(?:a\s+)?(?:rationale|reason|basis|justification)\b|\b(?:does|do|did|should|would|could|may|might|must|can|will)\s+not\s+(?:justify|support|explain)\b|\b(?:tbd|tbc|placeholder)\b|^\s*(?:maybe|perhaps|probably|possibly|tentatively|supposedly)\b/i.test(assertedRationale)) {
     return false;
