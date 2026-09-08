@@ -8160,6 +8160,19 @@ describe('Qwen Flash Next exact-response regressions', () => {
     expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
   });
 
+  it('accepts the latest Qwen recommendation phrasing but rejects its appended assurance', () => {
+    const response = [
+      'Our initial plan targeted a Friday shipment. Currently, API tests pass successfully.',
+      'However, browser tests exhibit two failures on Windows. Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these outstanding technical gaps, the recommendation is to delay the release until they are resolved.',
+      'This ensures all components function as expected across supported environments before deployment.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+  });
+
   it('keeps the current four-month runway separate from projected action scenarios', () => {
     const response = [
       'Runway = Cash / Net Monthly Burn',

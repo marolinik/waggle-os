@@ -2138,7 +2138,7 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
     if (hasPositiveLead) return true;
   }
 
-  const pronounCondition = /\b(?:these|those|the)\s+(?:outstanding\s+|unresolved\s+|identified\s+)?(?:gaps?|failures?)\b[^?\r\n]{0,180}\b(?:the\s+recommendation\s+is\s+to|(?:we|you|the team)\s+recommend(?:ed|ing)?)\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\b[^?\r\n]{0,80}\buntil\s+(?:(?:they|these|those)\s+(?:are\s+)?|all\s+(?:the\s+)?(?:identified\s+)?(?:issues?|gaps?|failures?)\s+(?:are\s+)?)(?:fully\s+)?(?:closed|resolved|fixed|addressed)\b/i;
+  const pronounCondition = /\b(?:these|those|the)\s+(?:outstanding\s+|unresolved\s+|identified\s+)?(?:technical\s+)?(?:gaps?|failures?)\b[^?\r\n]{0,180}\b(?:the\s+recommendation\s+is\s+to|(?:we|you|the team)\s+recommend(?:ed|ing)?)\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\b[^?\r\n]{0,80}\buntil\s+(?:(?:they|these|those)\s+(?:are\s+)?|all\s+(?:the\s+)?(?:identified\s+)?(?:issues?|gaps?|failures?)\s+(?:are\s+)?)(?:fully\s+)?(?:closed|resolved|fixed|addressed)\b/i;
   const pronounMatch = pronounCondition.exec(normalized);
   if (pronounMatch?.index !== undefined) {
     const prefix = normalized.slice(Math.max(0, pronounMatch.index - 40), pronounMatch.index);

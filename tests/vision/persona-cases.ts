@@ -231,7 +231,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?(?:all\s+)?(?:currently\s+)?pass(?:ed|ing)?|have\s+(?:currently\s+)?passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'writerRouterFact', points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'writerDelayRecommendation', points: 10 },
-      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\brisks?\s+(?:release\s+|platform\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:platform\s+)?stability\b|\bacross\s+all\s+environments\b)/i, points: 10 },
+      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\brisks?\s+(?:release\s+|platform\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:(?:all\s+)?components?\s+function\s+as\s+expected|(?:platform\s+)?stability)\b|\bacross\s+(?:all|supported)\s+environments\b)/i, points: 10 },
     ],
   },
   {
