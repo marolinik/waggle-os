@@ -447,6 +447,93 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(exactTokens);
   });
 
+  it('atomically repairs a missing explicitly required tagged JSON envelope', async () => {
+    const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
+    const wrappedReport = `<verifier_report>\n${bareReport}\n</verifier_report>`;
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: bareReport } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: wrappedReport }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 16 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+    const request = 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.';
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(JSON.stringify(repairBody.messages)).toContain('tagged JSON envelope');
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(wrappedReport);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it('atomically repairs malformed Markdown table column counts before display', async () => {
+    const malformed = [
+      '| Risk | Impact | Mitigation |',
+      '|---|---|---|',
+      '| Port collision | High | Local proxy may fail | Detect and select a free port |',
+    ].join('\n');
+    const corrected = [
+      '| Risk | Impact | Mitigation |',
+      '|---|---|---|',
+      '| Port collision | High | Detect and select a free port |',
+    ].join('\n');
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: malformed } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 20 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: corrected }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 18 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: 'Draft a concise release risk table with mitigations.' }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(JSON.stringify(repairBody.messages)).toContain('Markdown table');
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(corrected);
+    expect(result.content).toBe(corrected);
+  });
+
   it('rejects a repeated incorrect answer for an explicit exact-output contract', async () => {
     const fetch = mockFetch(['B-01', 'B-01']);
 

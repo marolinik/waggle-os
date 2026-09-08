@@ -86,6 +86,7 @@ const EXACT_OUTPUT_QUALIFIER = /^[\t ]*(?:(?:in[\t ]+(?:this|the|that|provided)[
 const MAX_EXACT_OUTPUT_CHARS = 2_048;
 const MAX_EXACT_OUTPUT_TOKENS = 256;
 const RAW_TOOL_CALL_MARKUP = /\[\/?TOOL_CALL\]|<\s*tool_call\b|\{\s*tool\s*=>|```(?:json|tool)?\s*\{[^`]*"tool"/is;
+const TAGGED_JSON_ENVELOPE_CONTRACT = /\b(?:return|respond|output|provide)\s+exactly\s+one\s+<([a-z][\w-]*)>\s*\.\.\.\s*<\/\1>\s+JSON\s+envelope\s+and\s+no\s+text\s+before\s+or\s+after(?:\s+it)?/i;
 const PACKAGE_MANAGER_REQUEST = /\bpackage[\s_-]+manager\b/i;
 const EXPLICIT_PACKAGE_MANAGER = /["']packageManager["']\s*:\s*["'](?<manager>[a-z][a-z0-9._-]*)@[^"']+["']/i;
 const CLAIMED_PACKAGE_MANAGER = /\bpackage\s+manager\s*(?::|is|=)\s*(?:\*\*|`)?(?<manager>[a-z][a-z0-9._-]*)/i;
@@ -144,6 +145,62 @@ function safeExactOutputSuffix(userRequest: string, content: string): string | u
     return undefined;
   }
   return expected.slice(normalized.length);
+}
+
+function requiredTaggedJsonEnvelope(userRequest: string): { open: string; close: string } | null {
+  const match = TAGGED_JSON_ENVELOPE_CONTRACT.exec(userRequest);
+  const tag = match?.[1];
+  if (!tag) return null;
+  return { open: `<${tag}>`, close: `</${tag}>` };
+}
+
+function taggedJsonEnvelopeMismatch(userRequest: string, content: string): boolean {
+  const envelope = requiredTaggedJsonEnvelope(userRequest);
+  if (!envelope) return false;
+  const normalized = normalizeExactOutput(content);
+  return !normalized.startsWith(`${envelope.open}\n`)
+    || !normalized.endsWith(`\n${envelope.close}`);
+}
+
+function markdownRowCells(line: string): string[] | null {
+  if (!/^\s*\|.*\|\s*$/.test(line)) return null;
+  const cells: string[] = [];
+  let cell = '';
+  let inCode = false;
+  for (let index = line.indexOf('|') + 1; index < line.lastIndexOf('|'); index += 1) {
+    const char = line[index];
+    if (char === '`' && line[index - 1] !== '\\') inCode = !inCode;
+    if (char === '|' && !inCode && line[index - 1] !== '\\') {
+      cells.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    cell += char;
+  }
+  cells.push(cell.trim());
+  return cells.length >= 2 ? cells : null;
+}
+
+function hasMalformedMarkdownTable(content: string): boolean {
+  const lines = content.replace(/\r\n?/g, '\n').split('\n');
+  let inFence = false;
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (/^\s*(```|~~~)/.test(lines[index])) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const header = markdownRowCells(lines[index]);
+    const separator = markdownRowCells(lines[index + 1]);
+    if (!header || !separator || !separator.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
+    if (header.length !== separator.length) return true;
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const row = markdownRowCells(lines[rowIndex]);
+      if (!row) break;
+      if (row.length !== header.length) return true;
+    }
+  }
+  return false;
 }
 
 function explicitlyScopesDraftToOpening(userRequest: string): boolean {
@@ -331,6 +388,10 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
 
   const exactOutputIncomplete = finishReason === 'stop'
     && explicitExactOutputMismatch(userRequest, content);
+  const taggedEnvelopeIncomplete = finishReason === 'stop'
+    && taggedJsonEnvelopeMismatch(userRequest, content);
+  const malformedMarkdownTable = finishReason === 'stop'
+    && hasMalformedMarkdownTable(content);
   const missingDraftComponents = finishReason === 'stop'
     ? missingStructuredDraftComponents(userRequest, content)
     : [];
@@ -350,10 +411,16 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     });
   }
   if ((exactOutputIncomplete && literalSuffix === undefined)
+    || taggedEnvelopeIncomplete
+    || malformedMarkdownTable
     || structuredDraftIncomplete
     || danglingLeadInIncomplete) {
     const reason = exactOutputIncomplete
       ? 'explicit exact-output contract was not completed'
+      : taggedEnvelopeIncomplete
+        ? 'explicit tagged JSON envelope was not completed'
+        : malformedMarkdownTable
+          ? 'Markdown table has inconsistent column counts'
       : structuredDraftIncomplete
         ? 'structured draft ended after its opening scaffold'
         : 'answer ended after an unfinished lead-in';
@@ -368,6 +435,20 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
           'Answer again from the beginning. Copy the complete payload requested after the response-format colon, character-for-character, with no prefix or suffix.',
           'Do not mention this correction and do not call tools.',
         ].join('\n')
+      : taggedEnvelopeIncomplete
+        ? [
+            '# Internal completion-integrity correction',
+            'The prior candidate omitted or malformed the explicitly required tagged JSON envelope and was not shown to the user.',
+            'Answer again from the beginning with exactly one tagged JSON envelope, using the precise opening and closing tags requested by the user and no text outside them.',
+            'Preserve the requested JSON schema and evidence. Do not mention this correction and do not call tools.',
+          ].join('\n')
+        : malformedMarkdownTable
+          ? [
+              '# Internal completion-integrity correction',
+              'The prior candidate contained a malformed Markdown table and was not shown to the user.',
+              'Answer again from the beginning. Every Markdown table header, separator, and data row must have exactly the same number of columns; preserve all substantive content.',
+              'Do not mention this correction and do not call tools.',
+            ].join('\n')
       : structuredDraftIncomplete
         ? [
           '# Internal completion-integrity correction',
