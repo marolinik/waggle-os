@@ -7221,6 +7221,105 @@ describe('Qwen Flash Next exact-response regressions', () => {
     expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
   });
 
+  it('accepts rationale expressed as one Why bullet per supplied priority', () => {
+    const response = [
+      '## Recommended order',
+      '1. Investigate the production memory bug',
+      '2. Close one customer',
+      '3. Repair onboarding friction',
+      '## Why',
+      '- **Memory bug first:** production reliability is the only item with time-sensitive downside.',
+      '- **Customer second:** one close is a concrete, short-cycle outcome.',
+      '- **Onboarding third:** friction reduction compounds over time and its cost is gradual.',
+      '## First action today',
+      'Open a production investigation ticket.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('accepts milestone-local dependencies and explicit Owner role assignments', () => {
+    const response = [
+      '## Milestones & Dependencies',
+      '**M1: Native packaging**',
+      '- **Dependencies:** None.',
+      '- **Owner:** Platform Engineering Lead',
+      '**M2: Local model integration**',
+      '- **Dependencies:** Depends on M1.',
+      '- **Owner:** Backend Infrastructure Engineer',
+      '## Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
+  });
+
+  it('accepts noun-phrase desired decisions in an explicit decision section', () => {
+    const response = [
+      '**Launch-readiness meeting agenda (30 minutes)**',
+      'Participants: Product, Engineering, QA, Support',
+      '| Time Block | Topic |',
+      '|---|---|',
+      '| 00:00-00:15 | Readiness review |',
+      '| 00:15-00:30 | Decision and actions |',
+      '**Desired Decisions**',
+      '- Go or No-Go for the launch date.',
+      '- Final confirmation of the production rollout sequence.',
+      '**Pre-read Checklist**',
+      '- [ ] Release evidence',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'decisions')?.passed).toBe(true);
+  });
+
+  it('accepts renegotiation and pre-sales as concrete runway actions', () => {
+    const response = [
+      'Cash divided by net monthly burn gives exactly 4 months of runway.',
+      'The biggest assumption is that burn stays constant and revenue remains zero.',
+      '**Two actions to extend runway:**',
+      '- **Cost reduction:** Renegotiate recurring expenses or cut discretionary spend.',
+      '- **Cash inflow:** Pre-sell services or accelerate accounts receivable.',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+  });
+
+  it('accepts lettered Researcher and Coder lane headings', () => {
+    const response = [
+      '#### Lane A: Researcher (Audit & Gap Analysis)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '#### Lane B: Coder (Remediation & Instrumentation)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+
+    const result = scoreResponse('coordinator', response);
+    expect(result.checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+  });
+
+  it('accepts a contains-no-files conclusion backed by an exhaustive receipt', () => {
+    const response = [
+      'The current virtual workspace contains no files.',
+      'An exhaustive workspace-rooted search returned no files.',
+      'Next engineering step: initialize the project foundation.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+  });
+
   it('recognizes the exact retained Windows failures while still rejecting its invented assurance', () => {
     const response = [
       '**MEMO: Release Delay Recommendation**',

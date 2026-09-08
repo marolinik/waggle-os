@@ -106,12 +106,12 @@ const windowsBrowserFailuresPattern = new RegExp([
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedFactClause}${String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
 ].join('|'), 'i');
-const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
+const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\*\*)?(?:(?:(?:cost reduction|cash inflow|revenue growth)(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*)|(?:(?:we|you|the team)[ \t]+should[ \t]+))?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
 const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|impossible|merely reported|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t)[ \t]+(?:(?:an?|the|this|that|my|your|our|their|his|her|its)[ \t]+)?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
 const nonActionRunwayArtifact = String.raw`(?:report|memo|briefing|presentation|deck|document|summary|analysis|forecast|plan|dashboard|statement|workshop|meeting|review|session|discussion|assessment|study)`;
 const directFundingAction = String.raw`(?:secure|obtain|arrange)\b[ \t]+(?:(?:an?|additional|new|short[- ]term|near[- ]term|emergency|external|temporary|working[- ]capital)\b[ \t]+){0,3}(?:bridge[ \t]+loan|financing|funding|(?:line|facility)[ \t]+of[ \t]+credit)(?![ \t]+${nonActionRunwayArtifact}\b)`;
-const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`(?:\b(?:(?:audit\s+and\s+)?(?:reduce|cut|lower))\b[^.\r\n]{0,60}(?:costs?|expenses?|burn)|\b(?:enact|implement|adopt)\b(?![^.\r\n]{0,50}\b(?:no|not|never|without|avoid|against)\b)[^.\r\n]{0,100}\bcost[- ]reduction\s+measures?\b)`}${positiveActionSuffix}`, 'im');
-const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue(?![ \t]+(?:loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)|customers?(?![ \t]+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn|loss(?:es)?)\b)|funding(?![ \t]+(?:costs?|fees?|burden)\b)|cash(?![ \t]+(?:burn|outflows?|loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)(?:[ \t]+inflows?)?)|${directFundingAction}|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)|accelerate\b(?:[ \t]+time[- ]to[- ]revenue\b|[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)))`}${positiveActionSuffix}`, 'im');
+const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`(?:\b(?:(?:audit\s+and\s+)?(?:reduce|cut|lower|renegotiate))\b[^.\r\n]{0,60}(?:costs?|expenses?|burn)|\b(?:enact|implement|adopt)\b(?![^.\r\n]{0,50}\b(?:no|not|never|without|avoid|against)\b)[^.\r\n]{0,100}\bcost[- ]reduction\s+measures?\b)`}${positiveActionSuffix}`, 'im');
+const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue(?![ \t]+(?:loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)|customers?(?![ \t]+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn|loss(?:es)?)\b)|funding(?![ \t]+(?:costs?|fees?|burden)\b)|cash(?![ \t]+(?:burn|outflows?|loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)(?:[ \t]+inflows?)?)|pre[- ]?sell\b[^.\r\n]{0,80}(?:services?|products?|subscriptions?|contracts?)|${directFundingAction}|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)|accelerate\b(?:[ \t]+time[- ]to[- ]revenue\b|[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)))`}${positiveActionSuffix}`, 'im');
 const verifierPairInstructions = VERIFIER_BLOCKER_CHECK_PAIRS
   .map(([blocker, [operation, target, passCondition]]) => (
     `${blocker} => ${JSON.stringify({ operation, target, passCondition })}`
@@ -156,10 +156,10 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
           },
           {
             topic: /\b(?:customer|deal)s?\b/i,
-            basis: /\b(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+            basis: /\b(?:revenue|pipeline|cash|commercial|near[- ]term|short[- ]cycle|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
             basisFamilies: [
               /\b(?:revenue|cash|commercial|near[- ]term|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage))\b/i,
-              /\b(?:pipeline|closable|proof points?|de-risk|signature|close date|deadline|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+              /\b(?:pipeline|short[- ]cycle|closable|proof points?|de-risk|signature|close date|deadline|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
             ],
           },
           {
@@ -242,7 +242,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     responseRules: [
       { id: 'milestones', description: 'Defines milestones', kind: 'pattern', pattern: /milestones?/i, points: 10 },
       { id: 'dependencies', description: 'Maps dependencies', kind: 'dependencyMap', points: 10 },
-      { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /role/i], points: 10 },
+      { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /(?:\brole\b|(?:^|\n)\s*(?:[-*]\s+)?(?:\*\*)?(?:M\d+\s+)?Owner(?:\*\*)?\s*:)/im], points: 10 },
       { id: 'risks-exit', description: 'Includes risks and exit criteria', kind: 'allPatterns', patterns: [/risks?/i, /exit criteria/i], points: 10 },
       { id: 'no-invented-schedule', description: 'Does not invent a calendar schedule', kind: 'notPattern', pattern: /(?:week\s*\d+|\d+[ -]?week effort|target date:)/i, points: 10 },
     ],
@@ -343,7 +343,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 3_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im], points: 10 },
+      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im], points: 10 },
       { id: 'lane-contracts', description: 'Provides objectives, inputs, and deliverables', kind: 'allPatterns', patterns: [/objectives?/i, /inputs?/i, /deliverables?/i], points: 10 },
       { id: 'dependencies', description: 'Defines dependencies', kind: 'pattern', pattern: /dependenc(?:y|ies)/i, points: 10 },
       { id: 'merge', description: 'Defines merge criteria', kind: 'pattern', pattern: /merge criteria/i, points: 10 },
