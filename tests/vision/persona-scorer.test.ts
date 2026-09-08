@@ -5764,6 +5764,18 @@ describe('deterministic 100-point persona scorer', () => {
       '### Key Facts from Primary Sources:\nSQLite is embedded.\n**Reduced Overhead (Inference):** A separate service adds operational cost.',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
+      '## Facts vs. Inference\n\n**Facts (verified from primary sources fetched this session: the sqlite-vec GitHub README and the pgvector GitHub README):** SQLite is embedded.\n\n**Inference (my reasoning, not stated as such by the sources):** Embedded storage lowers desktop operational burden.',
+    ))).toBe(true);
+    for (const response of [
+      '## Facts vs. Inference\nNo facts were verified; the source was unavailable.\n\n## Inference\nTreat the claim as tentative.',
+      '## Facts versus Inference\nFacts unavailable.\n\nInference: none can be drawn.',
+      '## Facts / Inference\nFacts: unverified.\n\nInference: opinion only.',
+      '**Facts (verified from primary sources fetched this session: the sqlite-vec README and pgvector README, with the complete evidence ultimately unverified):** SQLite is embedded.\nInference: tentative.',
+      '**Facts (confirmed from primary sources fetched this session: the sqlite-vec README and pgvector README, but the claims were later not verified):** SQLite is embedded.\nInference: tentative.',
+    ]) {
+      expect(rule.patterns.every(pattern => pattern.test(response))).toBe(false);
+    }
+    expect(rule.patterns.every(pattern => pattern.test(
       '| Architecture | Client-server | Fact (pgvector): confirmed in the README. |\n| Desktop fit | Embedded | Inference (SQLite): lower operational overhead. |',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
