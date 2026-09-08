@@ -487,6 +487,7 @@ function hasAffirmedCurrentRunway(response: string): boolean {
     .filter(({ clause }) => Boolean(clause));
   let positiveCurrentResult = false;
   let previousClauseHasCurrentRunwayContext = false;
+  let previousClauseHasRunwayHeading = false;
   let scenarioScopeActive = false;
   let scenarioScopeHeadingLevel: number | null = null;
 
@@ -579,6 +580,7 @@ function hasAffirmedCurrentRunway(response: string): boolean {
     for (const match of clause.matchAll(FINANCE_RUNWAY_EQUATION)) {
       const start = match.index ?? 0;
       const hasRunwayEquationContext = /\brunway\b/i.test(clause)
+        || previousClauseHasRunwayHeading
         || /^\s*(?:calculation|result)\s*:/i.test(clause);
       if (!hasRunwayEquationContext) continue;
       const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
@@ -629,6 +631,7 @@ function hasAffirmedCurrentRunway(response: string): boolean {
       if (FINANCE_RESULT_INVALIDATION.test(clause)) return false;
     }
     previousClauseHasCurrentRunwayContext = clauseCarriesCurrentRunwayContext;
+    previousClauseHasRunwayHeading = /^runway(?: calculation)?$/i.test(clause);
   }
 
   return positiveCurrentResult;
@@ -995,16 +998,16 @@ function hasAffirmedAgendaInvalidation(line: string): boolean {
 }
 
 function hasAllowedExactAgendaSuffix(lines: readonly string[]): boolean {
-  let inSupportingChecklist = false;
+  let inSupportingSection = false;
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (/^#{1,6}\s+(?:pre[- ]read|preparation|materials?)(?:\s+checklist)?\s*$/i.test(line)) {
-      inSupportingChecklist = true;
+    if (/^(?:#{1,6}\s+|\*\*)(?:pre[- ]read|preparation|materials?|desired decisions?)(?:\s+checklist)?(?:\*\*)?\s*$/i.test(line)) {
+      inSupportingSection = true;
       continue;
     }
-    if (inSupportingChecklist
-      && /^[-*]\s+(?:\[[ xX]\]\s+)?(?:Engineering|QA|Product|Support)\s*:\s+\S/i.test(line)
+    if (inSupportingSection
+      && /^[-*]\s+(?:\[[ xX]\]\s+)?\S/i.test(line)
       && !hasAffirmedAgendaInvalidation(line)) continue;
     return false;
   }
@@ -1019,9 +1022,8 @@ function hasSelfContainedExactAgendaTable(
   for (let headerIndex = 0; headerIndex < lines.length; headerIndex += 1) {
     if (!/^\s*\|.*\|\s*$/.test(lines[headerIndex])) continue;
     const headers = markdownTableCells(lines[headerIndex]);
-    if (!/^time blocks?$/i.test(headers[0] ?? '') || !/^duration$/i.test(headers[1] ?? '')) {
-      continue;
-    }
+    if (!/^time(?: blocks?)?$/i.test(headers[0] ?? '')) continue;
+    const durationColumn = headers.findIndex(header => /^duration$/i.test(header));
 
     const blocks: Array<{ start: number; end: number; duration: number }> = [];
     let malformed = false;
@@ -1032,14 +1034,16 @@ function hasSelfContainedExactAgendaTable(
       const cells = markdownTableCells(line);
       if (cells.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
       const range = /^(\d{1,2}):([0-5]\d)\s*(?:-|[\u2013\u2014]|to)\s*(\d{1,2}):([0-5]\d)$/i.exec(cells[0] ?? '');
-      const duration = /^(\d{1,3})\s*(?:mins?|minutes?)$/i.exec(cells[1] ?? '');
-      if (!range || !duration || /\b(?:option|alternative|choice|scenario)\b/i.test(line)) {
+      const duration = durationColumn >= 0
+        ? /^(\d{1,3})\s*(?:mins?|minutes?)$/i.exec(cells[durationColumn] ?? '')
+        : null;
+      if (!range || (durationColumn >= 0 && !duration) || /\b(?:option|alternative|choice|scenario)\b/i.test(line)) {
         malformed = true;
         break;
       }
       const start = (Number(range[1]) * 60) + Number(range[2]);
       const end = (Number(range[3]) * 60) + Number(range[4]);
-      blocks.push({ start, end, duration: Number(duration[1]) });
+      blocks.push({ start, end, duration: duration ? Number(duration[1]) : end - start });
       tableEndIndex = rowIndex + 1;
     }
     if (malformed || blocks.length < minimumBlocks || blocks[0]?.start !== 0) continue;
@@ -1368,6 +1372,8 @@ function hasTimedAgenda(
     const heading = headingText(line);
     if (lineIndex > declaredDurationLine && heading) section = sectionForHeading(heading);
     if (section !== 'agenda') continue;
+    if (heading && /\b(?:agenda|meeting)\b/i.test(heading)
+      && new RegExp(durationPattern.source, 'i').test(heading)) continue;
 
     const isStructuredBlock = /^\s*(?:[-*+]|\d+[.)])\s+/.test(line)
       || /^\s*\|.*\|\s*$/.test(line);
@@ -1849,12 +1855,12 @@ function hasOnlyBoundedWorkspaceClaims(response: string): boolean {
   ].some(pattern => pattern.test(withoutSafePackageMentions));
 }
 
-const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
+const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
 const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s+(?:plan|release|ship(?:ment|ping)?|ship\s+date)\b|\b(?:there\s+(?:is|was)\s+)?no\s+(?:plan|release|shipment)\b[^.;\r\n]{0,40}\b(?:for|on|by|to\s+ship)\s+Friday\b|\bFriday\b\s+(?:has|had)\s+no\s+(?:release\s+)?plan\b|\bFriday\s+(?:release\s+)?(?:plan|release|shipment)\b[^.;\r\n]{0,16}\b(?:(?:is|was|has\s+been|had\s+been)\s+)?(?:cancel(?:ed|led)|withdrawn|abandoned|scrapped)\b/i;
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
 const NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM = /\b(?:two|2)\s+failures?\s+(?:on|in)\s+(?!Windows\b)[^.;,\r\n]{1,30},?\s*(?:not|rather\s+than|instead\s+of|unlike)\s+(?:(?:on|in|under)\s+)?Windows\b|\bWindows\b\s*(?:[,;:–—-]\s*)?(?:(?:currently|now|still|otherwise)\s+)*(?:(?:is|was|remains?)\s+(?:(?:currently|now|still|otherwise)\s+)*(?:clean|green|passing|unaffected|failure[- ]free)|(?:shows?|reports?|has)\s+(?:no|zero)\s+failures?)\b/i;
-const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
-const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed)\b[^.\r\n]{0,60}\bbrowser test(?:s|ing)?\b|\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed)\b/i;
+const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser[- ]test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
+const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed)\b/i;
 const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
 const WRITER_ROUTER_PRE_QUALIFIER = /\b(?:unverified|unconfirmed|uncertain)\s+smart router(?:\s+(?:behaviou?r|functionality|operation))?\b(?=\s*(?:$|[,.;:!?*(){}[\]–—-]|(?:and|or|nor|&|as|along|together|without|while|but|is|are|was|were|remain(?:s|ed)?|has|have|had)\b))/gi;
 const WRITER_ROUTER_POST_QUALIFIER = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)(\s+(?:(?:is|remains?|was)\s+)?)(?:unverified|unconfirmed|uncertain)\b/gi;
@@ -1970,17 +1976,17 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
   });
   const hasDeniedFact = (topic: RegExp): boolean => clauses.some((clause) => {
     const sharedTopic = /browser/i.test(topic.source)
-      ? /\b(?:browser test(?:s|ing)?|browser (?:failure )?count)\b/i
+      ? /\b(?:browser[- ]test(?:s|ing)?|browser (?:failure )?count)\b/i
       : topic;
     const scopedClause = writerClauseForReleaseTopic(clause, topic, sharedTopic);
     return sharedTopic.test(scopedClause) && isNonAffirmative(scopedClause, topic);
   });
-  const browserTopic = /\bbrowser test(?:s|ing)?\b/i;
+  const browserTopic = /\bbrowser[- ]test(?:s|ing)?\b/i;
   const browserAffirmed = clauses.some((clause) => {
     const scopedClause = writerClauseForReleaseTopic(
       clause,
       browserTopic,
-      /\b(?:browser test(?:s|ing)?|browser (?:failure )?count)\b/i,
+      /\b(?:browser[- ]test(?:s|ing)?|browser (?:failure )?count)\b/i,
     );
     return browserTopic.test(scopedClause)
       && /\bWindows\b/i.test(scopedClause)
@@ -1994,7 +2000,7 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     && !browserFailureWasResolvedInClause
     && !hasDeniedFact(/\bFriday\b/i)
     && !hasDeniedFact(/\bAPI tests?\b/i)
-    && !hasDeniedFact(/\bbrowser test(?:s|ing)?\b/i)
+    && !hasDeniedFact(/\bbrowser[- ]test(?:s|ing)?\b/i)
     && hasAffirmedFact(/\bFriday\b/i, patterns[0])
     && hasAffirmedFact(/\bAPI tests?\b/i, patterns[1])
     && browserAffirmed;
@@ -2054,7 +2060,7 @@ function hasAffirmedWriterRouterFact(response: string): boolean {
 }
 
 function hasAffirmedWriterDelayRecommendation(response: string): boolean {
-  const delayRecommendation = /\bdelay(?:ing)?\s+(?:the\s+)?(?:(?:planned|Friday)\s+){0,2}release\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
+  const delayRecommendation = /\b(?:delay(?:ing)?|postpone|defer)\s+(?:the\s+)?(?:(?:planned|scheduled|Friday)\s+){0,2}(?:release|shipment)\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
   for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
     const line = rawLine.replace(/[*_`]/g, '').trim();
     const recommendation = delayRecommendation.exec(line);
@@ -2066,7 +2072,7 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
     if (/\b(?:but|however|yet)\b[^.\r\n]{0,80}\b(?:do\s+not|don't|no|not|cancel(?:led|ed)?|withdrawn|retracted)\b|\b(?:is|was|remains?)\s+not\s+recommended\b/i.test(suffix)) continue;
     const hasPositiveLead = recommendation.index === 0
       || /\brecommend(?:ation|ed|ing)?\b[^.\r\n]{0,80}$/i.test(prefix)
-      || /\b(?:we|you|the team)\s+should\s+$/i.test(prefix)
+      || /\b(?:we|you|the team)\s+(?:should|must)\s+$/i.test(prefix)
       || /^\s*(?:[-*#>]\s*)+$/.test(prefix);
     if (hasPositiveLead) return true;
   }
@@ -2892,11 +2898,13 @@ function hasAffirmedPrioritizationJustification(
   const segments = collectPrioritizationSegments(response);
   return criteria.every(({ topic, basis }, criterionIndex) => {
     const affirmed = segments.some((segment) => {
-      if (!testPattern(topic, segment)) return false;
+      const tableRationaleIndex = segment.indexOf('\u001fpersona-rationale\u001f');
+      const topicScope = tableRationaleIndex >= 0 ? segment.slice(0, tableRationaleIndex) : segment;
+      if (!testPattern(topic, topicScope)) return false;
       const clauses = splitPrioritizationClauses(segment, basis);
       return clauses.some((clause) => {
         const currentTopicIsExplicit = testPattern(topic, clause);
-        const segmentLeadTopics = matchedCriterionIndices(segment.split('\n', 1)[0], criteria, 'topic');
+        const segmentLeadTopics = matchedCriterionIndices(topicScope.split('\n', 1)[0], criteria, 'topic');
         const isSinglePriorityContinuation = !currentTopicIsExplicit
           && segmentLeadTopics.length === 1
           && segmentLeadTopics[0] === criterionIndex;
@@ -2946,7 +2954,13 @@ function evaluateResponseRule(
     case 'prioritizationJustification':
       return hasAffirmedPrioritizationJustification(evidence.response, rule.criteria);
     case 'allPatterns':
-      return rule.patterns.every(pattern => testPattern(pattern, evidence.response));
+      return rule.patterns.every(pattern => testPattern(
+        pattern,
+        evidence.response.replace(
+          /\*\*established\s+facts?\s*\([^)]*(?:primary|source)[^)]*\)\s*:\*\*/gi,
+          '**Facts from primary sources:**',
+        ),
+      ));
     case 'notPattern':
       return !testPattern(rule.pattern, evidence.response);
     case 'verifierContract':

@@ -7599,4 +7599,133 @@ describe('Qwen Flash Next exact-response regressions', () => {
       ).toBe(true);
     }
   });
+
+  it('accepts the three exact Qwen prioritization forms from the f399ee2d gate', () => {
+    const responses = [
+      [
+        '## Order & Plan',
+        '| Priority | Position | Why |',
+        '|---|---|---|',
+        '| Production memory bug | **1st** | Unfixed resource leaks degrade existing customers, risk an incident, and have the highest blast radius. |',
+        '| Close one customer | **2nd** | Revenue is time-sensitive and can be pursued once system stability is understood. |',
+        '| Repair onboarding friction | **3rd** | Highest leverage long-term, but least urgent in a single week. |',
+        '## First action for today',
+        'Reproduce the memory bug under controlled load.',
+      ].join('\n'),
+      [
+        '## Recommended order',
+        '1. Investigate the production memory bug',
+        '2. Close the customer deal',
+        '3. Repair onboarding friction',
+        '## Why',
+        '- Production defect first: it can cause data loss, outages, or customer harm.',
+        '- Deal second: sales timing matters and the customer conversation is stronger once the bug is understood.',
+        '- Onboarding friction third: it is a systemic fix requiring diagnosis, product/design coordination, and validation.',
+        '## First action today',
+        'Run a bounded memory-bug diagnostic.',
+      ].join('\n'),
+      [
+        '**Plan: Memory bug → customer close → onboarding repair**',
+        '1. **Memory bug first** — A production leak is a compounding liability and the highest outage risk.',
+        '2. **Customer close second** — Revenue is time-sensitive and the deal is bounded.',
+        '3. **Onboarding repair last** — This is a process problem, not a production incident, and better inputs will make the work cheaper.',
+        '**First action today:** Reproduce the memory bug.',
+      ].join('\n'),
+    ];
+
+    for (const response of responses) {
+      const result = scoreResponse('general-purpose', response);
+      expect(result.checks.find(check => check.id === 'ordered-plan')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'justification')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts established-facts and my-inference headings from the exact Qwen research answer', () => {
+    const response = [
+      '## Decision Table',
+      '| Criterion | SQLite + sqlite-vec | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Architecture | In-process | Client/server |',
+      '**Established facts (from primary sources):** sqlite-vec runs anywhere SQLite runs.',
+      '**My inference (not sourced):** SQLite likely gives a simpler desktop install.',
+      '## Recommendation',
+      'Choose SQLite + sqlite-vec for a single-user desktop store.',
+    ].join('\n');
+    const result = scoreResponse('researcher', response);
+    expect(result.checks.find(check => check.id === 'fact-inference')?.passed).toBe(true);
+  });
+
+  it('accepts all exact positive Qwen writer wording while retaining the closed-world facts', () => {
+    const responses = [
+      'We intended to ship on Friday. API tests are passing. Browser tests have two failures on Windows. The smart router has not been exercised without cloud credentials. Recommendation: We must delay the release until the Windows failures are resolved and the smart router is tested without cloud credentials.',
+      'API tests are all passing. Two browser-test failures persist on Windows. The smart router is not yet exercised without cloud credentials. Recommendation: Postpone the scheduled Friday shipment until the Windows failures and untested smart-router scenario are resolved.',
+      'Originally scheduled for Friday, the release requires a delay. API tests have passed successfully, browser tests exhibit two failures on Windows, and the smart router has not been exercised without cloud credentials. Recommendation: Defer the release until these gaps are closed.',
+    ];
+    for (const response of responses) {
+      const result = scoreResponse('writer', response);
+      for (const id of ['release-facts', 'router-fact', 'recommendation']) {
+        expect(result.checks.find(check => check.id === id)?.passed, `${id}: ${response}`).toBe(true);
+      }
+    }
+  });
+
+  it('accepts the exact Qwen clock-range agenda without a redundant duration column', () => {
+    const response = [
+      '**30-Minute Launch-Readiness Meeting Agenda**',
+      '| Time | Block | Participants |',
+      '|---|---|---|',
+      '| 0:00–0:05 | Kickoff and go/no-go criteria review | All |',
+      '| 0:05–0:11 | Product: feature scope | Product |',
+      '| 0:11–0:18 | Engineering readiness | Engineering, QA |',
+      '| 0:18–0:24 | QA results | QA, Engineering |',
+      '| 0:24–0:27 | Support readiness | Support, Product |',
+      '| 0:27–0:30 | Final go/no-go decision | All |',
+      '**Desired decisions**',
+      '- Confirm go/no-go for launch.',
+      '**Pre-read checklist**',
+      '- [ ] Product, Engineering, QA, and Support readiness summaries.',
+    ].join('\n');
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+  });
+
+  it('accepts exact Qwen runway decimals, action headings, and professional disclaimers', () => {
+    const responses = [
+      [
+        '| Metric | Value |', '|---|---|', '| Cash on Hand | $40,000.00 |',
+        '| Net Monthly Burn | $10,000.00 |', '| **Runway** | **4.00 months** |',
+        'Formula: Runway = Cash on Hand ÷ Net Monthly Burn.',
+        'Biggest assumption: monthly burn remains constant and revenue stays at zero.',
+        '**Actions to Improve Runway**',
+        '- **Reduce costs:** Cut discretionary subscriptions to lower monthly burn.',
+        '- **Generate cash inflow:** Pre-sell an offering or accelerate collections.',
+        'This is informational analysis, not professional financial advice.',
+      ].join('\n'),
+      [
+        '### Runway Calculation', '$40,000 / $10,000 = **4.0 months**',
+        'Formula: Runway = Cash / Net Monthly Burn.',
+        'Key assumption: burn remains constant and revenue remains at zero.',
+        '### Actions to Improve Runway',
+        '| Action | Mechanism |', '|---|---|',
+        '| Reduce Monthly Burn | Lower fixed costs. |',
+        '| Generate Revenue | Accelerate collections to increase cash. |',
+        'This analysis is informational and does not constitute professional financial advice.',
+      ].join('\n'),
+      [
+        '| Metric | Value |', '|---|---|', '| Cash | $40,000.00 |',
+        '| Monthly Burn | $10,000.00 |', '| Revenue | $0.00 |', '| **Runway** | **4.00 months** |',
+        'Formula: Runway = Cash ÷ Net Monthly Burn.',
+        'Biggest assumption: monthly burn remains constant.',
+        '## Two Actions to Improve Runway',
+        '- **Reduce Costs:** Eliminate non-essential expenses to lower monthly burn.',
+        '- **Increase Cash Inflow:** Accelerate customer payments or pre-sell services.',
+        'This is AI-generated informational content and not professional financial advice.',
+      ].join('\n'),
+    ];
+    for (const response of responses) {
+      const result = scoreResponse('finance-owner', response);
+      expect(result.checks.find(check => check.id === 'runway')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
+    }
+  });
 });

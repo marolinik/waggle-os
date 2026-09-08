@@ -103,6 +103,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/compact example or compact design.*whole answer.*900 words/i);
     expect(prompt).toMatch(/each requested dimension once.*one minimal complete example/i);
     expect(prompt).toMatch(/omit optional extensions.*unless.*requested/i);
+    expect(prompt).toMatch(/retry behavior.*executable bounded retry.*(?:backoff|busy_timeout)/i);
   });
 
   it('Verifier never upgrades an attributed claim into verified evidence', () => {
