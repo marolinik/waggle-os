@@ -6985,6 +6985,43 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
   });
 
+  it('accepts a Qwen memo that closes an explicitly named gap with a pronoun', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      'Browser tests retain two failures on Windows. The smart router has not been exercised without cloud credentials.',
+      'Given these outstanding gaps, the recommendation is to delay the release until they are closed.',
+    ].join('\n');
+
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+
+    for (const rejected of [
+      response.replace('the recommendation is to delay', 'the recommendation is not to delay'),
+      response.replace('until they are closed', 'until they are not closed'),
+      response.replace('the recommendation is to delay', 'should the recommendation be to delay'),
+      response.replace('until they are closed.', 'until they are closed, but that recommendation is withdrawn.'),
+      response.replace('until they are closed.', 'until they are closed but that recommendation was withdrawn.'),
+      response.replace('until they are closed.', 'until they are closed; the recommendation has been withdrawn.'),
+      `${response} However, that recommendation has been retracted.`,
+      `${response} However, delaying the release is not recommended.`,
+      `${response} However, the team no longer recommends delaying the release.`,
+      response.replace('Given these outstanding gaps', 'These outstanding gaps are not real;'),
+    ]) {
+      const rejectedResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: rejected,
+        persistedResponse: rejected,
+        requestPersonaId: writer.id,
+      }));
+      expect(rejectedResult.checks.find(check => check.id === 'recommendation')?.passed, rejected).toBe(false);
+    }
+  });
+
   it('does not invent a 30-minute agenda from a negated or wrong remainder', () => {
     const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
     const base = [
@@ -7326,6 +7363,27 @@ describe('Qwen Flash Next exact-response regressions', () => {
     const result = scoreResponse('project-manager', response);
     expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
     expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
+  });
+
+  it('accepts milestone-local Depends on labels emitted by Qwen', () => {
+    const response = [
+      '### Milestones & Dependencies',
+      '**M1: Native packaging**',
+      '* **Depends on:** N/A',
+      '**M2: Local model integration**',
+      '* **Depends on:** M1',
+      '### Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+
+    const denied = scoreResponse('project-manager', response.replace('**Depends on:** M1', '**Depends on:** does not depend on M1'));
+    expect(denied.checks.find(check => check.id === 'dependencies')?.passed).toBe(false);
+
+    const withdrawn = scoreResponse('project-manager', response.replace('**Depends on:** M1', '**No longer depends on:** M1'));
+    expect(withdrawn.checks.find(check => check.id === 'dependencies')?.passed).toBe(false);
   });
 
   it('accepts italic Owner labels as explicit role assignments', () => {

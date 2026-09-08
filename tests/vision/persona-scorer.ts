@@ -1793,7 +1793,9 @@ function hasMilestoneDependencyMap(response: string): boolean {
     const milestoneHeading = /^\s*(?:#{1,6}\s+)?(?:[-*]\s+)?(?:\*\*)?\s*(M\d+)\s*:/i.exec(lines[index]);
     if (milestoneHeading) currentMilestone = milestoneHeading[1].toUpperCase();
 
-    if (currentMilestone && /\bdependenc(?:y|ies)\s*:/i.test(lines[index])) {
+    if (currentMilestone
+      && /\b(?:depends?\s+on|dependenc(?:y|ies))\s*:/i.test(lines[index])
+      && !/\b(?:no\s+longer|not|never)\s+depends?\s+on\s*:/i.test(lines[index])) {
       const dependencyIds = affirmativeMilestoneIds(lines[index], true);
       if (dependencyIds.some(dependency => dependency !== currentMilestone)) return true;
     }
@@ -2075,6 +2077,18 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
       || /\b(?:we|you|the team)\s+(?:should|must)\s+$/i.test(prefix)
       || /^\s*(?:[-*#>]\s*)+$/.test(prefix);
     if (hasPositiveLead) return true;
+  }
+
+  const pronounCondition = /\b(?:these|those|the)\s+(?:outstanding\s+|unresolved\s+|identified\s+)?(?:gaps?|failures?)\b[^?\r\n]{0,180}\b(?:the\s+recommendation\s+is\s+to|(?:we|you|the team)\s+recommend(?:ed|ing)?)\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\b[^?\r\n]{0,80}\buntil\s+(?:they|these|those)\s+(?:are\s+)?(?:closed|resolved|fixed|addressed)\b/i;
+  const normalized = response.replace(/[*_`]/g, ' ');
+  const pronounMatch = pronounCondition.exec(normalized);
+  if (pronounMatch?.index !== undefined) {
+    const prefix = normalized.slice(Math.max(0, pronounMatch.index - 40), pronounMatch.index);
+    const suffix = normalized.slice(pronounMatch.index + pronounMatch[0].length);
+    if (!/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer)\s*$/i.test(prefix)
+      && !/\b(?:gaps?|failures?)\s+(?:are|were)\s+(?:not|never)\s+(?:real|outstanding|unresolved|identified|valid)\b/i.test(pronounMatch[0])
+      && !/\b(?:not|never)\s+(?:closed|resolved|fixed|addressed)\b/i.test(pronounMatch[0])
+      && !/\b(?:(?:that|this|the)\s+recommendation\s+(?:(?:is|was)|(?:has|had)\s+(?:since\s+)?been)\s+(?:withdrawn|retracted|cancelled|canceled)|delay(?:ing)?\s+(?:the\s+)?(?:release|shipment)\s+is\s+not\s+recommended|(?:we|you|the team)\s+no\s+longer\s+recommend(?:s|ed|ing)?\s+delay(?:ing)?\s+(?:the\s+)?(?:release|shipment))\b/i.test(suffix)) return true;
   }
 
   const adjacentCondition = /\b(?:we|you|the team)\s+recommend(?:ed|ing)?\s+(?:delay(?:ing)?|postpon(?:e|ing)|deferr?ing)\s+(?:the\s+)?(?:planned\s+|scheduled\s+|Friday\s+)?(?:release|shipment)\b[^?\r\n]{0,80}[.!]\s*(?:proceeding|shipping|releasing)\s+without\s+[^?\r\n]{0,180}\b(?:closing|resolving|fixing|addressing|validating)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
