@@ -8443,4 +8443,102 @@ describe('Qwen Flash Next exact-response regressions', () => {
       ).toBe(false);
     }
   });
+
+  it('accepts the exact 7ce5c3ee Qwen finance actions', () => {
+    const response = [
+      '| Metric | Value |',
+      '|---|---|',
+      '| Cash | $40,000.00 |',
+      '| Monthly Burn | $10,000.00 |',
+      '| Revenue | $0.00 |',
+      '| **Runway** | **4.00 months** |',
+      '',
+      '* **Formula:** Runway = Cash Balance / Net Monthly Burn.',
+      '* **Biggest Assumption:** This calculation assumes a constant net burn rate of $10,000.00 per month with zero revenue generation for the entire four-month period.',
+      '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+      '* **Action 2 (Cash Inflow):** Accelerate revenue collection from existing customers or secure external funding to increase the total cash balance.',
+    ].join('\n');
+
+    expect(
+      scoreResponse('finance-owner', response).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+
+    const deniedCostAction = response.replace(
+      'Identify and eliminate non-essential operating expenses',
+      'Do not eliminate non-essential operating expenses',
+    );
+    expect(
+      scoreResponse('finance-owner', deniedCostAction).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        response.replace(
+          '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+          '* **Action 1 (Cost Reduction):** Eliminate no operating expenses or costs.',
+        ),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const deniedAction of [
+      'Eliminate none of the operating expenses or costs.',
+      'Eliminate neither operating expenses nor costs.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          response.replace(
+            '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+            `* **Action 1 (Cost Reduction):** ${deniedAction}`,
+          ),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        deniedAction,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact 7ce5c3ee Qwen empty-workspace answer with an initialization recommendation', () => {
+    const response = [
+      'The exhaustive search confirmed that the workspace is empty.',
+      '',
+      'In the current virtual workspace (`C:\\temp\\workspace\\files`), no files exist.',
+      '',
+      'Next engineering step:',
+      '- [ ] Initialize the repository. You can start by creating a new project folder here and adding a basic project structure with a `README.md`.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const contradicted = scoreResponse(
+      'coder',
+      `${response}\nIn C:\\temp\\workspace\\files, one file exists: README.md.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(contradicted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+
+    const sameClauseContradiction = scoreResponse(
+      'coder',
+      response.replace('no files exist.', 'no files exist; README.md exists.'),
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(sameClauseContradiction.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
 });

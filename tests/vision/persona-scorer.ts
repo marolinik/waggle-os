@@ -135,7 +135,7 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
 
   const filePresence = new RegExp(
     String.raw`[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*[^.!?\r\n]{0,50}\b(?:exists?|remains?|sits?|is\s+(?:present|in|at)|can\s+be\s+(?:seen|found))\b`,
-    'i',
+    'ig',
   );
   const rootContainsFile = new RegExp(
     String.raw`\b(?:root|workspace)\b[^.!?\r\n]{0,30}\b(?:has|contains|includes)\b(?![^.!?\r\n]{0,20}\b(?:no|zero)\b)[^.!?\r\n]{0,50}(?:\bfiles?\b|[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)`,
@@ -146,9 +146,11 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
     .map(clause => clause.replace(/[*_`]/g, '').trim())
     .filter(Boolean)
     .some((clause) => {
-      const filePresenceMatch = clause.match(filePresence);
-      if (filePresenceMatch
-        && !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(filePresenceMatch[0])) return true;
+      const hasAffirmedFilePresence = [...clause.matchAll(filePresence)].some(match => (
+        !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(match[0])
+        && !/\bno\s+(?:workspace\s+)?files?\s+(?:exist|remain|(?:is|are)\s+present)\b/i.test(match[0])
+      ));
+      if (hasAffirmedFilePresence) return true;
       if (rootContainsFile.test(clause)) return true;
       if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(clause)) return true;
       return !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(clause)
