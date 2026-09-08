@@ -8541,4 +8541,87 @@ describe('Qwen Flash Next exact-response regressions', () => {
     );
     expect(sameClauseContradiction.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
   });
+
+  it('accepts the exact b8cfabfb Qwen finance action labels', () => {
+    const response = [
+      '**Runway: 4.0 months**',
+      '**Formula:** Runway = Cash Balance / Net Monthly Burn',
+      '**Biggest Assumption:** The monthly burn rate remains constant at $10,000 and no new cash inflows occur.',
+      '**Actions to Improve Runway:**',
+      '1. **Reduce Expenses:** Cut non-essential operational costs to lower the monthly burn.',
+      '2. **Accelerate Revenue:** Secure recurring revenue to offset burn.',
+    ].join('\n');
+
+    expect(
+      scoreResponse('finance-owner', response).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        response.replace(
+          '1. **Reduce Expenses:** Cut non-essential operational costs to lower the monthly burn.',
+          '1. **Reduce Expenses:** Do not reduce expenses or cut costs.',
+        ),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const deniedCashAction of [
+      'Secure no recurring revenue to offset burn.',
+      'Secure zero recurring revenue to offset burn.',
+      'Secure neither recurring revenue nor cash inflow.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          response.replace('Secure recurring revenue to offset burn.', deniedCashAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        deniedCashAction,
+      ).toBe(false);
+    }
+  });
+
+  it('does not treat hypothetical future files as an empty-workspace contradiction', () => {
+    const response = [
+      'The workspace is empty: no files of any kind exist.',
+      'One next step is to seed the workspace.',
+      'Once files are present, I can inspect them.',
+    ].join('\n');
+    const evidence = {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    };
+
+    expect(
+      scoreResponse('coder', response, evidence).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace('Once files are present, I can inspect them.', 'README.md is present.'),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace(
+          'Once files are present, I can inspect them.',
+          'When I inspected the workspace, README.md was found.',
+        ),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace(
+          'Once files are present, I can inspect them.',
+          'Once files are present, I can inspect them, but README.md is already present.',
+        ),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+  });
 });
