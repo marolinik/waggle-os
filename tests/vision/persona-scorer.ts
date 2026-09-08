@@ -113,7 +113,7 @@ const EMPTY_WORKSPACE_CONTRADICTION_TOOL = /^read_file$/i;
 const EMPTY_WORKSPACE_TOOL_RESULT = /^\s*(?:no files?(?:\s+(?:were\s+)?found)?\.?|\[\]\s*)$/i;
 const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such file\b|enoent\b|permission denied\b|access denied\b|unable to read\b|could not read\b)/i;
 const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
-const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\bthe workspace at (?:the|this) [^.!?\r\n]{1,40} is (?:currently )?empty\b|\b(?:the|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
+const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|this|current|fresh|virtual) workspace (?:is|was) empty\b|\bthe workspace at (?:the|this) [^.!?\r\n]{1,40} is (?:currently )?empty\b|\b(?:the|this|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
 const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
 const FUTURE_FILE_PRESENCE_CLAUSE = /^\s*(?:once|when)\s+(?:the\s+)?files?\s+(?:are|become)\s+present\b[^.!?\r\n]*\b(?:can|will|would|could)\b/i;
 const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\b(?:the\s+)?workspace\s+(?:is|was)\s+(?:actually\s+)?not\s+empty\b|\b(?:correction|update)\s*:[^.!?\r\n]{0,120}\b(?:empty[- ]workspace|workspace[- ]empty|workspace\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b[^.!?\r\n]{0,80}\b(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:that|this)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result)|(?:the\s+)?(?:earlier|prior|previous)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\s+(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:I|we)\s+)?(?:retract|withdraw|disavow|reject)\s+(?:(?:that|this)(?:\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))?|(?:the\s+)?(?:(?:earlier|prior|previous)\s+)?(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b|\b(?:correction\s*:|actually\b)[^.!?\r\n]{0,140}(?:\bthere\s+(?:are|were)\s+(?:one\s+or\s+more\s+)?files?\b|(?<!no )(?<!zero )\bfiles?\s+(?:(?:were|are)\s+)?found\b|\b(?:README(?:\.md)?|package\.json|pyproject\.toml)\s+(?:exists?|is\s+present)\b|\bworkspace\s+(?:contains?|includes?|has)\s+files?\b)/i;
@@ -128,9 +128,10 @@ const DIRECT_NONEMPTY_WORKSPACE_DISCLOSURE = new RegExp(
 );
 
 function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
-  if (DIRECT_NONEMPTY_WORKSPACE_CLAIM.test(response)
-    || DIRECT_NONEMPTY_WORKSPACE_DISCLOSURE.test(response)
-    || /\b(?:it|the workspace)\s+(?:isn['’]t|is not)\s+(?:entirely\s+)?empty\b/i.test(response)) {
+  const directClaim = DIRECT_NONEMPTY_WORKSPACE_CLAIM.test(response);
+  const directDisclosure = DIRECT_NONEMPTY_WORKSPACE_DISCLOSURE.test(response);
+  const explicitlyNotEmpty = /\b(?:it|the workspace)\s+(?:isn['’]t|is not)\s+(?:entirely\s+)?empty\b/i.test(response);
+  if (directClaim || directDisclosure || explicitlyNotEmpty) {
     return true;
   }
 
@@ -147,15 +148,29 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
     .map(clause => clause.replace(/[*_`]/g, '').trim())
     .filter(Boolean)
     .some((clause) => {
+      const prospectiveLead = /^\s*(?:once\s+(?:initialized|files?\b)|when\s+files?\b)/i.test(clause);
+      const currentOrPastContext = /\b(?:yesterday|just[ \t]+now|now|currently|already|earlier|today|still|continue(?:s|d|ing)?|remain(?:s|ed|ing)?)\b|\bfiles?\s+(?:existed|were|was|have|has)\b/i.test(clause);
+      const hasSpecificFile = new RegExp(WORKSPACE_FILE_REFERENCE, 'i').test(clause);
+      const hasFutureModal = /\b(?:can|will|would|could)\b/i.test(clause);
+      const futureFileContext = prospectiveLead
+        && !currentOrPastContext
+        && (!hasSpecificFile || hasFutureModal);
+      const currentFileAfterContrast = new RegExp(
+        String.raw`\b(?:but|however|actually|yet)\b[^.!?\r\n]{0,100}${WORKSPACE_FILE_REFERENCE}[^.!?\r\n]{0,30}\b(?:exists?|present|found)\b`,
+        'i',
+      ).test(clause);
       const hasAffirmedFilePresence = [...clause.matchAll(filePresence)].some(match => (
         !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(match[0])
+        && (!futureFileContext || currentFileAfterContrast)
         && !/\bno\s+(?:workspace\s+)?files?\s+(?:exist|remain|(?:is|are)\s+present)\b/i.test(match[0])
       ));
       if (hasAffirmedFilePresence) return true;
+      if (futureFileContext && !currentFileAfterContrast) return false;
       if (rootContainsFile.test(clause)) return true;
       if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(clause)) return true;
       return !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause)
         && !FUTURE_FILE_PRESENCE_CLAUSE.test(clause)
+        && !/\b(?:once|when)\b[^,;.!?]{0,60}\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause)
         && !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(clause)
         && /\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause);
     });
@@ -253,9 +268,9 @@ function hasExhaustiveEmptyWorkspaceToolResult(events: readonly CapturedSseEvent
 
 function hasAffirmedEmptyWorkspaceResult(evidence: PersonaTrialEvidence): boolean {
   const emptyToolResult = hasExhaustiveEmptyWorkspaceToolResult(evidence.sseEvents);
-  if (!emptyToolResult
-    || CONTRADICTED_EMPTY_WORKSPACE_CLAIM.test(evidence.response)
-    || hasDirectNonEmptyWorkspaceDisclosure(evidence.response)) return false;
+  const contradicted = CONTRADICTED_EMPTY_WORKSPACE_CLAIM.test(evidence.response);
+  const nonEmptyDisclosure = hasDirectNonEmptyWorkspaceDisclosure(evidence.response);
+  if (!emptyToolResult || contradicted || nonEmptyDisclosure) return false;
 
   AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM.lastIndex = 0;
   for (const match of evidence.response.matchAll(AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM)) {
@@ -2582,10 +2597,11 @@ const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
   'i',
 );
 const PRIORITIZATION_SEQUENCED_CONFIRMED_LEAD = /^\s*(?:(?:[-*]|\d+[.)])\s*)?(?:and\s+)?once\s+[^,.!?\r\n]{1,100}\b(?:is|are|has been|have been)\s+(?:confirmed|completed|resolved|closed|finished)\s*,\s*/i;
-const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|prevents?|prevented|preventing|minimi[sz](?:e[sd]?|ing)?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|ranks?|ranked|ranking|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|prevents?|prevented|preventing|minimi[sz](?:e[sd]?|ing)?|improves?|reduces?|degrades?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|generates?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|ranks?|ranked|ranking|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
 const PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE = /\b(?:revenue\s+with\s+)?momentum\s+decays?\s+(?:fast|quickly|rapidly)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
+const PRIORITIZATION_REDUCED_RISK_PREFIX = /\b(?:reduces?|lowers?|eliminates?|removes?|mitigates?)\s+(?:the\s+)?risk(?:\s+to)?\b[\s\S]{0,48}$/i;
 const PRIORITIZATION_NEGATION_SUFFIX = /^\s*(?:(?:is|are|was|were|does|do|has|have)\s+)?(?:not|no|irrelevant|absent|unproven)\b/i;
 const PRIORITIZATION_MODAL_PREFIX = /\b(?:may|might|could|would)\b[\s\S]*$/i;
 const PRIORITIZATION_CONDITION_SUFFIX = new RegExp(
@@ -2984,6 +3000,7 @@ function hasAffirmedPrioritizationBasis(
     if (PRIORITIZATION_REJECTION_PREFIX.test(rejectionBefore)) continue;
     if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(independentBefore)) continue;
     if (PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)) continue;
+    if (PRIORITIZATION_REDUCED_RISK_PREFIX.test(`${localBefore}${match[0]}`)) continue;
     if (PRIORITIZATION_NEGATION_SUFFIX.test(after)) continue;
     if (PRIORITIZATION_CONDITION_MARKER.test(unconditionalIndependentBefore) && !conditionalActionConsequence) continue;
     if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(unconditionalIndependentBefore)) continue;
@@ -3144,8 +3161,9 @@ function labeledPrioritizationCriterion(
   segment: string,
   criteria: readonly PrioritizationCriterion[],
 ): number | null {
-  const label = /^\s*(?:[-*]\s*)?(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+\*\*([^*]+)\*\*/i
-    .exec(segment)?.[1];
+  const labelMatch = /^\s*(?:[-*]\s*)?(?:(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+\*\*([^*]+)\*\*|\*\*(?:(?:priority\s+)?(?:\d+|first|second|third)|day\s+\d+(?:\s*[-–—]\s*\d+)?)\s*[:.)—-]\s*([^*]+)\*\*)/i
+    .exec(segment);
+  const label = labelMatch?.[1] ?? labelMatch?.[2];
   if (!label) return null;
   const matches = matchedCriterionIndices(label, criteria, 'topic');
   return matches.length === 1 ? matches[0] : null;

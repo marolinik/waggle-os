@@ -8625,6 +8625,176 @@ describe('Qwen Flash Next exact-response regressions', () => {
     ).toBe(false);
   });
 
+  it('accepts the exact 8a41cf50 Qwen prioritization, runway, and empty-workspace variants', () => {
+    const prioritizationVariants = [
+      [
+        '### Recommended Order',
+        '1. **Investigate the production memory bug**',
+        '2. **Close the customer**',
+        '3. **Repair onboarding friction**',
+        '### Justification',
+        '* **Priority 1: Production Memory Bug.** A production issue threatens user trust, potential data integrity, and system availability.',
+        '* **Priority 2: Close the Customer.** Revenue is the lifeblood of the business.',
+        '* **Priority 3: Repair Onboarding Friction.** While critical for long-term retention, onboarding fixes are typically less urgent than a live production bug or a closing deal.',
+        '### First Action for Today',
+        '**Reproduce and isolate the production memory bug.**',
+      ].join('\n'),
+      [
+        '### Recommended Order',
+        '1. **Investigate a production memory bug** (Critical Risk)',
+        '2. **Close one customer** (Immediate Revenue)',
+        '3. **Repair onboarding friction** (Long-term Conversion)',
+        '### Justification Plan',
+        '**Day 1–2: Contain the Bug.** Production instability threatens active customer trust and makes it the prerequisite for all other work.',
+        '**Day 3–4: Close the Customer.** Closing a deal generates immediate cash flow.',
+        '**Day 5: Repair Onboarding.** Friction in onboarding slows down future revenue and is a strategic fix for future efficiency.',
+        '### First Action for Today',
+        '**Set up real-time monitoring for the memory bug.**',
+      ].join('\n'),
+    ];
+    for (const response of prioritizationVariants) {
+      expect(
+        scoreResponse('general-purpose', response).checks.find(check => check.id === 'justification')?.passed,
+        response,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritizationVariants[0].replace(
+          'A production issue threatens user trust, potential data integrity, and system availability.',
+          'System availability is unaffected.',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+    for (const adverseAvailability of [
+      'The issue reduces system availability.',
+      'The issue degrades service availability.',
+    ]) {
+      expect(
+        scoreResponse(
+          'general-purpose',
+          prioritizationVariants[0].replace(
+            'A production issue threatens user trust, potential data integrity, and system availability.',
+            adverseAvailability,
+          ),
+        ).checks.find(check => check.id === 'justification')?.passed,
+        adverseAvailability,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritizationVariants[0].replace(
+          'A production issue threatens user trust, potential data integrity, and system availability.',
+          'The issue reduces the risk to system availability.',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+
+    const runway = [
+      '**Actions to Improve Runway**',
+      '1. **Cost Reduction**: Identify and cut non-essential operating expenses to lower the monthly burn rate.',
+      '2. **Cash Inflow**: Secure upfront revenue or short-term financing.',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', runway).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+
+    const emptyWorkspace = [
+      'Inspection completed successfully with one exhaustive workspace search (`**/*`).',
+      '**Files in this workspace: none.** The search returned "No files found," so this workspace is empty.',
+      '**Scaffold the project.** Since there is nothing to inspect, create an initial project structure; once files exist, further inspection becomes meaningful.',
+    ].join('\n');
+    expect(
+      scoreResponse('coder', emptyWorkspace, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      }).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+  });
+
+  it('rejects negated or reporting-only cost actions and ignores conditional future files', () => {
+    const cashAction = 'Secure upfront revenue to extend runway.';
+    for (const invalidCostAction of [
+      'Identify and cut no non-essential operating expenses.',
+      'Identify and cut zero operating expenses.',
+      'Identify and cut none of the non-essential operating expenses.',
+      'Identify and cut neither operating expenses nor costs.',
+      'Identify and cut absolutely no operating expenses.',
+      'Identify and cut not a single operating expense.',
+      'Identify and cut exactly 0 operating expenses.',
+      'Identify and reduce cost estimates in the forecast.',
+      'Identify and reduce operating cost baseline estimates in the forecast.',
+      'Identify and reduce operating cost baseline and quarterly team measurement estimates in the forecast.',
+      'Identify and cut operating expense reporting figures.',
+    ]) {
+      expect(
+        scoreResponse('finance-owner', `${invalidCostAction}\n${cashAction}`).checks.find(
+          check => check.id === 'two-actions',
+        )?.passed,
+        invalidCostAction,
+      ).toBe(false);
+    }
+
+    const evidence = {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    };
+    for (const futureContext of [
+      'Once initialized, the workspace contains files.',
+      'When files exist, the workspace has files.',
+    ]) {
+      expect(
+        scoreResponse(
+          'coder',
+          `No files were found. This workspace is empty. ${futureContext}`,
+          evidence,
+        ).checks.find(check => check.id === 'empty-result')?.passed,
+        futureContext,
+      ).toBe(true);
+    }
+    for (const currentContext of [
+      'Once initialized yesterday, the workspace contains README.md.',
+      'When files were inventoried just now, README.md was found.',
+      'Once initialized, README.md exists.',
+      'When files existed, README.md was found.',
+      'When files exist now, the workspace has README.md.',
+      'Once files exist, package.json is present now.',
+      'Once initialized, README.md will still exist.',
+      'Once initialized, README.md will continue to exist.',
+      'When files can be inspected, README.md remains in the workspace.',
+    ]) {
+      expect(
+        scoreResponse(
+          'coder',
+          `No files were found. This workspace is empty. ${currentContext}`,
+          evidence,
+        ).checks.find(check => check.id === 'empty-result')?.passed,
+        currentContext,
+      ).toBe(false);
+    }
+    for (const validCostAction of [
+      'Identify and cut operating expenses, with no layoffs or service reduction.',
+      'Identify and cut operating costs with zero customer impact.',
+      'Identify and cut operating costs, then report the savings.',
+      'Identify and cut operating expenses and update the forecast.',
+    ]) {
+      expect(
+        scoreResponse('finance-owner', `${validCostAction}\n${cashAction}`).checks.find(
+          check => check.id === 'two-actions',
+        )?.passed,
+        validCostAction,
+      ).toBe(true);
+    }
+  });
+
   it('accepts exact 53db46aa Qwen persona answers without weakening negative controls', () => {
     const prioritization = [
       '## Justification Plan',
