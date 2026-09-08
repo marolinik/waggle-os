@@ -158,8 +158,18 @@ function taggedJsonEnvelopeMismatch(userRequest: string, content: string): boole
   const envelope = requiredTaggedJsonEnvelope(userRequest);
   if (!envelope) return false;
   const normalized = normalizeExactOutput(content);
-  return !normalized.startsWith(`${envelope.open}\n`)
-    || !normalized.endsWith(`\n${envelope.close}`);
+  if (!normalized.startsWith(envelope.open) || !normalized.endsWith(envelope.close)) return true;
+  const payload = normalized.slice(envelope.open.length, -envelope.close.length).trim();
+  if (!payload
+    || payload.includes(envelope.open)
+    || payload.includes(envelope.close)
+    || RAW_TOOL_CALL_MARKUP.test(payload)) return true;
+  try {
+    const parsed = JSON.parse(payload) as unknown;
+    return parsed === null || typeof parsed !== 'object' || Array.isArray(parsed);
+  } catch {
+    return true;
+  }
 }
 
 function safeTaggedJsonEnvelopeSuffix(userRequest: string, content: string): string | undefined {
@@ -167,14 +177,15 @@ function safeTaggedJsonEnvelopeSuffix(userRequest: string, content: string): str
   const normalized = normalizeExactOutput(content);
   if (!envelope
     || content !== normalized
-    || !normalized.startsWith(`${envelope.open}\n`)
+    || !normalized.startsWith(envelope.open)
     || normalized.includes(envelope.close)
     || RAW_TOOL_CALL_MARKUP.test(normalized)) {
     return undefined;
   }
-  const payload = normalized.slice(envelope.open.length + 1);
+  const payload = normalized.slice(envelope.open.length).trimStart();
   try {
-    JSON.parse(payload);
+    const parsed = JSON.parse(payload) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
   } catch {
     return undefined;
   }

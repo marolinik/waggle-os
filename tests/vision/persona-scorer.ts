@@ -807,7 +807,7 @@ const RUNWAY_BURN_AMOUNT = String.raw`(?:[$\u20ac\u00a3]\s*)?10[,.]?000(?:\.0{1,
 const RUNWAY_BURN_AMOUNT_PERIOD = String.raw`${RUNWAY_BURN_AMOUNT}(?:\s*(?:\/\s*month|per\s+month))?`;
 const RUNWAY_BURN_CONTEXT = String.raw`${RUNWAY_BURN_SUBJECT}(?:\s*\(\s*(?:currently\s+)?${RUNWAY_BURN_AMOUNT_PERIOD}\s*\)|\s+(?:of|at)\s+${RUNWAY_BURN_AMOUNT_PERIOD})?(?:\s+and\s+(?:monthly\s+)?revenue)?`;
 const RUNWAY_BURN_STABILITY = new RegExp(String.raw`(?:${RUNWAY_BURN_CONTEXT}(?:${[
-  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?|as)\s+(?:the\s+same|(?:(?:perfectly|fully|entirely|strictly)\s+)?(?:constant|flat|stable|steady|unchanged|fixed))\b`,
+  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?|as)\s+(?:the\s+same|(?:(?:perfectly|fully|entirely|strictly)\s+)?(?:constant|flat|stable|static|steady|unchanged|fixed))\b`,
   String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?)\s+(?:(?:at|exactly)\s+)?${RUNWAY_BURN_AMOUNT}\b`,
   String.raw`\s+does\s+not\s+change\b`,
 ].join('|')})|\b(?:flat|constant|stable|steady|fixed)\s+${RUNWAY_BURN_SUBJECT}\s+of\s+${RUNWAY_BURN_AMOUNT_PERIOD}\b)`, 'gi');
@@ -1887,6 +1887,61 @@ function hasOnlyBoundedWorkspaceClaims(response: string): boolean {
   ].some(pattern => pattern.test(withoutSafePackageMentions));
 }
 
+function hasAffirmedNextStep(response: string): boolean {
+  const label = /\b(?:next (?:engineering |logical )?step|recommended next step)\b/gi;
+  for (const match of response.matchAll(label)) {
+    if (match.index === undefined) continue;
+    const before = response.slice(0, match.index);
+    const boundary = Math.max(
+      before.lastIndexOf('\n'),
+      before.lastIndexOf('.'),
+      before.lastIndexOf('!'),
+      before.lastIndexOf('?'),
+      before.lastIndexOf(';'),
+      before.lastIndexOf(','),
+    );
+    const prefix = before.slice(boundary + 1);
+    const after = response.slice(match.index + match[0].length);
+    const end = after.search(/[.!?;\r\n]/);
+    const suffix = end < 0 ? after : after.slice(0, end);
+    const deniedBefore = /\b(?:no|not|never|without)\s+(?:(?:an?|the|any)\s+)?$/i.test(prefix)
+      || /\b(?:(?:do|does|did)\s+not|(?:don|doesn|didn)['’]t)\s+(?:recommend|identify|provide|suggest)\s+(?:(?:an?|the|any)\s+)?$/i.test(prefix);
+    const deniedAfter = /^\s*(?:(?:does\s+not|doesn['’]t)\s+(?:exist|apply|follow|qualify)|(?:(?:is|was|should|will|would|can|must)\s+not(?!\s+only\b)|(?:isn|wasn|shouldn|won|wouldn|can|mustn)['’]t)\b|cannot\s+be\s+(?:determined|recommended|provided|identified)|(?:is|was)\s+(?:unavailable|absent|impossible|undefined|missing))\b/i.test(suffix)
+      && !/\bbut\s+(?:instead\s+)?to\s+\w+/i.test(suffix);
+    if (!deniedBefore && !deniedAfter) return true;
+  }
+  return false;
+}
+
+function laneLineIsDenied(line: string, role: 'research' | 'coder'): boolean {
+  const roleNoun = role === 'research'
+    ? String.raw`(?:researcher|research\s+lane)`
+    : String.raw`(?:coder|coder\s+lane)`;
+  const workNoun = role === 'research'
+    ? String.raw`(?:research|analysis|assessment)`
+    : String.raw`(?:coding|implementation|remediation)`;
+  const workVerb = role === 'research'
+    ? String.raw`(?:perform(?:ed)?|conduct(?:ed)?|undertak(?:e|en)|done|carried\s+out)`
+    : String.raw`(?:perform(?:ed)?|implement(?:ed)?|undertak(?:e|en)|done|carried\s+out)`;
+  const laneNoun = role === 'research' ? String.raw`(?:researcher|research)` : 'coder';
+  return new RegExp(String.raw`\bno\s+${laneNoun}\s+lane\b`, 'i').test(line)
+    || new RegExp(String.raw`\b(?:there\s+)?(?:(?:is|was)\s+not|(?:isn|wasn)['’]t)\s+(?:an?|any)\s+${laneNoun}\s+lane\b`, 'i').test(line)
+    || new RegExp(String.raw`\b${laneNoun}\s+lane\b[^\r\n]{0,24}\b(?:(?:is|was)\s+not|(?:isn|wasn)['’]t)\s+(?:defined|available|present|created|assigned)\b`, 'i').test(line)
+    || new RegExp(String.raw`\b${laneNoun}\s+lane\b[^\r\n]{0,24}\b(?:does\s+not|doesn['’]t)\s+exist\b`, 'i').test(line)
+    || new RegExp(String.raw`\bnot\s+(?:a\s+)?${roleNoun}\b`, 'i').test(line)
+    || new RegExp(String.raw`\bno\s+${workNoun}\s+(?:will|would|shall|is|was|can|should)\b`, 'i').test(line)
+    || new RegExp(String.raw`\b${workNoun}\b[^\r\n]{0,24}\b(?:(?:(?:does|is|was|will|would|can|should)\s+(?:not|never)|(?:doesn|isn|wasn|won|wouldn|can|shouldn)['’]t)\s+(?:be\s+)?${workVerb})\b`, 'i').test(line);
+}
+
+function hasAffirmedTwoLanes(response: string, patterns: readonly RegExp[]): boolean {
+  const lines = response.replace(/\r\n?/g, '\n').split('\n');
+  return patterns.length >= 2
+    && patterns.slice(0, 2).every((pattern, index) => lines.some(line => (
+      testPattern(pattern, line)
+      && !laneLineIsDenied(line, index === 0 ? 'research' : 'coder')
+    )));
+}
+
 const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
 const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s+(?:plan|release|ship(?:ment|ping)?|ship\s+date)\b|\b(?:there\s+(?:is|was)\s+)?no\s+(?:plan|release|shipment)\b[^.;\r\n]{0,40}\b(?:for|on|by|to\s+ship)\s+Friday\b|\bFriday\b\s+(?:has|had)\s+no\s+(?:release\s+)?plan\b|\bFriday\s+(?:release\s+)?(?:plan|release|shipment)\b[^.;\r\n]{0,16}\b(?:(?:is|was|has\s+been|had\s+been)\s+)?(?:cancel(?:ed|led)|withdrawn|abandoned|scrapped)\b/i;
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
@@ -2115,13 +2170,14 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
     .split(/\n+|(?<=[.!?])\s+/)
     .some((clause) => {
       const decisionRetraction = /\b(?:(?:(?:that|this|the|prior|previous)\s+)?(?:delay\s+)?recommendation|(?:the\s+)?delay)\b[^.\r\n]{0,60}\b(?:(?:(?:is|was)|(?:has|had)\s+(?:since\s+)?been)\s+)?(?:withdrawn|retracted|cancelled|canceled|reversed|invalid|superseded|rejected|rescinded|overruled|no\s+longer\s+(?:valid|applicable|necessary|required|needed))\b|\b(?:(?:that|this|the|prior|previous)\s+)?(?:delay\s+)?recommendation\s+no\s+longer\s+applies\b|\b(?:rescind|reject|withdraw|reverse|cancel|overrule)(?:s|ed|ing)?\b[^.\r\n]{0,60}\b(?:delay|postpon(?:e|ing)|deferr?(?:al|ing)|recommendation)\b/i.test(clause);
+      const negativeDelayRecommendation = /\b(?:delaying|postponing|deferring)\s+(?:the\s+)?(?:release|shipment)\s+is\s+not\s+recommended\b/i.test(clause);
       const positiveShipDecision = /\b(?:(?:we|you|the team|management)\s+(?:now\s+)?(?:(?:recommend(?:s|ed|ing)?\s+(?:proceeding\s+with\s+|shipping|releasing))|(?:(?:should|must|will|intend(?:s)?\s+to|plan(?:s)?\s+to|decid(?:e[sd]?|ing)\s+to)\s+(?:ship|release))|(?:(?:are|is)\s+(?:shipping|releasing)\s+Friday)|(?:(?:are\s+going|will\s+(?:be\s+going|go))\s+ahead\s+with\s+(?:the\s+)?Friday\s+release))|the\s+(?:decision\s+is\s+to\s+(?:ship|release)|release\s+(?:is\s+approved|remains?\s+scheduled)\s+for\s+Friday|ship\s+date\s+remains?\s+Friday)|Friday\s+(?:is|remains?)\s+still\s+(?:the\s+)?ship\s+date|proceed\s+with\s+(?:the\s+)?Friday\s+release)\b|^(?:update\s*:\s*)?(?:ship|release)\s+(?:the\s+)?(?:(?:product|build|version)\s+)?(?:on\s+)?Friday\b/i.test(clause.trim());
       const nonAffirmative = /\?|\b(?:do\s+not|don't|never|cannot|can't|should\s+not|must\s+not|would\s+not|might|may|could|if|unless|until|once|when|after|hypothetical)\b/i.test(clause);
-      return decisionRetraction || (positiveShipDecision && !nonAffirmative);
+      return decisionRetraction || negativeDelayRecommendation || (positiveShipDecision && !nonAffirmative);
     });
   if (decisionWasInvalidated) return false;
 
-  const delayRecommendation = /\b(?:delay(?:ing)?|postpone|defer)\s+(?:the\s+)?(?:(?:planned|scheduled|Friday)\s+){0,2}(?:release|shipment)\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
+  const delayRecommendation = /\b(?:delay(?:ing)?|postpone|defer)\s+(?:the\s+)?(?:(?:planned|scheduled|Friday)\s+){0,2}(?:release|shipment)\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|issues?|deficienc(?:y|ies)|smart router|cloud credentials)\b/i;
   for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
     const line = rawLine.replace(/[*_`]/g, '').trim();
     const recommendation = delayRecommendation.exec(line);
@@ -2129,7 +2185,8 @@ function hasAffirmedWriterDelayRecommendation(response: string): boolean {
     const prefix = line.slice(0, recommendation.index);
     const suffix = line.slice(recommendation.index + recommendation[0].length);
     if (/\b(?:should\s+we|could|would|may|might|perhaps|maybe|possibly)\b/i.test(prefix)) continue;
-    if (/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer|avoid|against)\b/i.test(prefix)) continue;
+    if (/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer|avoid|against)\b|\bnot\s+to\s*$/i.test(prefix)) continue;
+    if (/^\s+(?:are|remain)\s+(?:not|never)\s+(?:closed|resolved|fixed|addressed|validated)\b/i.test(suffix)) continue;
     if (/\b(?:but|however|yet)\b[^.\r\n]{0,80}\b(?:do\s+not|don't|no|not|cancel(?:led|ed)?|withdrawn|retracted)\b|\b(?:is|was|remains?)\s+not\s+recommended\b/i.test(suffix)) continue;
     const hasPositiveLead = recommendation.index === 0
       || /\brecommend(?:ation|ed|ing)?\b[^.\r\n]{0,80}$/i.test(prefix)
@@ -3074,6 +3131,10 @@ function evaluateResponseRule(
       return hasAffirmedEmptyWorkspaceResult(evidence);
     case 'boundedWorkspaceClaims':
       return hasOnlyBoundedWorkspaceClaims(evidence.response);
+    case 'affirmedNextStep':
+      return hasAffirmedNextStep(evidence.response);
+    case 'twoLanes':
+      return hasAffirmedTwoLanes(evidence.response, rule.patterns);
     case 'prioritizationJustification':
       return hasAffirmedPrioritizationJustification(evidence.response, rule.criteria);
     case 'allPatterns':

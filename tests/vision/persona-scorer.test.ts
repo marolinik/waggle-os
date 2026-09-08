@@ -8241,4 +8241,98 @@ describe('Qwen Flash Next exact-response regressions', () => {
     );
     expect(denied.checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
   });
+
+  it('scores the exact 9c497360 Qwen acceptance language without lexical false negatives', () => {
+    const prioritization = [
+      '### Recommended Order',
+      '1. **Close one customer**',
+      '2. **Repair onboarding friction**',
+      '3. **Investigate production memory bug**',
+      'Prioritize **Customer Close** today because revenue momentum and pipeline health typically require immediate, time-sensitive negotiation or follow-up that cannot be deferred without risk.',
+      'Address **Onboarding Friction** next, as it represents a compounding operational drag; fixing it this week prevents future churn and support volume, yielding higher long-term value than a bug fix alone.',
+      'Tackle the **Memory Bug** last, unless it causes an outage or data corruption. Production bugs are often isolated and can be mitigated with workarounds or monitoring, whereas sales delays lose money immediately, and onboarding friction blocks all new users.',
+      'First Action for Today: Identify the highest-probability deal and send a tailored follow-up.',
+    ].join('\n');
+    expect(scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const finance = [
+      'Runway = Cash / Net Monthly Burn',
+      'Runway = 40,000 / (10,000 - 0) = 4.00 months',
+      'Biggest assumption: The monthly burn rate remains static at $10,000 for the entire duration.',
+      'Actions to improve runway:',
+      '| Action | Expected Result |',
+      '|---|---|',
+      '| Cut discretionary spending by $2,000/mo | Burn drops to $8,000 and runway extends to 5.00 months |',
+      '| Generate $3,000/mo in early revenue | Net burn drops to $7,000 and runway extends to 5.71 months |',
+    ].join('\n');
+    expect(scoreResponse('finance-owner', finance).checks.find(check => check.id === 'assumption')?.passed).toBe(true);
+
+    const coder = 'No files exist in the current virtual workspace, so no specific engineering step can be recommended based on existing code; the next logical step is to initialize the project structure with a basic file.';
+    expect(scoreResponse('coder', coder).checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+    expect(scoreResponse('coder', 'There is no next logical step.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step does not exist.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', "The next logical step isn't available.").checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step should not be to initialize anything.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step is not to initialize anything.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step should not be initialization.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', "The next logical step shouldn't be initialization.").checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step is not to initialize blindly but to inspect the logs.').checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+    expect(scoreResponse('coder', 'With no files present, the next logical step is to initialize the project structure.').checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+
+    const coordinator = [
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '### 2. Coder Lane (Remediation & Hardening)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+    expect(scoreResponse('coordinator', coordinator).checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+    const contradictedCoordinator = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — this is not a research lane',
+    );
+    expect(scoreResponse('coordinator', contradictedCoordinator).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const emptyResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — no research will be performed',
+    );
+    expect(scoreResponse('coordinator', emptyResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const inactiveResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — research is not performed',
+    );
+    expect(scoreResponse('coordinator', inactiveResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const clearResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — no research blockers identified',
+    );
+    expect(scoreResponse('coordinator', clearResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+    const absentLanes = 'No researcher lane is defined.\nNo coder lane is defined.';
+    expect(scoreResponse('coordinator', absentLanes).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const contractedAbsentLanes = "There isn't a researcher lane.\nThere isn't a coder lane.";
+    expect(scoreResponse('coordinator', contractedAbsentLanes).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+  });
+
+  it('classifies the exact 9c497360 writer variants and rejects unsupported assurance', () => {
+    const bounded = [
+      'We initially planned to ship this Friday. Current status: API tests have passed, but browser tests exhibit two persistent failures on Windows.',
+      'Additionally, the smart router has not yet been exercised without cloud credentials.',
+      'Due to these unresolved technical gaps, we recommend delaying the release until all testing deficiencies are fully closed.',
+    ].join('\n');
+    const boundedResult = scoreResponse('writer', bounded);
+    expect(boundedResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(boundedResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+
+    const unsupportedAssurance = `${bounded}\nThis ensures product stability prior to deployment.`;
+    expect(scoreResponse('writer', unsupportedAssurance).checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+
+    const alternate = [
+      'We initially planned to ship this Friday. While our API tests have passed, browser tests remain incomplete, exhibiting two failures specifically on Windows.',
+      'Additionally, the smart router has not yet been exercised without cloud credentials.',
+      'Due to these outstanding testing gaps, we recommend delaying the release until all issues are resolved and the system is fully validated.',
+    ].join('\n');
+    const alternateResult = scoreResponse('writer', alternate);
+    expect(alternateResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(alternateResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+  });
 });

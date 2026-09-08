@@ -487,6 +487,76 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(wrappedReport);
   });
 
+  it('accepts a valid tagged JSON envelope without requiring newline padding', async () => {
+    const wrappedReport = '<verifier_report>{"schemaVersion":1,"verdict":"fail"}</verifier_report>';
+    const fetch = vi.fn(async () => streamResponse([
+      sse({ choices: [{ delta: { content: wrappedReport } }] }),
+      sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+      'data: [DONE]\n\n',
+    ]));
+    const onToken = vi.fn();
+    const request = 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.';
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledWith(wrappedReport);
+    expect(result.content).toBe(wrappedReport);
+  });
+
+  it.each([
+    ['non-JSON payload', '<verifier_report>not-json</verifier_report>'],
+    ['truncated JSON', '<verifier_report>{"schemaVersion":1</verifier_report>'],
+    ['raw tool markup', '<verifier_report><tool_call>{"name":"shell"}</tool_call></verifier_report>'],
+    ['nested wrappers', '<verifier_report><verifier_report>{"schemaVersion":1}</verifier_report></verifier_report>'],
+    ['text outside the wrapper', 'prefix<verifier_report>{"schemaVersion":1}</verifier_report>'],
+  ])('repairs an invalid adjacent tagged envelope with %s', async (_label, invalidReport) => {
+    const corrected = '<verifier_report>{"schemaVersion":1,"verdict":"fail"}</verifier_report>';
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: invalidReport } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 12 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      if (_label === 'raw tool markup') {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: corrected } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 16 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: corrected }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 16 },
+        }),
+      } as unknown as Response;
+    });
+    const request = 'Return exactly one <verifier_report>...</verifier_report> JSON envelope and no text before or after it.';
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      maxTurns: 2,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(corrected);
+  });
+
   it('locally closes a valid tagged JSON envelope when only its closing tag is missing', async () => {
     const bareReport = '{"schemaVersion":1,"verdict":"fail"}';
     const partialReport = `<verifier_report>\n${bareReport}`;

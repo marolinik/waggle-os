@@ -42,6 +42,8 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'writerDelayRecommendation' })
   | (BaseResponseRule & { kind: 'emptyWorkspaceResult' })
   | (BaseResponseRule & { kind: 'boundedWorkspaceClaims' })
+  | (BaseResponseRule & { kind: 'affirmedNextStep' })
+  | (BaseResponseRule & { kind: 'twoLanes'; patterns: readonly RegExp[] })
   | (BaseResponseRule & {
       kind: 'prioritizationJustification';
       criteria: readonly {
@@ -105,7 +107,8 @@ const windowsBrowserFailuresPattern = new RegExp([
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
-  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:have|exhibit)\s+(?:two|2)\s+failures?\b[^.\r\n]{0,60}\bWindows\b`}`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:have|exhibit)\s+(?:two|2)\s+(?:(?:persistent|unresolved|open|outstanding)\s+)?failures?\b[^.\r\n]{0,60}\bWindows\b`}`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,60}\bremain(?:s|ing)?\s+incomplete\b[^.\r\n]{0,60}\b(?:two|2)\s+failures?\b[^.\r\n]{0,40}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,80}\bremain(?:s|ing)?\b[^.\r\n]{0,60}\bfail(?:ure|ing)\b[^.\r\n]{0,80}\b(?:two|2)\s+(?:specific\s+)?(?:issues?|failures?)\b[^.\r\n]{0,60}\bpersist(?:s|ing)?\b[^.\r\n]{0,40}\bWindows\b`}`,
   `${affirmedFactClause}${String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser[- ]test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
 ].join('|'), 'i');
@@ -231,7 +234,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?(?:all\s+)?(?:currently\s+)?pass(?:ed|ing)?|have\s+(?:currently\s+)?passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'writerRouterFact', points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'writerDelayRecommendation', points: 10 },
-      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\brisks?\s+(?:release\s+|platform\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:(?:all\s+)?components?\s+function\s+as\s+expected|(?:platform\s+)?stability)\b|\bacross\s+(?:all|supported)\s+environments\b)/i, points: 10 },
+      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\brisks?\s+(?:release\s+|platform\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:(?:all\s+)?components?\s+function\s+as\s+expected|(?:(?:product|platform)\s+)?stability)\b|\bacross\s+(?:all|supported)\s+environments\b)/i, points: 10 },
     ],
   },
   {
@@ -303,7 +306,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     responseRules: [
       { id: 'workspace-scope', description: 'Reports on the current workspace', kind: 'pattern', pattern: /workspace/i, points: 10 },
       { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'emptyWorkspaceResult', points: 10 },
-      { id: 'next-step', description: 'Recommends one next engineering step', kind: 'pattern', pattern: /(?:next (?:engineering )?step|recommended next step)/i, points: 10 },
+      { id: 'next-step', description: 'Recommends one next engineering step', kind: 'affirmedNextStep', points: 10 },
       { id: 'bounded-claim', description: 'Does not claim parent or external repository contents', kind: 'boundedWorkspaceClaims', points: 10 },
       { id: 'concise', description: 'Keeps an empty-workspace report concise', kind: 'maxWords', maxWords: 300, points: 10 },
     ],
@@ -356,9 +359,9 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       {
         id: 'two-lanes',
         description: 'Defines researcher and coder lanes',
-        kind: 'allPatterns',
+        kind: 'twoLanes',
         patterns: [
-          /(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*(?![^\r\n]{0,80}\bnot\s+(?:a\s+)?researcher\b)[^\r\n()]{1,80}\(researcher\)[ \t]*(?:\*\*)?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im,
+          /(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\d+[.)][ \t]+)?(?:\*\*)?research\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*[^\r\n()]{1,80}\(researcher\)[ \t]*(?:\*\*)?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+\S[^\r\n]*$)/im,
           /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*(?![^\r\n]{0,80}\bnot\s+(?:a\s+)?coder\b)[^\r\n()]{1,80}\(coder\)[ \t]*(?:\*\*)?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+(?:\d+|[A-Z])\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im,
         ],
         points: 10,
