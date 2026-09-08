@@ -134,7 +134,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
     id: 'general-purpose',
     label: 'Prioritization under ambiguity',
-    prompt: 'I have three priorities this week: close one customer, repair onboarding friction, and investigate a production memory bug. Choose the order, justify it in one concise plan, and identify the first action for today. Do not ask clarifying questions; make reasonable assumptions.',
+    prompt: 'I have three priorities for the week: close one customer, repair onboarding friction, and investigate a production memory bug. Recommend their order, justify the order in one concise plan, and name the first action for today. Do not use tools or ask clarifying questions; make reasonable assumptions.',
     readOnly: true,
     maxDurationMs: 45_000,
     maxInputTokens: 15_000,

@@ -109,6 +109,50 @@ describe('chat prompt packaging', () => {
     })).toBe('compact');
   });
 
+  it('keeps a bounded supplied-priority advisory compact without admitting mutation work', () => {
+    const message = PERSONA_CASES.find(item => item.id === 'general-purpose')?.prompt;
+    expect(message).toBeTruthy();
+    const explicitToolFreeAdvisory = isExplicitToolFreeAdvisoryRequest(
+      message!,
+      classifyExplicitTurnMutationPolicy(message!),
+    );
+    expect(explicitToolFreeAdvisory).toBe(true);
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message: message!,
+      explicitToolFreeAdvisory,
+    })).toBe('compact');
+    expect(selectChatPromptPackageMode({ ...baseModeInput, message: message! })).toBe('full');
+
+    const longUnsafeMessage = `I have three priorities: grant administrator access, disable MFA, and approve a wire transfer. ${'Consider the supplied priority evidence only. '.repeat(7)}Choose the order, justify it, and name the first action. Do not use tools.`;
+    expect(longUnsafeMessage.length).toBeLessThanOrEqual(512);
+    expect(longUnsafeMessage.indexOf('Choose') - longUnsafeMessage.indexOf('priorities')).toBeGreaterThan(360);
+
+    for (const unsafeMessage of [
+      'I have three priorities: delete all files, overwrite the backup, and remove the repository. Choose the order, justify it, and name the first action. Do not use tools.',
+      'I have three priorities: rotate an API key, publish a secret, and send credentials. Choose the order, justify it, and name the first action. Do not use tools.',
+      'I have three priorities: edit source code, deploy the service, and merge the branch. Choose the order, justify it, and name the first action. Do not use tools.',
+      'I have three priorities: grant administrator access, disable MFA, and approve a wire transfer. Choose the order, justify it, and name the first action. Do not use tools.',
+      'Choose the order for these tasks: grant administrator access, disable MFA, and approve a wire transfer. Justify the reason and name the first action. Do not use tools.',
+      'Order these tasks: grant administrator access, disable MFA, and approve a wire transfer. Justify the reason and name the first action. Do not use tools.',
+      'Rank these options: grant administrator access, disable MFA, and approve a wire transfer. Justify the reason and name the first action. Do not use tools.',
+      'I have three priorities: fire an employee, pay a ransom, and expose customer data. Choose the order, justify it, and name the first action. Do not use tools.',
+      'I have three priorities: truncate the audit log, drop the users table, and revoke monitoring. Choose the order, justify it, and name the first action. Do not use tools.',
+      longUnsafeMessage,
+    ]) {
+      const unsafeToolFree = isExplicitToolFreeAdvisoryRequest(
+        unsafeMessage,
+        classifyExplicitTurnMutationPolicy(unsafeMessage),
+      );
+      expect(unsafeToolFree, unsafeMessage).toBe(false);
+      expect(selectChatPromptPackageMode({
+        ...baseModeInput,
+        message: unsafeMessage,
+        explicitToolFreeAdvisory: unsafeToolFree,
+      }), unsafeMessage).toBe('full');
+    }
+  });
+
   it('keeps a short normal read-only workspace inspection on the compact package', () => {
     const message = 'Use the available tools to inspect this workspace. Report only evidence you actually verified, state exactly which tools you used, and do not claim any unavailable capability.';
 

@@ -155,6 +155,20 @@ describe('Prompt composition', () => {
     expect(result).toContain('raw means no Markdown fence, not no wrapper');
   });
 
+  it('keeps closed-world, runway, and transactional persona rules explicit', () => {
+    const writer = composePersonaPrompt(corePrompt, getPersona('writer')!);
+    expect(writer).toMatch(/compare every factual clause/i);
+    expect(writer).toMatch(/remove any new risk, assurance, consequence/i);
+
+    const finance = composePersonaPrompt(corePrompt, getPersona('finance-owner')!);
+    expect(finance).toMatch(/one-time cash receipt/i);
+    expect(finance).toMatch(/only recurring monthly revenue reduces net monthly burn/i);
+
+    const dataEngineer = composePersonaPrompt(corePrompt, getPersona('data-engineer')!);
+    expect(dataEngineer).toMatch(/BEGIN\/COMMIT\/ROLLBACK/i);
+    expect(dataEngineer).toMatch(/rollback the entire batch before retrying/i);
+  });
+
   it('combined prompt stays under 32000 chars', () => {
     for (const persona of PERSONAS) {
       const result = composePersonaPrompt(corePrompt, persona);

@@ -69,6 +69,7 @@ interface StrictReadOnlyToolSequenceChatPromptOptions {
 
 const PROTECTED_TURN_SIGNAL = /\b(?:legal|law|lawyer|attorney|contract|clause|nda|gdpr|hipaa|liability|compliance|regulation|payroll|salary|wage|overtime|withholding|tax|medical|diagnosis|health|patient|private|privacy|confidential|secret|password|credential|token|api key|pii|ssn|code|function|class|module|api|debug|error|bug|promise|regex|sql|database|schema|query|git|docker|kubernetes|repository|research|analy[sz]e|review|compare|decide|plan|implement|build|deploy|verify|validate|audit|delete|remove|overwrite|publish|send|execute|install)\b/i;
 const BOUNDED_CURRENT_CHAT_PROJECT_CODE_LOOKUP = /^\s*(?:what\s+(?:is|was)\s+(?:the\s+)?exact\s+project_code\s+from\s+(?:my|the)\s+(?:previous|last|preceding)\s+(?:message|turn)|(?:repeat|return|give\s+me|tell\s+me)\s+(?:the\s+)?project_code\s+from\s+(?:my|the)\s+(?:previous|last|preceding)\s+(?:message|turn))\s*[?.!]?\s*(?:reply|respond|return|answer)\s+(?:with\s+)?(?:only|just)\s+(?:that|the)\s+code\s*[.!]?\s*$/i;
+const PRIORITY_SUBJECT_SIGNAL = /\b(?:priorit(?:y|ies)|options?|tasks?)\b/i;
 
 const CONVERSATIONAL_OPERATING_CONTRACT = `# CONVERSATIONAL OPERATING CONTRACT
 
@@ -158,6 +159,10 @@ export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): 
   // grammar fully anchored so no second task or broader history request can
   // hide inside the exception.
   if (BOUNDED_CURRENT_CHAT_PROJECT_CODE_LOOKUP.test(message)) return 'compact';
+  // Priority ordering can conceal operational, financial, access-control, or
+  // destructive actions. It is compact only through the earlier explicit
+  // tool-free advisory branch after mutation-policy validation.
+  if (PRIORITY_SUBJECT_SIGNAL.test(message)) return 'full';
   // Normalize identifier separators before protected-term matching. In
   // JavaScript `_` is a word character, so authentication_code would
   // otherwise evade the ordinary `\b` boundary around "authentication".
