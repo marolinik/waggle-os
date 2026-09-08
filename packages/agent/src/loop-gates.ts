@@ -162,6 +162,25 @@ function taggedJsonEnvelopeMismatch(userRequest: string, content: string): boole
     || !normalized.endsWith(`\n${envelope.close}`);
 }
 
+function safeTaggedJsonEnvelopeSuffix(userRequest: string, content: string): string | undefined {
+  const envelope = requiredTaggedJsonEnvelope(userRequest);
+  const normalized = normalizeExactOutput(content);
+  if (!envelope
+    || content !== normalized
+    || !normalized.startsWith(`${envelope.open}\n`)
+    || normalized.includes(envelope.close)
+    || RAW_TOOL_CALL_MARKUP.test(normalized)) {
+    return undefined;
+  }
+  const payload = normalized.slice(envelope.open.length + 1);
+  try {
+    JSON.parse(payload);
+  } catch {
+    return undefined;
+  }
+  return `\n${envelope.close}`;
+}
+
 function markdownRowCells(line: string): string[] | null {
   if (!/^\s*\|.*\|\s*$/.test(line)) return null;
   const cells: string[] = [];
@@ -402,6 +421,9 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const literalSuffix = exactOutputIncomplete && atomicRepairAvailable
     ? safeExactOutputSuffix(userRequest, content)
     : undefined;
+  const taggedEnvelopeSuffix = taggedEnvelopeIncomplete && atomicRepairAvailable
+    ? safeTaggedJsonEnvelopeSuffix(userRequest, content)
+    : undefined;
   if (literalSuffix !== undefined) {
     contentSuffix = literalSuffix;
     logTurnEvent(turnId, {
@@ -410,8 +432,16 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       suffixChars: literalSuffix.length,
     });
   }
+  if (taggedEnvelopeSuffix !== undefined) {
+    contentSuffix = taggedEnvelopeSuffix;
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.completion-integrity-local-tagged-json-suffix',
+      contentChars: content.length,
+      suffixChars: taggedEnvelopeSuffix.length,
+    });
+  }
   if ((exactOutputIncomplete && literalSuffix === undefined)
-    || taggedEnvelopeIncomplete
+    || (taggedEnvelopeIncomplete && taggedEnvelopeSuffix === undefined)
     || malformedMarkdownTable
     || structuredDraftIncomplete
     || danglingLeadInIncomplete) {
