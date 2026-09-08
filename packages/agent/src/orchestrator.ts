@@ -63,6 +63,7 @@ import {
 const logger = createCoreLogger('orchestrator');
 
 const sharedRerankerLoads = new Map<string, Promise<Reranker | undefined>>();
+const RERANKER_STARTUP_GRACE_MS = 1_000;
 
 function getSharedInProcessReranker(cacheDir?: string): Promise<Reranker | undefined> {
   const key = cacheDir ?? '<default>';
@@ -508,17 +509,28 @@ export class Orchestrator {
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
    * model (cached at the configured managed path, or ~/.hive-mind/models for
-   * standalone callers); creation failure (offline, OOM)
-   * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
+   * standalone callers). A cold download continues in the background after a
+   * short grace period so first recall can fall back to RRF instead of blocking;
+   * creation failure (offline, OOM) memoizes undefined and never throws.
    */
-  private getReranker(): Promise<Reranker | undefined> {
-    if (this.rerankerPromise) return this.rerankerPromise;
-    if (process.env['WAGGLE_RERANKER'] === '0') {
-      this.rerankerPromise = Promise.resolve(undefined);
-      return this.rerankerPromise;
+  private async getReranker(): Promise<Reranker | undefined> {
+    if (!this.rerankerPromise) {
+      this.rerankerPromise = process.env['WAGGLE_RERANKER'] === '0'
+        ? Promise.resolve(undefined)
+        : getSharedInProcessReranker(this.rerankerCacheDir);
     }
-    this.rerankerPromise = getSharedInProcessReranker(this.rerankerCacheDir);
-    return this.rerankerPromise;
+
+    let timer: ReturnType<typeof setTimeout> | number | undefined;
+    try {
+      return await Promise.race([
+        this.rerankerPromise,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(resolve, RERANKER_STARTUP_GRACE_MS);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async recallMemory(

@@ -115,6 +115,44 @@ describe('W4.2 — recallMemory reranker wiring', () => {
     expect(createInProcessReranker).toHaveBeenCalledWith({ cacheDir: rerankerCacheDir });
   });
 
+  it('falls back to RRF without blocking the first recall while the reranker warms', async () => {
+    vi.stubEnv('WAGGLE_RERANKER', '1');
+    vi.useFakeTimers();
+    let resolveReranker!: (reranker: Reranker) => void;
+    vi.mocked(createInProcessReranker)
+      .mockReturnValue(new Promise<Reranker>((resolve) => { resolveReranker = resolve; }));
+    const calls = { n: 0 };
+    const orchestrator = new Orchestrator({
+      db,
+      embedder: new MockEmbedder(),
+      rerankerCacheDir: 'C:\\Waggle\\models\\nonblocking-reranker-test',
+    });
+    await orchestrator.executeTool('save_memory', {
+      content: 'User preference: weekly report goes out on Fridays',
+      importance: 'normal',
+    });
+    let result: Awaited<ReturnType<typeof orchestrator.recallMemory>> | undefined;
+    const pending = orchestrator.recallMemory('weekly report').then((value) => { result = value; });
+    let rerankerResolved = false;
+
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(result?.count).toBeGreaterThan(0);
+      resolveReranker(markerReranker('Fridays', calls));
+      rerankerResolved = true;
+      await vi.runAllTimersAsync();
+      await pending;
+
+      await orchestrator.recallMemory('weekly report');
+      expect(calls.n).toBeGreaterThan(0);
+    } finally {
+      if (!rerankerResolved) resolveReranker(markerReranker('Fridays', calls));
+      await vi.runAllTimersAsync();
+      await pending;
+      vi.useRealTimers();
+    }
+  });
+
   it('shares one lazy reranker load across orchestrators using the same managed cache', async () => {
     vi.stubEnv('WAGGLE_RERANKER', '1');
     const calls = { n: 0 };
