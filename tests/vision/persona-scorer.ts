@@ -113,7 +113,7 @@ const EMPTY_WORKSPACE_CONTRADICTION_TOOL = /^read_file$/i;
 const EMPTY_WORKSPACE_TOOL_RESULT = /^\s*(?:no files?(?:\s+(?:were\s+)?found)?\.?|\[\]\s*)$/i;
 const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such file\b|enoent\b|permission denied\b|access denied\b|unable to read\b|could not read\b)/i;
 const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
-const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\b(?:the|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
+const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\bthe workspace at (?:the|this) [^.!?\r\n]{1,40} is (?:currently )?empty\b|\b(?:the|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
 const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
 const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\b(?:the\s+)?workspace\s+(?:is|was)\s+(?:actually\s+)?not\s+empty\b|\b(?:correction|update)\s*:[^.!?\r\n]{0,120}\b(?:empty[- ]workspace|workspace[- ]empty|workspace\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b[^.!?\r\n]{0,80}\b(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:that|this)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result)|(?:the\s+)?(?:earlier|prior|previous)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\s+(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:I|we)\s+)?(?:retract|withdraw|disavow|reject)\s+(?:(?:that|this)(?:\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))?|(?:the\s+)?(?:(?:earlier|prior|previous)\s+)?(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b|\b(?:correction\s*:|actually\b)[^.!?\r\n]{0,140}(?:\bthere\s+(?:are|were)\s+(?:one\s+or\s+more\s+)?files?\b|(?<!no )(?<!zero )\bfiles?\s+(?:(?:were|are)\s+)?found\b|\b(?:README(?:\.md)?|package\.json|pyproject\.toml)\s+(?:exists?|is\s+present)\b|\bworkspace\s+(?:contains?|includes?|has)\s+files?\b)/i;
 const WORKSPACE_FILE_REFERENCE = String.raw`(?:README(?:\.md)?|(?:[\w.-]+[\\/])+[\w.-]+|[\w-]+\.(?:md|txt|json|ya?ml|toml|tsx?|jsx?|mjs|cjs|py|rs|go|java|cs|cpp|c|h|html|css|scss|sh|ps1|lock))`;
@@ -121,6 +121,40 @@ const DIRECT_NONEMPTY_WORKSPACE_CLAIM = new RegExp(
   String.raw`(?:^|[.!?]\s+|\r?\n)\s*(?:(?:[-+*]|\d+[.)])\s+)?(?!(?:no|not|if|unless|maybe|perhaps|possibly|hypothetically|suppose|assuming)\b)(?:(?:(?:the|a|an)\s+)?[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*\s+(?:exists?|is\s+(?:present|located)|was\s+(?:found|discovered|located))\b|(?:(?:I|we)\s+(?:found|discovered|read|opened)|(?:(?:the\s+)?(?:workspace\s+)?search|(?:the\s+)?tool)\s+(?:found|discovered|returned))\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*|(?:the\s+)?workspace\s+(?:contains?|includes?|has|holds?)\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)`,
   'i',
 );
+const DIRECT_NONEMPTY_WORKSPACE_DISCLOSURE = new RegExp(
+  String.raw`(?:^|[.!?]\s+|\r?\n)\s*(?:(?:there\s+(?:is|are)\s+(?:an?\s+)?[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)|(?:[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*\s+(?:is\s+there|can\s+be\s+(?:seen|found)|(?:is|remains?)\s+(?:in|at)\s+(?:the\s+)?(?:root|workspace)))|(?:(?:the\s+)?(?:root|workspace)\s+(?:has|contains|includes)\s+[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)|(?:source\s+code\s+(?:is|remains?)\s+present)|(?:(?:one|a)\s+file\s+remains?\s*:\s*[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)|(?:it\s+contains\s+(?:source\s+code|(?:one\s+or\s+more\s+)?files?)))\b`,
+  'i',
+);
+
+function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
+  if (DIRECT_NONEMPTY_WORKSPACE_CLAIM.test(response)
+    || DIRECT_NONEMPTY_WORKSPACE_DISCLOSURE.test(response)
+    || /\b(?:it|the workspace)\s+(?:isn['’]t|is not)\s+(?:entirely\s+)?empty\b/i.test(response)) {
+    return true;
+  }
+
+  const filePresence = new RegExp(
+    String.raw`[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*[^.!?\r\n]{0,50}\b(?:exists?|remains?|sits?|is\s+(?:present|in|at)|can\s+be\s+(?:seen|found))\b`,
+    'i',
+  );
+  const rootContainsFile = new RegExp(
+    String.raw`\b(?:root|workspace)\b[^.!?\r\n]{0,30}\b(?:has|contains|includes)\b(?![^.!?\r\n]{0,20}\b(?:no|zero)\b)[^.!?\r\n]{0,50}(?:\bfiles?\b|[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)`,
+    'i',
+  );
+  return response
+    .split(/\r?\n|(?<=[.!?])\s+/)
+    .map(clause => clause.replace(/[*_`]/g, '').trim())
+    .filter(Boolean)
+    .some((clause) => {
+      const filePresenceMatch = clause.match(filePresence);
+      if (filePresenceMatch
+        && !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(filePresenceMatch[0])) return true;
+      if (rootContainsFile.test(clause)) return true;
+      if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(clause)) return true;
+      return !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(clause)
+        && /\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause);
+    });
+}
 
 export function containsFailureCopy(response: string): boolean {
   return FAILURE_BANNER.test(response)
@@ -216,7 +250,7 @@ function hasAffirmedEmptyWorkspaceResult(evidence: PersonaTrialEvidence): boolea
   const emptyToolResult = hasExhaustiveEmptyWorkspaceToolResult(evidence.sseEvents);
   if (!emptyToolResult
     || CONTRADICTED_EMPTY_WORKSPACE_CLAIM.test(evidence.response)
-    || DIRECT_NONEMPTY_WORKSPACE_CLAIM.test(evidence.response)) return false;
+    || hasDirectNonEmptyWorkspaceDisclosure(evidence.response)) return false;
 
   AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM.lastIndex = 0;
   for (const match of evidence.response.matchAll(AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM)) {
@@ -1942,9 +1976,21 @@ function hasAffirmedTwoLanes(response: string, patterns: readonly RegExp[]): boo
     )));
 }
 
-const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
+const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|don't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
 const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s+(?:plan|release|ship(?:ment|ping)?|ship\s+date)\b|\b(?:there\s+(?:is|was)\s+)?no\s+(?:plan|release|shipment)\b[^.;\r\n]{0,40}\b(?:for|on|by|to\s+ship)\s+Friday\b|\bFriday\b\s+(?:has|had)\s+no\s+(?:release\s+)?plan\b|\bFriday\s+(?:release\s+)?(?:plan|release|shipment)\b[^.;\r\n]{0,16}\b(?:(?:is|was|has\s+been|had\s+been)\s+)?(?:cancel(?:ed|led)|withdrawn|abandoned|scrapped)\b/i;
-const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
+const NON_AFFIRMATIVE_WRITER_API = /\bAPI test(?:s|ing)?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API test(?:s|ing)?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
+const CONTRADICTED_WRITER_API_PASS = /\bAPI test(?:s|ing)?\b[^.;\r\n]{0,80}\bpass(?:ed|ing)?\b[^.;\r\n]{0,40}\b(?:except(?:ion)?|save|apart\s+from|other\s+than|with|although|despite|but)\b(?![^.;\r\n]{0,40}\bbrowser[- ]test)[^.;\r\n]{0,40}\b(?:one|some|an?\s+exception|fail(?:ed|ing|ures?))\b/i;
+
+function hasContradictedWriterApiPass(clause: string): boolean {
+  const apiStart = clause.search(/\bAPI test(?:s|ing)?\b/i);
+  if (apiStart < 0) return false;
+  const apiTail = clause.slice(apiStart);
+  const browserStart = apiTail.search(/\bbrowser[- ]test(?:s|ing)?\b/i);
+  const apiScope = (browserStart >= 0 ? apiTail.slice(0, browserStart) : apiTail)
+    .replace(/\b(?:without(?:\s+any)?|with\s+(?:no|zero)|no|zero)\s+(?:API\s+)?(?:test\s+)?failures?\b/gi, '');
+  return CONTRADICTED_WRITER_API_PASS.test(apiScope)
+    || /\b(?:fail(?:ed|ing|ures?)|except(?:ion)?|barring|bar|minus|red|error(?:ed|ing|s)?|broke(?:n)?)\b/i.test(apiScope);
+}
 const NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM = /\b(?:two|2)\s+failures?\s+(?:on|in)\s+(?!Windows\b)[^.;,\r\n]{1,30},?\s*(?:not|rather\s+than|instead\s+of|unlike)\s+(?:(?:on|in|under)\s+)?Windows\b|\bWindows\b\s*(?:[,;:–—-]\s*)?(?:(?:currently|now|still|otherwise)\s+)*(?:(?:is|was|remains?)\s+(?:(?:currently|now|still|otherwise)\s+)*(?:clean|green|passing|unaffected|failure[- ]free)|(?:shows?|reports?|has)\s+(?:no|zero)\s+failures?)\b/i;
 const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser[- ]test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
 const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser[- ]test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed|eliminated)\b[^.\r\n]{0,60}\bbrowser[- ]test(?:s|ing)?\b|\b(?:there\s+(?:are|were)\s+)?(?:no|zero)\s+(?:outstanding\s+|remaining\s+|open\s+)?(?:Windows\s+)?browser[- ]test failures?\b|\bbrowser[- ]test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed|eliminated)\b|\b(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,60}\b(?:(?:have|has)\s+(?:now\s+)?been|were|are|is)\s+(?:now\s+)?(?:resolved|fixed|closed|cleared|eliminated|gone)\b|\b(?:Windows\s+)?browser testing\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:now\s+)?(?:clean|green|passing|failure[- ]free)\b|\bneither\s+(?:of\s+)?(?:the\s+)?(?:(?:two|2)\s+)?(?:Windows\s+)?browser[- ]test failures?\b[^.\r\n]{0,40}\b(?:remains?|(?:is|are)\s+(?:real|valid|outstanding|unresolved))\b/i;
@@ -2044,12 +2090,15 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     .split(/\n+|(?<=[.!?])\s+/)
     .map(clause => clause.trim())
     .filter(Boolean)
-    .map(clause => clause.replace(WRITER_FACT_CONSEQUENCE, ''));
+    .map(clause => clause.replace(WRITER_FACT_CONSEQUENCE, '').replace(/[*_`]/g, ''));
 
   const isNonAffirmative = (clause: string, topic: RegExp): boolean => (
     NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
     || (/Friday/i.test(topic.source) && NON_AFFIRMATIVE_WRITER_FRIDAY.test(clause))
-    || (/API/i.test(topic.source) && NON_AFFIRMATIVE_WRITER_API.test(clause))
+    || (/API/i.test(topic.source) && (
+      NON_AFFIRMATIVE_WRITER_API.test(clause)
+      || hasContradictedWriterApiPass(clause)
+    ))
     || (/browser/i.test(topic.source) && (
       NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM.test(clause)
       || AFFIRMATIVE_WRITER_BROWSER_PASS.test(clause)
@@ -2100,14 +2149,23 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
       || /\b(?:no|zero)\s+(?:outstanding\s+|remaining\s+|open\s+)?browser(?:[- ]test)?\s+failures?\s+(?:remain|exist)\b/i.test(clause)
       || /\bnot\s+(?:even\s+)?one\b[^.\r\n]{0,60}\bbrowser[- ]test failures?\b[^.\r\n]{0,40}\b(?:is|was)\s+(?:real|valid|genuine)\b/i.test(clause)
     ));
+  const apiStatusWasLaterContradicted = clauses.some((clause, index) => {
+    if (!/\bAPI test(?:s|ing)?\b/i.test(clause)) return false;
+    const next = clauses[index + 1];
+    if (!next || /\b(?:browser[- ]test(?:s|ing)?|smart router|recommendation|release|Friday)\b/i.test(next)) {
+      return false;
+    }
+    return /^(?:however[,;:]?\s*)?(?:one|some|an?|the)\s+(?:API\s+)?tests?\s+(?:fail(?:ed|ing)?|remain(?:s|ed)?\s+red|(?:has\s+)?error(?:ed)?|broke(?:n)?)\b/i.test(next);
+  });
   return !browserFailureWasLaterResolved
     && !browserFailureWasResolvedInClause
     && !browserFailureWasRetracted
+    && !apiStatusWasLaterContradicted
     && !hasDeniedFact(/\bFriday\b/i)
-    && !hasDeniedFact(/\bAPI tests?\b/i)
+    && !hasDeniedFact(/\bAPI test(?:s|ing)?\b/i)
     && !hasDeniedFact(/\bbrowser[- ]test(?:s|ing)?\b/i)
     && hasAffirmedFact(/\bFriday\b/i, patterns[0])
-    && hasAffirmedFact(/\bAPI tests?\b/i, patterns[1])
+    && hasAffirmedFact(/\bAPI test(?:s|ing)?\b/i, patterns[1])
     && browserAffirmed;
 }
 

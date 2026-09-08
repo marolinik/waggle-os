@@ -1126,7 +1126,10 @@ describe('deterministic 100-point persona scorer', () => {
         requestPersonaId: writer.id,
       }));
 
-      expect(misleadingResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(false);
+      expect(
+        misleadingResult.checks.find(check => check.id === 'release-facts')?.passed,
+        invalidResponse,
+      ).toBe(false);
       expect(misleadingResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(false);
       expect(misleadingResult.passed).toBe(false);
     }
@@ -8334,5 +8337,110 @@ describe('Qwen Flash Next exact-response regressions', () => {
     const alternateResult = scoreResponse('writer', alternate);
     expect(alternateResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
     expect(alternateResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+  });
+
+  it('accepts the exact b052 Qwen canary writer facts', () => {
+    const responses = [
+      'We planned to ship this Friday. API tests have passed successfully. However, browser testing reveals two persistent failures on the Windows platform. Furthermore, the smart router has not yet been exercised without cloud credentials. Given these outstanding issues, we recommend delaying the release until the identified gaps are fully resolved.',
+      'Scheduled Date: Friday. API Testing: All tests passing. Browser Testing: Two failures persist on Windows. Smart Router: Not yet tested without cloud credentials. Recommendation: Delay the release until the identified gaps are closed.',
+      'The initial plan was to ship on Friday. Currently, API tests are passing. However, browser tests show two remaining failures on Windows, and the smart router has not been exercised without cloud credentials. Given these unresolved issues, the recommendation is to delay the release until all gaps are closed.',
+    ];
+
+    for (const response of responses) {
+      expect(
+        scoreResponse('writer', response).checks.find(check => check.id === 'release-facts')?.passed,
+        response,
+      ).toBe(true);
+    }
+
+    for (const contradicted of [
+      `${responses[1]} Update: API Testing: All tests passing except one.`,
+      `${responses[1]} Update: API Testing: All tests passing, but one failed.`,
+      `${responses[1]} Update: API tests passed with one exception.`,
+      `${responses[1]} Update: API Testing: All tests passing save one.`,
+      `${responses[1]} Update: API Testing: All tests passing apart from one.`,
+      `${responses[1]} Update: API Testing: All tests passing other than one.`,
+      `${responses[1]} Update: API Testing: All tests passing with one failure.`,
+      `${responses[1]} Update: API Testing: All tests passing although one failed.`,
+      `${responses[1]} Update: API Testing: All tests passing despite one failing.`,
+      `${responses[1]} Update: API Testing: All tests passing barring one.`,
+      `${responses[1]} Update: API Testing: All tests passing bar the login test.`,
+      `${responses[1]} Update: API Testing: All tests passing minus one.`,
+      `${responses[1]} Update: API Testing: All tests passing except for authentication.`,
+      `${responses[1]} Update: API Testing: All tests passing; one failed.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test remains red.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test errored.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test broke.`,
+      `${responses[1]} Update: API Testing: All tests passing. One test failed.`,
+      `${responses[1]} Update: API Testing: All tests passing. However, one test remains red.`,
+    ]) {
+      expect(
+        scoreResponse('writer', contradicted).checks.find(check => check.id === 'release-facts')?.passed,
+        contradicted,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact b052 Qwen empty-workspace report with its future file examples', () => {
+    const response = [
+      'A single exhaustive workspace search (`**/*`) succeeded and returned no files.',
+      'The workspace at the given root is currently empty — no source files, configs, or docs exist to recommend a specific next engineering step from.',
+      'Next step: Add initial project files (e.g., start with a minimal source file plus a `README` or package manifest), then re-run inspection.',
+      'No files were created or edited; this is based solely on the successful read-only search above.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const conditionalRecommendation = scoreResponse(
+      'coder',
+      `${response}\nNext step: add README.md if it does not exist.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(
+      conditionalRecommendation.checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+
+    for (const contradiction of [
+      'There is a `README.md`.',
+      '`README.md` is there.',
+      '`README.md` can be seen.',
+      '`README.md` can be found.',
+      'It contains source code.',
+      '`README.md` remains in the root.',
+      '`README.md` is in the workspace.',
+      'The root has `README.md`.',
+      'Source code is present.',
+      'One file remains: `README.md`.',
+      "It isn't entirely empty; `README.md` remains.",
+      'Files remain in the workspace.',
+      '`README.md` sits in the root.',
+      'The root includes one file called `README.md`.',
+      'Next step: inspect `README.md`, which already exists.',
+    ]) {
+      const contradicted = scoreResponse('coder', `${response}\n${contradiction}`, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      });
+      expect(
+        contradicted.checks.find(check => check.id === 'empty-result')?.passed,
+        contradiction,
+      ).toBe(false);
+    }
   });
 });
