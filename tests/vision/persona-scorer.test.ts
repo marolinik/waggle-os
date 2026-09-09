@@ -9032,3 +9032,150 @@ describe('Qwen Flash Next exact-response regressions', () => {
     ).toBe(false);
   });
 });
+
+describe('exact Qwen 30-run adjudication regressions', () => {
+  function check(
+    personaId: string,
+    ruleId: string,
+    response: string,
+    overrides: Partial<PersonaTrialEvidence> = {},
+  ) {
+    const persona = PERSONA_CASES.find(candidate => candidate.id === personaId)!;
+    return scorePersonaTrial(persona, evidence({
+      prompt: persona.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: persona.id,
+      ...overrides,
+    })).checks.find(candidate => candidate.id === ruleId)?.passed;
+  }
+
+  it('accepts the exact four-month runway table emitted by Qwen', () => {
+    const response = [
+      '## Runway Analysis',
+      '| Metric | Value |',
+      '|---|---:|',
+      '| Cash Balance | $40,000.00 |',
+      '| Net Monthly Burn | $10,000.00 |',
+      '| Runway | **4.00 months** |',
+      '**Formula:** Runway (months) = Cash Balance ÷ Net Monthly Burn = $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      '**Biggest Assumption:** The burn rate remains constant at $10,000.00 per month.',
+    ].join('\n');
+
+    expect(check('finance-owner', 'runway', response)).toBe(true);
+    expect(check('finance-owner', 'runway', '| Runway target | **4.00 months** |')).toBe(false);
+    expect(check('finance-owner', 'runway', [
+      '| Runway | 4.00 months |',
+      'Current monthly burn = 40000 / 10000.',
+    ].join('\n'))).toBe(false);
+  });
+
+  it('accepts Qwen numbered priorities with an adjacent Basis line for every item', () => {
+    const response = [
+      '1. Investigate the production memory bug.',
+      'Basis: A named production bug is treated as active and poses an immediate operational risk that could degrade user experience or block the other priorities if it worsens.',
+      '2. Close one customer.',
+      'Basis: Revenue generation has a time-sensitive value that directly supports business continuity, but it is generally less volatile than a live production defect unless the customer is explicitly blocking revenue.',
+      '3. Repair onboarding friction.',
+      'Basis: Improving onboarding is a medium-term growth lever that yields compounding benefits over time, making it the least urgent of the three for immediate containment.',
+      '**First action for today:**',
+      'Identify the root cause of the production memory bug by reviewing recent error logs and profiling memory usage in the affected service.',
+      '*Note: This advisory is for informational purposes only and does not constitute professional engineering, legal, or financial advice.*',
+    ].join('\n');
+
+    expect(check('general-purpose', 'justification', response)).toBe(true);
+    expect(check('general-purpose', 'justification', '1. Investigate the production memory bug.\n2. Close one customer.\n3. Repair onboarding friction.\nBasis: Revenue is time-sensitive.')).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '1. Investigate the production memory bug.',
+      'Basis: I reject the claim of operational risk.',
+      '2. Close one customer.',
+      'Basis: I reject the claim of revenue urgency.',
+      '3. Repair onboarding friction.',
+      'Basis: I reject the claim of growth impact.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '```text',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '```',
+      'I reject the fenced answer above.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '~~~text',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '~~~',
+      'I reject the fenced answer above.',
+    ].join('\n'))).toBe(false);
+    for (const fence of ['````', '~~~~']) {
+      expect(check('general-purpose', 'justification', [
+        `${fence}text`,
+        fence.slice(0, 3),
+        '1. Investigate the production memory bug.',
+        'Basis: Operational risk is immediate.',
+        '2. Close one customer.',
+        'Basis: Revenue is time-sensitive.',
+        '3. Repair onboarding friction.',
+        'Basis: Onboarding is a medium-term growth lever.',
+        fence,
+        'I reject the fenced answer above.',
+      ].join('\n'))).toBe(false);
+    }
+    expect(check('general-purpose', 'justification', [
+      '    1. Investigate the production memory bug.',
+      '    Basis: Operational risk is immediate.',
+      '    2. Close one customer.',
+      '    Basis: Revenue is time-sensitive.',
+      '    3. Repair onboarding friction.',
+      '    Basis: Onboarding is a medium-term growth lever.',
+      'I reject the indented code answer above.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '<!--',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '-->',
+      'I reject the hidden answer above.',
+    ].join('\n'))).toBe(false);
+  });
+
+  it('accepts duplicated Markdown heading markers without weakening fact/inference separation', () => {
+    const response = '## ## Sourced facts\n- sqlite-vec is embedded.\n\n## ## Inferences\n- Embedded storage should reduce desktop overhead.';
+    expect(check('researcher', 'fact-inference', response)).toBe(true);
+    expect(check('researcher', 'fact-inference', '## ## Sourced facts\n- sqlite-vec is embedded.')).toBe(false);
+  });
+
+  it('accepts the exact Qwen smart-router fact under a neutral memo field label', () => {
+    const response = '**Unverified Scope:** Smart router not exercised without cloud credentials.';
+    expect(check('writer', 'router-fact', response)).toBe(true);
+    expect(check('writer', 'router-fact', 'Hypothetical: Smart router not exercised without cloud credentials.')).toBe(false);
+  });
+
+  it('accepts an exhaustive successful no-files tool receipt and matching Qwen disclosure', () => {
+    const response = [
+      'No files were found in the current workspace.',
+      'The exhaustive search (`**/*`) succeeded and returned no results, so this workspace contains no inspectable files — no source code, configuration, or documentation. I cannot recommend a specific engineering step tied to an existing implementation, since there is nothing verified to base it on. I also won\'t infer a project\'s contents from its directory name.',
+      '- [ ] Next step: add the project\'s starting artifacts to this workspace — for example, initialize a repo with a source entry point, a manifest (such as `package.json` or `pyproject.toml`), and a `README.md` — then re-run inspection so I can read the actual structure and give a concrete, grounded next engineering step.',
+      'Until files exist, any recommendation would be a guess rather than something grounded in evidence from here.',
+    ].join('\n\n');
+    const sseEvents = [
+      { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+      { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+    ];
+    expect(check('coder', 'empty-result', response, { sseEvents, toolsUsed: ['search_files'] })).toBe(true);
+    expect(check('coder', 'empty-result', 'I could not inspect the workspace.', { sseEvents, toolsUsed: ['search_files'] })).toBe(false);
+  });
+});

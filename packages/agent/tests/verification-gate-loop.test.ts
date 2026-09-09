@@ -374,6 +374,197 @@ describe('structured-draft completion integrity gate', () => {
   const danglingRecallLeadIn = 'From your recent session, I recall the key points:';
   const completeRecall = 'Waggle remembers the active project goal and recent decisions in this workspace. The current model is Qwen3.8 Flash Next.';
 
+  it.each([
+    {
+      label: 'the explicitly requested first action for today',
+      request: 'I have three priorities for the week: close one customer, repair onboarding friction, and investigate a production memory bug. Recommend their order, justify the order in one concise plan, and name the first action for today. Do not use tools or ask clarifying questions; make reasonable assumptions.',
+      incomplete: [
+        '1. Investigate production memory bug',
+        '   Basis: It carries the highest operational risk.',
+        '2. Close one customer',
+        '   Basis: Revenue is time-sensitive.',
+        '3. Repair onboarding friction',
+        '   Basis: It is a medium-term growth driver.',
+      ].join('\n'),
+      repaired: [
+        '1. Investigate production memory bug — highest operational risk.',
+        '2. Close one customer — revenue is time-sensitive.',
+        '3. Repair onboarding friction — medium-term growth.',
+        'First action for today: inspect the latest production memory trace.',
+      ].join('\n'),
+    },
+    {
+      label: 'both explicitly requested runway actions',
+      request: 'Cash is 40000 dollars, monthly burn is 10000 dollars, and revenue is zero. Calculate runway in months, state the formula, name the biggest assumption, and give two actions that improve runway. Do not create files or schedules.',
+      incomplete: [
+        '## Runway Analysis',
+        '| Metric | Value |',
+        '| --- | --- |',
+        '| Runway | **4.00 months** |',
+        '**Formula:** Cash balance divided by monthly burn = 4.00 months.',
+        '**Biggest assumption:** Burn remains constant.',
+      ].join('\n'),
+      repaired: [
+        'Runway is 4 months. Formula: $40,000 / $10,000 monthly burn = 4 months.',
+        'Biggest assumption: burn remains constant and revenue stays zero.',
+        '1. Cut non-essential monthly expenses.',
+        '2. Accelerate customer collections to increase cash inflow.',
+      ].join('\n'),
+    },
+    {
+      label: 'an unsupported quantified soak requirement',
+      request: 'Turn this release goal into milestones, dependencies, owners by role, risks, and exit criteria: production-ready solo installation with no Docker dependency, local models and proxy included, a functioning smart router, and verified Windows behavior. Do not create or edit anything.',
+      incomplete: [
+        '# Milestones',
+        'Owner: Release engineering.',
+        'Dependencies: packaged proxy and router.',
+        'Risks: Windows process handling.',
+        'Exit criteria: No critical errors in logs during a 24-hour soak test on Windows.',
+      ].join('\n'),
+      repaired: [
+        '# Milestones',
+        'Owner: Release engineering.',
+        'Dependencies: packaged proxy and router.',
+        'Risks: Windows process handling.',
+        'Exit criteria: verified Windows behavior against the supplied release requirements; any unspecified threshold remains TBD.',
+      ].join('\n'),
+    },
+    {
+      label: 'an unsupported quantified soak requirement with duration after soak',
+      request: 'Turn this release goal into milestones, dependencies, owners by role, risks, and exit criteria: production-ready solo installation with no Docker dependency, local models and proxy included, a functioning smart router, and verified Windows behavior. Do not create or edit anything.',
+      incomplete: [
+        '# Milestones',
+        'Owner: Release engineering.',
+        'Dependencies: packaged proxy and router.',
+        'Risks: Windows process handling.',
+        'Exit criteria: No critical errors during a soak test for 24 hours.',
+      ].join('\n'),
+      repaired: [
+        '# Milestones',
+        'Owner: Release engineering.',
+        'Dependencies: packaged proxy and router.',
+        'Risks: Windows process handling.',
+        'Exit criteria: verified Windows behavior against the supplied release requirements; any unspecified threshold remains TBD.',
+      ].join('\n'),
+    },
+  ])('atomically repairs a complete-looking response missing $label', async ({ request, incomplete, repaired }) => {
+    const fetch = mockFetch([incomplete, repaired]);
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(JSON.stringify(repairBody.messages)).toContain('# Internal completion-integrity correction');
+    expect(JSON.stringify(repairBody.messages)).not.toContain(incomplete);
+    expect(result.content).toBe(repaired);
+  });
+
+  it.each([
+    {
+      label: 'a prioritization request that did not ask for a first action',
+      request: 'Recommend the order of these priorities and justify it: fix the bug, close the customer, improve onboarding.',
+      response: '1. Fix the bug — it protects stability.\n2. Close the customer — revenue is time-sensitive.\n3. Improve onboarding — it supports growth.',
+    },
+    {
+      label: 'a runway response with distinct cost and cash actions',
+      request: 'Calculate runway and give two actions that improve runway.',
+      response: 'Runway is 4 months.\n1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'a soak requirement explicitly supplied by the user',
+      request: 'Draft a release plan whose exit criteria include a 24-hour soak test.',
+      response: 'Release plan\nExit criteria: complete the requested 24-hour soak test.',
+    },
+    {
+      label: 'a standalone first-action label followed by its action',
+      request: 'Recommend their order, justify it, and name the first action for today.',
+      response: '**First action for today:**\nIdentify the root cause by reviewing the latest production trace.',
+    },
+    {
+      label: 'affirmative runway actions with avoidance purpose clauses',
+      request: 'Calculate runway and give two actions that improve runway.',
+      response: '1. Cut costs to avoid insolvency.\n2. Increase revenue to avoid a cash shortfall.',
+    },
+    {
+      label: 'two cost-only runway actions when cash-inflow actions are prohibited',
+      request: 'Calculate runway and give two actions that improve runway. Use cost controls only; do not suggest revenue or cash-inflow actions.',
+      response: '1. Cut non-essential monthly expenses.\n2. Renegotiate supplier costs.',
+    },
+  ])('does not repair $label', async ({ request, response }) => {
+    const fetch = mockFetch([response]);
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(response);
+  });
+
+  it.each([
+    {
+      label: 'a refusal that merely repeats the first-action label',
+      request: 'Recommend their order, justify it, and name the first action for today.',
+      incomplete: 'I cannot name the first action for today.',
+      repaired: 'First action for today: inspect the latest production trace.',
+    },
+    {
+      label: 'one sentence that mentions both runway levers but refuses two actions',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: 'We could cut costs and increase revenue, but I cannot recommend two actions.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'one combined runway statement presented as two actions',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: 'Cut costs and increase revenue.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'a standalone first-action label followed by a non-answer',
+      request: 'Recommend their order, justify it, and name the first action for today.',
+      incomplete: '**First action for today:**\nNo action is available without more information.',
+      repaired: 'First action for today: inspect the latest production trace.',
+    },
+    {
+      label: 'a negated cash-inflow action',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: '1. Cut costs.\n2. Do not increase revenue.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'a never-qualified cash-inflow action',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: '1. Cut costs.\n2. Never increase revenue.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'an avoided cash-inflow action',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: '1. Cut costs.\n2. Avoid steps that increase revenue.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+    {
+      label: 'a response-level refusal followed by action-shaped text',
+      request: 'Calculate runway and give two actions that improve runway.',
+      incomplete: 'I cannot recommend two actions.\n1. Cut costs.\n2. Increase revenue.',
+      repaired: '1. Cut non-essential monthly expenses.\n2. Accelerate receivables to increase cash inflow.',
+    },
+  ])('repairs $label', async ({ request, incomplete, repaired }) => {
+    const fetch = mockFetch([incomplete, repaired]);
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
   it('atomically replaces a Qwen answer that stops after a dangling lead-in', async () => {
     let requestIndex = 0;
     const fetch = vi.fn(async () => {

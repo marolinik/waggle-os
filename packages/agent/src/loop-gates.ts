@@ -503,6 +503,70 @@ function missingStructuredDraftComponents(userRequest: string, content: string):
   return missing;
 }
 
+function explicitResponseContractIssues(userRequest: string, content: string): string[] {
+  const request = withoutQuotedText(userRequest);
+  const issues: string[] = [];
+
+  const responseUnits = content
+    .replace(/\r\n?/g, '\n')
+    .split(/\n|[.!?;]+|\s+(?=\d+[.)]\s+)/)
+    .map(unit => unit.trim())
+    .filter(Boolean);
+  const refusal = /\b(?:cannot|can't|unable\s+to|won't|will\s+not|do\s+not\s+know|not\s+able\s+to|refuse\s+to)\b/i;
+
+  const hasAffirmativeFirstAction = responseUnits.some((unit, index) => {
+    if (refusal.test(unit)) return false;
+    const match = /\b(?:first action(?: for)? today|today(?:['’]s)? action)\b\s*(?::|[—-]|\bis\b)\s*(?<action>.+)|\b(?:start|begin) today\b\s*(?:by|with|:|[—-])\s*(?<startAction>.+)/i.exec(unit);
+    if (!match) return false;
+    const inlineAction = (match?.groups?.action ?? match?.groups?.startAction ?? '')
+      .replace(/[*_`]/g, '')
+      .trim();
+    const action = (inlineAction.match(/[\p{L}][\p{L}'’-]*/gu)?.length ?? 0) >= 2
+      ? inlineAction
+      : (responseUnits[index + 1] ?? '').replace(/[*_`]/g, '').trim();
+    if (refusal.test(action)) return false;
+    return !/^(?:tbd|unknown|unspecified|none|no\s+(?:concrete\s+)?action)\b/i.test(action)
+      && (action.match(/[\p{L}][\p{L}'’-]*/gu)?.length ?? 0) >= 2;
+  });
+  if (/\b(?:name|give|provide)\s+(?:me\s+)?(?:the\s+)?first action for today\b/i.test(request)
+    && !hasAffirmativeFirstAction) {
+    issues.push('first action for today');
+  }
+
+  if (/\bgive\s+(?:me\s+)?two actions?\b[^.!?\r\n]{0,100}\b(?:improve|extend)\w*\s+(?:the\s+)?runway\b/i.test(request)) {
+    const costAction = /\b(?:cut|reduce|lower|renegotiate|defer|pause|eliminate)\b[^.!?\r\n]{0,80}\b(?:costs?|expenses?|spend(?:ing)?|burn)\b|\b(?:costs?|expenses?|spend(?:ing)?|burn)\b[^.!?\r\n]{0,80}\b(?:cut|reduce|lower|renegotiate|defer|pause|eliminate)\b/i;
+    const cashAction = /\b(?:increase|grow|accelerate|collect|raise|secure|generate|close)\b[^.!?\r\n]{0,80}\b(?:revenue|cash(?: inflow)?|sales?|receivables?|payments?|funding|customer)\b|\b(?:revenue|cash inflow|sales?|receivables?|payments?|funding)\b[^.!?\r\n]{0,80}\b(?:increase|grow|accelerate|collect|raise|secure|generate|close)\b/i;
+    const negatedCostAction = /\b(?:do\s+not|don't|never|avoid(?:s|ed|ing)?)\b[^.!?;]{0,80}\b(?:cut|reduce|lower|renegotiate|defer|pause|eliminate)\b/i;
+    const negatedCashAction = /\b(?:do\s+not|don't|never|avoid(?:s|ed|ing)?)\b[^.!?;]{0,80}\b(?:increase|grow|accelerate|collect|raise|secure|generate|close)\b/i;
+    const affirmativeActionUnits = responseUnits.filter(unit => (
+      (!negatedCostAction.test(unit) && costAction.test(unit))
+      || (!negatedCashAction.test(unit) && cashAction.test(unit))
+    ));
+    const refusesTwoActions = /\b(?:cannot|can't|unable\s+to|won't|will\s+not|refuse\s+to)\s+(?:recommend|give|provide|name|suggest)\s+(?:the\s+)?(?:requested\s+)?two actions?\b/i.test(content);
+    if (refusesTwoActions || affirmativeActionUnits.length < 2) issues.push('two distinct runway actions');
+  }
+
+  const asksForReleasePlan = /\bturn\b[^.!?\r\n]{0,100}\brelease goal\b[^.!?\r\n]{0,120}\bmilestones\b/i.test(request)
+    || /\b(?:draft|create|prepare|produce|write|build)\b[^.!?\r\n]{0,100}\brelease plan\b/i.test(request);
+  if (asksForReleasePlan) {
+    const quantifiedSoaks = [
+      ...content.matchAll(/\b(?<duration>\d+)[ -]?hours?\b[^.!?\r\n]{0,60}\bsoak(?: test)?\b/gi),
+      ...content.matchAll(/\bsoak(?: test)?\b[^.!?\r\n]{0,60}\b(?:for\s+)?(?<duration>\d+)[ -]?hours?\b/gi),
+    ];
+    for (const match of quantifiedSoaks) {
+      const duration = match.groups?.duration;
+      if (!duration) continue;
+      const supplied = new RegExp(`(?:\\b${duration}[ -]?hours?\\b[^.!?\\r\\n]{0,60}\\bsoak(?: test)?\\b|\\bsoak(?: test)?\\b[^.!?\\r\\n]{0,60}\\b(?:for\\s+)?${duration}[ -]?hours?\\b)`, 'i').test(request);
+      if (!supplied) {
+        issues.push('unsupported quantified soak requirement');
+        break;
+      }
+    }
+  }
+
+  return issues;
+}
+
 function endsAfterOpeningMetadataScaffold(content: string): boolean {
   const lines = content.trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const tail = lines.slice(-6);
@@ -667,6 +731,9 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const missingDraftComponents = finishReason === 'stop'
     ? missingStructuredDraftComponents(userRequest, content)
     : [];
+  const responseContractIssues = finishReason === 'stop'
+    ? explicitResponseContractIssues(userRequest, content)
+    : [];
   const draftRequestScope = directStructuredDraftScope(userRequest);
   const agendaMinutes = draftRequestScope ? requestedAgendaMinutes(draftRequestScope) : null;
   const timedAgendaIncomplete = agendaMinutes !== null
@@ -713,6 +780,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       && taggedEnvelopeSuffix === undefined
       && taggedEnvelopeReplacement === undefined)
     || malformedMarkdownTable
+    || responseContractIssues.length > 0
     || structuredDraftIncomplete
     || danglingLeadInIncomplete) {
     const reason = exactOutputIncomplete
@@ -721,6 +789,8 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
         ? 'explicit tagged JSON envelope was not completed'
         : malformedMarkdownTable
           ? 'Markdown table has inconsistent column counts'
+      : responseContractIssues.length > 0
+        ? 'answer omitted or contradicted an explicit response requirement'
       : structuredDraftIncomplete
         ? 'structured draft ended after its opening scaffold'
         : 'answer ended after an unfinished lead-in';
@@ -743,13 +813,21 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
             'Answer again from the beginning with exactly one tagged JSON envelope, using the precise opening and closing tags requested by the user and no text outside them.',
             'Preserve the requested JSON schema and evidence. Do not mention this correction and do not call tools.',
           ].join('\n')
-        : malformedMarkdownTable
+      : malformedMarkdownTable
           ? [
               '# Internal completion-integrity correction',
               'The prior candidate contained a malformed Markdown table and was not shown to the user.',
               'Answer again from the beginning. Every Markdown table header, separator, and data row must have exactly the same number of columns; preserve all substantive content.',
               'Do not mention this correction and do not call tools.',
             ].join('\n')
+      : responseContractIssues.length > 0
+        ? [
+            '# Internal completion-integrity correction',
+            'The prior candidate did not satisfy the user’s explicit response contract and was not shown to the user.',
+            `Answer again from the beginning and correct these issues: ${responseContractIssues.join(', ')}.`,
+            'Do not add quantified requirements or thresholds that the user did not supply; label unknown criteria as TBD or evidence-needed.',
+            'Do not mention this correction and do not call tools.',
+          ].join('\n')
       : structuredDraftIncomplete
         ? [
           '# Internal completion-integrity correction',
@@ -774,6 +852,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     logTurnEvent(turnId, {
       stage: 'agent-loop.completion-integrity-repair.fired',
       missingComponents: missingDraftComponents,
+      responseContractIssues,
       contentChars: content.length,
     });
     return {

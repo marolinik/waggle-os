@@ -115,7 +115,7 @@ const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such fil
 const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
 const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|this|current|fresh|virtual) workspace (?:is|was) empty\b|\bthe workspace at (?:the|this) [^.!?\r\n]{1,40} is (?:currently )?empty\b|\b(?:the|this|current|fresh|virtual) workspace contains no files?\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|\ban exhaustive search of (?:the|this|current|fresh|virtual) workspace\b[^.!?\r\n]{0,80}\breturned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
 const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
-const FUTURE_FILE_PRESENCE_CLAUSE = /^\s*(?:once|when)\s+(?:the\s+)?files?\s+(?:are|become)\s+present\b[^.!?\r\n]*\b(?:can|will|would|could)\b/i;
+const FUTURE_FILE_PRESENCE_CLAUSE = /^\s*(?:once|when|until)\s+(?:the\s+)?files?\s+(?:are|become|exist)\b[^.!?\r\n]*/i;
 const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\b(?:the\s+)?workspace\s+(?:is|was)\s+(?:actually\s+)?not\s+empty\b|\b(?:correction|update)\s*:[^.!?\r\n]{0,120}\b(?:empty[- ]workspace|workspace[- ]empty|workspace\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b[^.!?\r\n]{0,80}\b(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:that|this)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result)|(?:the\s+)?(?:earlier|prior|previous)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\s+(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:I|we)\s+)?(?:retract|withdraw|disavow|reject)\s+(?:(?:that|this)(?:\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))?|(?:the\s+)?(?:(?:earlier|prior|previous)\s+)?(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b|\b(?:correction\s*:|actually\b)[^.!?\r\n]{0,140}(?:\bthere\s+(?:are|were)\s+(?:one\s+or\s+more\s+)?files?\b|(?<!no )(?<!zero )\bfiles?\s+(?:(?:were|are)\s+)?found\b|\b(?:README(?:\.md)?|package\.json|pyproject\.toml)\s+(?:exists?|is\s+present)\b|\bworkspace\s+(?:contains?|includes?|has)\s+files?\b)/i;
 const WORKSPACE_FILE_REFERENCE = String.raw`(?:README(?:\.md)?|(?:[\w.-]+[\\/])+[\w.-]+|[\w-]+\.(?:md|txt|json|ya?ml|toml|tsx?|jsx?|mjs|cjs|py|rs|go|java|cs|cpp|c|h|html|css|scss|sh|ps1|lock))`;
 const DIRECT_NONEMPTY_WORKSPACE_CLAIM = new RegExp(
@@ -148,7 +148,7 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
     .map(clause => clause.replace(/[*_`]/g, '').trim())
     .filter(Boolean)
     .some((clause) => {
-      const prospectiveLead = /^\s*(?:once\s+(?:initialized|files?\b)|when\s+files?\b)/i.test(clause);
+      const prospectiveLead = /^\s*(?:once\s+(?:initialized|files?\b)|(?:when|until)\s+files?\b)/i.test(clause);
       const currentOrPastContext = /\b(?:yesterday|just[ \t]+now|now|currently|already|earlier|today|still|continue(?:s|d|ing)?|remain(?:s|ed|ing)?)\b|\bfiles?\s+(?:existed|were|was|have|has)\b/i.test(clause);
       const hasSpecificFile = new RegExp(WORKSPACE_FILE_REFERENCE, 'i').test(clause);
       const hasFutureModal = /\b(?:can|will|would|could)\b/i.test(clause);
@@ -170,7 +170,7 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
       if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(clause)) return true;
       return !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause)
         && !FUTURE_FILE_PRESENCE_CLAUSE.test(clause)
-        && !/\b(?:once|when)\b[^,;.!?]{0,60}\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause)
+        && !/\b(?:once|when|until)\b[^,;.!?]{0,60}\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause)
         && !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(clause)
         && /\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause);
     });
@@ -568,6 +568,14 @@ function hasAffirmedCurrentRunway(response: string): boolean {
     const clauseScenarioScope = scenarioScopeActive;
     let clauseHasRunwayContext = false;
     let clauseHasCurrentRunwayContext = false;
+    const tableRunway = /^\|\s*(?:actual\s+|current\s+)?runway(?:\s*\(months\))?\s*\|\s*(\d+(?:\.\d+)?)\s*months?\s*\|$/i.exec(clause);
+    if (tableRunway && !clauseScenarioScope) {
+      const value = financeNumber(tableRunway[1]);
+      if (!closeTo(value, 4)) return false;
+      positiveCurrentResult = true;
+      clauseHasRunwayContext = true;
+      clauseHasCurrentRunwayContext = true;
+    }
     for (const match of clause.matchAll(FINANCE_CURRENT_CASH)) {
       const start = match.index ?? 0;
       if (FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start))
@@ -576,6 +584,9 @@ function hasAffirmedCurrentRunway(response: string): boolean {
     }
     for (const match of clause.matchAll(FINANCE_CURRENT_BURN)) {
       const start = match.index ?? 0;
+      const end = start + match[0].length;
+      if (/^\s*(?:\/|÷|divided by)\s*(?:[$€£]\s*)?\d/i.test(clause.slice(end))
+        && /\brunway\b/i.test(clause.slice(0, start))) continue;
       if (FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start))
         || financeAssertionInScenario(clause, start, match[0], clauseScenarioScope)) continue;
       if (!closeTo(financeAmount(match[1]), 10_000)) return false;
@@ -2217,7 +2228,10 @@ function hasAffirmedWriterRouterFact(response: string): boolean {
   const clauses = response
     .replace(/\r\n?/g, '\n')
     .split(/\n+|;\s*|(?<=[.!?])\s+/)
-    .map(clause => clause.replace(/[*_`]/g, '').trim())
+    .map(clause => clause
+      .replace(/[*_`]/g, '')
+      .replace(/^(?:unverified\s+scope|router\s+status|scope|status)\s*:\s*/i, '')
+      .trim())
     .filter(Boolean);
   const routerStatus = /(?:\b(?:unexercised|untested|unvalidated)\b|\bnot (?:(?:yet|been|fully|thoroughly)\s+)*(?:exercised|tested|validated)\b|\b(?:still\s+)?needs?\s+to\s+be\s+(?:exercised|tested|validated)\b|\b(?:still\s+)?awaits?\s+(?:testing|validation|exercise)\b)/i;
   const activePendingStatus = /(?:\b(?:we|i|the team)\b\s+(?:have|has|had)\s+(?:still\s+)?yet\s+to\s+(?:exercise|test|validate)\s+(?:the\s+)?smart router\b|\btesting\s+(?:the\s+)?smart router\s+without cloud credentials\s+(?:remains?|is)\s+outstanding\b|\btesting\s+without cloud credentials\s+(?:is|remains?)\s+(?:still\s+)?pending\s+for\s+(?:the\s+)?smart router\b)/i;
@@ -2799,11 +2813,32 @@ function inlinePrioritizationActionBoundary(line: string): number {
   return -1;
 }
 
+function prioritizationVisibleLines(response: string): string[] {
+  const visible: string[] = [];
+  let fence: { character: string; length: number } | null = null;
+  const withoutComments = response
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!--[\s\S]*$/g, '');
+  for (const line of withoutComments.replace(/\r\n?/g, '\n').split('\n')) {
+    if (fence) {
+      const close = /^\s{0,3}(`+|~+)\s*$/.exec(line)?.[1];
+      if (close?.[0] === fence.character && close.length >= fence.length) fence = null;
+      continue;
+    }
+    const open = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (open) {
+      fence = { character: open[0], length: open.length };
+      continue;
+    }
+    if (!/^\s*>/.test(line) && !/^(?: {4}|\t)/.test(line)) visible.push(line);
+  }
+  return visible;
+}
+
 function collectPrioritizationSegments(response: string): string[] {
   const tableRationaleMarker = '\u001fpersona-rationale\u001f';
   const segments: string[] = [];
   let numberedBlock: string[] | null = null;
-  let insideFence = false;
   let rationaleColumn = -1;
   let pendingRationaleColumn = -1;
   let pendingRationaleCellCount = -1;
@@ -2812,13 +2847,7 @@ function collectPrioritizationSegments(response: string): string[] {
     if (numberedBlock?.length) segments.push(numberedBlock.join('\n'));
     numberedBlock = null;
   };
-  for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
-    if (/^\s*```/.test(rawLine)) {
-      insideFence = !insideFence;
-      continue;
-    }
-    if (insideFence || /^\s*>/.test(rawLine)) continue;
-
+  for (const rawLine of prioritizationVisibleLines(response)) {
     let line = rawLine.trimEnd();
     if (!line.trim()) {
       rationaleColumn = -1;
@@ -3092,13 +3121,7 @@ function hasAlignedExplicitRationale(
 
 function collectPrioritizationAtomicClauses(response: string): string[] {
   const clauses: string[] = [];
-  let insideFence = false;
-  for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
-    if (/^\s*```/.test(rawLine)) {
-      insideFence = !insideFence;
-      continue;
-    }
-    if (insideFence || /^\s*>/.test(rawLine)) continue;
+  for (const rawLine of prioritizationVisibleLines(response)) {
     for (const clause of rawLine.split(/(?<=[.!?;])\s+/)) {
       if (clause.trim()) clauses.push(clause);
     }
@@ -3176,7 +3199,53 @@ function hasAffirmedPrioritizationJustification(
   response: string,
   criteria: readonly PrioritizationCriterion[],
 ): boolean {
-  const segments = collectPrioritizationSegments(response);
+  const hasAffirmedAdjacentBasis = (line: string, basis: RegExp): boolean => {
+    const normalized = line.replace(/[*_`]/g, '').replace(/^basis\s*:\s*/i, '').trim();
+    if (/\?\s*$/.test(normalized)
+      || PRIORITIZATION_REPORTED_CLAUSE.test(normalized)
+      || PRIORITIZATION_REPORTED_SUFFIX.test(normalized)
+      || PRIORITIZATION_REJECTION_PREFIX.test(normalized)
+      || PRIORITIZATION_REJECTED_ASSERTION.test(normalized)
+      || PRIORITIZATION_DEPENDENT_REJECTION.test(normalized)
+      || PRIORITIZATION_QUOTED_CLAUSE.test(normalized)
+      || /^\s*(?:maybe|perhaps|possibly|probably|tentatively|hypothetically)\b/i.test(normalized)) return false;
+
+    const flags = [...new Set(`${basis.flags.replace(/g/g, '')}g`.split(''))].join('');
+    for (const match of normalized.matchAll(new RegExp(basis.source, flags))) {
+      const before = normalized.slice(0, match.index);
+      const after = normalized.slice((match.index ?? 0) + match[0].length);
+      const localBefore = before.split(/[,;]\s+(?:and|but|however|yet)\s+/i).at(-1) ?? before;
+      if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(localBefore)
+        || PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)
+        || PRIORITIZATION_MODAL_PREFIX.test(localBefore)
+        || PRIORITIZATION_CONDITIONAL_CLAUSE.test(localBefore)
+        || PRIORITIZATION_NEGATION_SUFFIX.test(after)
+        || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(after)) continue;
+      return true;
+    }
+    return false;
+  };
+  const visibleLines = prioritizationVisibleLines(response);
+  const visibleResponse = visibleLines.join('\n');
+  const numberedBlocks = visibleResponse
+    .split(/(?=^\s*(?:[-*]\s*)?(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+)/gim)
+    .map(block => block.trim())
+    .filter(Boolean);
+  const adjacentBasisPasses = criteria.every(({ topic, basis }, criterionIndex) => (
+    numberedBlocks.some((block) => {
+      const lines = block.split('\n').map(line => line.trim()).filter(Boolean);
+      const item = lines[0] ?? '';
+      const basisLine = lines.find(line => /^basis\s*:/i.test(line));
+      return testPattern(topic, item)
+        && basisLine !== undefined
+        && (hasAffirmedPrioritizationBasis(basisLine, basis, criteria, criterionIndex)
+          || hasAffirmedAdjacentBasis(basisLine, basis));
+    })
+    && !hasSupersedingPrioritizationCorrection(visibleResponse, criteria, criterionIndex)
+  ));
+  if (adjacentBasisPasses) return true;
+
+  const segments = collectPrioritizationSegments(visibleResponse);
   return criteria.every(({ topic, basis }, criterionIndex) => {
     const affirmed = segments.some((segment) => {
       const tableRationaleIndex = segment.indexOf('\u001fpersona-rationale\u001f');
@@ -3202,7 +3271,7 @@ function hasAffirmedPrioritizationJustification(
       });
     });
     return affirmed
-      && !hasSupersedingPrioritizationCorrection(response, criteria, criterionIndex);
+      && !hasSupersedingPrioritizationCorrection(visibleResponse, criteria, criterionIndex);
   });
 }
 
@@ -3244,13 +3313,18 @@ function evaluateResponseRule(
     case 'prioritizationJustification':
       return hasAffirmedPrioritizationJustification(evidence.response, rule.criteria);
     case 'allPatterns':
+      {
+        const normalizedResponse = evidence.response
+          .replace(/^(\s*#{1,6}\s+)#{1,6}\s+/gm, '$1')
+          .replace(
+            /\*\*established\s+facts?\s*\([^)]*(?:primary|source)[^)]*\)\s*:\*\*/gi,
+            '**Facts from primary sources:**',
+          );
       return rule.patterns.every(pattern => testPattern(
         pattern,
-        evidence.response.replace(
-          /\*\*established\s+facts?\s*\([^)]*(?:primary|source)[^)]*\)\s*:\*\*/gi,
-          '**Facts from primary sources:**',
-        ),
+        normalizedResponse,
       ));
+      }
     case 'notPattern':
       return !testPattern(rule.pattern, evidence.response);
     case 'verifierContract':
