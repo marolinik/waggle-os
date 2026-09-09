@@ -148,31 +148,35 @@ function hasDirectNonEmptyWorkspaceDisclosure(response: string): boolean {
     .map(clause => clause.replace(/[*_`]/g, '').trim())
     .filter(Boolean)
     .some((clause) => {
-      const prospectiveLead = /^\s*(?:once\s+(?:initialized|files?\b)|(?:when|until)\s+files?\b)/i.test(clause);
-      const currentOrPastContext = /\b(?:yesterday|just[ \t]+now|now|currently|already|earlier|today|still|continue(?:s|d|ing)?|remain(?:s|ed|ing)?)\b|\bfiles?\s+(?:existed|were|was|have|has)\b/i.test(clause);
-      const hasSpecificFile = new RegExp(WORKSPACE_FILE_REFERENCE, 'i').test(clause);
-      const hasFutureModal = /\b(?:can|will|would|could)\b/i.test(clause);
+      const presenceScope = clause.replace(
+        /\bto\s+(?:confirm|verify)\b[^.!?\r\n]{0,80}\bfiles?\s+(?:are\s+)?present\b/gi,
+        'to confirm future workspace availability',
+      );
+      const prospectiveLead = /^\s*(?:once\s+(?:initialized|files?\b)|(?:when|until)\s+files?\b)/i.test(presenceScope);
+      const currentOrPastContext = /\b(?:yesterday|just[ \t]+now|now|currently|already|earlier|today|still|continue(?:s|d|ing)?|remain(?:s|ed|ing)?)\b|\bfiles?\s+(?:existed|were|was|have|has)\b/i.test(presenceScope);
+      const hasSpecificFile = new RegExp(WORKSPACE_FILE_REFERENCE, 'i').test(presenceScope);
+      const hasFutureModal = /\b(?:can|will|would|could)\b/i.test(presenceScope);
       const futureFileContext = prospectiveLead
         && !currentOrPastContext
         && (!hasSpecificFile || hasFutureModal);
       const currentFileAfterContrast = new RegExp(
         String.raw`\b(?:but|however|actually|yet)\b[^.!?\r\n]{0,100}${WORKSPACE_FILE_REFERENCE}[^.!?\r\n]{0,30}\b(?:exists?|present|found)\b`,
         'i',
-      ).test(clause);
-      const hasAffirmedFilePresence = [...clause.matchAll(filePresence)].some(match => (
+      ).test(presenceScope);
+      const hasAffirmedFilePresence = [...presenceScope.matchAll(filePresence)].some(match => (
         !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(match[0])
         && (!futureFileContext || currentFileAfterContrast)
         && !/\bno\s+(?:workspace\s+)?files?\s+(?:exist|remain|(?:is|are)\s+present)\b/i.test(match[0])
       ));
       if (hasAffirmedFilePresence) return true;
       if (futureFileContext && !currentFileAfterContrast) return false;
-      if (rootContainsFile.test(clause)) return true;
-      if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(clause)) return true;
-      return !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause)
-        && !FUTURE_FILE_PRESENCE_CLAUSE.test(clause)
-        && !/\b(?:once|when|until)\b[^,;.!?]{0,60}\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause)
-        && !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(clause)
-        && /\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(clause);
+      if (rootContainsFile.test(presenceScope)) return true;
+      if (/\bsource code\s+(?:is|remains?)\s+present\b/i.test(presenceScope)) return true;
+      return !NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(presenceScope)
+        && !FUTURE_FILE_PRESENCE_CLAUSE.test(presenceScope)
+        && !/\b(?:once|when|until)\b[^,;.!?]{0,60}\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(presenceScope)
+        && !/\b(?:no|zero)\s+(?:workspace\s+|source\s+)?files?\b/i.test(presenceScope)
+        && /\bfiles?\s+(?:remain(?:s|ing)?|exist(?:s|ing)?|(?:is|are)\s+(?:present|in\s+the\s+workspace))\b/i.test(presenceScope);
     });
 }
 
@@ -1844,6 +1848,10 @@ function markdownTableCells(line: string): string[] {
 }
 
 function directDependencyIsAffirmed(response: string, start: number, end: number): boolean {
+  const dependencyText = response.slice(start, end);
+  const labels = [...dependencyText.matchAll(/\bM\d+\b\s*\(([^)]*)\)/gi)].map(match => match[1]);
+  if (labels.some(label => /^\s*(?:(?:status|state)\s*:\s*)?(?:(?:hypothetical|unapproved|rejected|invalid|denied|retracted|revoked|withdrawn|cancelled|canceled|disputed|unverified|unconfirmed|unestablished|unknown|tbd)|not\s+(?:approved|confirmed|established|verified|valid))(?:\s+by\s+[a-z][a-z .'-]{0,39})?\s*$/i.test(label))) return false;
+
   const prefixStart = Math.max(
     response.lastIndexOf('\n', start - 1),
     response.lastIndexOf('.', start - 1),
@@ -1865,6 +1873,7 @@ function directDependencyIsAffirmed(response: string, start: number, end: number
   const suffixEnd = suffixMatch?.index === undefined ? response.length : end + suffixMatch.index;
   const suffix = response.slice(end, suffixEnd);
   if (response[suffixEnd] === '?') return false;
+  if (/\b(?:but|however|yet|although|though|despite|notwithstanding)\b[^.!?;\r\n]{0,100}\b(?:(?:(?:the|this|that)\s+)?(?:dependency|relation(?:ship)?|edge)|it|this|that)\b[^.!?;\r\n]{0,40}\b(?:rejected|denied|refuted|retracted|revoked|withdrawn|cancelled|canceled|disputed|invalid)\b/i.test(suffix)) return false;
   return !/\b(?:(?:is|was|remains?)\s+not\s+(?:established|confirmed|verified|valid)|(?:is|was|remains?)\s+(?:wrong|false|invalid|disputed|unverified|unconfirmed|unsupported))\b/i.test(suffix);
 }
 
@@ -1936,7 +1945,7 @@ function hasMilestoneDependencyMap(response: string): boolean {
     retractedEdges.has(`${target.toUpperCase()}>${dependency.toUpperCase()}`)
   );
 
-  for (const match of text.matchAll(/\b(M\d+)\b\s+(?:(?:directly\s+)?depends?|depends?\s+directly)\s+on\s+\b(M\d+)\b/gi)) {
+  for (const match of text.matchAll(/\b(M\d+)\b(?:\s*\([^)\r\n]{1,80}\))?\s+(?:(?:directly\s+)?depends?|depends?\s+directly)\s+on\s+\b(M\d+)\b(?:\s*\([^)\r\n]{1,80}\))?/gi)) {
     const start = match.index;
     const end = start + match[0].length;
     if (match[1].toUpperCase() !== match[2].toUpperCase()
@@ -1968,7 +1977,7 @@ function hasMilestoneDependencyMap(response: string): boolean {
   const lines = text.split(/\r?\n/);
   let currentMilestone: string | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    const milestoneHeading = /^\s*(?:#{1,6}\s+)?(?:[-*]\s+)?(?:\*\*)?\s*(?:M|Milestone\s+)(\d+)\s*:/i.exec(lines[index]);
+    const milestoneHeading = /^\s*(?:#{1,6}\s+)?(?:[-*]\s+)?(?:\d+[.)]\s+)?(?:\*\*)?\s*(?:M|Milestone\s+)(\d+)\s*:/i.exec(lines[index]);
     if (milestoneHeading) currentMilestone = `M${Number(milestoneHeading[1])}`;
 
     if (currentMilestone
@@ -2255,7 +2264,7 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
   const browserAffirmed = browserAffirmedIndex >= 0;
 
   const browserFailureWasLaterResolved = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\s+on\s+Windows\b[\s\S]{0,180}\b(?:update|correction)\s*:\s*(?:those|these|the)\s+failures?\s+(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
-  const browserFailureWasResolvedInClause = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,120}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,100}\b(?:but|however|yet)\b\s*(?:(?:both|those|these|the)\s+(?:failures?\s+)?)?(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
+  const browserFailureWasResolvedInClause = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,120}\b(?:two|2)\s+(?:(?:unresolved|open|persistent)\s+)?failures?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,100}\b(?:but|however|yet|although|though|despite|notwithstanding)\b\s*(?:(?:both|those|these|the)\s+(?:failures?\s+)?)?(?:(?:have|has)\s+(?:now\s+)?been|were|are|being)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
   const browserFailureWasRetracted = browserAffirmed && clauses
     .slice(browserAffirmedIndex + 1)
     .some(clause => !WRITER_BROWSER_FUTURE_CLEAR_CONDITION.test(clause) && (

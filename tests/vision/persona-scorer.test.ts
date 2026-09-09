@@ -9312,4 +9312,109 @@ describe('exact Qwen 30-run adjudication regressions', () => {
     expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nMilestone 3 may slip; correction: no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
     expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: Milestone 2 could proceed independently because no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
   });
+
+  it('accepts the exact grounded response forms from the ec672874 acceptance run', () => {
+    expect(check(
+      'writer',
+      'release-facts',
+      'We originally planned to ship on Friday. Currently, API tests pass successfully. However, browser testing has revealed two persistent failures on Windows environments.',
+    )).toBe(true);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing failed to reveal two persistent failures on Windows.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, but both were fixed.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing has revealed two persistent failures on Windows environments, but both were resolved.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, although both were fixed.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, though both were fixed.',
+    )).toBe(false);
+
+    expect(check(
+      'project-manager',
+      'dependencies',
+      '**M2 (Routing) depends on M1 (Core Architecture)**',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Optional reporting module) depends on M1 (Optional core extension).',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Owner TBD) depends on M1 (Owner unknown).',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      '2. **M2: Smart Router Implementation**\n*Depends on:* M1 (Router requires local runtime/models).',
+    )).toBe(true);
+    expect(check('project-manager', 'dependencies', 'M2 (not approved) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (hypothetical) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (rejected) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (invalid) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (rejected by board) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (status: rejected by board) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (hypothetical).')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (not approved).')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Denied).')).toBe(false);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Routing) depends on M1 (Core Architecture), but that dependency was rejected.',
+    )).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but the relation was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but that relationship was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but the edge was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core Architecture), but it was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), although that relationship was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), though that edge was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), despite that relationship being rejected.')).toBe(false);
+
+    expect(check(
+      'finance-owner',
+      'two-actions',
+      '**Two Actions to Improve Runway**\n- [ ] **Cost Reduction:** Cut a specific recurring expense line.\n- [ ] **Cash Inflow:** Secure an early-stage financing event or a bridge loan.',
+    )).toBe(true);
+
+    const emptyResponse = [
+      'No files were found in the current workspace.',
+      '- **Established by tool evidence:** An exhaustive workspace search (`**/*`) succeeded and returned zero files. The workspace at the given root is empty — no source code, config, or documentation exists to inspect.',
+      '- **What I cannot claim:** Any project structure, language, dependencies, or prior artifacts. None are established by this result.',
+      '- **Recommended next engineering step:** - [ ] Initialize the workspace with a project scaffold (for example, a version-controlled project directory with a package manifest and source entry point), then rerun a file search to confirm the files are present.',
+      'Until files exist, I cannot recommend a code-specific step such as refactoring, debugging, or testing, since there is nothing to analyze.',
+    ].join('\n\n');
+    const emptyEvents = [
+      { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+      { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      { event: 'done', data: { content: emptyResponse, toolsUsed: ['search_files'] } },
+    ];
+    expect(check('coder', 'empty-result', emptyResponse, {
+      sseEvents: emptyEvents,
+      toolsUsed: ['search_files'],
+    })).toBe(true);
+    expect(check('coder', 'empty-result', [
+      'No files were found in the current workspace.',
+      'Files are present; rerun a search to confirm the files are present.',
+    ].join(' '), {
+      sseEvents: emptyEvents,
+      toolsUsed: ['search_files'],
+    })).toBe(false);
+  });
 });
