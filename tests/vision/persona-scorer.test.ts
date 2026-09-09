@@ -9178,4 +9178,53 @@ describe('exact Qwen 30-run adjudication regressions', () => {
     expect(check('coder', 'empty-result', response, { sseEvents, toolsUsed: ['search_files'] })).toBe(true);
     expect(check('coder', 'empty-result', 'I could not inspect the workspace.', { sseEvents, toolsUsed: ['search_files'] })).toBe(false);
   });
+
+  it('accepts the exact affirmed Qwen forms from the 398d42b0 run', () => {
+    const writer = 'Our current plan targets a Friday ship. While API tests are passing, browser tests continue to fail in two instances on Windows. Additionally, the smart router has not yet been tested without cloud credentials. Given these outstanding issues, we recommend delaying the release until these specific gaps are closed.';
+    const agenda = [
+      '## Launch-Readiness Meeting Agenda (30 minutes)',
+      '### Timed blocks',
+      '| Time | Item | Owner |',
+      '|---|---|---|',
+      '| 0:00–0:03 (3 min) | Welcome | Product |',
+      '| 0:03–0:10 (7 min) | Engineering readiness | Engineering |',
+      '| 0:10–0:17 (7 min) | QA sign-off | QA |',
+      '| 0:17–0:22 (5 min) | Support readiness | Support |',
+      '| 0:22–0:27 (5 min) | Go/No-Go decision | Product |',
+      '| 0:27–0:30 (3 min) | Wrap-up | Product |',
+    ].join('\n');
+    const decisions = '**Desired decisions**\n- Final go/no-go recommendation, with conditions for launch';
+    const dependencies = '- M1 → M2: Smart router requires the solo service layer from M1.\n- M2 → M3: Windows verification requires the router from M2.';
+    const actions = 'Actions to improve runway:\n- Negotiate vendor contracts or reduce operational overhead to lower the monthly burn rate.\n- Accelerate customer payments or implement pre-payment incentives to increase cash inflows.';
+
+    expect(check('writer', 'release-facts', writer)).toBe(true);
+    expect(check('executive-assistant', 'duration-blocks', agenda)).toBe(true);
+    expect(check('executive-assistant', 'decisions', decisions)).toBe(true);
+    expect(check('project-manager', 'dependencies', dependencies)).toBe(true);
+    expect(check('finance-owner', 'two-actions', actions)).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Negotiating vendor contracts did not reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiating vendor contracts was not shown to reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts to reduce no costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts to reduce zero expenses.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was rejected.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Rejected final go/no-go recommendation.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was denied.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation is no longer valid.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was vetoed.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Rejected dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M1 -> M2: The assertion that M2 requires M1 is incorrect.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Cancelled dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Revoked dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M1 -> M2: The assertion that M2 requires M1 is invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '- M1 → M1: M1 requires itself.')).toBe(false);
+    expect(check('executive-assistant', 'duration-blocks', `${agenda.replace('## Launch-Readiness Meeting Agenda (30 minutes)', '## Agenda (30 minutes) — rejected')}`)).toBe(false);
+    expect(check('executive-assistant', 'duration-blocks', `${agenda.replace('## Launch-Readiness Meeting Agenda (30 minutes)', '## Rejected agenda (30 minutes)')}`)).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. I reject the claim that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. I refute the claim that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. Suppose browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. The memo denies that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. The memo claims browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. Browser tests continue to fail in two instances on Windows, challenging release readiness. The smart router has not been tested without cloud credentials.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts, but this will not reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+  });
 });

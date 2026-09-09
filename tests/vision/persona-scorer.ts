@@ -1102,7 +1102,8 @@ function durationMentionIsAffirmed(text: string, start: number, end: number): bo
 function hasAffirmedAgendaInvalidation(line: string): boolean {
   return /(?<!do not )(?<!don't )(?<!never )(?<!not )\b(?:disregard|ignore|withdraw|cancel|abandon|rescind|supersede|replace)\b/i.test(line)
     || /\b(?:do\s+not|don't|never|should\s+not|must\s+not)\s+(?:follow|use|adopt|approve)\b/i.test(line)
-    || /\b(?:agenda|schedule|table)\b[^.\r\n]{0,80}\b(?:hypothetical|(?:merely|only)\s+illustrative|illustrative\s+only|not\s+(?:adopted|approved|the\s+(?:agenda|schedule))|replacement|different\s+one)\b/i.test(line);
+    || /\b(?:rejected|withdrawn|cancelled|canceled|superseded)\b[^.\r\n]{0,40}\b(?:agenda|schedule|table)\b/i.test(line)
+    || /\b(?:agenda|schedule|table)\b[^.\r\n]{0,80}\b(?:hypothetical|(?:merely|only)\s+illustrative|illustrative\s+only|not\s+(?:adopted|approved|the\s+(?:agenda|schedule))|rejected|withdrawn|cancelled|canceled|superseded|replacement|different\s+one)\b/i.test(line);
 }
 
 function hasAllowedExactAgendaSuffix(lines: readonly string[]): boolean {
@@ -1141,7 +1142,7 @@ function hasSelfContainedExactAgendaTable(
       if (!/^\s*\|.*\|\s*$/.test(line)) break;
       const cells = markdownTableCells(line);
       if (cells.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
-      const range = /^(\d{1,2}):([0-5]\d)\s*(?:-|[\u2013\u2014]|to)\s*(\d{1,2}):([0-5]\d)$/i.exec(cells[0] ?? '');
+      const range = /^(\d{1,2}):([0-5]\d)\s*(?:-|[\u2013\u2014]|to)\s*(\d{1,2}):([0-5]\d)(?:\s*\(\s*(\d{1,3})\s*(?:mins?|minutes?)\s*\))?$/i.exec(cells[0] ?? '');
       const duration = durationColumn >= 0
         ? /^(\d{1,3})\s*(?:mins?|minutes?)$/i.exec(cells[durationColumn] ?? '')
         : null;
@@ -1151,7 +1152,12 @@ function hasSelfContainedExactAgendaTable(
       }
       const start = (Number(range[1]) * 60) + Number(range[2]);
       const end = (Number(range[3]) * 60) + Number(range[4]);
-      blocks.push({ start, end, duration: duration ? Number(duration[1]) : end - start });
+      const annotatedDuration = range[5] === undefined ? null : Number(range[5]);
+      blocks.push({
+        start,
+        end,
+        duration: duration ? Number(duration[1]) : annotatedDuration ?? end - start,
+      });
       tableEndIndex = rowIndex + 1;
     }
     if (malformed || blocks.length < minimumBlocks || blocks[0]?.start !== 0) continue;
@@ -1181,8 +1187,20 @@ function hasTimedAgenda(
   const lines = text.split('\n');
   if (allowImplicitExactTable
     && hasSelfContainedExactAgendaTable(lines, durationMinutes, minimumBlocks)) {
+    const hasExplicitAgendaHeading = lines.some(line => (
+      /^\s*(?:#{1,6}\s+|\*\*)[^\r\n]*(?:agenda|timed? blocks?|schedule|run of show)/i.test(line)
+    ));
+    if (hasExplicitAgendaHeading) return !lines.some(hasAffirmedAgendaInvalidation);
+    const normalizedExactTable = lines.map(line => (
+      /^\s*\|/.test(line)
+        ? line.replace(
+          /(\d{1,2}:[0-5]\d\s*(?:-|[\u2013\u2014]|to)\s*\d{1,2}:[0-5]\d)\s*\(\s*\d{1,3}\s*(?:mins?|minutes?)\s*\)/gi,
+          '$1',
+        )
+        : line
+    )).join('\n');
     return hasTimedAgenda(
-      `# Launch-readiness agenda — ${durationMinutes} minutes\n${text}`,
+      `# Launch-readiness agenda — ${durationMinutes} minutes\n${normalizedExactTable}`,
       durationMinutes,
       minimumBlocks,
       false,
@@ -1716,6 +1734,11 @@ function isAffirmedAgendaDecision(value: string): boolean {
   if (!normalized || /\b(?:tbd|tbc|undecided|not decided|pending|decide later|approve later|no\s+(?:final\s+)?choice)\b|^(?:none|n\/?a|not applicable|no decision(?: required)?|decision required)$/i.test(normalized)) {
     return false;
   }
+  const decisionSubject = String.raw`(?:go\/?no-go\s+recommendation|(?:launch|go\/?no-go)\s+decision)`;
+  const decisionInvalidation = String.raw`(?:rejected|denied|withdrawn|cancelled|canceled|rescinded|superseded|vetoed|invalid|failed|no\s+longer\s+valid)`;
+  if (new RegExp(`\\b(?:${decisionInvalidation})\\b[^.\\r\\n]{0,40}\\b${decisionSubject}\\b|\\b${decisionSubject}\\b[^.\\r\\n]{0,40}\\b(?:${decisionInvalidation})\\b`, 'i').test(normalized)) {
+    return false;
+  }
   if (/\b(?:no|without)\s+(?:final\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b|\bnot\s+(?:an?\s+)?(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination|acceptance|rejection)\b/i.test(normalized)) {
     return false;
   }
@@ -1732,6 +1755,7 @@ function isAffirmedAgendaDecision(value: string): boolean {
     || /\b(?:approval|confirmation|selection|choice|agreement|sign[- ]?off|assignment|determination)\s+(?:of|on|for|with)\b/i.test(normalized)
     || /\bacceptance\s+or\s+rejection\s+of\b/i.test(normalized)
     || /\b(?:final\s+)?(?:launch|go\/?no-go)\s+decision\b/i.test(normalized)
+    || /\b(?:final\s+)?go\/?no-go\s+recommendation\b/i.test(normalized)
     || /\bgo\s+(?:or|\/)\s+no[- ]?go\b/i.test(normalized)
     || /\bfinal\s+confirmation\s+of\b/i.test(normalized);
 }
@@ -1846,7 +1870,7 @@ function directDependencyIsAffirmed(response: string, start: number, end: number
 
 function hasDeniedDependencyLanguage(value: string): boolean {
   const normalized = value.replace(/\bnot\s+only\b/gi, '');
-  return /[?]|\b(?:not|never|none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished|false|disputed|unordered|optional|cannot|can't|doesn't|don't|isn't|aren't|may|might|could|possibly|perhaps|potentially|likely)\b/i.test(normalized);
+  return /[?]|\b(?:not|never|none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished|false|incorrect|wrong|invalid|rejected|denied|refuted|retracted|revoked|withdrawn|cancelled|canceled|disputed|unordered|optional|cannot|can't|doesn't|don't|isn't|aren't|may|might|could|possibly|perhaps|potentially|likely)\b/i.test(normalized);
 }
 
 function affirmativeMilestoneIds(value: string, includeNamedPhases = false): string[] {
@@ -1894,6 +1918,14 @@ function hasMilestoneDependencyMap(response: string): boolean {
       && directDependencyIsAffirmed(text, start, end)) {
       return true;
     }
+  }
+
+  for (const line of text.split(/\r?\n/)) {
+    const edge = /\b(M\d+)\b\s*(?:\u2192|->|=>)\s*\b(M\d+)\b/i.exec(line);
+    if (edge
+      && edge[1].toUpperCase() !== edge[2].toUpperCase()
+      && /\b(?:requires?|depends?|prerequisites?|blocked by)\b/i.test(line)
+      && !hasDeniedDependencyLanguage(line)) return true;
   }
 
   for (const match of text.matchAll(/\bcritical\s+path\b\s*:?\s*([^\r\n]{0,360})/gi)) {
@@ -1999,6 +2031,7 @@ function hasAffirmedNextStep(response: string): boolean {
       && !/\bbut\s+(?:instead\s+)?to\s+\w+/i.test(suffix);
     if (!deniedBefore && !deniedAfter) return true;
   }
+
   return false;
 }
 
@@ -2031,7 +2064,7 @@ function hasAffirmedTwoLanes(response: string, patterns: readonly RegExp[]): boo
     )));
 }
 
-const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|don't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
+const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|don't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:reject(?:s|ed|ing)?|den(?:y|ies|ied|ying)|refut(?:e|es|ed|ing)|challeng(?:e|es|ed)|challenging(?=\s+(?:the\s+)?(?:claim|assertion))|suppos(?:e|es|ed|ing)|doubt(?:s|ed|ing)?|retract(?:s|ed|ing)?)\b|\b(?:memo|report|document)\s+(?:claims?|reports?|states?)\b|\b(?:rumou?rs?)\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser[- ]test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
 const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s+(?:plan|release|ship(?:ment|ping)?|ship\s+date)\b|\b(?:there\s+(?:is|was)\s+)?no\s+(?:plan|release|shipment)\b[^.;\r\n]{0,40}\b(?:for|on|by|to\s+ship)\s+Friday\b|\bFriday\b\s+(?:has|had)\s+no\s+(?:release\s+)?plan\b|\bFriday\s+(?:release\s+)?(?:plan|release|shipment)\b[^.;\r\n]{0,16}\b(?:(?:is|was|has\s+been|had\s+been)\s+)?(?:cancel(?:ed|led)|withdrawn|abandoned|scrapped)\b/i;
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI test(?:s|ing)?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API test(?:s|ing)?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
 const CONTRADICTED_WRITER_API_PASS = /\bAPI test(?:s|ing)?\b[^.;\r\n]{0,80}\bpass(?:ed|ing)?\b[^.;\r\n]{0,40}\b(?:except(?:ion)?|save|apart\s+from|other\s+than|with|although|despite|but)\b(?![^.;\r\n]{0,40}\bbrowser[- ]test)[^.;\r\n]{0,40}\b(?:one|some|an?\s+exception|fail(?:ed|ing|ures?))\b/i;
