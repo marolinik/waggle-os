@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-22)
+### Current Release Qualification Contract (updated 2026-09-09)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -72,6 +72,8 @@ WaggleDance, governance) is the upgrade trigger.
   same carry-forward rule. GO also requires zero unresolved Critical/High findings.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
+- A green private draft PR and a controlled-pilot installer are not public GO. Publicly trusted
+  Authenticode and a sealed managed Deep Security report remain binary release gates.
 
 ### Evidence authority
 

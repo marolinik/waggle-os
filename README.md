@@ -14,41 +14,39 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Current Windows Solo internal-pilot evidence — 2026-09-07
+### Current Windows Solo internal-pilot evidence — 2026-09-09
 
-The current PM-qualified candidate is private readiness-branch commit
-`c4e6a5157310876215d20c5e5f059f26ea1f4ba4`; it has not yet been merged to private
-`main`. Its internal-pilot NSIS installer (102,990,752 bytes; SHA-256
-`2211333B5562F0FEAACFFB37887F0918CBB8A79C591E77C858B62ADFA707E919`)
-passed **64/64** clean-profile checks. The receipt proves the bundled sidecar and npm,
+The current PM-qualified runtime is private draft-PR head
+`e4bf403ecfde8987089176ba1de216b224e1fc1c`; it has not been merged to private
+`main`. The same-tree merge candidate `b07a6173f9909e2decddb30077ef890cf16c602d`
+produced an unsigned internal-pilot NSIS installer (98,698,013 bytes; SHA-256
+`9C4A22D5540B1D26DE6A928F3268128A70994663FF2E9F1B99D12C8D63B96747`) that
+passed **64/64** isolated-profile checks. The receipt proves the bundled sidecar and npm,
 FREE/Solo first boot, in-process embeddings, the Waggle-managed runtime and
 `qwen2.5:0.5b`, local-model chat before and after proxy restart, same-version repair,
 relaunch, data preservation, Exit/owned-process cleanup, and uninstall. Docker, Python,
 developer Node.js, external LiteLLM, and a separately installed Ollama were not
 prerequisites.
 
-- The runtime parent passed 12,699 root and 2,442 web tests (15,141 total), agent/server/app
-  typechecks, repo lint, and Rust checks. The exact candidate adds only an app build-lock
-  security patch and its packaging regression: the affected 102 tests, app typecheck,
-  targeted lint, Cargo check, installer build, and clean-profile certification are green.
+- Draft PR #83 is mergeable and all current full CI, E2E, Tauri Windows/macOS, Hive Mind
+  cross-platform smoke, and Wave 1 acceptance jobs are green.
 - Production dependencies have **0 Critical and 0 High** findings. The separate Tauri
   build-tool lock audit has **0 vulnerabilities** after the exact-candidate patch.
 - Visible-browser PM journeys passed provider persistence and Qwen recovery, workspace and
   session isolation, artifact creation/download for PDF/PPTX/DOCX/XLSX, automation dry-run,
   memory continuity, compact tool disclosure, and deterministic skill verification.
-- The historical ten-persona x3 collection remains useful evidence but is not relabeled as
-  an exact-current public-release seal. The same restriction applies to historical router
-  and Claude Code/Codex/Hermes official-auth receipts.
+- A fresh live-Qwen ten-persona x3 collection completed 30/30 at or above 95/100 after
+  documented independent semantic adjudication. Router and Claude Code/Codex/Hermes
+  official-auth receipts have a reviewed no-impact boundary through the runtime candidate.
 - The curated Hive Mind mirror remains a separate maintainer-curated release stream; raw
   subtree publication remains forbidden.
 
 The exact receipt, hashes, limitations, and open gates are recorded in the current
 [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). The
-internal signer (`CN=Egzakta Internal Pilot`) and DigiCert timestamp support controlled
-internal testing but are not publicly trusted Authenticode. Public release is **not yet
+installer is unsigned and is intended only for controlled internal testing. Public release is **not yet
 approved**: a protected hosted build with a publicly trusted signer, an exact-release-tag
-sealed managed Deep Security report, current persona qualification, and fresh or explicitly
-attested smart-router and official-auth qualification remain mandatory.
+sealed managed Deep Security report, and preservation or rerun of revision-bound evidence
+remain mandatory.
 
 ## Architecture
 
