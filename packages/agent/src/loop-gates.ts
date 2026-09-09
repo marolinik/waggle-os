@@ -546,6 +546,34 @@ function explicitResponseContractIssues(userRequest: string, content: string): s
     if (refusesTwoActions || affirmativeActionUnits.length < 2) issues.push('two distinct runway actions');
   }
 
+  if (/\b(?:preserve|keep)\s+(?:the\s+)?facts?\b[^.!?\r\n]{0,80}\b(?:add|introduce)\s+no\s+new\s+claims?\b/i.test(request)) {
+    const unsupportedClaimPatterns = [
+      /\bcritical\s+testing\s+deficiencies\b/i,
+      /\bensure(?:s|d|ing)?\s+(?:(?:product|platform)\s+)?(?:stability|functionality)\b/i,
+    ];
+    const requestUnits = request
+      .split(/\n|[.!?;]+/)
+      .map(unit => unit.trim())
+      .filter(Boolean);
+    const isAffirmedIn = (pattern: RegExp, units: readonly string[]): boolean => units.some(unit => (
+      [...unit.matchAll(new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`))]
+        .some(match => {
+          const index = match.index ?? 0;
+          const prefixWindow = unit.slice(Math.max(0, index - 48), index).replace(/\bnot\s+only\b/gi, '');
+          const prefix = prefixWindow.split(/[,;:]|\b(?:but|however|although|yet|while|whereas)\b/i).at(-1) ?? prefixWindow;
+          const suffix = unit.slice(index + match[0].length, index + match[0].length + 48);
+          const deniedBefore = /\b(?:no|not|never|cannot|can't|couldn't|doesn't|don't|didn't|won't|wouldn't|shouldn't|reject(?:s|ed|ing)?|den(?:y|ies|ied|ying))\b[^,;:.!?]{0,32}$/i.test(prefix);
+          const deniedAfter = /^\s*(?:(?:is|are|was|were|has|have|had)\s+)?(?:not|never|false|incorrect|unsupported|unverified)\b/i.test(suffix);
+          return !deniedBefore && !deniedAfter;
+        })
+    ));
+    if (unsupportedClaimPatterns.some(pattern => (
+      isAffirmedIn(pattern, responseUnits) && !isAffirmedIn(pattern, requestUnits)
+    ))) {
+      issues.push('no new claims beyond the supplied facts');
+    }
+  }
+
   const asksForReleasePlan = /\bturn\b[^.!?\r\n]{0,100}\brelease goal\b[^.!?\r\n]{0,120}\bmilestones\b/i.test(request)
     || /\b(?:draft|create|prepare|produce|write|build)\b[^.!?\r\n]{0,100}\brelease plan\b/i.test(request);
   if (asksForReleasePlan) {
@@ -794,7 +822,11 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       : structuredDraftIncomplete
         ? 'structured draft ended after its opening scaffold'
         : 'answer ended after an unfinished lead-in';
-    const repairLimit = taggedEnvelopeIncomplete || timedAgendaIncomplete ? 2 : 1;
+    const repairLimit = taggedEnvelopeIncomplete
+      || timedAgendaIncomplete
+      || responseContractIssues.includes('first action for today')
+      ? 2
+      : 1;
     if (state.completionIntegrityRepairAttempts >= repairLimit || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };
     }

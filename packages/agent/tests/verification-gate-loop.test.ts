@@ -462,6 +462,116 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(repaired);
   });
 
+  it('permits one bounded second repair for a repeatedly omitted first action', async () => {
+    const request = 'Recommend their order, justify the order in one concise plan, and name the first action for today.';
+    const incomplete = '1. Repair the production bug.\n2. Close the customer.\n3. Improve onboarding.';
+    const repaired = `${incomplete}\nFirst action for today: inspect the latest production trace.`;
+    const fetch = mockFetch([incomplete, incomplete, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('repairs an executive rewrite that adds a new stability claim', async () => {
+    const request = 'Rewrite this into a crisp executive memo. Preserve the facts and add no new claims: We planned to ship Friday. API tests pass. Browser tests still have two failures on Windows. Recommendation: delay release.';
+    const invented = 'Delay Friday to address these critical testing deficiencies and ensure product stability and functionality.';
+    const repaired = 'Delay the Friday release because API tests pass but two browser tests still fail on Windows.';
+    const fetch = mockFetch([invented, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('does not treat a prohibited claim in the request as a supplied fact', async () => {
+    const request = 'Preserve the facts and add no new claims. Do not claim critical testing deficiencies or that this ensures product stability.';
+    const invented = 'These are critical testing deficiencies and this ensures product stability.';
+    const repaired = 'Two browser tests still fail on Windows.';
+    const fetch = mockFetch([invented, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('detects an affirmed invented claim beside an unrelated denial', async () => {
+    const request = 'Preserve the facts and add no new claims: API tests pass.';
+    const invented = 'These are critical testing deficiencies but do not ensure product stability.';
+    const repaired = 'API tests pass.';
+    const fetch = mockFetch([invented, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('detects a later affirmed invented claim after a denied occurrence', async () => {
+    const request = 'Preserve the facts and add no new claims: API tests pass.';
+    const invented = 'This does not ensure product stability, but the release process ensures product stability.';
+    const repaired = 'API tests pass.';
+    const fetch = mockFetch([invented, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('bounds claim negation at while contrast boundaries', async () => {
+    const request = 'Preserve the facts and add no new claims: API tests pass.';
+    const invented = "This doesn't ensure product stability while the release process ensures product stability.";
+    const repaired = 'API tests pass.';
+    const fetch = mockFetch([invented, repaired]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(repaired);
+  });
+
+  it('fails closed after one repair for a repeated invented claim', async () => {
+    const request = 'Preserve the facts and add no new claims: Two Windows browser tests fail.';
+    const invented = 'These critical testing deficiencies threaten the release.';
+    const fetch = mockFetch([invented, invented]);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }))).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     {
       label: 'a prioritization request that did not ask for a first action',
@@ -492,6 +602,21 @@ describe('structured-draft completion integrity gate', () => {
       label: 'two cost-only runway actions when cash-inflow actions are prohibited',
       request: 'Calculate runway and give two actions that improve runway. Use cost controls only; do not suggest revenue or cash-inflow actions.',
       response: '1. Cut non-essential monthly expenses.\n2. Renegotiate supplier costs.',
+    },
+    {
+      label: 'a no-new-claims rewrite that preserves supplied critical-deficiency language',
+      request: 'Preserve the facts and add no new claims: The Windows failures are critical testing deficiencies.',
+      response: 'The Windows failures remain critical testing deficiencies.',
+    },
+    {
+      label: 'a no-new-claims rewrite that denies an unsupported stability claim',
+      request: 'Preserve the facts and add no new claims: Two Windows browser tests fail.',
+      response: 'Two Windows browser tests fail; this does not ensure product stability.',
+    },
+    {
+      label: 'a mixed-polarity source whose affirmed deficiency fact is preserved',
+      request: 'Preserve the facts and add no new claims: Critical testing deficiencies exist, but do not claim they ensure product stability.',
+      response: 'Critical testing deficiencies exist.',
     },
   ])('does not repair $label', async ({ request, response }) => {
     const fetch = mockFetch([response]);
