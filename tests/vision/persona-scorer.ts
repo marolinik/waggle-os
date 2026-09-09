@@ -546,6 +546,8 @@ function hasAffirmedCurrentRunway(response: string): boolean {
   let scenarioScopeHeadingLevel: number | null = null;
 
   for (const { clause, headingLevel } of clauses) {
+    const continuesRunwayCalculation = previousClauseHasRunwayHeading
+      && /\b(?:cash|burn|revenue)\b/i.test(clause);
     if (FINANCE_CURRENT_SCOPE_HEADING.test(clause)) {
       scenarioScopeActive = false;
       scenarioScopeHeadingLevel = null;
@@ -725,7 +727,8 @@ function hasAffirmedCurrentRunway(response: string): boolean {
       if (FINANCE_RESULT_INVALIDATION.test(clause)) return false;
     }
     previousClauseHasCurrentRunwayContext = clauseCarriesCurrentRunwayContext;
-    previousClauseHasRunwayHeading = /^runway(?: calculation)?$/i.test(clause);
+    previousClauseHasRunwayHeading = /^(?:runway(?: calculation)?|calculation)\s*:?$/i.test(clause)
+      || continuesRunwayCalculation;
   }
 
   return positiveCurrentResult;
@@ -1907,7 +1910,7 @@ function hasMilestoneDependencyMap(response: string): boolean {
 
     if (!/^\s*\|/.test(lines[index])) continue;
     const headers = markdownTableCells(lines[index]);
-    const dependencyIndex = headers.findIndex(header => /^(?:depends?\s+on|dependencies?)$/i.test(header));
+    const dependencyIndex = headers.findIndex(header => /^(?:depends?\s+on|dependenc(?:y|ies))$/i.test(header));
     if (dependencyIndex < 0) continue;
 
     for (let rowIndex = index + 1; rowIndex < lines.length && /^\s*\|/.test(lines[rowIndex]); rowIndex += 1) {
@@ -2503,7 +2506,7 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
     const scorableLine = isLabeledActionTableRow
       ? markdownTableCells(line).slice(1).join(' | ')
       : isUnnumberedTableRow && explicitActionSection
-        ? line.replace(/^\s*\|[ \t]*/, '')
+        ? markdownTableCells(line).join(': ')
         : line;
     const primaryActionClause = isLabeledActionTableRow
       ? scorableLine.split(/\s+\bor\b\s+|;/i, 1)[0]
@@ -3161,9 +3164,9 @@ function labeledPrioritizationCriterion(
   segment: string,
   criteria: readonly PrioritizationCriterion[],
 ): number | null {
-  const labelMatch = /^\s*(?:[-*]\s*)?(?:(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+\*\*([^*]+)\*\*|\*\*(?:(?:priority\s+)?(?:\d+|first|second|third)|day\s+\d+(?:\s*[-–—]\s*\d+)?)\s*[:.)—-]\s*([^*]+)\*\*)/i
+  const labelMatch = /^\s*(?:[-*]\s*)?(?:(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+\*\*([^*]+)\*\*|\*\*(?:(?:priority\s+)?(?:\d+|first|second|third)|day\s+\d+(?:\s*[-–—]\s*\d+)?)\s*[:.)—-]\s*([^*]+)\*\*|(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+([^*\r\n]+?)(?=\r?\n|$))/i
     .exec(segment);
-  const label = labelMatch?.[1] ?? labelMatch?.[2];
+  const label = labelMatch?.[1] ?? labelMatch?.[2] ?? labelMatch?.[3];
   if (!label) return null;
   const matches = matchedCriterionIndices(label, criteria, 'topic');
   return matches.length === 1 ? matches[0] : null;

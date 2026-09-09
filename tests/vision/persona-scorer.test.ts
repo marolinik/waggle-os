@@ -8257,6 +8257,101 @@ describe('Qwen Flash Next exact-response regressions', () => {
     expect(denied.checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
   });
 
+  it('accepts the exact 8c7cbe9c Qwen priority, dependency, and finance evidence', () => {
+    const prioritization = [
+      'Here is the recommended order and execution plan.',
+      '1. Investigate production memory bug',
+      'Basis: A named production bug is treated as an active issue by default, creating immediate risk to system stability and potentially blocking other workflows, so its investigation must take precedence over revenue and process tasks.',
+      '2. Close one customer',
+      'Basis: Revenue generation directly impacts immediate business survival and weekly goals, making it the highest priority after system stability is secured, though it does not carry the same operational risk as a production bug.',
+      '3. Repair onboarding friction',
+      'Basis: Process improvements for future customers are important for long-term efficiency but do not impact the current week’s immediate revenue or system stability, so they can be addressed last.',
+      '**First Action for Today:** Open the application logs and monitoring dashboards.',
+    ].join('\n\n');
+    expect(
+      scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(true);
+
+    const projectPlan = [
+      '| ID | Milestone | Description | Dependency |',
+      '| :--- | :--- | :--- | :--- |',
+      '| **M1** | **Native Packaging & Infra** | Build native bundles. | None |',
+      '| **M2** | **Core Logic Integration** | Verify the smart router. | M1 |',
+      '| **M3** | **Windows Validation** | Execute runtime tests. | M2 |',
+      '| **M4** | **Release Candidate Sign-off** | Final go/no-go. | M3 |',
+      'Owners: Build Engineer, Core Developer, QA Manager, Project Manager.',
+      'Risks: binary size, Windows permissions, and router latency.',
+      'Exit criteria: installers build and all validation passes.',
+    ].join('\n');
+    expect(
+      scoreResponse('project-manager', projectPlan).checks.find(check => check.id === 'dependencies')?.passed,
+    ).toBe(true);
+
+    const finance = [
+      '**Formula:**',
+      'Runway (months) = Total Cash / Net Monthly Burn',
+      '**Calculation:**',
+      'Since revenue is zero, Net Monthly Burn equals Gross Monthly Burn ($10,000).',
+      '$40,000 / $10,000 = **4.00 months**',
+      '**Biggest Assumption:** The current monthly burn rate remains exactly $10,000 and revenue remains zero.',
+      '**Actions to Improve Runway:**',
+      '| Action Type | Specific Action | Mechanism |',
+      '|---|---|---|',
+      '| **Cost Reduction** | Cancel non-critical subscriptions. | Lowers monthly burn. |',
+      '| **Cash Inflow** | Secure upfront customer payments. | Increases cash balance. |',
+      '*Disclaimer: This analysis is informational and does not constitute professional financial advice.*',
+    ].join('\n');
+    const financeScore = scoreResponse('finance-owner', finance);
+    expect(financeScore.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(financeScore.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    for (const invalidCostAction of [
+      'Do not cancel non-critical subscriptions.',
+      'Cancel no non-critical subscriptions.',
+      'Cancel subscription estimates in the forecast.',
+      'Cancel the report about non-critical subscriptions.',
+      'Cancel the meeting about non-critical subscriptions.',
+      'Drop the discussion about redundant tools.',
+      'Eliminate the review of unused licenses.',
+      'Cancel the email about non-critical subscriptions.',
+      'Drop the note about redundant tools.',
+      'Eliminate the agenda item about unused licenses.',
+      'Cancel subscription spreadsheets.',
+      'Cancel subscriptions without actually canceling them.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          finance.replace('Cancel non-critical subscriptions.', invalidCostAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        invalidCostAction,
+      ).toBe(false);
+    }
+    for (const invalidCashAction of [
+      'Secure a report about upfront customer payments.',
+      'Secure a meeting about upfront customer payments.',
+      'Secure an analysis of upfront customer payments.',
+      'Secure the cash inflow forecast.',
+      'Secure recurring revenue projections.',
+      'Secure the cash inflow spreadsheet.',
+      'Secure recurring revenue notes.',
+      'Secure upfront customer payment records.',
+      'Secure upfront customer payments without collecting them.',
+      'Secure upfront customer payments or not.',
+      'Secure recurring revenue while not actually generating it.',
+      'Secure upfront customer payments or credit forecast.',
+      'Secure cash inflows through preparing a report.',
+      'Secure upfront customer payments through a reporting dashboard.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          finance.replace('Secure upfront customer payments.', invalidCashAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        invalidCashAction,
+      ).toBe(false);
+    }
+  });
+
   it('scores the exact 9c497360 Qwen acceptance language without lexical false negatives', () => {
     const prioritization = [
       '### Recommended Order',

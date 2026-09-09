@@ -1342,6 +1342,7 @@ describe('chat smart-router integration', () => {
         'test-mid-model',
         'test-mid-model',
         'test-mid-model',
+        'test-mid-model',
         'gemma-4-31b',
       ]);
       const primaryPrompt = requests[0]?.messages?.[0]?.content ?? '';
@@ -1419,7 +1420,88 @@ describe('chat smart-router integration', () => {
     ]);
   });
 
-  it('never rotates credentials or models after an incomplete completion', async () => {
+  it('retries one interrupted no-tool answer on the same model and credential', async () => {
+    const attempts: Array<{
+      model: string;
+      apiKey: string;
+      toolCount: number;
+      maxTokenBudget?: number;
+      modelOperationTimeoutMs?: number;
+    }> = [];
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push({
+        model: agentConfig.model,
+        apiKey: agentConfig.litellmApiKey,
+        toolCount: agentConfig.tools.length,
+        maxTokenBudget: agentConfig.maxTokenBudget,
+        modelOperationTimeoutMs: agentConfig.modelOperationTimeoutMs,
+      });
+      if (attempts.length === 1) {
+        throw Object.assign(
+          new Error('LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.'),
+          {
+            code: 'INCOMPLETE_COMPLETION',
+            status: 502,
+            usage: { inputTokens: 100, outputTokens: 20 },
+          },
+        );
+      }
+      return {
+        content: 'Recovered on the same model.',
+        toolsUsed: [],
+        usage: { inputTokens: 100, outputTokens: 25 },
+      };
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-safe-retry' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toMatchObject({
+      model: attempts[0]?.model,
+      apiKey: attempts[0]?.apiKey,
+      toolCount: 0,
+      maxTokenBudget: (attempts[0]?.maxTokenBudget ?? 0) - 120,
+    });
+    expect(attempts[1]?.modelOperationTimeoutMs).toBeLessThan(attempts[0]?.modelOperationTimeoutMs ?? 0);
+    expect(response.body).toContain('Recovered on the same model.');
+    expect(response.body).toContain('retrying once');
+    expect(response.body).not.toContain('event: model_switch');
+  });
+
+  it.each([
+    ['assistant refusal', 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
+    ['content filter', 'LLM returned an incomplete completion (unsupported finish_reason=content_filter); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
+    ['malformed response', 'LLM returned an incomplete completion (invalid response body); partial content was not accepted.', { inputTokens: 0, outputTokens: 0 }],
+    ['exhausted token budget', 'LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.', { inputTokens: 100_000, outputTokens: 20 }],
+  ])('does not retry an incomplete completion caused by %s', async (_label, message, usage) => {
+    let attempts = 0;
+    server.agentRunner = async (): Promise<AgentResponse> => {
+      attempts++;
+      throw Object.assign(new Error(message), {
+        code: 'INCOMPLETE_COMPLETION',
+        status: 502,
+        usage,
+      });
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-no-retry' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toBe(1);
+    expect(response.body).toContain('incomplete completion');
+    expect(response.body).not.toContain('retrying once');
+  });
+
+  it('never replays an incomplete completion after a non-replayable tool started', async () => {
     const firstKey = 'sk-openrouter-incomplete-first';
     const secondKey = 'sk-openrouter-incomplete-second';
     server.vault.set('openrouter', firstKey);
@@ -1440,6 +1522,7 @@ describe('chat smart-router integration', () => {
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
       simulatedMutations++;
+      agentConfig.onToolUse?.('write_file', { path: 'release.txt' });
       throw Object.assign(
         new Error('LLM returned an incomplete completion; partial content was not accepted.'),
         { code: 'INCOMPLETE_COMPLETION', status: 502 },

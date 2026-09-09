@@ -157,6 +157,13 @@ function isIncompleteCompletionError(error: unknown): boolean {
     && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
 }
 
+function isRetryableStreamInterruption(error: unknown): boolean {
+  return isIncompleteCompletionError(error)
+    && /\(stream ended before data:\s*\[DONE\]\); partial content was not accepted\.?$/i.test(
+      (error as { message?: unknown }).message as string,
+    );
+}
+
 type EmptyModelResponseError = Error & {
   code: 'EMPTY_MODEL_RESPONSE';
   status: 502;
@@ -5017,12 +5024,51 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           throw failure;
         };
 
+        const primaryAttemptStartedAt = performance.now();
+        const runPrimaryWithSafeInterruptedRetry = async (): Promise<AgentResponse> => {
+          try {
+            return await runAgentAttempt(runConfig);
+          } catch (error) {
+            const failedUsage = getFailedCompletionUsage(error);
+            const consumedTokens = (failedUsage?.inputTokens ?? 0) + (failedUsage?.outputTokens ?? 0);
+            const remainingTokenBudget = runConfig.maxTokenBudget === undefined
+              ? 0
+              : Math.floor(runConfig.maxTokenBudget - consumedTokens);
+            const remainingModelTimeMs = runConfig.modelOperationTimeoutMs === undefined
+              ? 0
+              : Math.floor(runConfig.modelOperationTimeoutMs - (performance.now() - primaryAttemptStartedAt));
+            const canReplayWithoutSideEffects = isRetryableStreamInterruption(error)
+              && runConfig.tools.length === 0
+              && !budgetModelSelected
+              && !requiredToolSequenceStarted
+              && !nonReplayableToolExecutionStarted
+              && !explicitReadOnlyToolWasUsed
+              && remainingTokenBudget > 0
+              && remainingModelTimeMs > 0;
+            if (!canReplayWithoutSideEffects) throw error;
+            sendEvent('step', {
+              content: 'Model response was interrupted — retrying once on the same model.',
+            });
+            return await runAgentAttempt({
+              ...runConfig,
+              maxTokenBudget: remainingTokenBudget,
+              modelOperationTimeoutMs: remainingModelTimeMs,
+              ...(runConfig.initialModelActivityTimeoutMs === undefined
+                ? {}
+                : { initialModelActivityTimeoutMs: Math.min(
+                    runConfig.initialModelActivityTimeoutMs,
+                    remainingModelTimeMs,
+                  ) }),
+            });
+          }
+        };
+
         // ── Run agent with credential pool + fallback chain ──
         let result: AgentResponse;
         const agentStartedAt = performance.now();
         let agentLatencyMs = 0;
         try {
-          result = await runAgentAttempt(runConfig);
+          result = await runPrimaryWithSafeInterruptedRetry();
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
