@@ -9227,4 +9227,89 @@ describe('exact Qwen 30-run adjudication regressions', () => {
     expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. Browser tests continue to fail in two instances on Windows, challenging release readiness. The smart router has not been tested without cloud credentials.')).toBe(true);
     expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts, but this will not reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
   });
+
+  it('accepts the exact dependency and runway-action forms from the f8b797c3 run', () => {
+    const dependencies = [
+      '### Milestone 1: Core Environment',
+      '**Dependencies:** None (Start Node)',
+      '### Milestone 2: Local Model Integration',
+      '**Dependencies:** Milestone 1 (Requires stable runtime & proxy)',
+    ].join('\n');
+    const actionForms = [
+      [
+        'Actions to improve runway:',
+        '- [ ] Cut $10000.00 to a smaller monthly base so each dollar lasts longer.',
+        '- [ ] Generate recurring monthly revenue, which reduces net burn.',
+      ].join('\n'),
+      [
+        'The calculation assumes no new financing, cost reductions, or revenue inflows occur.',
+        '**Actions to Improve Runway:**',
+        '1. **Cost Reduction:** Identify and eliminate non-essential expenses to lower monthly burn.',
+        '2. **Cash Inflow:** Secure a short-term loan or pre-sell a product/service to increase the cash balance (numerator), noting that one-time inflows do not reduce the monthly burn rate itself.',
+      ].join('\n'),
+      [
+        '**Actions to Improve Runway**',
+        '- [ ] **Reduce Costs:** Audit discretionary spending and negotiate vendor contracts to lower the monthly burn rate.',
+        '- [ ] **Increase Inflows:** Implement pre-sales, deposits, or early-stage consulting services to generate immediate, recurring revenue that reduces the net monthly burn.',
+      ].join('\n'),
+    ];
+
+    expect(check('project-manager', 'dependencies', dependencies)).toBe(true);
+    expect(check('finance-owner', 'two-actions', `${actionForms[0].split('\n')[1]}\nAccelerate customer payments to increase cash inflows.`), 'monthly-base cost action').toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut no costs to establish a smaller monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut 10000 with no layoffs to reach a smaller monthly base.\n- Generate recurring monthly revenue.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000, but this will not reduce the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan with zero proceeds.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan that will not improve runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', "Actions to improve runway:\n- Secure a loan that won't improve runway.\n- Cut costs.")).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan without receiving any cash.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan application.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan approval.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan estimate.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan rejection.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan denial.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a short-term loan for working capital.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Obtain a loan to cover payroll.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan from our bank.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan from our bank after another lender denied us.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan, but approval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan, but it was cancelled before disbursement.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nIt has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThat loan has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nApproval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nCorrection: the loan was rejected.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nLoan approval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThe lender denied the application.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThe bank rejected it.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan but it has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000, although it will not reduce the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000 despite not reducing the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000 but this has no effect on the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut costs.\n- Implement pre-sales reporting.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', `Negotiate vendor contracts to reduce costs.\n${actionForms[0].split('\n')[2]}`), 'recurring-revenue action').toBe(true);
+    expect(check('finance-owner', 'two-actions', `${actionForms[1].split('\n')[2]}\nAccelerate customer payments to increase cash inflows.`), 'bold cost-reduction action').toBe(true);
+    expect(check('finance-owner', 'two-actions', `Negotiate vendor contracts to reduce costs.\n${actionForms[1].split('\n')[3]}`), 'bold cash-inflow action').toBe(true);
+    for (const actions of actionForms) {
+      expect(check('finance-owner', 'two-actions', actions), actions).toBe(true);
+    }
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1 (Requires stable runtime), but this dependency was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1, although that dependency is invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1, despite that dependency being invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1; no dependency exists.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 3 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nThe claim that no dependency exists between Milestone 2 and Milestone 1 was rejected.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is false that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is not true that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nI reject the claim that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt may be that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is possible that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nQuestion: does no dependency exist between Milestone 2 and Milestone 1?')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nWhy does no dependency exist between Milestone 2 and Milestone 1?')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1; Milestone 2 could proceed independently.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1; why was it listed?')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nMilestone 3 may slip; correction: no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: Milestone 2 could proceed independently because no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+  });
 });

@@ -1817,7 +1817,7 @@ function dependencyReferences(value: string, includeNamedPhases = false): Depend
     text: match[0],
   }));
   if (includeNamedPhases) {
-    for (const pattern of [/\bPhase\s+(\d+)\b/gi, /\((\d+)\)/g]) {
+    for (const pattern of [/\b(?:Phase|Milestone)\s+(\d+)\b/gi, /\((\d+)\)/g]) {
       for (const match of value.matchAll(pattern)) {
         references.push({
           id: `M${Number(match[1])}`,
@@ -1896,7 +1896,7 @@ function affirmativeMilestoneIds(value: string, includeNamedPhases = false): str
     }
     const fragment = prefix.slice(fragmentStart);
     const suffixStart = reference.index + reference.text.length;
-    const suffixBoundary = /[,;]|\b(?:and|but|plus)\b/i.exec(normalized.slice(suffixStart));
+    const suffixBoundary = /,(?!\s*(?:but|although|despite|however|though|yet)\b)|[;]|\b(?:and|plus)\b/i.exec(normalized.slice(suffixStart));
     const suffixEnd = suffixBoundary ? suffixStart + suffixBoundary.index : normalized.length;
     const referenceClause = `${fragment} ${normalized.slice(suffixStart, suffixEnd)}`;
     if (!hasDeniedDependencyLanguage(referenceClause)) {
@@ -1910,11 +1910,37 @@ function hasMilestoneDependencyMap(response: string): boolean {
   const text = response
     .replace(/(?:\*\*|__)(M\d+)(?:\*\*|__)/gi, '$1')
     .replace(/`(M\d+)`/gi, '$1');
+  if (/\b(?:correction|retraction|update)\s*:\s*(?:there\s+(?:is|are)\s+)?no\s+dependenc(?:y|ies)\s+(?:exists?|remain)\b(?!\s+between\b)/i.test(text)) {
+    return false;
+  }
+  const retractedEdges = new Set<string>();
+  for (const match of text.matchAll(/\bno\s+dependenc(?:y|ies)\s+(?:exists?|remain)\s+between\s+(?:M|Milestone\s+)(\d+)\s+and\s+(?:M|Milestone\s+)(\d+)\b/gi)) {
+    const lineStart = text.lastIndexOf('\n', match.index - 1) + 1;
+    const lineEnd = text.indexOf('\n', match.index);
+    const clause = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+    const assertionClauseStart = Math.max(lineStart - 1, text.lastIndexOf(';', match.index - 1)) + 1;
+    const assertionPrefix = text.slice(assertionClauseStart, match.index);
+    if (/\bquestion\s*:|^\s*(?:are|can|could|do|does|how|is|should|what|when|where|whether|who|why|would)\b/i.test(assertionPrefix)
+      || /(?:\b(?:may|might|could)(?:\s+be)?(?:\s+that)?|\b(?:possible|likely|uncertain|unconfirmed|unverified)(?:\s+that)?|\b(?:allegedly|perhaps|possibly|potentially|reportedly)|\b(?:hypothetical|quoted)(?:\s+(?:claim|assertion|statement))?(?:\s+that)?)\s*$/i.test(assertionPrefix)
+      || /\b(?:false|incorrect|not\s+true|wrong|untrue)\s+that\s+no\s+dependenc/i.test(clause)
+      || /\b(?:deny|denies|denied|dispute|disputes|disputed|refute|refutes|refuted|reject|rejects|rejected)\s+(?:the\s+)?(?:claim|assertion|statement)\s+that\s+no\s+dependenc/i.test(clause)
+      || /\b(?:claim|assertion|statement)\s+that\s+no\s+dependenc[^.\r\n]{0,120}\b(?:was|is|has\s+been)\s+(?:denied|rejected|refuted|retracted)\b/i.test(clause)) {
+      continue;
+    }
+    const left = `M${Number(match[1])}`;
+    const right = `M${Number(match[2])}`;
+    retractedEdges.add(`${left}>${right}`);
+    retractedEdges.add(`${right}>${left}`);
+  }
+  const edgeIsRetracted = (target: string, dependency: string): boolean => (
+    retractedEdges.has(`${target.toUpperCase()}>${dependency.toUpperCase()}`)
+  );
 
   for (const match of text.matchAll(/\b(M\d+)\b\s+(?:(?:directly\s+)?depends?|depends?\s+directly)\s+on\s+\b(M\d+)\b/gi)) {
     const start = match.index;
     const end = start + match[0].length;
     if (match[1].toUpperCase() !== match[2].toUpperCase()
+      && !edgeIsRetracted(match[1], match[2])
       && directDependencyIsAffirmed(text, start, end)) {
       return true;
     }
@@ -1924,6 +1950,7 @@ function hasMilestoneDependencyMap(response: string): boolean {
     const edge = /\b(M\d+)\b\s*(?:\u2192|->|=>)\s*\b(M\d+)\b/i.exec(line);
     if (edge
       && edge[1].toUpperCase() !== edge[2].toUpperCase()
+      && !edgeIsRetracted(edge[1], edge[2])
       && /\b(?:requires?|depends?|prerequisites?|blocked by)\b/i.test(line)
       && !hasDeniedDependencyLanguage(line)) return true;
   }
@@ -1934,21 +1961,23 @@ function hasMilestoneDependencyMap(response: string): boolean {
     if (/\b(?:no|not\s+(?:necessarily\s+)?(?:a|the))\s*$/i.test(prefix) || hasDeniedDependencyLanguage(path)) continue;
 
     for (const edge of path.matchAll(/\b(M\d+)\b[^;\r\n!?]{0,180}(?:\u2192|->|=>)[^;\r\n!?]{0,180}\b(M\d+)\b/gi)) {
-      if (edge[1].toUpperCase() !== edge[2].toUpperCase()) return true;
+      if (edge[1].toUpperCase() !== edge[2].toUpperCase() && !edgeIsRetracted(edge[1], edge[2])) return true;
     }
   }
 
   const lines = text.split(/\r?\n/);
   let currentMilestone: string | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    const milestoneHeading = /^\s*(?:#{1,6}\s+)?(?:[-*]\s+)?(?:\*\*)?\s*(M\d+)\s*:/i.exec(lines[index]);
-    if (milestoneHeading) currentMilestone = milestoneHeading[1].toUpperCase();
+    const milestoneHeading = /^\s*(?:#{1,6}\s+)?(?:[-*]\s+)?(?:\*\*)?\s*(?:M|Milestone\s+)(\d+)\s*:/i.exec(lines[index]);
+    if (milestoneHeading) currentMilestone = `M${Number(milestoneHeading[1])}`;
 
     if (currentMilestone
       && /\b(?:depends?\s+on|dependenc(?:y|ies))\s*:/i.test(lines[index])
-      && !/\b(?:no\s+longer|not|never)\s+depends?\s+on\s*:/i.test(lines[index])) {
+      && !/\b(?:no\s+longer|not|never)\s+depends?\s+on\s*:/i.test(lines[index])
+      && !/\b(?:no|zero)\s+dependenc(?:y|ies)\b/i.test(lines[index])
+      && !/\b(?:but|however|although|though|yet)\b[^.\r\n]{0,160}\b(?:rejected|denied|refuted|retracted|revoked|withdrawn|cancelled|canceled|disputed|invalid|false|wrong)\b/i.test(lines[index])) {
       const dependencyIds = affirmativeMilestoneIds(lines[index], true);
-      if (dependencyIds.some(dependency => dependency !== currentMilestone)) return true;
+      if (dependencyIds.some(dependency => dependency !== currentMilestone && !edgeIsRetracted(currentMilestone, dependency))) return true;
     }
 
     if (!/^\s*\|/.test(lines[index])) continue;
@@ -1985,7 +2014,7 @@ function hasMilestoneDependencyMap(response: string): boolean {
       });
       const uniqueTargetIds = [...new Set(targetIds)];
       if (uniqueTargetIds.length !== 1) continue;
-      if (dependencyIds.some(dependency => uniqueTargetIds[0] !== dependency)) return true;
+      if (dependencyIds.some(dependency => uniqueTargetIds[0] !== dependency && !edgeIsRetracted(uniqueTargetIds[0], dependency))) return true;
     }
   }
 
@@ -2397,6 +2426,12 @@ const RESETTABLE_SCENARIO_ACTION_SECTION = /^\s*(?:(?:hypothetical|alternative)\
 const RUNWAY_ACTION_REFERENCE = String.raw`(?:actions?|recommendations?|steps?|measures?|proposals?)`;
 const RUNWAY_ARTIFACT_REFERENCE = String.raw`(?:memo|report|briefing|presentation|deck|document|summary|analysis|forecast|projection|model|dashboard|statement|workshop|meeting|review|session|discussion|assessment|study)`;
 function hasAffirmedActionInvalidation(line: string): boolean {
+  if (/\b(?:it|this|that|(?:this|that|the)\s+(?:action|financing|funding|loan))\s+(?:has|have|had)\s+no\s+effect\s+on\s+runway\b/i.test(line)) {
+    return true;
+  }
+  if (/^(?:\s*correction\s*:\s*)?(?:(?:(?:the\s+)?(?:loan\s+)?(?:approval|application|disbursement|financing|funding|loan)|it)\s+(?:(?:was|is)\s+|has\s+been\s+)(?:denied|cancelled|canceled|rejected)|(?:the\s+)?(?:bank|lender)\s+(?:denied|cancelled|canceled|rejected)\s+(?:(?:the\s+)?(?:application|financing|funding|loan)|it))\b/i.test(line)) {
+    return true;
+  }
   const hasScenarioDescriptor = /\b(?:hypothetical|illustrative)\b/i.test(line);
   const scenarioDescriptorIsNegated = /\b(?:not|never)\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b|\bneither\b[^.\r\n]{0,80}\b(?:is|are|was|were)\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b/i.test(line);
   const descriptorAffirmsApprovedActions = /\billustrative\b[^.\r\n]{0,80}\b(?:approved|selected|recommended)\s+actions?\b/i.test(line);
@@ -2500,7 +2535,7 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
     }
     const markdownHeading = /^\s*(#{1,6})\s+(.+?)\s*$/.exec(line);
     const heading = markdownHeading?.[2]
-      ?? /^\s*\*\*([^*]+)\*\*\s*$/.exec(line)?.[1];
+      ?? /^\s*\*\*([^*]+)\*\*\s*:?\s*$/.exec(line)?.[1];
     if (heading !== undefined) {
       const headingLevel = markdownHeading?.[1].length ?? null;
       const nextState = transitionActionSection(
@@ -2558,7 +2593,11 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
     const primaryActionClause = isLabeledActionTableRow
       ? scorableLine.split(/\s+\bor\b\s+|;/i, 1)[0]
       : scorableLine;
-    if (NON_AFFIRMATIVE_ACTION_LINE.test(line) || NON_ACTIONABLE_RUNWAY_LINE.test(line)) {
+    const actionSemantics = line.replace(
+      /,?\s*noting\s+that\s+one[- ]time\s+inflows?\s+do\s+not\s+reduce\s+the\s+monthly\s+burn\s+rate\s+itself\.?/gi,
+      '',
+    );
+    if (NON_AFFIRMATIVE_ACTION_LINE.test(actionSemantics) || NON_ACTIONABLE_RUNWAY_LINE.test(actionSemantics)) {
       patterns.forEach((pattern, index) => {
         if (testPattern(pattern, primaryActionClause)) matched[index] = false;
       });
