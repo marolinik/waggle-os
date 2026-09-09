@@ -29,7 +29,6 @@ import {
   getWikiPage,
   getWikiPageContent,
   isFirstLaunch,
-  markFirstLaunchComplete,
   resetFirstLaunch,
   ensureDesktopService,
   listenDesktopServiceLifecycle,
@@ -324,12 +323,6 @@ describe('onboarding flag bindings (A10)', () => {
     mockedInvoke.mockResolvedValue(true);
     expect(await isFirstLaunch()).toBe(true);
     expect(mockedInvoke).toHaveBeenCalledWith('is_first_launch');
-  });
-
-  it('markFirstLaunchComplete invokes void IPC', async () => {
-    mockedInvoke.mockResolvedValue(undefined);
-    await markFirstLaunchComplete();
-    expect(mockedInvoke).toHaveBeenCalledWith('mark_first_launch_complete');
   });
 
   it('resetFirstLaunch invokes void IPC', async () => {

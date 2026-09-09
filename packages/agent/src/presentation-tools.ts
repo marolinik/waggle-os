@@ -34,6 +34,14 @@ function hasUnsupportedImageInput(slide: unknown): boolean {
     || Object.prototype.hasOwnProperty.call(slide, 'images');
 }
 
+function inferTerseBulletItems(content: string | undefined): string[] | undefined {
+  if (!content?.includes('\n')) return undefined;
+  const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length < 2 || lines.length > 8) return undefined;
+  if (!lines.every(line => line.length <= 120 && !/[.!?]$/.test(line))) return undefined;
+  return lines;
+}
+
 // Hive DS colors for presentations
 const COLORS = {
   bg: '08090C',
@@ -51,6 +59,8 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
       description: [
         'Generate a PowerPoint presentation (.pptx) from structured slides.',
         'Provide slides as an array of { title?, subtitle?, content?, bullets?, layout?, notes?, table? }.',
+        'When the user requests bullets or a list, MUST put items in bullets[];',
+        'never encode a list as newline-separated content.',
         'Layouts: "title" (title slide), "content" (title+body), "two-column", "blank".',
         'Tables: { headers: string[], rows: string[][] }.',
         'Uses Hive DS brand colors (dark theme with honey accent).',
@@ -66,7 +76,46 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
           slides: {
             type: 'array' as const,
             description: 'Array of slide definitions',
-            items: { type: 'object' as const },
+            items: {
+              type: 'object' as const,
+              properties: {
+                title: { type: 'string' as const, description: 'Concise slide title' },
+                subtitle: { type: 'string' as const, description: 'Subtitle, primarily for title slides' },
+                content: {
+                  type: 'string' as const,
+                  description: 'Plain paragraph text only. Use bullets for any list.',
+                },
+                bullets: {
+                  type: 'array' as const,
+                  description: 'List of bullet items, one concise item per array entry',
+                  items: { type: 'string' as const },
+                },
+                layout: {
+                  type: 'string' as const,
+                  enum: ['title', 'content', 'two-column', 'blank'],
+                  description: 'Slide layout',
+                },
+                notes: { type: 'string' as const, description: 'Optional speaker notes' },
+                table: {
+                  type: 'object' as const,
+                  description: 'Optional editable table',
+                  required: ['headers', 'rows'],
+                  properties: {
+                    headers: {
+                      type: 'array' as const,
+                      items: { type: 'string' as const },
+                    },
+                    rows: {
+                      type: 'array' as const,
+                      items: {
+                        type: 'array' as const,
+                        items: { type: 'string' as const },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
           title: { type: 'string' as const, description: 'Presentation title' },
           author: { type: 'string' as const, description: 'Author name' },
@@ -143,8 +192,11 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
               }
 
               const contentY = slideDef.title ? 1.1 : 0.3;
+              const bulletItems = slideDef.bullets?.length
+                ? slideDef.bullets
+                : inferTerseBulletItems(slideDef.content);
 
-              if (slideDef.content) {
+              if (slideDef.content && !bulletItems) {
                 slide.addText(slideDef.content, {
                   x: 0.5, y: contentY, w: '90%', h: 4,
                   fontSize: 14, color: COLORS.text,
@@ -153,15 +205,16 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
                 });
               }
 
-              if (slideDef.bullets && slideDef.bullets.length > 0) {
-                const bulletText = slideDef.bullets.map(b => ({
+              if (bulletItems) {
+                const bulletText = bulletItems.map(b => ({
                   text: b,
                   options: {
                     fontSize: 14,
                     color: COLORS.text,
-                    fontFace: 'Arial',
-                    bullet: { type: 'bullet' as const, color: COLORS.honey },
-                    paraSpaceAfter: 6,
+                     fontFace: 'Arial',
+                     bullet: true,
+                     breakLine: true,
+                     paraSpaceAfter: 6,
                   },
                 }));
                 slide.addText(bulletText, {

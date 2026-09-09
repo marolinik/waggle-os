@@ -297,9 +297,20 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     if (!isSafeMemoryIngress(content, title, tags)) {
       return reply.status(400).send({ error: 'Memory content could not be saved.' });
     }
-    const workspace = b.workspace ?? b.workspaceId;
+    const workspaceInputs: unknown[] = [b.workspace, b.workspaceId]
+      .filter((value) => value !== undefined);
+    if (
+      workspaceInputs.some((value) => typeof value !== 'string' || value.trim().length === 0)
+      || (workspaceInputs.length === 2 && workspaceInputs[0] !== workspaceInputs[1])
+    ) {
+      return reply.status(400).send({ error: 'workspace must be a non-empty string' });
+    }
+    const workspace = workspaceInputs[0] as string | undefined;
 
     let targetDb = workspace ? server.agentState.getWorkspaceMindDb(workspace) : undefined;
+    if (workspace && !targetDb) {
+      return reply.status(404).send({ error: 'Workspace not found' });
+    }
     let mind = targetDb ? 'workspace' : 'personal';
     if (!targetDb) {
       targetDb = server.multiMind.personal;
@@ -331,8 +342,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     frames.setMetadata(frame.id, JSON.stringify(meta));
 
     emitAuditEvent(server, {
-      // Attribute to the RESOLVED mind — an unknown workspace falls back to the
-      // personal store above, and the audit row must say so (review finding).
+      // Attribute to the resolved mind; personal is valid only when workspace is omitted.
       workspaceId: mind === 'workspace' && workspace ? workspace : 'personal',
       eventType: 'memory_write',
       input: JSON.stringify({ content: content.slice(0, 500), kind: meta.kind, source: 'memory-create' }),

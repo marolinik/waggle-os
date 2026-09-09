@@ -78,7 +78,10 @@ function routeWithSkip(route: string) {
 
 async function gotoApp(page: Page, route: string) {
   await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
+  await page.getByRole('banner', { name: 'Application status' }).waitFor({
+    state: 'visible',
+    timeout: 15_000,
+  });
   // Let lazy route content and the shell's 200ms entrance transition settle
   // before axe samples transient dialog/backdrop layers.
   await page.waitForTimeout(800);
@@ -122,7 +125,37 @@ async function seedWaggleDanceSignal(request: APIRequestContext) {
   expect(response.status()).toBe(201);
 }
 
+async function seedCompletedOnboarding(page: Page, request: APIRequestContext) {
+  const statusResponse = await request.get('/api/onboarding/status');
+  expect(statusResponse.status(), await statusResponse.text()).toBe(200);
+  const status = await statusResponse.json() as { completed: boolean; profileId?: string };
+  expect(status.profileId).toMatch(/^[0-9a-f-]{36}$/i);
+
+  if (!status.completed) {
+    const completeResponse = await request.post('/api/onboarding/complete', {
+      data: { expectedProfileId: status.profileId },
+    });
+    expect(completeResponse.status(), await completeResponse.text()).toBe(200);
+  }
+
+  await page.addInitScript((profileId: string) => {
+    window.localStorage.setItem('waggle:onboarding', JSON.stringify({
+      completed: true,
+      step: 7,
+      profileId,
+      tier: 'power',
+      tooltipsDismissed: true,
+    }));
+    window.localStorage.setItem('waggle:first-run', 'done');
+    window.localStorage.setItem('waggle-booted', 'true');
+  }, status.profileId!);
+}
+
 test.describe('Runtime accessibility smoke', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await seedCompletedOnboarding(page, request);
+  });
+
   test('milestone toast and signal badges have no mobile accessibility violations', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedWaggleDanceSignal(request);
@@ -138,6 +171,39 @@ test.describe('Runtime accessibility smoke', () => {
 
     expect(formatViolations(await runAxe(page))).toEqual([]);
   });
+
+  for (const theme of ['dark', 'light'] as const) {
+    test(`active Chat metadata remains accessible in the ${theme} theme`, async ({ page, request }) => {
+      const createSession = await request.post('/api/workspaces/default-workspace/sessions', {
+        data: { title: `${theme} contrast ${Date.now()}` },
+      });
+      expect(createSession.status(), await createSession.text()).toBe(201);
+      const session = await createSession.json() as { id: string };
+
+      try {
+        await page.addInitScript((resolvedTheme: 'dark' | 'light') => {
+          window.localStorage.setItem('waggle-theme', resolvedTheme);
+        }, theme);
+        await gotoApp(page, '/workspaces/default-workspace/chat');
+
+        if (theme === 'light') {
+          await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+        } else {
+          await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'light');
+        }
+        const sessionButton = page.locator(`[data-session-id="${session.id}"]`);
+        await sessionButton.click();
+        await expect(sessionButton).toHaveAttribute('aria-current', 'true');
+        await expect(sessionButton.getByText('0 msgs', { exact: false })).toBeVisible();
+        await expect(page.getByTestId('chat-model-health-label')).toBeVisible();
+        expect(formatViolations(await runAxe(page))).toEqual([]);
+      } finally {
+        const deleteSession = await request.delete(`/api/sessions/${session.id}?workspace=default-workspace`);
+        expect(deleteSession.status()).toBe(200);
+        expect(await deleteSession.json()).toEqual({ deleted: true });
+      }
+    });
+  }
 
   for (const viewport of VIEWPORTS) {
     test(`axe has no violations across core routes (${viewport.name})`, async ({ page, request }) => {

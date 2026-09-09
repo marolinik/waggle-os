@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { execFile, type ChildProcess } from 'node:child_process';
+import ExcelJS from 'exceljs';
 import { glob } from 'glob';
+import JSZip from 'jszip';
 import type { ToolDefinition } from './tools.js';
 import { SearchCache, RateLimiter } from './web-search-utils.js';
 import { dedupTextResults, truncateToTokenBudget } from './tool-output-compressor.js';
@@ -39,6 +41,29 @@ export interface SystemToolDeps {
   fileBackend?: FileBackend;
   /** Deny reads of well-known secret material for user-linked workspace roots. */
   denySensitiveFiles?: boolean;
+}
+
+export interface ToolExecutionOutcome {
+  content: string;
+  isError: boolean;
+}
+
+type StructuredToolExecutor = (
+  args: Record<string, unknown>,
+) => Promise<ToolExecutionOutcome>;
+
+const structuredToolExecutors = new WeakMap<ToolDefinition, StructuredToolExecutor>();
+
+export async function executeToolWithStatus(
+  tool: ToolDefinition,
+  args: Record<string, unknown>,
+): Promise<ToolExecutionOutcome> {
+  const structuredExecutor = structuredToolExecutors.get(tool);
+  if (structuredExecutor) return structuredExecutor(args);
+  return {
+    content: `Error: structured execution status unavailable for tool "${tool.name}".`,
+    isError: true,
+  };
 }
 
 /** Prefer a repository README over GitHub navigation chrome for exact repo-root fetches. */
@@ -80,6 +105,74 @@ export function extractWebPageText(body: string, sourceUrl: string): string {
 const searchCache = new SearchCache(300_000); // 5 min TTL
 const searchRateLimiter = new RateLimiter(10, 60_000); // 10 searches per minute
 
+const OFFICE_DOCUMENT_EXTENSIONS = new Set(['.docx', '.pptx', '.xlsx']);
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+function extractTaggedText(xml: string, tag: string): string[] {
+  const pattern = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'g');
+  return [...xml.matchAll(pattern)].map(match => decodeXmlText(match[1])).filter(Boolean);
+}
+
+async function extractDocumentText(buffer: Buffer, ext: string): Promise<string> {
+  if (ext === '.pdf') {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      return (await parser.getText()).text.trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  if (ext === '.xlsx') {
+    const workbook = new ExcelJS.Workbook();
+    const workbookBytes = Uint8Array.from(buffer).buffer as ArrayBuffer;
+    await workbook.xlsx.load(workbookBytes);
+    return workbook.worksheets.map((worksheet) => {
+      const rows: string[] = [];
+      worksheet.eachRow((row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        rows.push(values.map((value) => {
+          if (value === null || value === undefined) return '';
+          if (typeof value === 'object' && 'result' in value) return String(value.result ?? '');
+          if (typeof value === 'object' && 'text' in value) return String(value.text ?? '');
+          return String(value);
+        }).join(','));
+      });
+      return `--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`;
+    }).join('\n\n').trim();
+  }
+
+  const archive = await JSZip.loadAsync(buffer);
+  if (ext === '.docx') {
+    const document = archive.file('word/document.xml');
+    if (!document) throw new Error('DOCX document body is missing');
+    const xml = await document.async('string');
+    const paragraphs = [...xml.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)]
+      .map(match => extractTaggedText(match[1], 'w:t').join(''))
+      .filter(Boolean);
+    return paragraphs.join('\n').trim();
+  }
+
+  const slides = Object.keys(archive.files)
+    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => Number(a.match(/(\d+)\.xml$/)?.[1]) - Number(b.match(/(\d+)\.xml$/)?.[1]));
+  return (await Promise.all(slides.map(async (name, index) => {
+    const xml = await archive.file(name)!.async('string');
+    return `--- Slide ${index + 1} ---\n${extractTaggedText(xml, 'a:t').join('\n')}`;
+  }))).join('\n\n').trim();
+}
+
 /** Background task tracking */
 interface BackgroundTask {
   process: ChildProcess;
@@ -98,6 +191,231 @@ const MAX_BACKGROUND_TASKS = 100;
 
 /** Maximum age (ms) for stale completed tasks — 30 minutes */
 const STALE_TASK_THRESHOLD_MS = 30 * 60 * 1000;
+
+const DECISION_MATRIX_MAX_ITEMS = 5;
+const DECISION_MATRIX_MAX_NAME_LENGTH = 64;
+const DECISION_MATRIX_MAX_VALUE = 100;
+
+function roundDecisionNumber(value: number): number {
+  const rounded = Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function decisionMatrixError(detail: string): string {
+  return `Error: Invalid decision matrix: ${detail}`;
+}
+
+function parseDecisionName(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} name must be text`);
+  const name = value.trim();
+  if (
+    name.length === 0
+    || name.length > DECISION_MATRIX_MAX_NAME_LENGTH
+    || Array.from(name).some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 32
+        || codePoint === 127
+        || /(?:\p{Cf}|\p{Zl}|\p{Zp})/u.test(character);
+    })
+  ) {
+    throw new Error(`${label} name must be 1-${DECISION_MATRIX_MAX_NAME_LENGTH} printable characters`);
+  }
+  return name;
+}
+
+function parseDecisionNumber(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number'
+    || !Number.isFinite(value)
+    || value < 0
+    || value > DECISION_MATRIX_MAX_VALUE
+  ) {
+    throw new Error(`${label} must be a finite number from 0 to ${DECISION_MATRIX_MAX_VALUE}`);
+  }
+  return value;
+}
+
+function ensureUniqueDecisionNames(names: readonly string[], label: string): void {
+  const normalized = names.map((name) => name.toLocaleLowerCase('en-US'));
+  if (new Set(normalized).size !== normalized.length) {
+    throw new Error(`${label} names must be unique`);
+  }
+}
+
+function compareDecisionNames(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function calculateDecisionMatrix(args: Record<string, unknown>): string {
+  try {
+    if (
+      !Array.isArray(args.criteria)
+      || args.criteria.length < 1
+      || args.criteria.length > DECISION_MATRIX_MAX_ITEMS
+    ) {
+      throw new Error(`criteria must contain 1-${DECISION_MATRIX_MAX_ITEMS} items`);
+    }
+    if (
+      !Array.isArray(args.options)
+      || args.options.length < 2
+      || args.options.length > DECISION_MATRIX_MAX_ITEMS
+    ) {
+      throw new Error(`options must contain 2-${DECISION_MATRIX_MAX_ITEMS} items`);
+    }
+
+    const criteria = args.criteria.map((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error(`criterion ${index + 1} must be an object`);
+      }
+      const criterion = candidate as Record<string, unknown>;
+      return {
+        name: parseDecisionName(criterion.name, `criterion ${index + 1}`),
+        weight: parseDecisionNumber(criterion.weight, `criterion ${index + 1} weight`),
+      };
+    });
+    ensureUniqueDecisionNames(criteria.map((criterion) => criterion.name), 'criterion');
+
+    const options = args.options.map((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error(`option ${index + 1} must be an object`);
+      }
+      const option = candidate as Record<string, unknown>;
+      const name = parseDecisionName(option.name, `option ${index + 1}`);
+      if (!Array.isArray(option.scores) || option.scores.length !== criteria.length) {
+        throw new Error(`option ${index + 1} must provide exactly ${criteria.length} scores`);
+      }
+      const scores = option.scores.map((score, scoreIndex) => (
+        parseDecisionNumber(score, `option ${index + 1} score ${scoreIndex + 1}`)
+      ));
+      const weightedScores = criteria.map((criterion, criterionIndex) => ({
+        criterion: criterion.name,
+        weight: criterion.weight,
+        score: scores[criterionIndex],
+        weightedScore: roundDecisionNumber(criterion.weight * scores[criterionIndex]),
+      }));
+      const total = roundDecisionNumber(
+        weightedScores.reduce((sum, item) => sum + item.weightedScore, 0),
+      );
+      return {
+        name,
+        scores,
+        weightedScores,
+        checksum: `${weightedScores.map((item) => item.weightedScore).join(' + ')} = ${total}`,
+        total,
+      };
+    });
+    ensureUniqueDecisionNames(options.map((option) => option.name), 'option');
+
+    const ranking = options
+      .map((option) => ({ name: option.name, total: option.total }))
+      .sort((left, right) => right.total - left.total || compareDecisionNames(left.name, right.name));
+    const topTotal = ranking[0].total;
+    const tiedOptions = ranking
+      .filter((item) => Math.abs(item.total - topTotal) < 0.000001)
+      .map((item) => item.name);
+    const result: Record<string, unknown> = {
+      formula: 'weighted score = weight * raw score',
+      criteria,
+      options: options.map((option) => ({
+        name: option.name,
+        scores: option.scores,
+        weightedScores: option.weightedScores.map((item) => item.weightedScore),
+        checksum: option.checksum,
+        total: option.total,
+      })),
+      ranking,
+      decision: {
+        winner: tiedOptions.length === 1 ? tiedOptions[0] : null,
+        tied: tiedOptions.length > 1,
+        tiedOptions: tiedOptions.length > 1 ? tiedOptions : [],
+      },
+    };
+
+    if (args.sensitivityCriterion !== undefined) {
+      if (options.length !== 2) {
+        throw new Error('sensitivity analysis requires exactly two options');
+      }
+      const requestedCriterion = parseDecisionName(
+        args.sensitivityCriterion,
+        'sensitivity criterion',
+      );
+      const criterionIndex = criteria.findIndex((criterion) => (
+        criterion.name.toLocaleLowerCase('en-US')
+        === requestedCriterion.toLocaleLowerCase('en-US')
+      ));
+      if (criterionIndex < 0) throw new Error('sensitivity criterion must match a criterion name');
+
+      const criterion = criteria[criterionIndex];
+      const equations = options.map((option) => {
+        const criterionContribution = option.weightedScores[criterionIndex].weightedScore;
+        const fixedTotal = roundDecisionNumber(option.total - criterionContribution);
+        const criterionScore = option.scores[criterionIndex];
+        return {
+          name: option.name,
+          fixedTotal,
+          criterionScore,
+          equation: `${fixedTotal} + (${criterionScore} * weight)`,
+        };
+      });
+      const baselineWinner = tiedOptions.length === 1 ? tiedOptions[0] : null;
+      const denominator = equations[0].criterionScore - equations[1].criterionScore;
+      const rawTieWeight = denominator === 0
+        ? null
+        : (equations[1].fixedTotal - equations[0].fixedTotal) / denominator;
+      const tieWeight = rawTieWeight !== null && Number.isFinite(rawTieWeight)
+        ? roundDecisionNumber(rawTieWeight)
+        : null;
+      let firstWholeNumberWeightWhereWinnerChanges: number | null = null;
+      let winnerAtFirstWholeNumber: string | null = null;
+      let totalsAtFirstWholeNumber: Record<string, number> | null = null;
+
+      if (
+        baselineWinner
+        && tieWeight !== null
+        && tieWeight >= 0
+        && tieWeight <= DECISION_MATRIX_MAX_VALUE
+        && Math.abs(tieWeight - criterion.weight) > 0.000001
+      ) {
+        const direction = tieWeight > criterion.weight ? 1 : -1;
+        let candidate = direction > 0 ? Math.floor(tieWeight) + 1 : Math.ceil(tieWeight) - 1;
+        while (candidate >= 0 && candidate <= DECISION_MATRIX_MAX_VALUE) {
+          const totals = Object.fromEntries(equations.map((equation) => [
+            equation.name,
+            roundDecisionNumber(equation.fixedTotal + equation.criterionScore * candidate),
+          ]));
+          const candidateRanking = Object.entries(totals)
+            .sort((left, right) => right[1] - left[1]);
+          if (
+            candidateRanking.length === 2
+            && candidateRanking[0][1] > candidateRanking[1][1]
+            && candidateRanking[0][0] !== baselineWinner
+          ) {
+            firstWholeNumberWeightWhereWinnerChanges = candidate;
+            winnerAtFirstWholeNumber = candidateRanking[0][0];
+            totalsAtFirstWholeNumber = totals;
+            break;
+          }
+          candidate += direction;
+        }
+      }
+
+      result.sensitivity = {
+        criterion: criterion.name,
+        baselineWeight: criterion.weight,
+        baselineWinner,
+        equations,
+        tieWeight,
+        firstWholeNumberWeightWhereWinnerChanges,
+        totalsAtFirstWholeNumber,
+        winnerAtFirstWholeNumber,
+      };
+    }
+
+    return JSON.stringify(result);
+  } catch (error) {
+    return decisionMatrixError(error instanceof Error ? error.message : 'invalid input');
+  }
+}
 
 /**
  * Evict the oldest completed/failed/killed task when the map exceeds MAX_BACKGROUND_TASKS.
@@ -186,6 +504,93 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     resolveSafe(workspace, pattern);
     return pattern;
   };
+
+  const executeReadFileWithStatus: StructuredToolExecutor = async (args) => {
+    try {
+      const filePath = args.path as string;
+      const ext = path.extname(filePath).toLowerCase();
+
+      // Read once from the active storage boundary, then decode by file type.
+      let content: string;
+      let buffer: Buffer;
+      if (fileBackend) {
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          return {
+            content: `[Image file: ${filePath}, binary content not read over storage backend]`,
+            isError: false,
+          };
+        }
+        const key = resolveReadableBackendKey(filePath);
+        buffer = await fileBackend.read(key);
+      } else {
+        const resolved = resolveReadablePath(filePath);
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          const stat = fs.statSync(resolved);
+          return { content: `[Image file: ${filePath}, ${stat.size} bytes]`, isError: false };
+        }
+        buffer = fs.readFileSync(resolved);
+      }
+
+      if (ext === '.pdf' || OFFICE_DOCUMENT_EXTENSIONS.has(ext)) {
+        try {
+          content = await extractDocumentText(buffer, ext);
+          if (!content) content = `[${ext.slice(1).toUpperCase()} file: ${filePath}, ${buffer.length} bytes, no text content extracted]`;
+        } catch (error) {
+          return {
+            content: `[${ext.slice(1).toUpperCase()} file: ${filePath}, ${buffer.length} bytes, text extraction failed: ${error instanceof Error ? error.message : String(error)}]`,
+            isError: true,
+          };
+        }
+      } else {
+        content = buffer.toString('utf-8');
+      }
+
+      let lines = content.split('\n');
+      const offset = (args.offset as number) ?? 1;
+      const limit = args.limit as number | undefined;
+      const lineNumbers = (args.line_numbers as boolean) ?? false;
+      const startIdx = Math.max(0, offset - 1);
+      lines = lines.slice(startIdx);
+
+      if (limit !== undefined && limit > 0) {
+        lines = lines.slice(0, limit);
+      }
+
+      if (lineNumbers) {
+        const maxLineNum = startIdx + lines.length;
+        const padWidth = String(maxLineNum).length;
+        lines = lines.map((line, i) => {
+          const lineNum = String(startIdx + i + 1).padStart(padWidth, ' ');
+          return `${lineNum}\t${line}`;
+        });
+      }
+
+      return { content: lines.join('\n'), isError: false };
+    } catch (err: unknown) {
+      return {
+        content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  };
+
+  const readFileTool: ToolDefinition = {
+    name: 'read_file',
+    description: 'Read text from a workspace file, including PDF, DOCX, PPTX, and XLSX documents. Supports offset/limit for partial reads and line numbers.',
+    offlineCapable: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to workspace' },
+        offset: { type: 'number', description: 'Starting line number (1-based, default: 1)' },
+        limit: { type: 'number', description: 'Maximum number of lines to return (default: all)' },
+        line_numbers: { type: 'boolean', description: 'If true, prefix each line with its right-aligned line number (default: false)' },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => (await executeReadFileWithStatus(args)).content,
+  };
+  structuredToolExecutors.set(readFileTool, executeReadFileWithStatus);
 
   return [
     // 1. bash — Execute shell commands
@@ -290,101 +695,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     },
 
     // 2. read_file — Read file contents
-    {
-      name: 'read_file',
-      description: 'Read the contents of a file (path relative to workspace). Supports offset/limit for partial reads and line numbers.',
-      offlineCapable: true,
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to workspace' },
-          offset: { type: 'number', description: 'Line number to start reading from (1-based, default: 1)' },
-          limit: { type: 'number', description: 'Maximum number of lines to return (default: all)' },
-          line_numbers: { type: 'boolean', description: 'When true, prefix each line with right-aligned line number (default: false)' },
-        },
-        required: ['path'],
-      },
-      execute: async (args) => {
-        try {
-          const filePath = args.path as string;
-          const ext = path.extname(filePath).toLowerCase();
-
-          // Image / PDF branches are fs-only for v1. Team-storage users will see
-          // backend routing for text files; images/PDFs stay on local disk until
-          // Bucket 2 adds binary-stream support in the backend contract.
-          if (!fileBackend) {
-            const resolved = resolveReadablePath(filePath);
-
-            if (IMAGE_EXTENSIONS.has(ext)) {
-              const stat = fs.statSync(resolved);
-              return `[Image file: ${filePath}, ${stat.size} bytes]`;
-            }
-            if (ext === '.pdf') {
-              const stat = fs.statSync(resolved);
-              try {
-                // pdf-parse is an optional CJS module; describe only the call we make.
-                type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
-                const pdfModule = (await import('pdf-parse')) as unknown as
-                  PdfParseFn & { default?: PdfParseFn };
-                const buffer = fs.readFileSync(resolved);
-                const parseFn: PdfParseFn = pdfModule.default ?? pdfModule;
-                const data = await parseFn(buffer);
-                const text = data.text;
-                return text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`;
-              } catch {
-                return `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`;
-              }
-            }
-          }
-
-          // Text read — branch on backend presence.
-          let content: string;
-          if (fileBackend) {
-            if (IMAGE_EXTENSIONS.has(ext)) {
-              return `[Image file: ${filePath}, binary content not read over storage backend]`;
-            }
-            if (ext === '.pdf') {
-              return `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`;
-            }
-            const key = resolveReadableBackendKey(filePath);
-            const buf = await fileBackend.read(key);
-            content = buf.toString('utf-8');
-          } else {
-            const resolved = resolveReadablePath(filePath);
-            content = fs.readFileSync(resolved, 'utf-8');
-          }
-
-          let lines = content.split('\n');
-
-          const offset = (args.offset as number) ?? 1;
-          const limit = args.limit as number | undefined;
-          const lineNumbers = (args.line_numbers as boolean) ?? false;
-
-          // Apply offset (1-based)
-          const startIdx = Math.max(0, offset - 1);
-          lines = lines.slice(startIdx);
-
-          // Apply limit
-          if (limit !== undefined && limit > 0) {
-            lines = lines.slice(0, limit);
-          }
-
-          // Apply line numbers
-          if (lineNumbers) {
-            const maxLineNum = startIdx + lines.length;
-            const padWidth = String(maxLineNum).length;
-            lines = lines.map((line, i) => {
-              const lineNum = String(startIdx + i + 1).padStart(padWidth, ' ');
-              return `${lineNum}\t${line}`;
-            });
-          }
-
-          return lines.join('\n');
-        } catch (err: unknown) {
-          return `Error: ${err instanceof Error ? err.message : String(err)}`;
-        }
-      },
-    },
+    readFileTool,
 
     // 3. write_file — Create/overwrite files
     {
@@ -1065,6 +1376,60 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         task.status = 'killed';
         return `Task ${taskId} has been killed`;
       },
+    },
+
+    // 13. calculate_decision_matrix — Deterministic, side-effect-free arithmetic
+    {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate and verify a weighted decision matrix. Use this as the sole numeric authority for weighted cells, checksums, totals, ranking, and optional two-option sensitivity analysis.',
+      riskLevel: 'low',
+      offlineCapable: true,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          criteria: {
+            type: 'array',
+            minItems: 1,
+            maxItems: DECISION_MATRIX_MAX_ITEMS,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: DECISION_MATRIX_MAX_NAME_LENGTH },
+                weight: { type: 'number', minimum: 0, maximum: DECISION_MATRIX_MAX_VALUE },
+              },
+              required: ['name', 'weight'],
+            },
+          },
+          options: {
+            type: 'array',
+            minItems: 2,
+            maxItems: DECISION_MATRIX_MAX_ITEMS,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: DECISION_MATRIX_MAX_NAME_LENGTH },
+                scores: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: DECISION_MATRIX_MAX_ITEMS,
+                  items: { type: 'number', minimum: 0, maximum: DECISION_MATRIX_MAX_VALUE },
+                },
+              },
+              required: ['name', 'scores'],
+            },
+          },
+          sensitivityCriterion: {
+            type: 'string',
+            minLength: 1,
+            maxLength: DECISION_MATRIX_MAX_NAME_LENGTH,
+          },
+        },
+        required: ['criteria', 'options'],
+      },
+      execute: async (args) => calculateDecisionMatrix(args),
     },
   ];
 }

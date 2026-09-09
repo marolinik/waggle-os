@@ -50,6 +50,21 @@ describe('renderChatMarkdown', () => {
     expect(html).toContain('2.&nbsp;four');
   });
 
+  it('renders model comparison tables as responsive semantic tables', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown([
+      '| Criterion | Choice |',
+      '| --- | :---: |',
+      '| **Safety** | Concierge |',
+    ].join('\n'));
+
+    expect(host.querySelector('table')).not.toBeNull();
+    expect(host.querySelectorAll('th')).toHaveLength(2);
+    expect(host.querySelector('th')?.textContent).toBe('Criterion');
+    expect(host.querySelector('td strong')?.textContent).toBe('Safety');
+    expect(host.textContent).not.toContain('|');
+  });
+
   it('renders horizontal rules', () => {
     expect(renderChatMarkdown('---')).toContain('<hr');
   });
@@ -129,7 +144,7 @@ describe('renderChatMarkdown', () => {
     expect(safeHost.querySelector('script')).toBeNull();
     expect(safeHost.querySelector('pre code')?.textContent).toBe('<script>alert(1)</script>');
 
-    const unsafeHtml = renderChatMarkdown('```\"><img src=x onerror=alert(1)>\nbody');
+    const unsafeHtml = renderChatMarkdown('```"><img src=x onerror=alert(1)>\nbody');
     expect(unsafeHtml).not.toContain('<img');
     expect(unsafeHtml).not.toContain('onerror="');
   });

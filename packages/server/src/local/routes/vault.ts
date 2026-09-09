@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { clearSkillRequirementsCache } from '@waggle/agent';
 import { isLocalRequest } from '../origin-guard.js';
+import { PROVIDER_ENV_NAMES } from '../provider-env.js';
 import { validateBody } from '../../validate-body.js';
 
 /** POST /api/vault body — a secret write (name + value, optional credential type). */
@@ -109,6 +110,14 @@ const SUGGESTED_SECRETS: { category: string; items: { name: string; type: string
 
 /** Flat list of all suggested secret names */
 const COMMON_KEYS = SUGGESTED_SECRETS.flatMap(c => c.items.map(i => i.name));
+const RESERVED_PROVIDER_KEYS = new Set([
+  ...Object.keys(PROVIDER_ENV_NAMES),
+  'openai-compatible',
+]);
+
+function isReservedProviderKey(name: string): boolean {
+  return RESERVED_PROVIDER_KEYS.has(name.trim().toLowerCase());
+}
 
 export async function vaultRoutes(fastify: FastifyInstance) {
   // GET /api/vault — list all secrets (names, types, dates — NO values)
@@ -125,12 +134,14 @@ export async function vaultRoutes(fastify: FastifyInstance) {
       isCommon: COMMON_KEYS.includes(entry.name),
     }));
 
-    const suggestedKeys = COMMON_KEYS.filter(k => !existingNames.has(k));
+    const suggestedKeys = COMMON_KEYS.filter(k => (
+      !existingNames.has(k) && !isReservedProviderKey(k)
+    ));
 
     // Categorized suggestions with labels (for dropdown UI)
     const suggestedSecrets = SUGGESTED_SECRETS.map(cat => ({
       category: cat.category,
-      items: cat.items.filter(i => !existingNames.has(i.name)),
+      items: cat.items.filter(i => !existingNames.has(i.name) && !isReservedProviderKey(i.name)),
     })).filter(cat => cat.items.length > 0);
 
     return { secrets, suggestedKeys, suggestedSecrets };
@@ -143,6 +154,12 @@ export async function vaultRoutes(fastify: FastifyInstance) {
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
     const { name, value, type } = request.body as z.infer<typeof vaultUpsertSchema>;
+    if (isReservedProviderKey(name)) {
+      return reply.code(409).send({
+        code: 'PROVIDER_CREDENTIAL_MANAGED_BY_SETTINGS',
+        error: 'LLM provider credentials must be changed in Model Settings.',
+      });
+    }
 
     fastify.vault.set(name, value, type ? { credentialType: type } : undefined);
 
@@ -159,6 +176,12 @@ export async function vaultRoutes(fastify: FastifyInstance) {
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
     const { name } = request.params as { name: string };
+    if (isReservedProviderKey(name)) {
+      return reply.code(409).send({
+        code: 'PROVIDER_CREDENTIAL_MANAGED_BY_SETTINGS',
+        error: 'LLM provider credentials must be changed in Model Settings.',
+      });
+    }
     const deleted = fastify.vault.delete(name);
 
     if (!deleted) {

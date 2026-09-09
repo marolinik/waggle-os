@@ -80,6 +80,16 @@ async function searchMemory(request: APIRequestContext, query: string, workspace
   return request.get(`${API}/api/memory/search?q=${encodeURIComponent(query)}&workspace=${encodeURIComponent(workspace)}&limit=${limit}`);
 }
 
+async function createWorkspace(request: APIRequestContext, name: string): Promise<string> {
+  const response = await request.post(`${API}/api/workspaces`, {
+    data: { name, group: 'Workspaces' },
+  });
+  expect(response.status()).toBe(201);
+  const workspace = await response.json();
+  expect(workspace.id).toEqual(expect.any(String));
+  return workspace.id;
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // BENCHMARK 1 — LATENCY
 // Baseline: ChatGPT web ~800ms, Claude.ai ~600ms, Claude Code ~200ms (local)
@@ -129,8 +139,9 @@ test.describe('B1 — Latency Benchmark (vs ChatGPT / Claude.ai)', () => {
 
   test('B1.6 — Memory search < 500ms [Claude Code: no memory API, ChatGPT: ~800ms]', async ({ request }) => {
     await request.get(`${API}/health`); // warm-up
+    const workspace = await createWorkspace(request, `latency-bench-${Date.now()}`);
     const { result, ms } = await timed(() =>
-      searchMemory(request, 'benchmark latency test', 'default', 5)
+      searchMemory(request, 'benchmark latency test', workspace, 5)
     );
     expect(result.ok()).toBe(true);
     // Sub-500ms semantic search is the moat — competitors can't do this locally
@@ -192,7 +203,7 @@ test.describe('B2 — Memory Persistence (vs ChatGPT / Claude Code / Hermes)', (
   });
 
   test('B2.2 — Semantic recall finds concepts, not just keywords (Paperclip fails this)', async ({ request }) => {
-    const ws = `semantic-bench-${Date.now()}`;
+    const ws = await createWorkspace(request, `semantic-bench-${Date.now()}`);
 
     // Store: specific fact
     await saveMemory(request, 'I lead a team building an enterprise AI platform for regulated markets in Serbia.', ws);
@@ -227,8 +238,8 @@ test.describe('B2 — Memory Persistence (vs ChatGPT / Claude Code / Hermes)', (
   });
 
   test('B2.4 — Memory isolation: 100% workspace separation (Hermes has no isolation)', async ({ request }) => {
-    const wsA = `isolation-bench-a-${Date.now()}`;
-    const wsB = `isolation-bench-b-${Date.now()}`;
+    const wsA = await createWorkspace(request, `isolation-bench-a-${Date.now()}`);
+    const wsB = await createWorkspace(request, `isolation-bench-b-${Date.now()}`);
     const secretData = `BENCH-SECRET-${Math.random().toString(36).slice(2)}`;
 
     await saveMemory(request, `Confidential: ${secretData}`, wsA);
@@ -411,7 +422,11 @@ test.describe('B4 — Multi-Agent Concurrency (vs Claude Code / ChatGPT / OpenCl
 
   test('B4.4 — 4 simultaneous memory searches complete without collision', async ({ request }) => {
     // Simulate 4 parallel agent sessions each searching memory
-    const workspaces = ['ws-agent-1', 'ws-agent-2', 'ws-agent-3', 'ws-agent-4'];
+    const workspaces = await Promise.all(
+      ['ws-agent-1', 'ws-agent-2', 'ws-agent-3', 'ws-agent-4'].map((name) =>
+        createWorkspace(request, `${name}-${Date.now()}`)
+      )
+    );
     const { result: results, ms } = await timed(async () =>
       Promise.all(workspaces.map(ws =>
         searchMemory(request, 'agent benchmark search', ws, 3)
@@ -564,6 +579,7 @@ test.describe('B5 — Security Hardening (vs all competitors)', () => {
   });
 
   test('B5.5 — SQL injection in search query returns safe response', async ({ request }) => {
+    const workspace = await createWorkspace(request, `sql-injection-bench-${Date.now()}`);
     const sqlInjections = [
       "'; DROP TABLE memory_frames; --",
       "1' OR '1'='1",
@@ -573,7 +589,7 @@ test.describe('B5 — Security Hardening (vs all competitors)', () => {
     ];
 
     for (const injection of sqlInjections) {
-      const res = await searchMemory(request, injection, 'default', 5);
+      const res = await searchMemory(request, injection, workspace, 5);
       // Must not crash — must handle safely
       expect(res.status(), `SQL injection caused crash: ${injection}`).not.toBe(500);
       expect([200, 400, 422]).toContain(res.status());
@@ -659,7 +675,8 @@ test.describe('B6 — Onboarding Friction (vs Claude Code / OpenClaw / Hermes)',
   test('B6.4 — Step 3: Memory works immediately (no embedding model download)', async ({ request }) => {
     // OpenClaw: must download model (1-3GB). Hermes: requires Ollama setup.
     // Waggle: in-process embedding via @huggingface/transformers or mock.
-    const res = await searchMemory(request, 'test', 'default', 1);
+    const workspace = await createWorkspace(request, `onboarding-memory-${Date.now()}`);
+    const res = await searchMemory(request, 'test', workspace, 1);
     // Must not return 503 "embedding not ready" — must work immediately
     expect(res.status()).not.toBe(503);
     expect([200, 400, 422]).toContain(res.status());
@@ -968,7 +985,7 @@ test.describe('B10 — Composite Competitive Score', () => {
   });
 
   test('B10.2 — MEMORY WIN: cross-session persistence [ChatGPT: 0%, Claude Code: 0%]', async ({ request }) => {
-    const ws = `composite-bench-${Date.now()}`;
+    const ws = await createWorkspace(request, `composite-bench-${Date.now()}`);
     await saveMemory(request, 'Composite benchmark test memory anchor', ws);
     await new Promise(r => setTimeout(r, 200));
     const res = await searchMemory(request, 'composite benchmark anchor', ws, 3);

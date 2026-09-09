@@ -293,11 +293,32 @@ export const sessionRoutes: FastifyPluginAsync = async (server) => {
     const filePath = path.join(
       server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
     );
+    const chatState = server.agentState.chatStateController;
+    if (!chatState) {
+      return reply.status(503).send({
+        error: 'Chat state is not ready. Try again.',
+        code: 'CHAT_STATE_UNAVAILABLE',
+      });
+    }
+    if (chatState.isSessionActive(workspaceId, sessionId)) {
+      return reply.status(409).send({
+        error: 'Cannot delete a session while it has an active turn.',
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+    }
     if (!fs.existsSync(filePath)) {
+      chatState.evictSession(workspaceId, sessionId);
       return reply.status(404).send({ error: 'Session not found' });
     }
 
-    fs.unlinkSync(filePath);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      chatState.evictSession(workspaceId, sessionId);
+      return reply.status(404).send({ error: 'Session not found' });
+    }
+    chatState.evictSession(workspaceId, sessionId);
     return { deleted: true };
   });
 

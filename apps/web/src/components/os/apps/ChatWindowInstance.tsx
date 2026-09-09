@@ -1,11 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
-import { useToast } from '@/hooks/use-toast';
-import { adapter } from '@/lib/adapter';
+import { toast as showToast, useToast } from '@/hooks/use-toast';
+import { adapter, MODEL_SETTINGS_CHANGED_EVENT } from '@/lib/adapter';
 import { formatModelLabel } from '@/lib/model-label';
+import {
+  acknowledgeChatDispatch,
+  claimNewChatSessionIntent,
+  completeNewChatSessionIntent,
+  enqueueChatDispatch,
+  usePendingChatDispatch,
+  usePendingNewChatSessionIntent,
+} from '@/hooks/useChatWidgetState';
 import ChatApp from './ChatApp';
-import type { TeamMember } from './ChatApp';
+import type { ModelCatalogStatus, ModelHealthStatus, TeamMember } from './ChatApp';
 
 type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
@@ -35,6 +43,11 @@ interface ChatWindowInstanceProps {
   onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
   /** ContextRail: triggered when user double-clicks a message. */
   onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
+  /** Exact session requested by the active workspace route. Undefined means
+   * this kept-alive workspace is hidden and should preserve its selection. */
+  preferredSessionId?: string | null;
+  /** Records an explicit user session choice in the active route. */
+  onSessionNavigate?: (sessionId: string, options?: { replace?: boolean }) => void;
 }
 
 const ChatWindowInstance = ({
@@ -51,26 +64,72 @@ const ChatWindowInstance = ({
   autonomyExpiresAt = null,
   onAutonomyChange,
   onContextRail,
+  preferredSessionId,
+  onSessionNavigate,
 }: ChatWindowInstanceProps) => {
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
 
   // Sync the local persona state when the parent sends a new initialPersona
   // (e.g. when PersonaSwitcher updates the window from outside ChatWindowInstance).
   useEffect(() => {
-    if (initialPersona && initialPersona !== currentPersona) {
-      setCurrentPersona(initialPersona);
+    if (initialPersona) {
+      setCurrentPersona(current => current === initialPersona ? current : initialPersona);
     }
   }, [initialPersona]);
 
-  const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
+  const {
+    sessions,
+    activeSessionId,
+    setActiveSessionId,
+    createSession,
+    revalidateSessions,
+    retrySessions,
+    loading: sessionLoading,
+    creating: sessionCreating,
+    error: sessionError,
+    listFailed: sessionListFailed,
+  } = useSessions(workspaceId, preferredSessionId);
+  const onSessionNavigateRef = useRef(onSessionNavigate);
+  onSessionNavigateRef.current = onSessionNavigate;
+  const isActiveChat = preferredSessionId !== undefined;
+  const isActiveChatRef = useRef(isActiveChat);
+  const wasActiveChatRef = useRef(isActiveChat);
+  isActiveChatRef.current = isActiveChat;
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
+    onSessionNavigateRef.current?.(sessionId);
+  }, [setActiveSessionId]);
+
+  const handleCreateSession = useCallback(async () => {
+    const session = await createSession();
+    if (session) onSessionNavigateRef.current?.(session.id);
+    return session;
+  }, [createSession]);
+
+  useEffect(() => {
+    if (
+      preferredSessionId === undefined
+      || sessionLoading
+      || !activeSessionId
+      || (typeof preferredSessionId === 'string'
+        && sessions.some(session => session.id === preferredSessionId))
+    ) return;
+    onSessionNavigateRef.current?.(activeSessionId, { replace: true });
+  }, [activeSessionId, preferredSessionId, sessionLoading, sessions]);
 
   const [currentModel, setCurrentModel] = useState<string>(initialModel ?? '');
+  const [modelHealthStatus, setModelHealthStatus] = useState<ModelHealthStatus>(
+    initialModel ? 'checking' : 'unconfigured',
+  );
   const currentModelRef = useRef(initialModel ?? '');
   const confirmedModelRef = useRef(initialModel ?? '');
   const initialModelRef = useRef(initialModel);
   const modelRevisionRef = useRef(0);
   const userSelectedModelRef = useRef(false);
   const modelPersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  const refreshCurrentModelRef = useRef<() => Promise<void>>(async () => {});
+  const refreshModelHealthRef = useRef<(announceChecking?: boolean) => Promise<void>>(async () => {});
 
   // The shell may finish loading the workspace after this kept-alive chat
   // mounts. Accept that workspace-scoped model until the user makes an
@@ -95,15 +154,102 @@ const ChatWindowInstance = ({
       ? { ...s, title: 'New session' }
       : s,
   );
-  const { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction } = useChat({
+  const {
+    messages,
+    isLoading,
+    historyLoaded,
+    historyReady = historyLoaded,
+    historyStatus,
+    historyError,
+    retryHistory,
+    sendMessage,
+    retryLastFailed,
+    stopStreaming,
+    clearHistory,
+    pendingApproval,
+    approveAction,
+  } = useChat({
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
     model: currentModel,
     autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
+    onTurnSettled: ({ workspaceId: settledWorkspaceId, sessionId: settledSessionId }) => {
+      void revalidateSessions(settledWorkspaceId, settledSessionId);
+    },
   });
+  const pendingNewChatSession = usePendingNewChatSessionIntent(workspaceId);
+  const pendingDispatch = usePendingChatDispatch(workspaceId);
+  const dispatchInFlightRef = useRef<string | null>(null);
+  const lastHandledDispatchIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !pendingNewChatSession
+      || isLoading
+      || sessionLoading
+      || sessionCreating
+    ) return;
+    if (!claimNewChatSessionIntent(workspaceId, pendingNewChatSession.id)) return;
+
+    void (async () => {
+      try {
+        const session = await handleCreateSession();
+        if (session && pendingNewChatSession.initialMessage) {
+          enqueueChatDispatch(workspaceId, pendingNewChatSession.initialMessage, session.id);
+        }
+      } catch {
+        // useSessions owns the visible error state; still release the intent.
+      } finally {
+        completeNewChatSessionIntent(workspaceId, pendingNewChatSession.id);
+      }
+    })();
+  }, [handleCreateSession, isLoading, pendingNewChatSession, sessionCreating, sessionLoading, workspaceId]);
+
+  useEffect(() => {
+    if (
+      !pendingDispatch
+      || !activeSessionId
+      || (pendingDispatch.targetSessionId && pendingDispatch.targetSessionId !== activeSessionId)
+      || sessionLoading
+      || sessionCreating
+      || !historyReady
+    ) return;
+    if (
+      dispatchInFlightRef.current === pendingDispatch.id
+      || lastHandledDispatchIdRef.current === pendingDispatch.id
+    ) return;
+
+    const { id, content } = pendingDispatch;
+    dispatchInFlightRef.current = id;
+    let accepted = false;
+    const discardUnaccepted = () => {
+      if (accepted) return;
+      lastHandledDispatchIdRef.current = id;
+      acknowledgeChatDispatch(workspaceId, id);
+      showToast({
+        title: 'Message not sent',
+        description: 'The chat was not ready. Try sending the message again.',
+        variant: 'destructive',
+      });
+    };
+    void sendMessage(content, {
+      onAccepted: () => {
+        accepted = true;
+        lastHandledDispatchIdRef.current = id;
+        acknowledgeChatDispatch(workspaceId, id);
+      },
+    })
+      .then(discardUnaccepted)
+      .catch(discardUnaccepted)
+      .finally(() => {
+        if (dispatchInFlightRef.current === id) dispatchInFlightRef.current = null;
+      });
+  }, [activeSessionId, historyReady, pendingDispatch, sendMessage, sessionCreating, sessionLoading, workspaceId]);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelCatalogStatus, setModelCatalogStatus] = useState<ModelCatalogStatus>('loading');
+  const refreshModelsRef = useRef<(announceLoading?: boolean) => Promise<void>>(async () => {});
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
   const { toast } = useToast();
@@ -127,38 +273,61 @@ const ChatWindowInstance = ({
     let cancelled = false;
     let modelsLanded = false;
     let currentLanded = false;
+    let modelRequest = 0;
+    let currentModelRequest = 0;
+    let modelFetchInFlight = false;
+    let currentModelFetchInFlight = false;
 
     // The sidecar merges LiteLLM, provider API catalogs, and local runtime models.
     // Keep an empty list on outage rather than presenting model IDs that may no
     // longer exist at the provider.
-    const fetchModels = async () => {
+    const fetchModels = async (announceLoading = false) => {
+      if (announceLoading) setModelCatalogStatus('loading');
+      if (modelFetchInFlight) return;
+      modelFetchInFlight = true;
+      const request = ++modelRequest;
       try {
         const models = await adapter.getModels();
-        if (cancelled) return;
+        if (cancelled || request !== modelRequest) return;
+        modelsLanded = true;
         if (models && models.length > 0) {
           setAvailableModels(models);
-          modelsLanded = true;
+          setModelCatalogStatus('ready');
         } else {
           setAvailableModels([]);
+          setModelCatalogStatus('empty');
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch models failed:', err);
-        if (!cancelled) setAvailableModels([]);
+        if (!cancelled && request === modelRequest) {
+          setAvailableModels([]);
+          setModelCatalogStatus('unavailable');
+        }
+      } finally {
+        modelFetchInFlight = false;
       }
     };
+    refreshModelsRef.current = fetchModels;
 
     // Try fetching the current active model from the sidecar. Also retries on
     // transient failure — the initial render may race the sidecar spawning.
-    const fetchCurrentModel = async () => {
+    const fetchCurrentModel = async (supersede = false) => {
       if (initialModelRef.current || userSelectedModelRef.current) {
         currentLanded = true;
         return;
       }
+      if (currentModelFetchInFlight && !supersede) return;
+      currentModelFetchInFlight = true;
+      const request = ++currentModelRequest;
       const loadRevision = modelRevisionRef.current;
       try {
         const model = await adapter.getModel();
-        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
-          currentLanded = true;
+        if (
+          cancelled
+          || request !== currentModelRequest
+          || userSelectedModelRef.current
+          || loadRevision !== modelRevisionRef.current
+        ) {
           return;
         }
         if (typeof model === 'string' && model) {
@@ -169,8 +338,12 @@ const ChatWindowInstance = ({
           return;
         }
         const settings = await adapter.getSettings();
-        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
-          currentLanded = true;
+        if (
+          cancelled
+          || request !== currentModelRequest
+          || userSelectedModelRef.current
+          || loadRevision !== modelRevisionRef.current
+        ) {
           return;
         }
         const fromSettings = (settings as { defaultModel?: string; model?: string }).defaultModel
@@ -183,8 +356,11 @@ const ChatWindowInstance = ({
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch current model failed:', err);
+      } finally {
+        if (request === currentModelRequest) currentModelFetchInFlight = false;
       }
     };
+    refreshCurrentModelRef.current = fetchCurrentModel;
 
     fetchModels();
     fetchCurrentModel();
@@ -202,27 +378,108 @@ const ChatWindowInstance = ({
       if (!currentLanded) fetchCurrentModel();
     }, 2000);
 
-    // Fetch team members for presence display
+    const refreshModelsOnFocus = () => {
+      if (!isActiveChatRef.current) return;
+      void fetchModels();
+      void fetchCurrentModel();
+      void refreshModelHealthRef.current(true);
+    };
+    const refreshInheritedModel = () => {
+      if (!isActiveChatRef.current) return;
+      void fetchCurrentModel(true);
+    };
+    window.addEventListener('focus', refreshModelsOnFocus);
+    window.addEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
+    return () => {
+      cancelled = true;
+      currentModelRequest += 1;
+      refreshModelsRef.current = async () => {};
+      refreshCurrentModelRef.current = async () => {};
+      window.removeEventListener('focus', refreshModelsOnFocus);
+      window.removeEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
+      clearInterval(retryInterval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (storageType !== 'team') {
+      setTeamPresence([]);
+      return;
+    }
+
+    let cancelled = false;
+    let fetchInFlight = false;
     const fetchTeam = async () => {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
       try {
         const members = await adapter.getTeamMembers();
-        if (cancelled) return;
-        setTeamPresence(members.filter(m => m.status === 'online'));
+        if (!cancelled) setTeamPresence(members.filter(m => m.status === 'online'));
       } catch (err) {
         console.error('[ChatWindowInstance] fetch team failed:', err);
         if (!cancelled) setTeamPresence([]);
+      } finally {
+        fetchInFlight = false;
       }
     };
-    fetchTeam();
+    void fetchTeam();
     const teamInterval = setInterval(fetchTeam, 10000);
-    const refreshModelsOnFocus = () => { void fetchModels(); };
-    window.addEventListener('focus', refreshModelsOnFocus);
     return () => {
       cancelled = true;
-      window.removeEventListener('focus', refreshModelsOnFocus);
       clearInterval(teamInterval);
-      clearInterval(retryInterval);
     };
+  }, [storageType]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let request = 0;
+
+    const probeSelectedModel = async (announceChecking = true) => {
+      const model = currentModelRef.current.trim();
+      const probeRequest = ++request;
+      if (!model) {
+        setModelHealthStatus('unconfigured');
+        return;
+      }
+      if (announceChecking) setModelHealthStatus('checking');
+      try {
+        const result = await adapter.probeModel(model);
+        if (
+          cancelled
+          || probeRequest !== request
+          || currentModelRef.current.trim() !== model
+        ) return;
+        setModelHealthStatus(result.configured && result.verified ? 'ready' : 'unavailable');
+      } catch (err) {
+        console.error('[ChatWindowInstance] probe selected model failed:', err);
+        if (
+          !cancelled
+          && probeRequest === request
+          && currentModelRef.current.trim() === model
+        ) setModelHealthStatus('unavailable');
+      }
+    };
+
+    refreshModelHealthRef.current = probeSelectedModel;
+    void probeSelectedModel();
+    return () => {
+      cancelled = true;
+      refreshModelHealthRef.current = async () => {};
+    };
+  }, [currentModel]);
+
+  useEffect(() => {
+    const wasActive = wasActiveChatRef.current;
+    wasActiveChatRef.current = isActiveChat;
+    if (wasActive || !isActiveChat) return;
+    void refreshModelsRef.current(true);
+    void refreshCurrentModelRef.current();
+    void refreshModelHealthRef.current(true);
+  }, [isActiveChat]);
+
+  const handleRetryModels = useCallback(() => {
+    void refreshModelsRef.current(true);
+    void refreshModelHealthRef.current(true);
   }, []);
 
   const handleModelChange = (model: string) => {
@@ -273,11 +530,20 @@ const ChatWindowInstance = ({
       currentModel={currentModel}
       onModelChange={handleModelChange}
       availableModels={availableModels}
+      modelCatalogStatus={modelCatalogStatus}
+      modelHealthStatus={modelHealthStatus}
+      onRetryModels={handleRetryModels}
       teamPresence={teamPresence}
       sessions={displaySessions}
       activeSessionId={activeSessionId}
-      onSelectSession={setActiveSessionId}
-      onNewSession={createSession}
+      onSelectSession={handleSelectSession}
+      onNewSession={handleCreateSession}
+      sessionCreating={sessionCreating}
+      sessionLoading={sessionLoading}
+      sessionReady={!sessionLoading && !sessionCreating && Boolean(activeSessionId)}
+      sessionError={sessionError}
+      sessionListFailed={sessionListFailed}
+      onRetrySessions={retrySessions}
       workspaceId={workspaceId}
       templateId={templateId}
       storageType={storageType}
@@ -287,7 +553,10 @@ const ChatWindowInstance = ({
       onContextRail={onContextRail}
       initialMessage={initialMessage}
       autoSendInitial={autoSendInitial}
-      historyLoaded={historyLoaded}
+      historyLoaded={historyReady}
+      historyStatus={historyStatus}
+      historyError={historyError}
+      onRetryHistory={retryHistory}
       onRetry={retryLastFailed}
       onStopStreaming={stopStreaming}
     />

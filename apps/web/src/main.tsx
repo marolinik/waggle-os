@@ -9,7 +9,7 @@ startup.setAttribute('aria-live', 'polite');
 startup.dataset.waggleStartup = 'loading';
 Object.assign(startup.style, {
   alignItems: 'center',
-  color: '#f6f1e4',
+  color: 'inherit',
   display: 'flex',
   fontFamily: 'system-ui, sans-serif',
   fontSize: '16px',

@@ -6,13 +6,25 @@
 import type { FastifyInstance } from 'fastify';
 import { parseTier, type GoalAncestry } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
-import { runAgentLoop, isEnabled, detectTaskShape, listPersonas } from '@waggle/agent';
+import {
+  TraceRecorder,
+  runAgentLoop,
+  isEnabled,
+  detectTaskShape,
+  listPersonas,
+  type TraceHandle,
+} from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
-import { spawnIsolatedFleetRun } from '../fleet-run-executor.js';
+import {
+  spawnIsolatedFleetRun,
+  type FleetExecutionLifecycle,
+} from '../fleet-run-executor.js';
 import { resolveUsableModel } from '../model-availability.js';
+import type { WorkspaceSessionActivityLease } from '../workspace-sessions.js';
+import { getAgent } from '../agents-store.js';
 
 /**
  * AI-OS #6 fast-follow — durable "why" for an agent spawn: project ← workspace
@@ -30,8 +42,111 @@ export function buildSpawnAncestry(
 }
 
 const log = createLogger('fleet');
+const ACTIVE_FLEET_RUN_STATUSES = new Set([
+  'queued',
+  'starting',
+  'running',
+  'waiting_for_approval',
+  'paused',
+  'cancelling',
+]);
+
+interface TrackedFleetExecution {
+  execution: Promise<void>;
+  abort: () => void;
+  cancel: () => Promise<void>;
+}
 
 export async function fleetRoutes(fastify: FastifyInstance) {
+  let shuttingDown = false;
+  let legacyExecutionSequence = 0;
+  const shutdownController = new AbortController();
+  const activeExecutions = new Map<string, TrackedFleetExecution>();
+
+  const trackExecution = (
+    executionId: string,
+    execution: Promise<void>,
+    abort: () => void,
+    cancel: () => Promise<void>,
+  ): void => {
+    const tracked = { execution, abort, cancel };
+    activeExecutions.set(executionId, tracked);
+    void execution.then(
+      () => {
+        if (activeExecutions.get(executionId) === tracked) activeExecutions.delete(executionId);
+      },
+      (error: unknown) => {
+        if (activeExecutions.get(executionId) === tracked) activeExecutions.delete(executionId);
+        log.error(`[fleet/shutdown] execution ${executionId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      },
+    );
+  };
+
+  const durableLifecycle: FleetExecutionLifecycle = {
+    shutdownSignal: shutdownController.signal,
+    isShuttingDown: () => shuttingDown,
+    trackExecution: (runId, execution, abort) => {
+      trackExecution(
+        `durable:${runId}`,
+        execution,
+        abort,
+        async () => {
+          const current = fastify.agentRunRegistry?.get(runId);
+          if (
+            !current
+            || current.kind !== 'worker'
+            || current.source !== 'fleet'
+            || !ACTIVE_FLEET_RUN_STATUSES.has(current.status)
+          ) return;
+          try {
+            await fastify.agentRunRegistry.control(runId, 'cancel');
+          } catch (error) {
+            const after = fastify.agentRunRegistry.get(runId);
+            if (!after || !ACTIVE_FLEET_RUN_STATUSES.has(after.status)) return;
+            throw error;
+          }
+        },
+      );
+    },
+  };
+
+  fastify.addHook('preClose', async () => {
+    shuttingDown = true;
+    shutdownController.abort();
+    const executions = [...activeExecutions.entries()];
+    if (executions.length === 0) return;
+
+    const diagnosticTimer = setTimeout(() => {
+      log.warn(`[fleet/shutdown] still draining ${executions.length} Fleet execution(s)`);
+    }, 10_000);
+    diagnosticTimer.unref();
+    // Never time out into onClose: closing a mind DB while its Fleet run is
+    // still unwinding is unsafe. The desktop supervisor owns the hard-kill bound.
+    const failures: unknown[] = [];
+    try {
+      for (const [, tracked] of executions) {
+        try { tracked.abort(); } catch (error) { failures.push(error); }
+      }
+      const cancellationResults = await Promise.allSettled(
+        executions.map(([, tracked]) => tracked.cancel()),
+      );
+      for (const result of cancellationResults) {
+        if (result.status === 'rejected') failures.push(result.reason);
+      }
+      const executionResults = await Promise.allSettled(
+        executions.map(([, tracked]) => tracked.execution),
+      );
+      for (const result of executionResults) {
+        if (result.status === 'rejected') failures.push(result.reason);
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'Fleet execution cleanup failed during shutdown');
+      }
+    } finally {
+      clearTimeout(diagnosticTimer);
+    }
+  });
+
   // GET /api/fleet — list all active workspace sessions
   fastify.get('/api/fleet', async () => {
     const sessionManager = fastify.sessionManager;
@@ -81,18 +196,29 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // actually executes the task; this Phase A delivers the visible-state
   // halves of PM acceptance: live session count + Waggle Dance signal.
   fastify.post<{
-    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string };
+    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string; savedAgentId?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
-    const { task, persona, model, parentWorkspaceId, goal, agentId } = request.body;
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
+    const { task, persona, model, parentWorkspaceId, goal, agentId, savedAgentId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
+
+    const persistedLegacyAgent = agentId
+      ? getAgent(fastify.localConfig.dataDir, agentId)
+      : undefined;
+    if (!fastify.agentRunRegistry && (savedAgentId || persistedLegacyAgent)) {
+      return reply.code(503).send({
+        error: 'saved_agent_runtime_unavailable',
+        message: 'Saved agents require the durable policy executor. Restart Waggle and try again.',
+      });
+    }
 
     // The durable registry is present in every production sidecar. Keep the
     // legacy workspace-session path below only for lightweight route tests and
     // old embedders that register fleetRoutes in isolation.
     if (fastify.agentRunRegistry) {
       const spawned = await spawnIsolatedFleetRun(fastify, {
-        task, persona, model, parentWorkspaceId, goal, agentId,
-      });
+        task, persona, model, parentWorkspaceId, goal, agentId, savedAgentId,
+      }, durableLifecycle);
       return reply.code(spawned.statusCode).send(spawned.body);
     }
 
@@ -122,10 +248,12 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       ?? fastify.agentState?.currentModel
       ?? 'default';
     const resolvedModel = await resolveUsableModel(fastify, selectedModel);
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
 
     let session;
+    let sessionActivity: WorkspaceSessionActivityLease;
     try {
-      session = sessionManager.getOrCreate(
+      const candidateSession = sessionManager.getOrCreate(
         wsId,
         // Pin the shared cache handle for this session's lifetime so an LRU
         // eviction elsewhere cannot close this spawn's mind out from under it.
@@ -135,14 +263,27 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         persona ?? fastify.workspaceManager?.get(wsId)?.personaId ?? undefined,
         () => fastify.mindCache.release(wsId),
       );
+      const acquiredActivity = sessionManager.acquireActivity(wsId);
+      if (!acquiredActivity) {
+        throw new Error(`Workspace session is ${candidateSession.status}`);
+      }
+      sessionActivity = acquiredActivity;
+      session = acquiredActivity.session;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return reply.code(409).send({ error: 'spawn_failed', message });
     }
 
-    // Synchronously emit the spawn signal so Waggle Dance shows the new
-    // entry within the same response cycle.
-    emitWaggleSignal({
+    const emitSignalBestEffort = (signal: Parameters<typeof emitWaggleSignal>[0]): void => {
+      try {
+        emitWaggleSignal(signal);
+      } catch (err) {
+        log.warn(`[fleet/spawn] activity projection failed: ${(err as Error).message}`);
+      }
+    };
+
+    // Synchronously project the spawn so Waggle Dance can show the new entry.
+    emitSignalBestEffort({
       type: 'agent:spawned',
       workspaceId: wsId,
       content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
@@ -175,9 +316,21 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       log.warn(`[fleet/spawn] persist user message failed: ${(err as Error).message}`);
     }
 
-    void (async () => {
+    const runSignal = session.abortController.signal;
+    const accountSessionTokens = (totalTokens: number): void => {
+      if (
+        totalTokens > 0
+        && fastify.sessionManager.get(wsId) === session
+      ) {
+        fastify.sessionManager.addTokens(wsId, totalTokens);
+      }
+    };
+    const execution = (async () => {
+      let traceRecorder: TraceRecorder | undefined;
+      let traceHandle: TraceHandle | undefined;
+      const observedTools = new Set<string>();
       try {
-        emitWaggleSignal({
+        emitSignalBestEffort({
           type: 'agent:started',
           workspaceId: wsId,
           content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
@@ -223,7 +376,19 @@ export async function fleetRoutes(fastify: FastifyInstance) {
           systemPrompt = session.orchestrator.buildSystemPrompt();
         }
 
-        const result = await runAgentLoop({
+        if (fastify.traceStore) {
+          traceRecorder = new TraceRecorder(fastify.traceStore);
+          traceHandle = traceRecorder.start({
+            sessionId: spawnSessionId,
+            personaId: session.personaId ?? persona ?? null,
+            workspaceId: wsId,
+            model: resolvedModel,
+            input: task,
+            tags: ['fleet:legacy'],
+          });
+        }
+        const runner = fastify.agentRunner ?? runAgentLoop;
+        const result = await runner({
           litellmUrl: fastify.localConfig.litellmUrl,
           litellmApiKey: fastify.agentState.litellmApiKey,
           model: resolvedModel,
@@ -231,16 +396,31 @@ export async function fleetRoutes(fastify: FastifyInstance) {
           tools: session.tools,
           messages: [userMessage],
           maxTurns: 10,
-          signal: session.abortController.signal,
-          onToolUse: (name, input) => {
-            emitWaggleSignal({
+          signal: runSignal,
+          ...(traceRecorder && traceHandle ? {
+            traceRecording: {
+              recorder: traceRecorder,
+              handle: traceHandle,
+            },
+          } : {}),
+          onToolUse: (name) => {
+            observedTools.add(name);
+            emitSignalBestEffort({
               type: 'tool:called',
               workspaceId: wsId,
-              content: `${name}(${JSON.stringify(input).slice(0, 100)})`,
+              content: `${name} called`,
               metadata: { sessionId: spawnSessionId },
             });
           },
         });
+        if (runSignal.aborted) {
+          throw Object.assign(new Error('Agent loop aborted (workspace paused).'), {
+            name: 'AgentLoopAbortError',
+            code: 'AGENT_LOOP_ABORTED',
+            toolsUsed: result.toolsUsed,
+            usage: result.usage,
+          });
+        }
 
         try {
           persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
@@ -252,10 +432,22 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         }
 
         const totalTokens = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
-        if (totalTokens > 0) fastify.sessionManager.addTokens(wsId, totalTokens);
-        fastify.sessionManager.touch(wsId);
+        accountSessionTokens(totalTokens);
 
-        emitWaggleSignal({
+        if (traceRecorder && traceHandle) {
+          try {
+            traceRecorder.finalize(traceHandle, {
+              outcome: 'success',
+              output: result.content,
+              tokens: {
+                input: result.usage?.inputTokens ?? 0,
+                output: result.usage?.outputTokens ?? 0,
+              },
+            });
+          } catch { /* best-effort trace projection */ }
+        }
+
+        emitSignalBestEffort({
           type: 'agent:completed',
           workspaceId: wsId,
           content: `Completed: ${result.toolsUsed.length} tool${result.toolsUsed.length === 1 ? '' : 's'} used, ${totalTokens.toLocaleString()} tokens`,
@@ -270,24 +462,110 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log.error(`[fleet/spawn] agent loop failed for ${wsId}/${spawnSessionId}: ${msg}`);
+        const abortPayload = err && typeof err === 'object'
+          && 'code' in err && err.code === 'AGENT_LOOP_ABORTED'
+          ? err as {
+              usage?: { inputTokens?: unknown; outputTokens?: unknown };
+              toolsUsed?: unknown;
+            }
+          : undefined;
+        if (runSignal.aborted && abortPayload) {
+          const normalizeTokenCount = (value: unknown): number => (
+            typeof value === 'number' && Number.isFinite(value) && value >= 0
+              ? Math.floor(value)
+              : 0
+          );
+          const abortTools = Array.isArray(abortPayload.toolsUsed)
+            ? abortPayload.toolsUsed
+              .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+              .map(name => name.trim())
+            : [];
+          const toolsUsed = [...new Set([...observedTools, ...abortTools])];
+          const inputTokens = normalizeTokenCount(abortPayload.usage?.inputTokens);
+          const outputTokens = normalizeTokenCount(abortPayload.usage?.outputTokens);
+          const totalTokens = inputTokens + outputTokens;
+          const summary = toolsUsed.length > 0
+            ? `This run was stopped after Waggle recorded tool activity: ${toolsUsed.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
+            : 'This run was stopped. An external action may have been in flight. Review activity before retrying so actions are not duplicated.';
+
+          accountSessionTokens(totalTokens);
+          try {
+            persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
+              role: 'assistant',
+              content: summary,
+            });
+          } catch { /* persist best-effort */ }
+          if (traceRecorder && traceHandle) {
+            try {
+              traceRecorder.finalize(traceHandle, {
+                outcome: 'abandoned',
+                output: summary,
+                tokens: { input: inputTokens, output: outputTokens },
+              });
+            } catch { /* best-effort trace projection */ }
+          }
+          emitSignalBestEffort({
+            type: 'agent:cancelled',
+            workspaceId: wsId,
+            content: summary.slice(0, 200),
+            metadata: {
+              sessionId: spawnSessionId,
+              model: resolvedModel,
+              toolsUsed,
+              inputTokens,
+              outputTokens,
+            },
+          });
+          return;
+        }
+        const failedTools = [...new Set(
+          [...observedTools]
+            .filter(name => name.trim().length > 0)
+            .map(name => name.trim()),
+        )];
+        const failureSummary = failedTools.length > 0
+          ? `This run failed after Waggle recorded tool activity: ${failedTools.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
+          : `I couldn't finish this run — the model didn't respond. Nothing was changed. You can retry from the Agent Center, or pick a different model in the chat header. (Details are in Events & Logs.)`;
         try {
-          // Human-readable failure in the chat — the raw error (often a JSON
-          // blob) is logged above and carried on the agent:error signal; a
-          // verbatim dump rendered as the assistant's reply read as the
-          // product being broken on every judge persona.
+          // The raw provider/tool error remains in the local log above. Durable
+          // user-facing projections keep only safe retry guidance.
           persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
             role: 'assistant',
-            content: `I couldn't finish this run — the model didn't respond. Nothing was changed. You can retry from the Agent Center, or pick a different model in the chat header. (Details are in Events & Logs.)`,
+            content: failureSummary,
           });
         } catch { /* persist best-effort */ }
-        emitWaggleSignal({
+        if (traceRecorder && traceHandle) {
+          try {
+            traceRecorder.finalize(traceHandle, {
+              outcome: 'abandoned',
+              output: failureSummary,
+            });
+          } catch { /* best-effort trace projection */ }
+        }
+        emitSignalBestEffort({
           type: 'agent:error',
           workspaceId: wsId,
-          content: `Failed: ${msg.length > 200 ? `${msg.slice(0, 197)}…` : msg}`,
-          metadata: { sessionId: spawnSessionId, model: resolvedModel },
+          content: failureSummary.slice(0, 200),
+          metadata: {
+            sessionId: spawnSessionId,
+            model: resolvedModel,
+            toolsUsed: failedTools,
+          },
         });
+      } finally {
+        sessionActivity.release();
       }
     })();
+    const executionId = `legacy:${spawnSessionId}:${++legacyExecutionSequence}`;
+    trackExecution(
+      executionId,
+      execution,
+      () => {
+        if (sessionManager.get(wsId) === session) sessionManager.close(wsId);
+        else session.abortController.abort();
+      },
+      async () => {},
+    );
 
     return {
       id: session.workspaceId,

@@ -438,12 +438,19 @@ export interface ChatMessage {
   /** The model that actually produced this turn, as reported by the server. */
   model?: string;
   /**
+   * Live proof that saved memory passed safety checks and entered this reply's
+   * model context. Empty, failed, skipped, and blocked lookups are omitted.
+   */
+  memoryContext?: MemoryContextReceipt;
+  /**
    * Lane C (Pillar 2.2/2.5): an optimistic user turn that was typed+sent while a
    * previous reply was still streaming. It renders immediately with a truthful
    * "waiting" marker and dispatches the moment the in-flight reply finishes —
    * never errors, never drops. Cleared to `false`/absent once dispatched.
    */
   queued?: boolean;
+  /** A same-session server turn is still unwinding; this draft is waiting to retry. */
+  retrying?: boolean;
   /**
    * Non-authoritative streaming preview. Draft text is display-only: it must
    * never feed copy/pin/feedback, conversation context, or the settled cache.
@@ -456,6 +463,15 @@ export interface ChatMessage {
     content: string;
     status: 'streaming' | 'stopped';
   };
+}
+
+export interface MemoryContextReceipt {
+  included: true;
+  count: number;
+  /** Only the live SSE path sets this; restored history must stay silent. */
+  live: true;
+  /** Stable per-assistant-turn key used to prevent duplicate live notices. */
+  receiptId: string;
 }
 
 export interface ToolExecution {
@@ -545,6 +561,7 @@ export type ContentBlock =
   | TextContentBlock
   | StepContentBlock
   | ToolUseContentBlock
+  | ToolContextContentBlock
   | ModelSwitchContentBlock
   | ErrorContentBlock
   | RouteProposalContentBlock;
@@ -576,6 +593,34 @@ export interface ToolUseContentBlock {
   status: 'running' | 'done' | 'error' | 'denied';
   result?: string;
   duration?: number;
+}
+
+/**
+ * Sanitized, aggregate proof of how much of the tool catalog entered one turn.
+ * This is preparation telemetry, not evidence that any tool or skill ran.
+ */
+export interface ToolContextContentBlock {
+  type: 'tool_context';
+  blockId: string;
+  metrics: ToolContextMetrics;
+}
+
+export interface ToolContextMetrics {
+  toolCatalogCount: number;
+  toolEligibleCount: number;
+  toolSelectedCount: number;
+  toolOmittedCount: number;
+  transmittedToolSchemaChars: number;
+  estimatedToolSchemaTokens: number;
+  finalSystemPromptChars: number;
+  estimatedSystemPromptTokens: number;
+  packageMode: 'compact' | 'full' | 'custom';
+  selectorLatencyMs: number;
+  timeToFirstTokenMs: number | null;
+  agentLatencyMs: number;
+  totalServerLatencyMs: number;
+  providerInputTokens: number;
+  providerOutputTokens: number;
 }
 
 export interface ModelSwitchContentBlock {
@@ -746,6 +791,13 @@ export interface Settings {
   model: string;
   /** Canonical server-side model preference; `model` remains for legacy payloads. */
   defaultModel?: string;
+  fallbackModel?: string | null;
+  budgetModel?: string | null;
+  budgetThreshold?: number;
+  dailyBudget?: number | null;
+  budgetHardCap?: boolean;
+  /** Requests atomic server-side verification before any model setting is persisted. */
+  verifyModelSettings?: true;
   provider: string;
   apiKey?: string;
   tokenLimit: number;

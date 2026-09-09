@@ -7,7 +7,11 @@
  * a fetched list only VALIDATES an existing selection, it never picks one.
  */
 
-const ACTIVE_WORKSPACE_KEY = 'waggle:active-workspace-v1';
+const LEGACY_ACTIVE_WORKSPACE_KEY = 'waggle:active-workspace-v1';
+const ACTIVE_WORKSPACE_KEY = 'waggle:active-workspace-v2';
+
+const activeWorkspaceKey = (profileId: string | null): string =>
+  `${ACTIVE_WORKSPACE_KEY}:${encodeURIComponent(profileId ?? 'unbound')}`;
 
 /** Offline `createWorkspace` mints `local-<ts>` ids the server list never
  *  contains — those must survive list validation until a real sync replaces them. */
@@ -25,25 +29,41 @@ export function resolveActiveWorkspaceId(prev: string | null, ids: readonly stri
   return ids.includes(prev) ? prev : null;
 }
 
-export function readPersistedWorkspaceId(): string | null {
+export function readPersistedWorkspaceId(profileId: string | null = null): string | null {
   try {
-    return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+    return localStorage.getItem(activeWorkspaceKey(profileId));
   } catch {
     return null;
   }
 }
 
-export function persistWorkspaceId(id: string): void {
+export function persistWorkspaceId(id: string, profileId: string | null = null): void {
   try {
-    localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
+    localStorage.setItem(activeWorkspaceKey(profileId), id);
   } catch {
     /* storage unavailable — selection still lives in memory this session */
   }
 }
 
-export function clearPersistedWorkspaceId(): void {
+export function clearPersistedWorkspaceId(profileId: string | null = null): void {
   try {
-    localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+    localStorage.removeItem(activeWorkspaceKey(profileId));
+  } catch {
+    /* no-op */
+  }
+}
+
+export function readLegacyPersistedWorkspaceId(): string | null {
+  try {
+    return localStorage.getItem(LEGACY_ACTIVE_WORKSPACE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearLegacyPersistedWorkspaceId(): void {
+  try {
+    localStorage.removeItem(LEGACY_ACTIVE_WORKSPACE_KEY);
   } catch {
     /* no-op */
   }

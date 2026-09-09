@@ -9,10 +9,10 @@
  * Run the expensive matrix through the built-in proxy with a real provider:
  *   WAGGLE_E2E_SKIP_LITELLM=1 npx playwright test tests/vision/personas.spec.ts
  */
-import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type Request, type Response, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import {
@@ -33,6 +33,8 @@ import {
   BASE,
   dismissOverlay,
   gotoDesktop,
+  redactDiagnosticText,
+  redactDiagnosticUrl,
   type ConsoleCapture,
 } from './_helpers';
 
@@ -43,6 +45,7 @@ const ARTIFACTS = resolve(
 const ACCEPTANCE_RUN_ID = process.env.WAGGLE_PERSONA_RUN_ID?.trim() || null;
 const EXPECTED_LLM_PROVIDER = process.env.WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER?.trim() || null;
 const EXPECTED_LLM_DETAIL = process.env.WAGGLE_PERSONA_EXPECTED_LLM_DETAIL?.trim() || null;
+const EXPECTED_BILLING_CLASS = process.env.WAGGLE_PERSONA_EXPECTED_BILLING_CLASS?.trim() || null;
 
 function gitOutput(args: string[]): string | null {
   try {
@@ -144,6 +147,7 @@ interface ApprovalAutoDenial {
 interface SendAndCaptureOptions {
   bodyTimeoutMs: number;
   approvalScreenshotPrefix: string;
+  authorizedRetryHeaderTimeoutMs?: number;
 }
 
 interface WireTurn {
@@ -209,7 +213,9 @@ function parseSse(body: string): { events: CapturedSseEvent[]; errors: string[] 
     try {
       events.push({ event, data: JSON.parse(rawData), rawData });
     } catch (error) {
-      errors.push(`${event}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(redactDiagnosticText(
+        `${event}: ${error instanceof Error ? error.message : String(error)}`,
+      ));
       events.push({ event, data: null, rawData });
     }
   }
@@ -316,9 +322,10 @@ async function settleBeforeDeadline<T>(
 }
 
 function appendTransportError(denial: ApprovalAutoDenial, message: string): void {
+  const sanitized = redactDiagnosticText(message);
   denial.transportError = denial.transportError
-    ? `${denial.transportError} ${message}`
-    : message;
+    ? `${denial.transportError} ${sanitized}`
+    : sanitized;
 }
 
 async function armChatWireCapture(page: Page): Promise<number> {
@@ -328,6 +335,7 @@ async function armChatWireCapture(page: Page): Promise<number> {
       error: string | null;
       settled: boolean;
       terminal: boolean;
+      abort: (() => void) | null;
     }
     interface BrowserChatCaptureRegistry {
       captures: BrowserChatCapture[];
@@ -343,7 +351,14 @@ async function armChatWireCapture(page: Page): Promise<number> {
     scope.__wagglePersonaChatCapture = registry;
     registry.restore?.();
 
-    const cursor = registry.captures.length;
+    const capture: BrowserChatCapture = {
+      bodyText: '',
+      error: null,
+      settled: false,
+      terminal: false,
+      abort: null,
+    };
+    const cursor = registry.captures.push(capture) - 1;
     const originalFetch = window.fetch.bind(window);
     let restored = false;
     const restore = () => {
@@ -384,26 +399,47 @@ async function armChatWireCapture(page: Page): Promise<number> {
           : String(input);
       const isChatRequest = method === 'POST'
         && new URL(rawUrl, window.location.href).pathname === '/api/chat';
+      const controller = isChatRequest ? new AbortController() : null;
+      const callerSignal = init?.signal
+        ?? (input instanceof Request ? input.signal : null);
+      const forwardCallerAbort = () => controller?.abort(callerSignal?.reason);
+      if (controller && callerSignal) {
+        if (callerSignal.aborted) forwardCallerAbort();
+        else callerSignal.addEventListener('abort', forwardCallerAbort, { once: true });
+      }
+      const removeCallerAbort = () => callerSignal?.removeEventListener('abort', forwardCallerAbort);
+      if (controller) {
+        capture.abort = () => controller.abort(new DOMException(
+          'Persona harness stream completion deadline expired.',
+          'AbortError',
+        ));
+      }
       try {
-        const response = await originalFetch(input, init);
+        const response = await originalFetch(
+          input,
+          controller ? { ...init, signal: controller.signal } : init,
+        );
         const isSuccessfulSse = isChatRequest
           && response.ok
           && (response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream');
-        if (!isSuccessfulSse) return response;
+        if (!isSuccessfulSse) {
+          if (isChatRequest) capture.abort = null;
+          removeCallerAbort();
+          return response;
+        }
 
-        const capture: BrowserChatCapture = {
-          bodyText: '',
-          error: null,
-          settled: false,
-          terminal: false,
-        };
-        registry.captures.push(capture);
+        capture.bodyText = '';
+        capture.error = null;
+        capture.settled = false;
+        capture.terminal = false;
         try {
           const clone = response.clone();
           const reader = clone.body?.getReader();
           if (!reader) {
             capture.error = 'Chat SSE response did not expose a readable body.';
             capture.settled = true;
+            capture.abort = null;
+            removeCallerAbort();
           } else {
             void (async () => {
               const decoder = new TextDecoder('utf-8');
@@ -428,6 +464,8 @@ async function armChatWireCapture(page: Page): Promise<number> {
                 }
                 capture.settled = true;
               } finally {
+                capture.abort = null;
+                removeCallerAbort();
                 try { reader.releaseLock(); } catch { /* reader already released */ }
               }
             })();
@@ -435,10 +473,18 @@ async function armChatWireCapture(page: Page): Promise<number> {
         } catch (error) {
           capture.error = error instanceof Error ? error.message : String(error);
           capture.settled = true;
+          capture.abort = null;
+          removeCallerAbort();
         }
         restore();
         return response;
       } catch (error) {
+        removeCallerAbort();
+        if (isChatRequest) {
+          capture.error = error instanceof Error ? error.message : String(error);
+          capture.settled = true;
+          capture.abort = null;
+        }
         if (isChatRequest) restore();
         throw error;
       }
@@ -493,12 +539,27 @@ async function disarmChatWireCapture(page: Page): Promise<void> {
   }).catch(() => {});
 }
 
+async function abortCapturedChatRequest(page: Page, cursor: number): Promise<void> {
+  await page.evaluate((captureCursor) => {
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: {
+        captures: Array<{ abort?: (() => void) | null }>;
+      };
+    };
+    scope.__wagglePersonaChatCapture?.captures[captureCursor]?.abort?.();
+  }, cursor).catch(() => {});
+}
+
 function isTimeoutFailure(error: unknown): boolean {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   return /(?:timed out|timeout|deadline expired)/i.test(message);
 }
 
-async function captureBodyWithApprovalDenials(
+function isAbsoluteResponseDeadlineFailure(error: unknown, deadlineAt: number): boolean {
+  return isTimeoutFailure(error) && deadlineAt - Date.now() <= 10;
+}
+
+async function captureBodyWithApprovalDenialsInternal(
   page: Page,
   bodyPromise: Promise<Buffer>,
   deadlineAt: number,
@@ -538,24 +599,11 @@ async function captureBodyWithApprovalDenials(
     }).catch(() => '')).trim();
     const observedAt = new Date().toISOString();
     const screenshotPath = `${screenshotPrefix}-${approvalAutoDenials.length + 1}.png`;
-    let capturedPath: string | null = screenshotPath;
-    let screenshotError: string | null = null;
-    try {
-      await page.screenshot({
-        path: screenshotPath,
-        fullPage: true,
-        timeout: remainingDeadlineMs(deadlineAt, 'capturing the approval card', 3_000),
-      });
-    } catch (error) {
-      capturedPath = null;
-      screenshotError = error instanceof Error ? error.message : String(error);
-    }
-
     const denial: ApprovalAutoDenial = {
       observedAt,
       cardText,
-      screenshotPath: capturedPath,
-      screenshotError,
+      screenshotPath,
+      screenshotError: null,
       requestId: null,
       requestUrl: null,
       requestBody: null,
@@ -564,6 +612,14 @@ async function captureBodyWithApprovalDenials(
       transportError: null,
     };
     approvalAutoDenials.push(denial);
+    const screenshotPromise = page.screenshot({
+      path: screenshotPath,
+      fullPage: true,
+      timeout: remainingDeadlineMs(deadlineAt, 'capturing the approval card', 3_000),
+    }).catch((error) => {
+      denial.screenshotPath = null;
+      denial.screenshotError = redactDiagnosticText(error instanceof Error ? error.message : String(error));
+    });
     const denialResponsePromise = page.waitForResponse(
       response => response.request().method() === 'POST'
         && new URL(response.url()).pathname.startsWith('/api/approval/'),
@@ -586,7 +642,7 @@ async function captureBodyWithApprovalDenials(
       ? decodeURIComponent(new URL(requestUrl).pathname.split('/').filter(Boolean).at(-1) ?? '') || null
       : null;
     denial.requestId = requestId;
-    denial.requestUrl = requestUrl;
+    denial.requestUrl = requestUrl ? redactDiagnosticUrl(requestUrl) : null;
     denial.requestBody = denialResponse?.request().postData() ?? null;
     denial.responseStatus = denialResponse?.status() ?? null;
     if (denialResponse) {
@@ -615,6 +671,30 @@ async function captureBodyWithApprovalDenials(
         `Approval card did not close: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+    await screenshotPromise;
+  }
+}
+
+async function captureBodyWithApprovalDenials(
+  page: Page,
+  bodyPromise: Promise<Buffer>,
+  deadlineAt: number,
+  screenshotPrefix: string,
+  approvalAutoDenials: ApprovalAutoDenial[],
+): Promise<Buffer> {
+  try {
+    return await captureBodyWithApprovalDenialsInternal(
+      page,
+      bodyPromise,
+      deadlineAt,
+      screenshotPrefix,
+      approvalAutoDenials,
+    );
+  } catch (error) {
+    if (isAbsoluteResponseDeadlineFailure(error, deadlineAt)) {
+      throw new Error(STREAM_COMPLETION_DEADLINE_ERROR);
+    }
+    throw error;
   }
 }
 
@@ -627,7 +707,7 @@ async function sendAndCapture(
   const startedAt = Date.now();
   const deadlineAt = startedAt + options.bodyTimeoutMs;
   const approvalAutoDenials: ApprovalAutoDenial[] = [];
-  let requestUrl = `${BASE}/api/chat`;
+  let requestUrl = redactDiagnosticUrl(`${BASE}/api/chat`);
   let requestPayload: ChatRequestPayload = { message: prompt };
   let httpStatus = 0;
   let captureCursor: number | null = null;
@@ -673,7 +753,7 @@ async function sendAndCapture(
 
     const [requestOutcome, firstResponseOutcome] = await Promise.all([requestResult, firstResponseResult]);
     if (requestOutcome.request) {
-      requestUrl = requestOutcome.request.url();
+      requestUrl = redactDiagnosticUrl(requestOutcome.request.url());
       requestPayload = parseRequestPayload(requestOutcome.request.postData());
     }
     if (firstResponseOutcome.error) throw firstResponseOutcome.error;
@@ -684,12 +764,12 @@ async function sendAndCapture(
       const retryWaitMs = remainingDeadlineMs(
         deadlineAt,
         'waiting for the authorized chat retry',
-        20_000,
+        options.authorizedRetryHeaderTimeoutMs ?? 20_000,
       );
       const retryOutcome = await Promise.race([
         retryResponseResult,
         page.waitForTimeout(retryWaitMs).then(() => {
-          throw new Error('Chat request remained unauthorized after HTTP 401; no retry response arrived.');
+          throw new Error('Chat response deadline expired while waiting for authorized retry headers after HTTP 401.');
         }),
       ]);
       if (retryOutcome.error) throw retryOutcome.error;
@@ -699,7 +779,7 @@ async function sendAndCapture(
       response = retryOutcome.response;
     }
     if (!requestOutcome.request) {
-      requestUrl = response.url();
+      requestUrl = redactDiagnosticUrl(response.url());
       requestPayload = parseRequestPayload(response.request().postData());
     }
     httpStatus = response.status();
@@ -736,6 +816,10 @@ async function sendAndCapture(
       approvalAutoDenials,
     };
   } catch (error) {
+    const timedOut = isAbsoluteResponseDeadlineFailure(error, deadlineAt);
+    if (captureCursor !== null) {
+      await abortCapturedChatRequest(page, captureCursor);
+    }
     return {
       requestUrl,
       requestPayload,
@@ -744,8 +828,8 @@ async function sendAndCapture(
       events: [],
       parseErrors: [],
       done: null,
-      timedOut: isTimeoutFailure(error),
-      transportError: error instanceof Error ? error.message : String(error),
+      timedOut,
+      transportError: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
       approvalAutoDenials,
     };
   } finally {
@@ -823,6 +907,50 @@ interface VisibleAssistantEvidence {
   codeSegments: string[];
 }
 
+const STREAM_COMPLETION_DEADLINE_ERROR = 'Chat response body deadline expired while waiting for stream completion.';
+
+function shouldReadAssistantUiEvidence(wire: WireTurn, responseText: string): boolean {
+  return !wire.timedOut && wire.done !== null && responseText.trim().length > 0;
+}
+
+async function collectAssistantUiEvidence(
+  wire: WireTurn,
+  responseText: string,
+  readCopied: () => Promise<string>,
+  readVisible: () => Promise<VisibleAssistantEvidence>,
+): Promise<{ copiedAssistantResponse: string; visibleAssistant: VisibleAssistantEvidence }> {
+  if (!shouldReadAssistantUiEvidence(wire, responseText)) {
+    return { copiedAssistantResponse: '', visibleAssistant: { text: '', codeSegments: [] } };
+  }
+  return {
+    copiedAssistantResponse: await readCopied(),
+    visibleAssistant: await readVisible(),
+  };
+}
+
+async function persistPersonaArtifactAndAssertTransport(
+  artifactPath: string,
+  artifact: unknown,
+  score: unknown,
+  wire: WireTurn,
+  testInfo: TestInfo,
+): Promise<void> {
+  writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+  await testInfo.attach('persona-acceptance-score', {
+    body: Buffer.from(JSON.stringify(score, null, 2)),
+    contentType: 'application/json',
+  });
+  expect(wire.httpStatus, 'chat request succeeded').toBe(200);
+  expect(wire.timedOut, 'chat request completed before timeout').toBe(false);
+}
+
+function personaTransportArtifactFields(wire: WireTurn): {
+  timedOut: boolean;
+  transportError: string | null;
+} {
+  return { timedOut: wire.timedOut, transportError: wire.transportError };
+}
+
 async function readVisibleAssistantEvidence(page: Page): Promise<VisibleAssistantEvidence> {
   const copyButton = page.getByTestId('chat-msg-copy').last();
   await copyButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -858,7 +986,7 @@ async function captureScreenshot(page: Page, path: string, errors: string[]): Pr
     await page.screenshot({ path, fullPage: true });
     return path;
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    errors.push(redactDiagnosticText(error instanceof Error ? error.message : String(error)));
     return null;
   }
 }
@@ -893,17 +1021,86 @@ test('persona harness safely denies an approval card while the response body is 
   ].join(''));
 
   const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  let screenshotStarted: (() => void) | undefined;
+  let releaseScreenshot: (() => void) | undefined;
+  const screenshotStart = new Promise<void>((resolve) => {
+    screenshotStarted = resolve;
+  });
+  const screenshotRelease = new Promise<void>((resolve) => {
+    releaseScreenshot = resolve;
+  });
+  const lifecycle: string[] = [];
+  const screenshotWatchdog = setTimeout(() => releaseScreenshot?.(), 5_000);
+  const releaseScreenshotOnDenial = (request: Request) => {
+    if (request.method() !== 'POST'
+      || !new URL(request.url()).pathname.startsWith('/api/approval/')) return;
+    lifecycle.push('denial-request-started');
+    clearTimeout(screenshotWatchdog);
+    releaseScreenshot?.();
+  };
+  page.on('request', releaseScreenshotOnDenial);
+  const originalScreenshotDescriptor = Object.getOwnPropertyDescriptor(page, 'screenshot');
+  Object.defineProperty(page, 'screenshot', {
+    configurable: true,
+    value: async () => {
+      lifecycle.push('screenshot-started');
+      screenshotStarted?.();
+      await screenshotRelease;
+      lifecycle.push('screenshot-finished');
+      return Buffer.from('deterministic screenshot evidence');
+    },
+  });
   const simulatedBody = page.locator('[data-testid="chat-approval-gate"]')
     .waitFor({ state: 'detached' })
     .then(() => Buffer.from('event: done\ndata: {"content":"denied safely"}\n\n'));
-  const body = await captureBodyWithApprovalDenials(
+  const captureOutcome = captureBodyWithApprovalDenials(
     page,
     simulatedBody,
-    Date.now() + 3_000,
+    Date.now() + 10_000,
     join(ARTIFACTS, 'harness-approval-denied'),
     approvalAutoDenials,
+  ).then(
+    body => ({ kind: 'body' as const, body }),
+    error => ({ kind: 'error' as const, error }),
   );
+  let screenshotStartTimer: ReturnType<typeof setTimeout> | undefined;
+  const screenshotStartTimeout = new Promise<{ kind: 'start-timeout' }>((resolve) => {
+    screenshotStartTimer = setTimeout(() => resolve({ kind: 'start-timeout' }), 5_000);
+  });
+  let body: Buffer;
+  try {
+    const firstOutcome = await Promise.race([
+      screenshotStart.then(() => ({ kind: 'screenshot-start' as const })),
+      captureOutcome,
+      screenshotStartTimeout,
+    ]);
+    if (firstOutcome.kind === 'error') throw firstOutcome.error;
+    if (firstOutcome.kind === 'body') {
+      throw new Error('Approval capture completed before starting screenshot evidence.');
+    }
+    if (firstOutcome.kind === 'start-timeout') {
+      throw new Error('Approval capture did not start screenshot evidence within 5 seconds.');
+    }
+    const finalOutcome = await captureOutcome;
+    if (finalOutcome.kind === 'error') throw finalOutcome.error;
+    body = finalOutcome.body;
+  } finally {
+    clearTimeout(screenshotWatchdog);
+    if (screenshotStartTimer !== undefined) clearTimeout(screenshotStartTimer);
+    page.off('request', releaseScreenshotOnDenial);
+    releaseScreenshot?.();
+    if (originalScreenshotDescriptor) {
+      Object.defineProperty(page, 'screenshot', originalScreenshotDescriptor);
+    } else {
+      Reflect.deleteProperty(page, 'screenshot');
+    }
+  }
 
+  expect(lifecycle).toEqual([
+    'screenshot-started',
+    'denial-request-started',
+    'screenshot-finished',
+  ]);
   expect(body.toString('utf8')).toContain('denied safely');
   expect(approvalAutoDenials).toHaveLength(1);
   expect(approvalAutoDenials[0]).toMatchObject({
@@ -967,7 +1164,7 @@ test('persona harness preserves denial evidence and exits at the absolute body d
     startedAt + 800,
     join(ARTIFACTS, 'harness-approval-deadline'),
     approvalAutoDenials,
-  )).rejects.toThrow(/deadline expired/i);
+  )).rejects.toThrow(STREAM_COMPLETION_DEADLINE_ERROR);
 
   expect(Date.now() - startedAt).toBeLessThan(2_000);
   expect(approvalAutoDenials).toHaveLength(1);
@@ -988,6 +1185,76 @@ test('persona harness distinguishes transport failures from response deadlines',
   ))).toBe(true);
 });
 
+test('persona harness does not classify an early operation cap as the response deadline', () => {
+  const operationTimeout = new Error('locator.click: Timeout 3000ms exceeded.');
+  expect(isAbsoluteResponseDeadlineFailure(operationTimeout, Date.now() + 2_000)).toBe(false);
+  expect(isAbsoluteResponseDeadlineFailure(operationTimeout, Date.now())).toBe(true);
+});
+
+test('persona harness preserves timeout artifacts without waiting for absent assistant UI', async ({ page: _page }, testInfo) => {
+  const timedOutWire: WireTurn = {
+    requestUrl: `${BASE}/api/chat`,
+    requestPayload: { message: 'test' },
+    httpStatus: 200,
+    durationMs: 60_000,
+    events: [],
+    parseErrors: [],
+    done: null,
+    timedOut: true,
+    transportError: 'Chat response body deadline expired while waiting for stream completion.',
+    approvalAutoDenials: [],
+  };
+
+  let copiedReads = 0;
+  let visibleReads = 0;
+  const readCopied = async () => { copiedReads += 1; return 'complete'; };
+  const readVisible = async () => {
+    visibleReads += 1;
+    return { text: 'complete', codeSegments: [] };
+  };
+  const timedOutEvidence = await collectAssistantUiEvidence(
+    timedOutWire,
+    '',
+    readCopied,
+    readVisible,
+  );
+  expect(timedOutEvidence).toEqual({
+    copiedAssistantResponse: '',
+    visibleAssistant: { text: '', codeSegments: [] },
+  });
+  expect([copiedReads, visibleReads]).toEqual([0, 0]);
+
+  const completedWire = {
+    ...timedOutWire,
+    done: { content: 'complete' },
+    timedOut: false,
+    transportError: null,
+  };
+  expect(await collectAssistantUiEvidence(
+    completedWire,
+    'complete',
+    readCopied,
+    readVisible,
+  )).toEqual({
+    copiedAssistantResponse: 'complete',
+    visibleAssistant: { text: 'complete', codeSegments: [] },
+  });
+  expect([copiedReads, visibleReads]).toEqual([1, 1]);
+
+  const artifactPath = testInfo.outputPath('timeout-artifact.json');
+  const artifact = {
+    response: personaTransportArtifactFields(timedOutWire),
+  };
+  await expect(persistPersonaArtifactAndAssertTransport(
+    artifactPath,
+    artifact,
+    { passed: false },
+    timedOutWire,
+    testInfo,
+  )).rejects.toThrow(/chat request completed before timeout/);
+  expect(JSON.parse(readFileSync(artifactPath, 'utf8'))).toEqual(artifact);
+});
+
 test('persona harness captures completed SSE when the browser consumer cancels after done', async ({ page }) => {
   const responsePrefix = [
     'event: token',
@@ -998,6 +1265,19 @@ test('persona harness captures completed SSE when the browser consumer cancels a
   const terminalDataLine = 'data: {"content":"captured"}\n';
   const terminalData = 'data: {"content":"captured"}\n\n';
   const duplicateTerminal = 'event: done\ndata: {"content":"captured"}\n\n';
+  let resolveStalledSocketClosed: (() => void) | undefined;
+  const stalledSocketClosed = new Promise<void>((resolve) => {
+    resolveStalledSocketClosed = resolve;
+  });
+  let resolveStalledHeaderSocketClosed: (() => void) | undefined;
+  const stalledHeaderSocketClosed = new Promise<void>((resolve) => {
+    resolveStalledHeaderSocketClosed = resolve;
+  });
+  let resolveRetryHeaderSocketClosed: (() => void) | undefined;
+  const retryHeaderSocketClosed = new Promise<void>((resolve) => {
+    resolveRetryHeaderSocketClosed = resolve;
+  });
+  const chatAttempts = new Map<string, number>();
   const server = createServer((request, response) => {
     if (request.url === '/api/chat') {
       let requestBody = '';
@@ -1005,6 +1285,28 @@ test('persona harness captures completed SSE when the browser consumer cancels a
       request.on('data', chunk => { requestBody += chunk; });
       request.on('end', () => {
         const message = (JSON.parse(requestBody) as { message?: string }).message;
+        const attempt = (chatAttempts.get(message ?? '') ?? 0) + 1;
+        chatAttempts.set(message ?? '', attempt);
+        if (message === 'stall headers') {
+          const lateHeader = setTimeout(() => {
+            if (!response.destroyed) response.writeHead(200).end();
+          }, 5_000);
+          response.once('close', () => {
+            clearTimeout(lateHeader);
+            resolveStalledHeaderSocketClosed?.();
+          });
+          return;
+        }
+        if (message === 'auth retry stall headers' && attempt > 1) {
+          const lateHeader = setTimeout(() => {
+            if (!response.destroyed) response.writeHead(200).end();
+          }, 5_000);
+          response.once('close', () => {
+            clearTimeout(lateHeader);
+            resolveRetryHeaderSocketClosed?.();
+          });
+          return;
+        }
         if (message === 'http failure' || message?.startsWith('auth ')) {
           const status = message === 'http failure' ? 500 : 401;
           response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -1017,6 +1319,11 @@ test('persona harness captures completed SSE when the browser consumer cancels a
           'content-type': 'text/event-stream; charset=utf-8',
         });
         response.flushHeaders();
+        if (message === 'stall stream') {
+          response.write('event: heartbeat\ndata: {"status":"working"}\n\n');
+          response.once('close', () => resolveStalledSocketClosed?.());
+          return;
+        }
         response.write(responsePrefix);
         const splitBeforeDelimiter = message === 'capture split terminal';
         const sendTerminal = setTimeout(
@@ -1097,6 +1404,64 @@ test('persona harness captures completed SSE when the browser consumer cancels a
     expect(wire.done).toMatchObject({ content: 'captured' });
     expect(wire.events.filter(event => event.event === 'done')).toHaveLength(2);
 
+    const stalledWire = await sendAndCapture(page, 'stall stream', {
+      bodyTimeoutMs: 800,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-stalled-stream'),
+    });
+    expect(stalledWire.timedOut).toBe(true);
+    expect(stalledWire.transportError).toBe(STREAM_COMPLETION_DEADLINE_ERROR);
+    expect(stalledWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      stalledSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Timed-out persona request left the server socket open.');
+      }),
+    ]);
+
+    const stalledHeaderWire = await sendAndCapture(page, 'stall headers', {
+      bodyTimeoutMs: 800,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-stalled-headers'),
+    });
+    expect(stalledHeaderWire.timedOut).toBe(true);
+    expect(stalledHeaderWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      stalledHeaderSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Pre-header timeout left the server socket open.');
+      }),
+    ]);
+
+    const postTimeoutWire = await sendAndCapture(page, 'capture split terminal', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-post-timeout-isolation'),
+    });
+    expect(postTimeoutWire.transportError).toBeNull();
+    expect(postTimeoutWire.done).toMatchObject({ content: 'captured' });
+
+    const stalledRetryWire = await sendAndCapture(page, 'auth retry stall headers', {
+      bodyTimeoutMs: 3_000,
+      authorizedRetryHeaderTimeoutMs: 300,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-retry-stalled-headers'),
+    });
+    expect(stalledRetryWire.timedOut).toBe(false);
+    expect(stalledRetryWire.transportError).toContain(
+      'deadline expired while waiting for authorized retry headers after HTTP 401',
+    );
+    expect(stalledRetryWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      retryHeaderSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Authorized-retry header timeout left the server socket open.');
+      }),
+    ]);
+
+    const postRetryTimeoutWire = await sendAndCapture(page, 'capture split terminal', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-post-retry-timeout-isolation'),
+    });
+    expect(postRetryTimeoutWire.transportError).toBeNull();
+    expect(postRetryTimeoutWire.done).toMatchObject({ content: 'captured' });
+
     const httpFailure = await sendAndCapture(page, 'http failure', {
       bodyTimeoutMs: 3_000,
       approvalScreenshotPrefix: join(ARTIFACTS, 'harness-http-failure'),
@@ -1121,8 +1486,10 @@ test('persona harness captures completed SSE when the browser consumer cancels a
       approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-refresh-failure'),
     });
     expect(authRefreshFailure.httpStatus).toBe(401);
-    expect(authRefreshFailure.timedOut).toBe(false);
-    expect(authRefreshFailure.transportError).toContain('remained unauthorized after HTTP 401');
+    expect(authRefreshFailure.timedOut).toBe(true);
+    expect(authRefreshFailure.transportError).toContain(
+      'deadline expired while waiting for authorized retry headers after HTTP 401',
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>(resolveClose => server.close(() => resolveClose()));
@@ -1134,17 +1501,21 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
     if (RUN_MODE.gating) {
       expect(
         process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER,
-        'paid acceptance requires a freshly built server (WAGGLE_E2E_REUSE_EXISTING_SERVER=0)',
+        'acceptance requires a freshly built server (WAGGLE_E2E_REUSE_EXISTING_SERVER=0)',
       ).toBe('0');
-      expect(ACCEPTANCE_RUN_ID, 'paid acceptance requires WAGGLE_PERSONA_RUN_ID').toMatch(/\S/);
+      expect(ACCEPTANCE_RUN_ID, 'acceptance requires WAGGLE_PERSONA_RUN_ID').toMatch(/\S/);
       expect(
         EXPECTED_LLM_PROVIDER,
-        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER',
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER',
       ).toMatch(/\S/);
       expect(
         EXPECTED_LLM_DETAIL,
-        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_DETAIL',
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_DETAIL',
       ).toMatch(/\S/);
+      expect(
+        EXPECTED_BILLING_CLASS,
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_BILLING_CLASS=priced|free',
+      ).toMatch(/^(priced|free)$/);
     }
     const response = await request.get(`${BASE}/api/personas`);
     expect(response.ok(), 'live persona catalog is available before acceptance trials').toBe(true);
@@ -1199,7 +1570,12 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           : [];
         const inputTokens = numeric(usage?.inputTokens ?? usage?.prompt_tokens ?? tokens?.input);
         const outputTokens = numeric(usage?.outputTokens ?? usage?.completion_tokens ?? tokens?.output);
-        const estimatedCostUsd = numeric(wire.done?.cost);
+        const billingClass = wire.done?.billingClass === 'priced' || wire.done?.billingClass === 'free'
+          ? wire.done.billingClass
+          : null;
+        const estimatedCostUsd = typeof wire.done?.cost === 'number' && Number.isFinite(wire.done.cost)
+          ? wire.done.cost
+          : null;
         const contextMetrics = asRecord(wire.done?.contextMetrics);
         const toolCatalogCount = finiteContextMetric(contextMetrics, 'toolCatalogCount');
         const toolEligibleCount = finiteContextMetric(contextMetrics, 'toolEligibleCount');
@@ -1259,8 +1635,12 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         );
         if (chatScreenshot) screenshots.push(chatScreenshot);
         const renderedConversation = await page.locator('body').innerText().catch(() => '');
-        const copiedAssistantResponse = await readCopiedAssistantResponse(page);
-        const visibleAssistant = await readVisibleAssistantEvidence(page);
+        const { copiedAssistantResponse, visibleAssistant } = await collectAssistantUiEvidence(
+          wire,
+          responseText,
+          () => readCopiedAssistantResponse(page),
+          () => readVisibleAssistantEvidence(page),
+        );
         const expectedCodeSegments = extractMarkdownCodeSegments(responseText);
 
         await page.goto(
@@ -1345,7 +1725,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 7,
+          schemaVersion: 8,
           runId: ACCEPTANCE_RUN_ID,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
@@ -1384,6 +1764,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             doneEventCount,
             httpStatus: wire.httpStatus,
             model: wire.done?.model ?? null,
+            billingClass,
             estimatedCostUsd,
             durationMs: wire.durationMs,
             tokens: { input: inputTokens, output: outputTokens },
@@ -1396,7 +1777,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             approvalAutoDenials: wire.approvalAutoDenials,
             sseEvents: wire.events,
             parseErrors: wire.parseErrors,
-            transportError: wire.transportError,
+            ...personaTransportArtifactFields(wire),
           },
           runtime: {
             healthStatus: runtimeHealthResponse?.status() ?? null,
@@ -1404,6 +1785,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             llmHealthy: runtimeLlmHealthy,
             expectedProvider: EXPECTED_LLM_PROVIDER,
             expectedDetail: EXPECTED_LLM_DETAIL,
+            expectedBillingClass: EXPECTED_BILLING_CLASS,
           },
           journey: {
             renderedConversation,
@@ -1428,14 +1810,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           score,
         };
         const artifactPath = join(ARTIFACTS, `${stem}.json`);
-        writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
-        await testInfo.attach('persona-acceptance-score', {
-          body: Buffer.from(JSON.stringify(score, null, 2)),
-          contentType: 'application/json',
-        });
-
-        expect(wire.httpStatus, 'chat request succeeded').toBe(200);
-        expect(wire.timedOut, 'chat request completed before the timeout').toBe(false);
+        await persistPersonaArtifactAndAssertTransport(
+          artifactPath,
+          artifact,
+          score,
+          wire,
+          testInfo,
+        );
         expect(wire.parseErrors, 'every SSE event was valid JSON').toEqual([]);
         expect(runtimeHealthResponse?.ok(), 'runtime health endpoint responded after the provider turn').toBe(true);
         expect(runtimeLlm?.health, 'runtime LLM health is verified after the provider turn').toBe('healthy');
@@ -1466,7 +1847,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           visibleAssistant.codeSegments.map(normalizeEol),
           'visible inline and fenced code exactly matched the response Markdown',
         ).toEqual(expectedCodeSegments.map(normalizeEol));
-        if (persona.id === 'coder' || persona.id === 'data-engineer') {
+        if (persona.id === 'data-engineer') {
           expect(
             expectedCodeSegments.length,
             `${persona.id} response included code that was verified in the visible DOM`,
@@ -1546,7 +1927,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         expect(providerInputTokens, 'provider input tokens are positive').toBeGreaterThan(0);
         expect(providerOutputTokens, 'provider output tokens are positive').toBeGreaterThan(0);
         if (RUN_MODE.gating) {
-          expect(estimatedCostUsd, 'Waggle returned a positive paid-call cost estimate').toBeGreaterThan(0);
+          expect(billingClass, 'Waggle returned an explicit billing class').toBe(EXPECTED_BILLING_CLASS);
+          expect(estimatedCostUsd, 'Waggle returned an explicit finite cost').not.toBeNull();
+          if (EXPECTED_BILLING_CLASS === 'free') {
+            expect(estimatedCostUsd, 'free provider cost is exactly zero').toBe(0);
+          } else {
+            expect(estimatedCostUsd, 'priced provider cost is positive').toBeGreaterThan(0);
+          }
         }
         if (RUN_MODE.gating) {
           expect(

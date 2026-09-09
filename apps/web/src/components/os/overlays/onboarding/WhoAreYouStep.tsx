@@ -23,7 +23,14 @@ const profileChipClass = (selected: boolean): string => selected
  * cockpit greets the user by name (B8). This component is presentational: it
  * lifts every field through `onChange` and delegates the save to `onContinue`.
  */
-const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepProps) => {
+const WhoAreYouStep = ({
+  profile,
+  onChange,
+  onContinue,
+  onContinueWithoutPersonalization,
+  saving,
+  saveError,
+}: WhoAreYouStepProps) => {
   const goals = profile.goals ?? [];
   const toggleGoal = (id: string) => {
     const next = goals.includes(id) ? goals.filter(g => g !== id) : [...goals, id];
@@ -65,8 +72,9 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
               autoComplete="name"
               value={profile.name ?? ''}
               onChange={e => onChange({ name: e.target.value })}
+              disabled={saving}
               placeholder="Marko Markovic"
-              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-[13px] sm:text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-[13px] sm:text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           <div>
@@ -77,8 +85,9 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
               autoComplete="organization-title"
               value={profile.role ?? ''}
               onChange={e => onChange({ role: e.target.value })}
+              disabled={saving}
               placeholder="Strategy Consultant"
-              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-[13px] sm:text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-[13px] sm:text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           <div>
@@ -91,6 +100,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
             <Select
               value={profile.industry || undefined}
               onValueChange={(v) => onChange({ industry: v })}
+              disabled={saving}
             >
               <SelectTrigger
                 id="who-industry"
@@ -118,7 +128,8 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                 type="button"
                 aria-pressed={profile.workType === w.id}
                 onClick={() => onChange({ workType: profile.workType === w.id ? '' : w.id })}
-                className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors ${profileChipClass(profile.workType === w.id)}`}
+                disabled={saving}
+                className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${profileChipClass(profile.workType === w.id)}`}
               >
                 {w.label}
               </button>
@@ -136,7 +147,8 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                 type="button"
                 aria-pressed={profile.teamSize === t.id}
                 onClick={() => onChange({ teamSize: profile.teamSize === t.id ? '' : t.id })}
-                className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors ${profileChipClass(profile.teamSize === t.id)}`}
+                disabled={saving}
+                className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${profileChipClass(profile.teamSize === t.id)}`}
               >
                 {t.label}
               </button>
@@ -156,7 +168,8 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                   type="button"
                   aria-pressed={on}
                   onClick={() => toggleGoal(g.id)}
-                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors ${profileChipClass(on)}`}
+                  disabled={saving}
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-display transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${profileChipClass(on)}`}
                 >
                   {g.label}
                 </button>
@@ -174,15 +187,36 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-4 mt-4 sm:mt-6">
+      {saveError && (
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {saveError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-end gap-3 mt-4 sm:mt-6">
+        {saveError && onContinueWithoutPersonalization && (
+          <button
+            type="button"
+            onClick={onContinueWithoutPersonalization}
+            disabled={saving}
+            className="px-4 py-2 rounded-xl text-sm font-display text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Continue without personalization
+          </button>
+        )}
         <button
+          type="button"
           onClick={onContinue}
           disabled={saving}
           aria-busy={saving}
-          className="inline-flex items-center gap-2 px-5 py-2 sm:py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="inline-flex items-center gap-2 px-5 py-2 sm:py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:cursor-not-allowed disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {saving ? 'Saving…' : 'Continue →'}
+          {saving ? 'Saving…' : saveError ? 'Retry saving profile' : 'Continue →'}
         </button>
       </div>
     </motion.div>

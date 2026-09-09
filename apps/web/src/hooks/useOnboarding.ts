@@ -1,16 +1,13 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
 import { ONBOARDED_THIS_SESSION_KEY, COACH_MARKS_FORCE_KEY } from '@/lib/coach-marks-gate';
-import {
-  isTauri,
-  isFirstLaunch as tauriIsFirstLaunch,
-  markFirstLaunchComplete as tauriMarkFirstLaunchComplete,
-} from '@/lib/tauri-bindings';
 
 export interface OnboardingState {
   completed: boolean;
   step: number;
+  /** Opaque server-issued identity for the active personal-mind profile. */
+  profileId?: string;
   tier?: UserTier;
   workspaceId?: string;
   apiKeySet?: boolean;
@@ -28,6 +25,7 @@ export interface OnboardingState {
 }
 
 const STORAGE_KEY = 'waggle:onboarding';
+const PROFILE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const defaultState: OnboardingState = {
   completed: false,
@@ -42,6 +40,18 @@ const defaultState: OnboardingState = {
 // so onFinish ran with a fallback local-* id and the seeding/navigation chain
 // silently broke.
 let forceWizardConsumed = false;
+export type OnboardingReconciliation = 'unknown' | 'confirmed' | 'unavailable';
+const RECONCILIATION_EVENT = 'waggle:onboarding-reconciliation';
+let serverReconciliation: OnboardingReconciliation = 'unknown';
+let reconciliationInFlight: Promise<OnboardingReconciliation> | null = null;
+let reconciliationGeneration = 0;
+let generationRevalidationInFlight: Promise<OnboardingReconciliation> | null = null;
+
+function setServerReconciliation(next: OnboardingReconciliation): OnboardingReconciliation {
+  serverReconciliation = next;
+  window.dispatchEvent(new CustomEvent(RECONCILIATION_EVENT));
+  return next;
+}
 
 function forceWizardParamAllowed(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_WAGGLE_E2E === '1';
@@ -51,7 +61,7 @@ function loadState(): OnboardingState {
   try {
     // E2E test bypass: ?skipOnboarding=true skips wizard and sets tier to 'power'
     const params = new URLSearchParams(window.location.search);
-    if (params.get('skipOnboarding') === 'true') {
+    if (forceWizardParamAllowed() && params.get('skipOnboarding') === 'true') {
       const tier = (params.get('tier') as UserTier) || 'power';
       const done: OnboardingState = { ...defaultState, completed: true, step: 7, tier, tooltipsDismissed: true };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
@@ -78,23 +88,36 @@ function loadState(): OnboardingState {
       return fresh;
     }
 
-    // Migrate from old key
-    if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
-      localStorage.removeItem('waggle_onboarding_complete');
-      const done: OnboardingState = { ...defaultState, completed: true, step: 7 };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
-      return done;
-    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       const state = { ...defaultState, ...parsed };
-      // Existing completed users without a tier default to 'simple'
-      if (parsed.completed && !parsed.tier) {
+      // The modern record is authoritative. A leftover legacy flag must never
+      // erase richer tier/workspace/persona choices from a newer client.
+      localStorage.removeItem('waggle_onboarding_complete');
+      const profileBound = typeof state.profileId === 'string'
+        && PROFILE_ID_PATTERN.test(state.profileId);
+      const forcedWalkthrough = forceWizardParamAllowed()
+        && params.get('forceWizard') === 'true';
+      if (state.completed && !profileBound && !forcedWalkthrough) {
+        // Pre-profile clients could persist a modern-looking completion record
+        // without identifying the dataDir that earned it. Keep benign choices
+        // provisional, but never let that record open the shell by itself.
+        state.completed = false;
+        state.step = 0;
+        delete state.completedAt;
+      }
+      // Existing profile-bound completed users without a tier default to 'simple'
+      if (state.completed && !parsed.tier) {
         state.tier = 'simple';
       }
       return state;
     }
+    // The legacy flag is not bound to a server-issued profile identity. Retire
+    // it instead of letting it complete onboarding for a replacement dataDir.
+    // The profile-bound server status below remains the returning-user source
+    // of truth and will restore completion when it belongs to this profile.
+    localStorage.removeItem('waggle_onboarding_complete');
   } catch { /* ignore */ }
   return defaultState;
 }
@@ -107,25 +130,18 @@ function saveState(state: OnboardingState) {
 
 /**
  * Wave T Lane A (item 1): can we decide wizard-vs-shell WITHOUT the server?
- * True when localStorage already settles it (completed, or mid-wizard step>0), or
- * a DEV forceWizard / E2E skipOnboarding param forces the decision. False only
- * for a fresh localStorage that must ask /api/onboarding/status — the exact case
- * where the wizard flashes for ~1s before the async auto-complete lands. Reads
+ * True only when an explicit DEV/E2E override settles the decision. Every
+ * ordinary cache (completed or mid-wizard) is provisional because the desktop
+ * may now point at a different/fresh dataDir, so the sidecar must confirm its
+ * profile identity. Reads
  * raw localStorage with no side effects (does NOT consume the forceWizard latch),
  * so AppShell can gate the boot screen on it.
  */
 export function isOnboardingStatusKnownSync(): boolean {
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('skipOnboarding') === 'true') return true;
+    if (forceWizardParamAllowed() && params.get('skipOnboarding') === 'true') return true;
     if (forceWizardParamAllowed() && params.get('forceWizard') === 'true') return true;
-    if (localStorage.getItem('waggle_onboarding_complete') === 'true') return true;
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<OnboardingState>;
-      if (parsed?.completed) return true;
-      if (typeof parsed?.step === 'number' && parsed.step > 0) return true;
-    }
     return false;
   } catch {
     return false;
@@ -133,35 +149,148 @@ export function isOnboardingStatusKnownSync(): boolean {
 }
 
 /**
- * Wave T Lane A (item 1): resolve a fresh-localStorage user's onboarding against
- * the server BEFORE the shell mounts, and persist the completed flag so
- * useOnboarding reads it synchronously (the wizard never paints for a
- * server-onboarded returning user). No-op when the decision is already known
- * locally. The boot-time counterpart of the in-hook auto-complete effect below;
- * never throws — a dead sidecar leaves the wizard in place for a truly new user.
+ * Wave T Lane A (item 1): resolve browser onboarding state against the server
+ * BEFORE the shell mounts. Server completion normalizes a returning-user cache;
+ * explicit server incompletion resets stale WebView state for a fresh dataDir.
+ * Never throws or erases a completed cache when the sidecar is unreachable.
  */
-export async function resolveReturningUserOnboarding(): Promise<void> {
-  if (isOnboardingStatusKnownSync()) return;
-  try {
-    const status = await adapter.getOnboardingStatus();
-    if (status?.completed) {
-      const next: OnboardingState = {
-        ...defaultState,
-        completed: true,
-        step: 7,
-        tier: 'power',
-        tooltipsDismissed: true,
-        apiKeySet: true,
-      };
-      saveState(next);
+export async function resolveReturningUserOnboarding(
+  confirmedCompletion?: OnboardingState,
+): Promise<OnboardingReconciliation> {
+  if (isOnboardingStatusKnownSync()) return 'confirmed';
+  if (serverReconciliation === 'confirmed') return 'confirmed';
+  if (reconciliationInFlight) return reconciliationInFlight;
+  const generationAtStart = reconciliationGeneration;
+  const reconcile = (async (): Promise<OnboardingReconciliation> => {
+    const stateAtStart = loadState();
+    try {
+      const stateSnapshot = localStorage.getItem(STORAGE_KEY);
+      const status = await adapter.getOnboardingStatus();
+      if (generationAtStart !== reconciliationGeneration) return serverReconciliation;
+      const profileId = typeof status?.profileId === 'string'
+        && PROFILE_ID_PATTERN.test(status.profileId)
+        ? status.profileId
+        : undefined;
+      if (!profileId) {
+        return setServerReconciliation('unavailable');
+      }
+      const stateChanged = localStorage.getItem(STORAGE_KEY) !== stateSnapshot;
+      const currentState = loadState();
+      const wizardAdvanced = stateChanged
+        && !stateAtStart.completed
+        && (
+          (!currentState.completed && currentState.step > stateAtStart.step)
+          || (currentState.completed && typeof currentState.completedAt === 'number')
+        );
+      const startedAsPristineUnboundWizard = !stateAtStart.profileId
+        && !stateAtStart.completed
+        && stateAtStart.step === 0
+        && !stateAtStart.workspaceId
+        && !stateAtStart.personaId
+        && !stateAtStart.templateId
+        && !stateAtStart.profileSeeded
+        && !(stateAtStart.toolsUsed?.length);
+      const advancingProfileIsCompatible = (stateAtStart.profileId === profileId || startedAsPristineUnboundWizard)
+        && (!currentState.profileId || currentState.profileId === profileId);
+      if (wizardAdvanced && advancingProfileIsCompatible) {
+        saveState({ ...currentState, profileId });
+        return setServerReconciliation('confirmed');
+      }
+      const sameProfile = currentState.profileId === profileId;
+      const hasDurableCompletionFlag = status?.completed === true && status?.source === 'flag';
+      if (sameProfile && !currentState.completed && currentState.step > 0 && !hasDurableCompletionFlag) {
+        return setServerReconciliation('confirmed');
+      }
+      localStorage.removeItem('waggle_onboarding_complete');
+      if (status?.completed) {
+        if (confirmedCompletion?.profileId && confirmedCompletion.profileId !== profileId) {
+          // A completion attempt belongs to one immutable service profile. If
+          // the desktop generation switched while it was in flight, bind the
+          // fresh wizard to the replacement profile without inheriting either
+          // profile's completion through the stale attempt. Normal boot-time
+          // reconciliation (without confirmedCompletion) still restores a
+          // genuinely returning user.
+          saveState({ ...defaultState, profileId });
+          return setServerReconciliation('confirmed');
+        }
+        const preserveConfirmedCompletion = confirmedCompletion?.profileId === profileId;
+        const next: OnboardingState = sameProfile && (currentState.completed || preserveConfirmedCompletion)
+          ? {
+              ...(preserveConfirmedCompletion ? confirmedCompletion : currentState),
+              completed: true,
+              step: 7,
+              profileId,
+            }
+          : {
+              ...defaultState,
+              completed: true,
+              step: 7,
+              tier: currentState.tier || 'power',
+              tooltipsDismissed: true,
+              profileId,
+            };
+        saveState(next);
+      } else if (status?.completed === false) {
+        if (sameProfile && currentState.completed) {
+          // Preserve browser choices only when they belong to this exact
+          // logical profile, then repair the missing durable flag. The server
+          // compares this profile id immediately before writing, so a desktop
+          // generation switch fails with 409 instead of stamping a replacement.
+          saveState({ ...currentState, profileId });
+          void adapter.markOnboardingComplete(profileId).catch((err) => {
+            console.warn('[useOnboarding] profile-bound completion repair failed:', err);
+          });
+        } else {
+          localStorage.removeItem('waggle:tooltips_done');
+          saveState({ ...defaultState, profileId });
+        }
+      } else {
+        return setServerReconciliation('unavailable');
+      }
+      return setServerReconciliation('confirmed');
+    } catch {
+      if (generationAtStart !== reconciliationGeneration) return serverReconciliation;
+      /* sidecar unreachable — stay on the wizard so a truly new user can set up */
+      return setServerReconciliation('unavailable');
     }
-  } catch {
-    /* sidecar unreachable — stay on the wizard so a truly new user can set up */
+  })();
+  reconciliationInFlight = reconcile;
+  try {
+    return await reconcile;
+  } finally {
+    if (reconciliationInFlight === reconcile) reconciliationInFlight = null;
+  }
+}
+
+export async function revalidateReturningUserOnboarding(
+  replaceInFlight = false,
+  confirmedCompletion?: OnboardingState,
+): Promise<OnboardingReconciliation> {
+  if (generationRevalidationInFlight && !replaceInFlight) return generationRevalidationInFlight;
+  if (replaceInFlight) generationRevalidationInFlight = null;
+  const revalidate = (async () => {
+    reconciliationGeneration += 1;
+    setServerReconciliation('unknown');
+    // A request owned by the previous sidecar generation may never settle.
+    // Detach it: its generation guard prevents stale writes, while the equality
+    // check in its finally block prevents it from clearing this new request.
+    reconciliationInFlight = null;
+    return resolveReturningUserOnboarding(confirmedCompletion);
+  })();
+  generationRevalidationInFlight = revalidate;
+  try {
+    return await revalidate;
+  } finally {
+    if (generationRevalidationInFlight === revalidate) generationRevalidationInFlight = null;
   }
 }
 
 export const useOnboarding = () => {
   const [state, setState] = useState<OnboardingState>(loadState);
+  const completionInFlightRef = useRef<Promise<boolean> | null>(null);
+  const [reconciliationUnavailable, setReconciliationUnavailable] = useState(
+    () => serverReconciliation === 'unavailable',
+  );
 
   // Re-sync when another hook instance writes to localStorage
   useEffect(() => {
@@ -170,42 +299,33 @@ export const useOnboarding = () => {
     return () => window.removeEventListener('waggle:onboarding-sync', handler);
   }, []);
 
-  // CC Sesija A §2.3 A11: Tauri filesystem-flag fast-path for returning users.
-  // Runs in Tauri mode only; if ~/.waggle/first-launch.flag exists the user
-  // has completed onboarding before (even if this WebView profile is fresh).
-  // Auto-completes the wizard in that case. Complementary to the workspaces-
-  // check below — flag is faster + doesn't need sidecar; either trigger is
-  // sufficient.
   useEffect(() => {
-    if (state.completed) return;
-    if (!isTauri()) return;
-    let cancelled = false;
-    tauriIsFirstLaunch()
-      .then((firstLaunch) => {
-        if (cancelled || firstLaunch) return;
-        console.info(
-          '[useOnboarding] Tauri filesystem flag indicates returning user — auto-completing wizard',
-        );
-        const next: OnboardingState = {
-          ...defaultState,
-          completed: true,
-          step: 7,
-          tier: state.tier || 'power',
-          tooltipsDismissed: true,
-          apiKeySet: true,
-        };
-        saveState(next);
-        setState(next);
-      })
-      .catch(() => {
-        /* command unavailable — fall through to existing returning-user check */
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const handler = () => setReconciliationUnavailable(serverReconciliation === 'unavailable');
+    window.addEventListener(RECONCILIATION_EVENT, handler);
+    return () => window.removeEventListener(RECONCILIATION_EVENT, handler);
   }, []);
+
+  const params = new URLSearchParams(window.location.search);
+  const onboardingOverrideActive = (forceWizardParamAllowed() && params.get('skipOnboarding') === 'true')
+    || (forceWizardParamAllowed() && params.get('forceWizard') === 'true');
+  // Retry an unavailable probe when the browser itself recovers. The AppShell
+  // owns service-generation events so one production `connected:true` event
+  // cannot race a generic retry against generation invalidation.
+  useEffect(() => {
+    if (!reconciliationUnavailable || onboardingOverrideActive) return;
+    const retry = () => { void resolveReturningUserOnboarding(); };
+    const retryWhenVisible = () => {
+      if (document.visibilityState === 'visible') retry();
+    };
+    window.addEventListener('online', retry);
+    window.addEventListener('focus', retry);
+    document.addEventListener('visibilitychange', retryWhenVisible);
+    return () => {
+      window.removeEventListener('online', retry);
+      window.removeEventListener('focus', retry);
+      document.removeEventListener('visibilitychange', retryWhenVisible);
+    };
+  }, [onboardingOverrideActive, reconciliationUnavailable]);
 
   // Bug #2: auto-complete onboarding for returning users.
   // The localStorage flag is per-webview, so a fresh Tauri webview (or a
@@ -222,12 +342,9 @@ export const useOnboarding = () => {
   // alone is not evidence.
   useEffect(() => {
     if (state.completed) return;
-    // Mid-wizard guard: step > 0 means THIS webview is actively onboarding —
-    // not a fresh-localStorage returning user. Without it, a C33 import run
-    // during the wizard writes personal-mind frames (= legacy evidence), and
-    // a refresh would auto-complete the wizard out from under the user,
-    // skipping the remaining steps.
-    if (state.step > 0) return;
+    // Mid-wizard caches must also be profile-confirmed. The reconciliation
+    // preserves progress for the matching profile (even if legacy evidence is
+    // present) and resets it only when the server identifies another profile.
     // PM walkthrough bypass (DEV/E2E only): when ?forceWizard=true is set, skip
     // the auto-complete branch so the wizard renders even for a returning
     // user. Symmetric with the loadState() bypass above.
@@ -235,31 +352,7 @@ export const useOnboarding = () => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('forceWizard') === 'true') return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const status = await adapter.getOnboardingStatus();
-        if (cancelled) return;
-        if (status?.completed) {
-          console.info(
-            `[useOnboarding] returning user detected (server onboarding status: ${status.source ?? 'flag'}) — auto-completing wizard`
-          );
-          const next: OnboardingState = {
-            ...defaultState,
-            completed: true,
-            step: 7,
-            tier: state.tier || 'power',
-            tooltipsDismissed: true,
-            apiKeySet: true,
-          };
-          saveState(next);
-          setState(next);
-        }
-      } catch {
-        /* sidecar unreachable — stay on the wizard so a truly new user can set up */
-      }
-    })();
-    return () => { cancelled = true; };
+    void resolveReturningUserOnboarding();
     // Run once on mount — we intentionally don't re-run on state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -269,9 +362,15 @@ export const useOnboarding = () => {
       const next = { ...prev, ...updates };
       // F1/F5: stamp the completion time on the transition ONLY (immutable copy)
       // so the trial-modal gate + coach-marks gate can quiet themselves right
-      // after the wizard. The two returning-user auto-complete effects use
-      // saveState() directly and deliberately leave completedAt unset.
+      // after the wizard. Server-authoritative returning-user completion calls
+      // saveState() directly and deliberately leaves completedAt unset.
       const justCompleted = next.completed && !prev.completed;
+      const forcedWalkthrough = forceWizardParamAllowed()
+        && new URLSearchParams(window.location.search).get('forceWizard') === 'true';
+      if (justCompleted && !forcedWalkthrough) {
+        console.warn('[useOnboarding] completion must be confirmed by the active profile');
+        return prev;
+      }
       const stamped = justCompleted ? { ...next, completedAt: Date.now() } : next;
       saveState(stamped);
       if (justCompleted) {
@@ -280,33 +379,74 @@ export const useOnboarding = () => {
         try {
           sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
         } catch { /* storage disabled — the completedAt window still covers first-run */ }
-        // P4: stamp the server-side completion flag — the durable signal the
-        // auto-complete effect above keys on. Fire-and-forget; failure is
-        // non-fatal (localStorage still says completed for this webview).
-        adapter.markOnboardingComplete().catch((err) => {
-          console.warn('[useOnboarding] markOnboardingComplete failed:', err);
-        });
-        // CC Sesija A §2.3 A11: Tauri filesystem flag too (default ~/.waggle
-        // installs share the same file; the IPC path works even when the
-        // sidecar is mid-restart).
-        if (isTauri()) {
-          tauriMarkFirstLaunchComplete().catch((err) => {
-            console.warn('[useOnboarding] markFirstLaunchComplete failed:', err);
-          });
-        }
       }
       return stamped;
     });
   }, []);
 
-  const complete = useCallback(() => {
-    update({ completed: true, step: 7 });
-  }, [update]);
+  const complete = useCallback((): Promise<boolean> => {
+    const forcedWalkthrough = forceWizardParamAllowed()
+      && new URLSearchParams(window.location.search).get('forceWizard') === 'true';
+    if (forcedWalkthrough) {
+      update({ completed: true, step: 7 });
+      return Promise.resolve(true);
+    }
+
+    const profileId = state.profileId;
+    if (typeof profileId !== 'string' || !PROFILE_ID_PATTERN.test(profileId)) {
+      console.warn('[useOnboarding] completion is not bound to an active profile');
+      return Promise.resolve(false);
+    }
+    if (completionInFlightRef.current) return completionInFlightRef.current;
+
+    const attempt = (async () => {
+      try {
+        // The server compares the expected profile atomically before writing.
+        // Do not expose local completion until the durable stamp succeeds.
+        await adapter.markOnboardingComplete(profileId);
+      } catch (err) {
+        console.warn('[useOnboarding] profile-bound completion failed:', err);
+        // The server may have committed before the transport failed. The
+        // profile-bound status read below is the durable authority: exact
+        // same-profile completion recovers, while missing/mismatched state
+        // remains incomplete.
+      }
+
+      const reconciliation = await revalidateReturningUserOnboarding(true, state);
+      const confirmed = loadState();
+      if (reconciliation !== 'confirmed'
+        || !confirmed.completed
+        || confirmed.profileId !== profileId) {
+        return false;
+      }
+
+      const finalized: OnboardingState = {
+        ...state,
+        ...confirmed,
+        completed: true,
+        step: 7,
+        profileId,
+        completedAt: Date.now(),
+      };
+      saveState(finalized);
+      try {
+        sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
+      } catch { /* storage disabled — completedAt still protects first-run UX */ }
+      return true;
+    })();
+    completionInFlightRef.current = attempt;
+    void attempt.finally(() => {
+      if (completionInFlightRef.current === attempt) completionInFlightRef.current = null;
+    });
+    return attempt;
+  }, [state, update]);
 
   const reset = useCallback(() => {
-    const fresh = { ...defaultState };
-    saveState(fresh);
-    setState(fresh);
+    setState((previous) => {
+      const fresh = { ...defaultState, profileId: previous.profileId };
+      saveState(fresh);
+      return fresh;
+    });
   }, []);
 
   // Phase 1 #6 — replay just the post-wizard Tour without rerunning the full

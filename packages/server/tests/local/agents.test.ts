@@ -349,6 +349,8 @@ describe('Agent entity routes (Phase 3)', () => {
       persona: 'researcher',
       model: 'claude-haiku-4-5',
       parentWorkspaceId: 'ws-a',       // single workspace → auto-selected
+      savedAgentId: agent.id,          // opt in to authoritative stored policy
+      agentId: agent.id,               // preserve durable-run correlation
     });
   });
 
@@ -376,6 +378,25 @@ describe('Agent entity routes (Phase 3)', () => {
     const picked = await server.inject({ method: 'POST', url: `/api/agents/${agent.id}/run`, payload: { workspaceId: 'ws-b' } });
     expect(picked.statusCode).toBe(200);
     expect(spawnCalls.at(-1)?.parentWorkspaceId).toBe('ws-b');
+  });
+
+  it('run opens the workspace picker when the saved agent has no workspace assignment', async () => {
+    server.decorate('workspaceManager', {
+      list: () => [{ id: 'ws-a' }, { id: 'ws-b' }],
+      get: () => undefined,
+    } as never);
+    const agent = await createAgent({ ...VALID_BODY, workspaceIds: [] });
+
+    const response = await server.inject({
+      method: 'POST', url: `/api/agents/${agent.id}/run`, payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: 'workspace_ambiguous',
+      workspaceIds: ['ws-a', 'ws-b'],
+    });
+    expect(spawnCalls).toHaveLength(0);
   });
 
   it('run 404s for an unknown agent; rejects a traversal workspaceId', async () => {
@@ -463,15 +484,15 @@ describe('Agent entity routes (Phase 3)', () => {
     expect(registry.get(worker.id)?.status).toBe('running');
   });
 
-  it('agent with no workspaceIds is pausable after /run (default-workspace fallback)', async () => {
+  it('agent with no workspaceIds is pausable after an explicit runtime workspace pick', async () => {
     const agent = await createAgent({ ...VALID_BODY, name: 'NoWs', workspaceIds: undefined });
-    const run = await runAgent(agent);
-    expect(run.workspaceId).toBe('default-workspace'); // fleet fallback
-    sessions.push({ workspaceId: 'default-workspace', personaId: 'researcher', status: 'active' });
+    const run = await runAgent(agent, { workspaceId: 'picked-workspace' });
+    expect(run.workspaceId).toBe('picked-workspace');
+    sessions.push({ workspaceId: 'picked-workspace', personaId: 'researcher', status: 'active' });
 
     const res = await server.inject({ method: 'POST', url: `/api/agents/${agent.id}/pause` });
     expect(res.statusCode).toBe(200);
-    expect(pausedIds).toEqual(['default-workspace']);
+    expect(pausedIds).toEqual(['picked-workspace']);
   });
 
   it('pause 404s when the recorded run has no active session left', async () => {

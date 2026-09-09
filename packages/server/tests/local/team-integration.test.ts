@@ -553,7 +553,8 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(sharedOrchestrator.teamSync).not.toBeNull();
     const capturedTeamSync = sharedOrchestrator.teamSync!;
 
-    server.agentState.closeWorkspaceMind(workspace.id);
+    const retirement = await server.agentState.closeWorkspaceMind(workspace.id);
+    retirement.release();
 
     expect(sharedOrchestrator.teamSync).toBeNull();
     mockFetch.mockClear();

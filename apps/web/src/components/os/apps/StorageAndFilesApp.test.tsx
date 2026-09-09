@@ -124,6 +124,57 @@ describe('StorageAndFilesApp', () => {
     expect(fileBrowser).toHaveAttribute('tabindex', '0');
   });
 
+  it('downloads the exact file returned by the workspace adapter', async () => {
+    const downloaded = new Blob(['release notes'], { type: 'text/markdown' });
+    mocks.adapter.downloadFile.mockResolvedValue(downloaded);
+    const createObjectURL = vi.fn(() => 'blob:waggle-download');
+    const revokeObjectURL = vi.fn();
+    const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    try {
+      renderApp();
+      fireEvent.click(screen.getByTestId('storage-view-b'));
+      await screen.findByRole('columnheader', { name: /source/i });
+      fireEvent.click(screen.getByText('teardown.md'));
+
+      const downloadButtons = await screen.findAllByRole('button', { name: /^download$/i });
+      fireEvent.click(downloadButtons.at(-1)!);
+
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledWith(downloaded));
+      const anchor = click.mock.instances.at(-1);
+      expect(anchor).toHaveAttribute('href', 'blob:waggle-download');
+      expect(anchor).toHaveAttribute('download', 'teardown.md');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:waggle-download');
+    } finally {
+      click.mockRestore();
+      if (originalCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectURL);
+      else Reflect.deleteProperty(URL, 'createObjectURL');
+      if (originalRevokeObjectURL) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectURL);
+      else Reflect.deleteProperty(URL, 'revokeObjectURL');
+    }
+  });
+
+  it('does not launch browser-blocked automatic downloads for a multi-file selection', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+    fireEvent.click(screen.getByText('teardown.md'), { ctrlKey: true });
+    fireEvent.click(screen.getByText('mem0-teardown.pdf'), { ctrlKey: true });
+    await screen.findByText('2 selected');
+
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+
+    expect(mocks.adapter.downloadFile).not.toHaveBeenCalled();
+    expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Download files one at a time',
+      variant: 'destructive',
+    }));
+  });
+
   it('names file toolbar icon controls and the temporary filter field', async () => {
     renderApp();
     fireEvent.click(screen.getByTestId('storage-view-b'));

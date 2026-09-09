@@ -72,6 +72,13 @@ export const ACTION_VERBS = [
 ];
 export const ACTION_VERB_PATTERN = new RegExp(`^(${ACTION_VERBS.join('|')})\\b`, 'i');
 
+const WORKSPACE_CATCH_UP_PATTERN = /\b(?:catch me up|get me up to speed|where did we leave off|where were we|what matters here now)\b/i;
+
+/** Explicit continuity requests are actionable even when they are short. */
+export function isWorkspaceCatchUpRequest(text: string): boolean {
+  return WORKSPACE_CATCH_UP_PATTERN.test(text.trim());
+}
+
 /**
  * Detect whether a user message is too brief/vague to act on confidently.
  * Returns true when the message is short and lacks clear intent signals.
@@ -81,6 +88,8 @@ export const ACTION_VERB_PATTERN = new RegExp(`^(${ACTION_VERBS.join('|')})\\b`,
 export function isAmbiguousMessage(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
+
+  if (isWorkspaceCatchUpRequest(trimmed)) return false;
 
   // Must have fewer than 10 words
   const words = trimmed.split(/\s+/);
@@ -148,8 +157,8 @@ const TURN_DIRECTIVE_START_SOURCE = String.raw`(?:^|[.;!?:—–\r\n]\s*|,\s*(?=
   String.raw`(?:(?:please|kindly|now)\b[\s,]*)*` +
   String.raw`(?:(?:(?:can|could|would|will)\s+you\s+)|(?:(?:I|we)\s+(?:want|need|would\s+like)\s+you\s+to\s+))?`;
 const TURN_RESPONSE_ACTION_SOURCE = String.raw`(?:answer|respond|reply|explain|tell|summarize|continue|proceed|start(?:\s+(?:over|fresh))?|begin(?:\s+(?:again|fresh))?)`;
-const MEMORY_READ_ACTION_SOURCE = String.raw`(?:search|query|read|check|use|access|consult|retrieve|recall|inspect|browse|load|reference|refer\s+to|look\s+(?:up|at)|draw\s+from|rely\s+on|pull\s+from|fetch\s+from)`;
-const MEMORY_READ_ACTION_GERUND_SOURCE = String.raw`(?:searching|querying|reading|checking|using|accessing|consulting|retrieving|recalling|inspecting|browsing|loading|referencing|referring\s+to|looking\s+(?:up|at)|drawing\s+from|relying\s+on|pulling\s+from|fetching\s+from)`;
+const MEMORY_READ_ACTION_SOURCE = String.raw`(?:search|query|read|check|use|access|consult|retrieve|recall|inspect|browse|load|reference|refer\s+to|look\s+(?:up|at|in)|draw\s+from|rely\s+on|pull\s+from|fetch\s+from)`;
+const MEMORY_READ_ACTION_GERUND_SOURCE = String.raw`(?:searching|querying|reading|checking|using|accessing|consulting|retrieving|recalling|inspecting|browsing|loading|referencing|referring\s+to|looking\s+(?:up|at|in)|drawing\s+from|relying\s+on|pulling\s+from|fetching\s+from)`;
 const MEMORY_READ_AUTHORIZATION_SCOPE_SOURCE = String.raw`(?:to\s+(?:${MEMORY_READ_ACTION_SOURCE}|${MEMORY_READ_ACTION_GERUND_SOURCE})|to\s+(?:(?:my|our|your|the)\s+)?(?:use|access|search|recall)\s+of|to\s+(?=${CONVERSATION_HISTORY_SOURCE}\b|(?:(?:my|our|your|the|any)\s+)?(?:(?:saved|stored|persistent|personal|workspace)\s+)?memor(?:y|ies)\b)|for\s+(?:(?:you\s+)?to\s+${MEMORY_READ_ACTION_SOURCE}|${MEMORY_READ_ACTION_GERUND_SOURCE}|(?:the\s+)?(?:(?:use|search|recall)\s+of|access\s+(?:of|to))))`;
 const MEMORY_READ_PROHIBITION_SOURCE = String.raw`(?:do not|don['’]t|never|(?:can|could|would|will)\s+you\s+(?:please\s+)?not|under\s+no\s+circumstances(?:\s+(?:should|may|must)\s+you)?|(?:you\s+)?(?:must|should|may)\s+not|(?:you\s+)?(?:mustn['’]t|shouldn['’]t)|(?:you\s+)?(?:cannot|can['’]t|can\s+not)|(?:you\s+)?(?:are\s+)?not\s+(?:permitted|allowed|authorized)\s+to|(?:you\s+)?lack(?:s)?\s+permission\s+to)`;
 const REMEMBERED_PERSONAL_CONTEXT_SOURCE = String.raw`(?:anything|everything|what)\s+(?:you\s+)?(?:know|remember)\s+about\s+(?:me|us)`;
@@ -245,16 +254,23 @@ function withoutTechnicalMemoryTerms(text: string): string {
 }
 
 const ATTRIBUTED_REPORTED_MEMORY_POLICY_CLAUSE_PATTERNS = Object.freeze([
-  /(^|[.;!?\r\n]\s*)(?!(?:I|We|You)\s)\p{Lu}[\p{L}\p{M}'’-]+(?:\s+\p{Lu}[\p{L}\p{M}'’-]+){0,2}\s+(?:said|says|stated|states|reported|reports|wrote|writes|noted|notes|claimed|claims)\s*:\s*[^.;!?\r\n]*/gu,
-  /(^|[.;!?\r\n]\s*)(?:the\s+)?(?:report|document|documentation|article|email|message|transcript|example|author|speaker|customer|client|reviewer)\s+(?:said|says|stated|states|reported|reports|wrote|writes|noted|notes|claimed|claims|reads)\s*:\s*[^.;!?\r\n]*/gi,
+  /(^|[.;!?\r\n]\s*)(?!(?:I|We|You)\s)\p{L}[\p{L}\p{M}'’-]+(?:\s+\p{L}[\p{L}\p{M}'’-]+){0,2}\s+(?:said|says|asked|asks|requested|requests|stated|states|reported|reports|wrote|writes|noted|notes|claimed|claims|told|tells)(?:\s+(?:me|us))?\s*(?::|[,—–-])\s*[^.;!?\r\n]*/giu,
+  /(^|[.;!?\r\n]\s*)(?:the\s+)?(?:report|document|documentation|article|email|message|transcript|example|author|speaker|customer|client|reviewer)\s+(?:said|says|asked|asks|requested|requests|stated|states|reported|reports|wrote|writes|noted|notes|claimed|claims|reads)\s*(?::|[,—–-])\s*[^.;!?\r\n]*/gi,
+  /(^|[.;!?\r\n]\s*)(?:according\s+to|per)\s+\p{L}[\p{L}\p{M}'’-]+(?:\s+\p{L}[\p{L}\p{M}'’-]+){0,2}\s*:\s*[^.;!?\r\n]*/giu,
+  /(^|[.;!?\r\n]\s*)(?!(?:I|We|You|My|Our)\b)\p{L}[\p{L}\p{M}’-]+(?:\s+\p{L}[\p{L}\p{M}’-]+){0,2}['’]s\s+(?:request|instruction|question|statement|prompt)\s*:\s*[^.;!?\r\n]*/giu,
 ]);
 const ATTRIBUTED_REPORTED_MEMORY_POLICY_VERBS = new Set([
-  'said', 'says', 'stated', 'states', 'reported', 'reports', 'wrote', 'writes',
+  'said', 'says', 'asked', 'asks', 'requested', 'requests',
+  'stated', 'states', 'reported', 'reports', 'wrote', 'writes',
   'noted', 'notes', 'claimed', 'claims', 'reads',
+  'request', 'instruction', 'question', 'statement', 'prompt',
 ]);
+const DESCRIPTIVE_MEMORY_CONTENT_CLAUSE = /(^|[.;!?\r\n]\s*)(?:(?:can|could|would|will)\s+you\s+)?(?:(?:please|kindly)\s+)?(?:quote|translate|repeat|paraphrase|explain|analy[sz]e|review|summari[sz]e|rewrite|classify|critique|edit|proofread|evaluate|discuss|correct(?:\s+the\s+grammar)?|answer\s+whether\b[^:;!?\r\n]{0,80})\b(?:\s+(?:briefly|concisely|verbatim|exactly|literally|carefully))?(?:\s+(?:this|that|the\s+following)\s+(?:question|statement|sentence|phrase|prompt|request))?\s*:\s*(?=[^.;!?\r\n]{0,180}\b(?:remember|memor(?:y|ies)|(?:previous|prior|another|other|earlier)\s+(?:session|chat|conversation|thread))\b)[^.;!?\r\n]*/gi;
 const DIRECT_USER_POLICY_CONTINUATION_AFTER_COMMA = /,(?=\s*(?:but|however|instead|yet|actually|rather|and(?:\s+now)?)\b[\s,]*(?:(?:I|we)\b|(?:my|our)\b)[^,.;!?\r\n]{0,80}:)/giu;
 
 function hasAttributedReportedMemoryPolicyMarker(text: string): boolean {
+  if (/\b(?:said|says|asked|asks|requested|requests|told|tells)(?:\s+(?:me|us))?\s*(?::|[,—–-])/i.test(text)) return true;
+  if (/\b(?:according\s+to|per)\s+\p{L}[\p{L}\p{M}'’-]*(?:\s+\p{L}[\p{L}\p{M}'’-]*){0,2}\s*:/iu.test(text)) return true;
   for (let colonIndex = text.indexOf(':'); colonIndex >= 0; colonIndex = text.indexOf(':', colonIndex + 1)) {
     let wordEnd = colonIndex;
     while (wordEnd > 0 && /\s/u.test(text[wordEnd - 1]!)) wordEnd -= 1;
@@ -281,19 +297,17 @@ function withoutAttributedReportedMemoryPolicyClauses(text: string): string {
   DIRECT_USER_POLICY_CONTINUATION_AFTER_COMMA.lastIndex = 0;
   return ATTRIBUTED_REPORTED_MEMORY_POLICY_CLAUSE_PATTERNS.reduce((result, pattern) => {
     pattern.lastIndex = 0;
-    const next = result.replace(pattern, (match, boundary: string) => (
-      `${boundary}${' '.repeat(match.length - boundary.length)}`
-    ));
+    const next = result.replace(pattern, (_match, boundary: string) => `${boundary} `);
     pattern.lastIndex = 0;
     return next;
   }, textWithDirectUserBoundaries);
 }
 
-function actionableMemoryDirectiveText(message: string): string {
+export function actionableMemoryDirectiveText(message: string): string {
   return withoutTechnicalMemoryTerms(normalizeMemoryDirectiveBoundaries(
-    withoutAttributedReportedMemoryPolicyClauses(
-      withoutQuotedText(exposeOperativeQuotedDirectives(message)),
-    ),
+    withoutAttributedReportedMemoryPolicyClauses(withoutQuotedText(
+      exposeOperativeQuotedDirectives(message),
+    )).replace(DESCRIPTIVE_MEMORY_CONTENT_CLAUSE, '$1 '),
   ));
 }
 
@@ -385,13 +399,50 @@ function buildNegativeMemoryAuthorizationPatterns(memorySource: string, flags: s
 }
 
 function buildDeferredMemoryReadPatterns(memorySource: string, flags: string): RegExp[] {
+  const benignAvailability = String.raw`(?:(?:that\s+)?(?:(?:it|that|they|memory)\s+(?:(?:is|are)|(?:might|may|could|can|would)\s+be)\s+)?(?:available|accessible|possible|relevant|helpful|useful|needed|appropriate)\b|(?:it|that|memory)\s+(?:(?:might|may|could|can|would)\s+help|helps?\b[^.;!?\r\n]{0,40}\banswer\b)|you\s+(?:(?:can|could|may)\s+(?:access|use|find|retrieve)|(?:need|want))\s+(?:it|that|memory)\b|any\s+(?:memor(?:y|ies)\s+)?exist\b)`;
+  const condition = String.raw`(?:(?:only\s+)?(?:if|when|once|after|upon)|provided(?:\s+that)?|only\s+with)\b`;
+  const deferredCondition = String.raw`${condition}(?!\s+${benignAvailability})`;
+  const benignCondition = String.raw`(?:if|when|provided(?:\s+that)?)\b\s+${benignAvailability}`;
+  const authorizationNoun = String.raw`(?:approval|consent|permission|authorization)`;
+  const memoryAuthorizationObject = String.raw`(?:it|that|its\s+use|using\s+(?:it|that)|memory(?:\s+(?:access|use))?|access)`;
+  const delegatedMemoryAuthorization = String.raw`you\s+to\s+${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryAuthorizationObject}`;
+  const authorizationPurpose = String.raw`(?:\s+(?:for\s+memory\s+use|to\s+${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryAuthorizationObject}))?`;
+  const userAuthorizationVerb = String.raw`(?:approv(?:e|es|ed)(?:\s+${memoryAuthorizationObject})?|consent(?:s|ed)?(?:\s+to\s+${memoryAuthorizationObject})?|authori[sz](?:e|es|ed)(?:\s+(?:${memoryAuthorizationObject}|${delegatedMemoryAuthorization}))?|permit(?:s|ted)?(?:\s+(?:${memoryAuthorizationObject}|${delegatedMemoryAuthorization}))?|allow(?:s|ed)?(?:\s+(?:${memoryAuthorizationObject}|${delegatedMemoryAuthorization}))?|agree(?:s|d)?|opt(?:s|ed)?\s+in|say(?:s|ing)?\s+(?:(?:it\s+is\s+)?(?:okay|ok|fine)|yes|so|go)|(?:tell|tells|told|telling)\s+you\s+(?:(?:it\s+is\s+)?(?:okay|ok|fine|allowed)|to\s+proceed)|(?:give|gives|gave|giving|grant|grants|granted|granting)\s+(?:you\s+)?(?:(?:the\s+)?go[- ]ahead|${authorizationNoun}|access)(?:\s+to\s+you)?${authorizationPurpose}|provide(?:s|d|ing)?\s+${authorizationNoun}|sign(?:s|ed|ing)?\s+off(?:\s+on\s+${memoryAuthorizationObject})?|grant(?:s|ed|ing)?\s+access|confirm(?:s|ed|ing)?|enable(?:s|d|ing)?(?:\s+${memoryAuthorizationObject})?)`;
+  const directUserAuthorization = String.raw`(?:I|we)\s+(?:(?:have|had)\s+)?(?:(?:explicitly|later)\s+)?${userAuthorizationVerb}`;
+  const reviewedUserAuthorization = String.raw`(?:I|we)\s+(?:have|had)\s+[^.;!?\r\n]{0,60}\s+and\s+(?:explicitly\s+)?${userAuthorizationVerb}`;
+  const contractedUserAuthorization = String.raw`(?:I|we)['’]ve\s+(?:explicitly\s+)?${userAuthorizationVerb}`;
+  const ownedAuthorization = String.raw`(?:(?:my|our|the\s+user['’]s)\s+(?:${authorizationNoun}|go[- ]ahead)|${authorizationNoun}\s+from\s+(?:me|us)|(?:explicit\s+)?${authorizationNoun}(?:\s+from\s+(?:me|us))?\s+(?:(?:is|has\s+been)\s+)?(?:given|granted|provided))`;
+  const authorizationSignal = String.raw`(?:${reviewedUserAuthorization}|${directUserAuthorization}|${contractedUserAuthorization}|(?:me|us)\s+to\s+${userAuthorizationVerb}|the\s+user\s+${userAuthorizationVerb}|${ownedAuthorization}|ask(?:s|ed|ing)?\s+(?:me|us)|(?:tell|tells|told|telling)\s+you\s+to)`;
+  const memoryReference = String.raw`(?:it|that|(?:(?:my|our|your|the|saved|stored|persistent|personal|workspace)\s+)?memor(?:y|ies))`;
+  const questionLeadModifier = String.raw`(?:(?:exactly|precisely|specifically|roughly|approximately|actually|really|historically|then|ever|in\s+fact)\b[\s,]*){0,3}`;
+  const questionLead = String.raw`${questionLeadModifier}(?:did|do|does|was|were|is|are|has|have|had|what|which|who|where|why|how)\b`;
+  const authorizationClauseEnd = String.raw`(?=\s*(?:(?:[;.!?](?=\s|$))|$))`;
+  const activationCondition = String.raw`${condition}(?![\s,]+${questionLead})[^.;!?\r\n]{0,120}\b${authorizationSignal}\b${authorizationClauseEnd}`;
+  const controlledRead = String.raw`(?:(?:only|solely)\s+${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryReference}\b|${MEMORY_READ_ACTION_SOURCE}\b\s+(?:it|that)\s+(?:only|solely)|${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryReference}\b\s+(?:only|solely))`;
+  const deferredRead = String.raw`(?:defer|delay|postpone)\b\s+(?:${MEMORY_READ_ACTION_GERUND_SOURCE}\b\s+${memoryReference}\b|(?:the\s+)?(?:use|access)\s+of\s+${memoryReference}\b)`;
+  const authorizationCheckPrefix = String.raw`(?:(?:(?:could|would|can|will)\s+you|you\s+(?:must|should|need\s+to|have\s+to))\s+)?(?:(?:please|kindly)\s+)?`;
+  const authorizationCheck = String.raw`${authorizationCheckPrefix}(?:(?:ask|check\s+with|confirm\s+with)\s+(?:me|us)|(?:ask\s+for|obtain|seek|get)\b[^.;!?\r\n]{0,40}\b(?:approval|consent|permission|authorization|go[- ]ahead))`;
+  const memoryUseAfterCheck = String.raw`before\s+${MEMORY_READ_ACTION_GERUND_SOURCE}\b\s+(?:it|that|memory)\b`;
+  const authorizationCheckFirst = String.raw`(?:first[\s,]+${authorizationCheck}\b|${authorizationCheck}\b[^.;!?\r\n]{0,24}\b(?:first|${memoryUseAfterCheck})\b)`;
+  const checkBeforeMemoryUse = String.raw`before\s+(?:(?:you\s+)?${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryReference}\b|${MEMORY_READ_ACTION_GERUND_SOURCE}\b\s+${memoryReference}\b)[^.;!?\r\n]{0,32}\b(?:${authorizationCheck}|${authorizationSignal})\b`;
+  const activationDeferral = String.raw`(?:${activationCondition}|(?:wait|hold)\b[^.;!?\r\n]{0,100}\b(?:until|for)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|${controlledRead}[^.;!?\r\n]{0,40}\b(?:after|when|once|upon)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|${MEMORY_READ_PROHIBITION_SOURCE}\b\s+(?:${MEMORY_READ_ACTION_SOURCE}\b\s+${memoryReference}\b|proceed\b[^.;!?\r\n]{0,24}\bmemory\b)[^.;!?\r\n]{0,40}\b(?:until|unless|before|without)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|(?:subject\s+to|pending|contingent\s+on)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|not\s+(?:before|without|unless)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|${deferredRead}[^.;!?\r\n]{0,60}\buntil\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b|${authorizationCheckFirst}|${checkBeforeMemoryUse}|only\s+(?:on|at)\s+(?:(?:my|our|the\s+user['’]s)\s+command|[^.;!?\r\n]{0,40}\b${authorizationSignal}\b)${authorizationClauseEnd})`;
+  const followOnSeparator = String.raw`(?:\s+(?:and|but)\s+|\s*(?:[,;:—–-]\s*|[.!?]\s+)(?:(?:and|but)\s+)?)`;
+  const followOnActivationDeferral = String.raw`${followOnSeparator}${activationDeferral}`;
   return [
     new RegExp(
-      String.raw`${TURN_DIRECTIVE_START_SOURCE}${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\b${memorySource}\b\s+(?:(?:only\s+)?(?:if|when|once|after|upon)|provided(?:\s+that)?|only\s+with)\b`,
+      String.raw`${TURN_DIRECTIVE_START_SOURCE}${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\b${memorySource}\b\s+${deferredCondition}`,
       flags,
     ),
     new RegExp(
-      String.raw`${TURN_DIRECTIVE_START_SOURCE}only\s+${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\b${memorySource}\b\s+(?:if|when|once|after|upon|with)\b`,
+      String.raw`${TURN_DIRECTIVE_START_SOURCE}only\s+${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\b${memorySource}\b\s+(?:if|when|once|after|upon|with)\b(?!\s+${benignAvailability})`,
+      flags,
+    ),
+    new RegExp(
+      String.raw`${TURN_DIRECTIVE_START_SOURCE}${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\b${memorySource}\b\s+${benignCondition}${followOnActivationDeferral}`,
+      flags,
+    ),
+    new RegExp(
+      String.raw`${TURN_DIRECTIVE_START_SOURCE}${MEMORY_READ_ACTION_SOURCE}\b[^.;!?\r\n]{0,80}\bmemor(?:y|ies)\b\s+${benignCondition}${followOnSeparator}(?:use|access|read|consult|search|recall)\s+(?:it|that)\s+(?:only|solely)\s+(?:after|when|once|upon)\b[^.;!?\r\n]{0,80}\b${authorizationSignal}\b`,
       flags,
     ),
   ];
@@ -638,7 +689,7 @@ function buildMemoryReadDirectivePatternProfile(
     ] : []),
   ];
   const positiveDoubleNegation = String.raw`(?:do not|don['’]t|never)\s+(?:ever\s+)?(?:ignore|disregard)\b[^.;!?\r\n]{0,40}\b${memorySource}\b`;
-  const explicitRecall = String.raw`(?:${positiveDoubleNegation}|${recallAction}\b(?:(?!\b${recallAction}\b)[^.;!?\r\n]){0,80}\b${memorySource}\b|(?:recall|remember)\b[^.;!?\r\n]{0,80}\b(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b)`;
+  const explicitRecall = String.raw`(?:${positiveDoubleNegation}|${recallAction}\b(?:(?!\b${recallAction}\b)[^.;!?\r\n]){0,80}\b${memorySource}\b|(?:would|do)\s+you\s+mind\s+${recallActionGerund}\b[^.;!?\r\n]{0,80}\b${memorySource}\b|(?:recall|remember)\b[^.;!?\r\n]{0,80}\b(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b)`;
 
   return Object.freeze({
     includeConversationReferences: options.includeConversationReferences,
@@ -903,7 +954,7 @@ function resolveMemoryReadDirectiveForSource(
   if (latestDenial < 0) return latestDirectRead >= 0 ? 'allow' : 'unspecified';
 
   // A later explicit same-capability instruction wins after a clear resume marker.
-  const deferredQualifier = /^\s*(?:[,:(—–-]\s*)*(?:(?:only\s+)?(?:after|if|when|once|unless|later|upon|with)|provided(?:\s+that)?|as\s+soon\s+as)\b/i;
+  const deferredQualifier = /^\s*(?:[,:(—–-]\s*)*(?:(?:(?:only|solely)\s+)?(?:after|if|when|once|unless|later|upon|with)|provided(?:\s+that)?|as\s+soon\s+as)\b/i;
   const latestOverride = Math.max(
     -1,
     ...collectCachedMatches(profile.overridePattern, actionable)
@@ -1137,14 +1188,18 @@ export function isExplicitToolFreeAdvisoryRequest(
   const actionable = withoutQuotedText(message).trim();
   if (!actionable) return false;
 
-  const explicitlyNonExecuting = policy.denyAllMutations
+  const explicitToolDenial = /\b(?:do not|don['\u2019]t|never)\s+(?:use|call|invoke|run)\s+(?:any\s+|the\s+)?tools?\b|\bwithout\s+(?:using\s+)?(?:any\s+)?tools?\b/i.test(actionable);
+  const explicitlyNonExecuting = explicitToolDenial
+    || policy.denyAllMutations
     || (policy.denyFileWrites && (policy.denyCodeExecution || policy.denyAgentLaunch));
   if (!explicitlyNonExecuting) return false;
   const affirmative = actionable.replace(
     /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;:\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|yet|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|[;:]|\bbut\b|\bhowever\b|\byet\b|\bbased on\b|[.?!]|$))/gi,
     ' ',
   );
-  if (!/\b(?:design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
+  const responseArtifactCreation = /(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?create\s+(?:(?:a|an|the)\s+)?(?:(?:concise|brief|short|simple|numbered|bulleted|(?:one|two|three|four|five|\d+)-step)\s+){0,3}(?:checklist|outline|summary|plan|agenda|list|table|answer|response|reply)\b/i.test(affirmative);
+  if (!responseArtifactCreation
+    && !/\b(?:turn|design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
     return false;
   }
 
@@ -1160,6 +1215,11 @@ export function isExplicitToolFreeAdvisoryRequest(
     && (!onlyTechnologyFilenames || !technologyNameUsage || technologyFileIntent))
     || /(?:^|[\s"'`])(?:Dockerfile|Makefile|Jenkinsfile|Procfile|README(?:\.[A-Za-z0-9_-]+)?|\.gitignore|\.gitattributes|\.npmrc|\.nvmrc|\.env(?:\.[A-Za-z0-9_-]+)?)(?=$|[\s"'`,;:.!?])/i.test(message);
   const methodExplanation = /\b(?:explain|describe|outline)\s+how\s+to\b/i.test(affirmative);
+  const inlineDefinedCurrentObject = /\b(?:turn|convert|transform)\s+this\s+(?:release\s+)?(?:goal|brief|objective|plan|request)\s+into\b[^:\r\n]{0,200}:\s*\S/i.test(affirmative);
+  const createActionCount = affirmative.match(/\bcreate\b/gi)?.length ?? 0;
+  const persistentResponseArtifact = /\b(?:checklist|outline|summary|plan|agenda|list|table|answer|response|reply)\b[^.?!\r\n]{0,48}\b(?:(?:as|in|to)\s+)?(?:(?:a|an|the)\s+)?(?:(?:downloadable|markdown|excel|word|powerpoint)\s+){0,2}(?:file|document|spreadsheet|workbook|presentation|slides?|deck|pdf|docx|xlsx|pptx)(?:\s+format)?\b/i.test(affirmative);
+  const unsafeCreateAction = createActionCount > 0
+    && !(responseArtifactCreation && !persistentResponseArtifact && createActionCount === 1);
   const explicitLookup = /https?:\/\//i.test(affirmative)
     || /\b(?:search|browse|inspect|read|open|list|scan|query|retrieve|recall|look up|find)\b[^.?!\r\n]{0,100}\b(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|web|internet|online|sources?|documents?|documentation)\b/i.test(affirmative)
     || /\b(?:current|existing|this|our|my|saved|previous|prior|attached|uploaded)\s+(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|documents?|pdfs?|emails?|messages?|spreadsheets?|tickets?|records?|inbox|calendar|tasks?)\b/i.test(affirmative)
@@ -1176,9 +1236,11 @@ export function isExplicitToolFreeAdvisoryRequest(
     || /\b(?:use|call|invoke)\b[^.?!\r\n]{0,80}\b(?:tool|plugin|mcp|connector|calculator)\b/i.test(affirmative)
     || /\b(?:web_search|web_fetch|search_memory|read_file|search_files|search_content|bash|run_code|spawn_agent)\b/i.test(affirmative)
     || /\bgit\s+(?:status|diff|log|show|branch)\b/i.test(affirmative)
-    || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
+    || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
+    || unsafeCreateAction
     || /\b(?:once\s+(?:done|complete)|after(?:wards|\s+that)?)\b[^.?!\r\n]{0,40}\b(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge|deploy)\b/i.test(affirmative)
-    || /\b(?:that|this|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || /\b(?:that|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || (!inlineDefinedCurrentObject && /\bthis\b/i.test(affirmative))
     || /\b(?:we|you)\s+(?:discussed|mentioned|agreed)\b/i.test(affirmative)
     || /\bfrom\s+before\b/i.test(affirmative)
     || /\b(?:attached|uploaded|below)\b/i.test(message)

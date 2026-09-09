@@ -225,9 +225,7 @@ export class OfflineManager {
         type: 'notification',
         timestamp: new Date().toISOString(),
         title: 'Back online',
-        body: this._queue.length > 0
-          ? `Connection restored. You have ${this._queue.length} queued message${this._queue.length === 1 ? '' : 's'}.`
-          : 'LLM connection restored.',
+        body: 'Model connection restored. Review any failed chat turn and retry only if needed.',
         category: 'agent',
       });
       this._eventBus.emit('offline_state_change', { offline: false, queuedMessages: this._queue.length });
@@ -239,7 +237,7 @@ export class OfflineManager {
         type: 'notification',
         timestamp: new Date().toISOString(),
         title: 'Offline',
-        body: 'LLM connection lost. Local tools still work. Messages will be queued.',
+        body: 'Model connection lost. Local tools still work. Review failed chat turns after it reconnects; retry only if needed.',
         category: 'agent',
       });
       this._eventBus.emit('offline_state_change', { offline: true, since: this._since });

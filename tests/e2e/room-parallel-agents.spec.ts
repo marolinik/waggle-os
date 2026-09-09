@@ -143,11 +143,23 @@ async function openRoom(page: Page) {
   await expect(page.locator('[data-testid="room-root"]')).toBeVisible({ timeout: 10_000 });
 }
 
+async function emitRosterAfterRoomMount(page: Page) {
+  await expect.poll(
+    () => page.evaluate(() => ((window as unknown as { __p6MockSources?: unknown[] }).__p6MockSources?.length ?? 0)),
+    { message: 'notifications EventSource should open', timeout: 5_000 },
+  ).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const sources = (window as unknown as { __p6MockSources?: Array<{ __reemit(): void }> }).__p6MockSources ?? [];
+    sources.at(-1)?.__reemit();
+  });
+}
+
 test.describe('Room — parallel agent visualization (P6)', () => {
   test('renders two simultaneous agents with distinct tiles', async ({ page }) => {
     await installSseMock(page);
     await openRoom(page);
     await dismissOverlay(page);
+    await emitRosterAfterRoomMount(page);
 
     // Both tiles present, keyed by agent id.
     const alpha = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_ALPHA_ID}"]`);
@@ -167,6 +179,7 @@ test.describe('Room — parallel agent visualization (P6)', () => {
     await installSseMock(page);
     await openRoom(page);
     await dismissOverlay(page);
+    await emitRosterAfterRoomMount(page);
 
     const alpha = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_ALPHA_ID}"]`);
     const beta = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_BETA_ID}"]`);

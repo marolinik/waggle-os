@@ -94,7 +94,34 @@ describe('skill-audit routes (§D2)', () => {
     server.vault?.delete('anthropic');
     const res = await post();
     expect(res.statusCode).toBe(422);
-    expect(JSON.parse(res.body).error).toMatch(/Anthropic API key/i);
+    expect(JSON.parse(res.body).error).toMatch(/ready model|Anthropic API key/i);
+  });
+
+  it('C4b: Solo can verify with the healthy active local model and no Anthropic key', async () => {
+    const previousProvider = { ...server.agentState.llmProvider };
+    const previousModel = server.agentState.currentModel;
+    server.vault?.delete('anthropic');
+    server.agentState.currentModel = 'openai-compatible/qwen3.8-flash-next';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'Built-in provider proxy (openai-compatible endpoint verified)',
+      checkedAt: new Date().toISOString(),
+      verifiedModel: 'openai-compatible/qwen3.8-flash-next',
+    };
+    installLLMFactory((apiKey) => {
+      expect(apiKey).toBe('');
+      return stubLLM(PASS_JUDGE);
+    });
+
+    try {
+      const res = await post({ names: ['verify-me'] });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).report.verified).toContain('verify-me');
+    } finally {
+      server.agentState.llmProvider = previousProvider;
+      server.agentState.currentModel = previousModel;
+    }
   });
 
   it('C5: Solo + key but the LLM factory yields nothing → 503', async () => {

@@ -49,6 +49,32 @@ describe('LoopGuard graduated tiers (steal #9)', () => {
     expect(guard.checkTiered('bash', args)).toEqual({ action: 'allow' });
   });
 
+  it('blocks a successful read_file range that is already fully covered', () => {
+    const guard = new LoopGuard();
+    guard.record('read_file', { path: 'package.json', limit: 40 }, true);
+
+    const verdict = guard.checkTiered('read_file', { path: './package.json', offset: 1, limit: 25 });
+
+    expect(verdict.action).toBe('block');
+    if (verdict.action === 'block') expect(verdict.reason).toMatch(/already read successfully/i);
+  });
+
+  it('allows a read_file range that extends beyond prior evidence', () => {
+    const guard = new LoopGuard();
+    guard.record('read_file', { path: 'README.md', offset: 1, limit: 25 }, true);
+
+    expect(guard.checkTiered('read_file', { path: 'README.md', offset: 26, limit: 25 }).action).toBe('allow');
+    expect(guard.checkTiered('read_file', { path: 'README.md', offset: 1, limit: 50 }).action).toBe('allow');
+  });
+
+  it('allows a previously covered range after a successful mutating tool', () => {
+    const guard = new LoopGuard();
+    guard.record('read_file', { path: 'README.md', limit: 25 }, true);
+    guard.record('edit_file', { path: 'README.md', old_string: 'a', new_string: 'b' }, true);
+
+    expect(guard.checkTiered('read_file', { path: 'README.md', limit: 25 }).action).toBe('allow');
+  });
+
   it('T3 aborts at exactly 8 same-tool consecutive failures', () => {
     const guard = new LoopGuard();
     recordFailures(guard, 'bash', 7, (i) => ({ command: `c${i}` }));

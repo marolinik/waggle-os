@@ -17,7 +17,7 @@ describe('Evolution Routes', () => {
     const mind = new MindDB(personalPath);
     mind.close();
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();

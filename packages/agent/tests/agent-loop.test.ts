@@ -4,6 +4,7 @@ import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
 import { HookRegistry } from '../src/hooks.js';
 import { needsConfirmationWithAutonomy } from '../src/confirmation.js';
+import type { ModelSpendBudget, ModelSpendReservationRequest } from '../src/cost-tracker.js';
 import Database from 'better-sqlite3';
 
 /**
@@ -38,6 +39,42 @@ function mockFetch(
       json: async () => body,
     } as unknown as Response;
   });
+}
+
+function mockStreamFetch(
+  chunks: string[],
+  options: {
+    toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  } = {},
+) {
+  const encoder = new TextEncoder();
+  const events = [
+    ...chunks.map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`),
+    ...(options.toolCalls?.length ? [`data: ${JSON.stringify({ choices: [{ delta: {
+      tool_calls: options.toolCalls.map((toolCall, index) => ({
+        index,
+        id: toolCall.id,
+        type: 'function',
+        function: { name: toolCall.name, arguments: toolCall.arguments },
+      })),
+    } }] })}\n\n`] : []),
+    `data: ${JSON.stringify({
+      choices: [{ delta: {}, finish_reason: options.toolCalls?.length ? 'tool_calls' : 'stop' }],
+      usage: options.usage ?? { prompt_tokens: 10, completion_tokens: 25 },
+    })}\n\n`,
+    'data: [DONE]\n\n',
+  ];
+  return vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) controller.enqueue(encoder.encode(event));
+        controller.close();
+      },
+    }),
+  } as unknown as Response));
 }
 
 function makeConfig(overrides: Partial<AgentLoopConfig> = {}): AgentLoopConfig {
@@ -77,6 +114,162 @@ describe('runAgentLoop', () => {
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Hello' });
   });
 
+  it('normalizes malformed Qwen reasoning content before returning it', async () => {
+    const answer = 'ORCHID-ANCHOR';
+    const malformed = '<think>all tests passed</think>'
+      + Array.from({ length: 9 }, () => answer).join('</think>');
+    const onToken = vi.fn();
+    const fetch = mockFetch([{ content: malformed }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe(answer);
+    expect(result.content).not.toMatch(/<\/?think>/i);
+    expect(onToken).toHaveBeenCalledWith(answer);
+    expect(onToken).not.toHaveBeenCalledWith(malformed);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('buffers a Qwen stream until malformed reasoning content is normalized', async () => {
+    const answer = 'ORCHID-STREAM';
+    const malformed = '<think>private analysis</think>'
+      + Array.from({ length: 4 }, () => answer).join('</think>');
+    const fetch = mockStreamFetch([
+      malformed.slice(0, 21),
+      malformed.slice(21, 52),
+      malformed.slice(52),
+    ]);
+    const onToken = vi.fn();
+    const onModelActivity = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      onModelActivity,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe(answer);
+    expect(onModelActivity).toHaveBeenCalledTimes(1);
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(answer);
+    expect(JSON.stringify(onToken.mock.calls)).not.toContain('private analysis');
+    expect(JSON.stringify(onToken.mock.calls)).not.toContain('</think>');
+  });
+
+  it('uses the raw Qwen response for missing-usage token accounting', async () => {
+    const raw = `<think>${'private '.repeat(80)}</think>Safe answer`;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{
+          message: { role: 'assistant', content: raw },
+          finish_reason: 'stop',
+        }],
+      }),
+    } as unknown as Response));
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe('Safe answer');
+    expect(result.usage.outputTokens).toBeGreaterThan(100);
+  });
+
+  it('emits the buffered Qwen answer once when the token budget stops the turn', async () => {
+    const fetch = mockStreamFetch(['Budget answer'], {
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    });
+    const onToken = vi.fn();
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTokenBudget: 200,
+    }));
+
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a buffered Qwen max-turn fallback after a streamed tool call', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'Echoes text',
+      parameters: { type: 'object', properties: { text: { type: 'string' } } },
+      execute: vi.fn(async args => String(args.text)),
+    };
+    const fetch = mockStreamFetch(['Checking safely.'], {
+      toolCalls: [{ id: 'call_qwen', name: 'echo', arguments: '{"text":"ok"}' }],
+    });
+    const onToken = vi.fn();
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      tools: [echoTool],
+      maxTurns: 1,
+    }));
+
+    expect(result.content).toBe('Checking safely.');
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(echoTool.execute).toHaveBeenCalledOnce();
+  });
+
+  it('emits a buffered Qwen D3 and D1 preserved answer exactly once', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'Echoes text',
+      parameters: { type: 'object', properties: { text: { type: 'string' } } },
+      execute: vi.fn(async args => String(args.text)),
+    };
+    const toolCalls = Array.from({ length: 5 }, (_, index) => ({
+      id: `call_gate_${index}`,
+      name: 'echo',
+      arguments: `{"text":"${index}"}`,
+    }));
+    const responses = [
+      mockStreamFetch([], { toolCalls }),
+      mockStreamFetch(['All tests passed.']),
+      mockStreamFetch(['Skill distillation complete.']),
+    ];
+    let responseIndex = 0;
+    const fetch = vi.fn(async () => responses[responseIndex++]());
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      tools: [echoTool],
+    }));
+
+    expect(result.content).toContain('All tests passed.');
+    expect(result.content).toContain('Verification scope: EVIDENCE-ONLY');
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(echoTool.execute).toHaveBeenCalledTimes(5);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves literal think markup from non-Qwen providers', async () => {
+    const literal = 'Example: `<think>literal XML-like text</think>`.';
+    const fetch = mockFetch([{ content: literal }]);
+    const result = await runAgentLoop(makeConfig({ fetch, model: 'gpt-4' }));
+    expect(result.content).toBe(literal);
+  });
+
   it('forwards an explicit provider reasoning policy without inventing one', async () => {
     const fetch = mockFetch([{ content: 'Bounded answer.' }]);
     const config = makeConfig({
@@ -88,6 +281,571 @@ describe('runAgentLoop', () => {
 
     const body = JSON.parse(fetch.mock.calls[0][1].body);
     expect(body.reasoning).toEqual({ enabled: true, effort: 'low' });
+  });
+
+  it('forces one requested tool only on the first model turn', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{ id: 'call-1', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      { content: '18' },
+    ]);
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+    }));
+
+    const firstBody = JSON.parse(fetch.mock.calls[0][1].body);
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(firstBody.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'list_skills' },
+    });
+    expect(firstBody.parallel_tool_calls).toBe(false);
+    expect(secondBody.tool_choice).toBeUndefined();
+    expect(secondBody.parallel_tool_calls).toBeUndefined();
+    expect(listSkills.execute).toHaveBeenCalledOnce();
+  });
+
+  it('executes one strict zero-argument forced tool when the provider ignores tool_choice', async () => {
+    const atomicFetch = mockFetch([
+      { content: 'I can answer without the requested tool.' },
+      { content: 'ORCHID-7' },
+    ]);
+    const leakedStreamFetch = mockStreamFetch(['I can answer without the requested tool.']);
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { stream?: boolean };
+      return body.stream === true
+        ? leakedStreamFetch(url, init)
+        : atomicFetch(url, init);
+    });
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+    }));
+
+    const firstBody = JSON.parse(fetch.mock.calls[0][1].body);
+    const synthesisBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(firstBody.tool_choice.function.name).toBe('search_memory');
+    expect(firstBody.stream).toBeUndefined();
+    expect(firstBody.stream_options).toBeUndefined();
+    expect(synthesisBody.tool_choice).toBeUndefined();
+    expect(JSON.stringify(synthesisBody.messages)).toContain('ORCHID-7');
+    expect(JSON.stringify(synthesisBody.messages)).not.toContain('I can answer without the requested tool.');
+    expect(searchMemory.execute).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ content: 'ORCHID-7', toolsUsed: ['search_memory'] });
+    expect(onToken.mock.calls.flat().join('')).toBe('ORCHID-7');
+    expect(onToken.mock.calls.flat().join('')).not.toContain('I can answer without the requested tool.');
+  });
+
+  it('fails closed when an ignored forced tool is not strictly zero-argument', async () => {
+    const fetch = mockFetch([{ content: 'FABRICATED_UNVERIFIED_TOOL_RESULT' }]);
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: {
+        type: 'object',
+        properties: { verbose: { type: 'boolean' } },
+      },
+      execute: vi.fn(async () => '18 skills'),
+    };
+    const onToken = vi.fn();
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToken,
+    }))).rejects.toThrow('Forced tool choice list_skills was not called');
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(listSkills.execute).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ambiguous forced tool before a colliding plugin can replace it', async () => {
+    const fetch = mockFetch([{ content: 'should not be reached' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'base'),
+    };
+    const pluginExecute = vi.fn(async () => 'plugin');
+    const pluginTools: PluginToolProvider = {
+      getAllTools: () => [{ ...searchMemory, execute: pluginExecute }],
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      pluginTools,
+      toolChoice: 'search_memory',
+    }))).rejects.toThrow('Forced tool choice search_memory is ambiguous');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(pluginExecute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different tool returned for a forced tool choice before execution', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{ id: 'wrong-call', function: { name: 'read_file', arguments: '{"path":"secret.txt"}' } }],
+    }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file',
+      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+      execute: vi.fn(async () => 'PRIVATE_FILE_CONTENT'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory, readFile],
+      toolChoice: 'search_memory',
+    }))).rejects.toThrow('Forced tool choice search_memory returned a different tool call');
+
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(readFile.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not expose ignored forced-tool prose when the provider exhausts the budget', async () => {
+    const fetch = mockFetch([{
+      content: 'FABRICATED_UNVERIFIED_TOOL_RESULT',
+      usage: { prompt_tokens: 4_000, completion_tokens: 2_000 },
+    }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const onToken = vi.fn();
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      maxTokenBudget: 6_000,
+      onToken,
+    }))).rejects.toThrow('Required tool search_memory could not complete within the token budget');
+
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch a forced tool when it cannot start within the budget', async () => {
+    const fetch = mockFetch([{ content: 'should not be reached' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      maxTokenBudget: 1,
+    }))).rejects.toThrow('Required tool search_memory could not start within the token budget');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass a forced tool when synthesis reserve exhausts the token budget', async () => {
+    const fetch = mockFetch([{ content: 'FABRICATED_WITHOUT_MEMORY' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      systemPrompt: 'x'.repeat(8_000),
+      maxTokenBudget: 3_000,
+      synthesisReserveTokens: 500,
+    }))).rejects.toThrow('Required tool search_memory could not start within the token budget');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['maxTurns', { maxTurns: 1 }],
+    ['maxToolRounds', { maxToolRounds: 0 }],
+  ])('does not bypass a forced tool when it cannot fit within %s', async (limit, config) => {
+    const fetch = mockFetch([{ content: 'FABRICATED_WITHOUT_MEMORY' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      ...config,
+    }))).rejects.toThrow(`Forced tool choice does not fit within ${limit}`);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects multiple forced tool calls before executing any of them', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [
+          { id: 'call-1', function: { name: 'list_skills', arguments: '{}' } },
+          { id: 'call-2', function: { name: 'list_skills', arguments: '{}' } },
+        ],
+      },
+      { content: 'should not be reached' },
+    ]);
+    const onToolUse = vi.fn();
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToolUse,
+    }))).rejects.toThrow('multiple tool calls');
+
+    expect(listSkills.execute).not.toHaveBeenCalled();
+    expect(onToolUse).not.toHaveBeenCalled();
+  });
+
+  it('does not execute the forced tool again on a later model turn', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{ id: 'call-1', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      {
+        content: null,
+        tool_calls: [{ id: 'call-2', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      { content: 'should not need another turn' },
+    ]);
+    const onToolUse = vi.fn();
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToolUse,
+    }));
+
+    expect(listSkills.execute).toHaveBeenCalledOnce();
+    expect(onToolUse).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('forces an authorized tool sequence exactly once before synthesis', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call-skill',
+          function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+        }],
+      },
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call-calculator',
+          function: {
+            name: 'calculate_decision_matrix',
+            arguments: JSON.stringify({
+              criteria: [{ name: 'cost', weight: 5 }],
+              options: [
+                { name: 'Option A', scores: [4] },
+                { name: 'Option B', scores: [2] },
+              ],
+            }),
+          },
+        }],
+      },
+      { content: 'Option A wins 54 to 45.' },
+    ]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'Decision matrix instructions'),
+    };
+    const calculator: ToolDefinition = {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate a weighted decision matrix',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '{"winner":"Option A","total":54,"otherTotal":45}'),
+    };
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill, calculator],
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+    }));
+
+    expect(result.content).toBe('Option A wins 54 to 45.');
+    expect(result.toolsUsed).toEqual(['read_skill', 'calculate_decision_matrix']);
+    expect(readSkill.execute).toHaveBeenCalledOnce();
+    expect(calculator.execute).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies[0].tool_choice.function.name).toBe('read_skill');
+    expect(bodies[1].tool_choice.function.name).toBe('calculate_decision_matrix');
+    expect(bodies[0].parallel_tool_calls).toBe(false);
+    expect(bodies[1].parallel_tool_calls).toBe(false);
+    expect(bodies[2].tool_choice).toBeUndefined();
+    expect(bodies[2].tools).toBeUndefined();
+    const synthesisToolMessages = bodies[2].messages.filter((message: { role: string }) => (
+      message.role === 'tool'
+    ));
+    expect(synthesisToolMessages).toHaveLength(2);
+    expect(synthesisToolMessages[0]).toMatchObject({ tool_call_id: 'call-skill' });
+    expect(synthesisToolMessages[0].content).toContain('Decision matrix instructions');
+    expect(synthesisToolMessages[1]).toMatchObject({ tool_call_id: 'call-calculator' });
+    expect(synthesisToolMessages[1].content).toContain('"total":54');
+  });
+
+  it('fails closed before dispatch when a required sequence tool is unavailable', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*unavailable/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Error: skill not found',
+    'Failed: access denied',
+    '{"error":"access denied"}',
+  ])('fails closed when a required sequence tool returns %s', async (toolResult) => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => toolResult),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*failed/i);
+
+    expect(readSkill.execute).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a provider call that violates the required tool order', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-wrong',
+        function: { name: 'calculate_decision_matrix', arguments: '{}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'Decision matrix instructions'),
+    };
+    const calculator: ToolDefinition = {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate a weighted decision matrix',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '{}'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill, calculator],
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+    }))).rejects.toThrow(/required tool.*read_skill.*not called in sequence/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+    expect(calculator.execute).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when governance rejects a required tool before execution', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'must not run'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      governancePolicies: { blockedTools: ['read_skill'] },
+    }))).rejects.toThrow(/required tool.*read_skill.*failed/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ambiguous required tool before provider dispatch', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'built-in'),
+    };
+    const pluginTools: PluginToolProvider = {
+      getAllTools: () => [{ ...readSkill, execute: vi.fn(async () => 'plugin') }],
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      pluginTools,
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*ambiguous/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a required tool cannot start within the token budget', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'instructions'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      maxTokenBudget: 1,
+    }))).rejects.toThrow(/required tool.*read_skill.*could not start.*token budget/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not execute a required tool after the provider exhausts the token budget', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+      usage: { prompt_tokens: 700, completion_tokens: 300 },
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'instructions'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      maxTokenBudget: 1_000,
+    }))).rejects.toThrow(/required tool.*read_skill.*could not complete.*token budget/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['maxTurns', { maxTurns: 2 }],
+    ['maxToolRounds', { maxToolRounds: 1 }],
+  ])('rejects a required sequence that exceeds %s', async (_label, limits) => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const tools: ToolDefinition[] = ['read_skill', 'calculate_decision_matrix'].map((name) => ({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'ok'),
+    }));
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools,
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+      ...limits,
+    }))).rejects.toThrow(/required tool sequence does not fit/i);
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('retries once when the model emits raw tool-call markup as text', async () => {
@@ -534,7 +1292,7 @@ describe('runAgentLoop', () => {
     expect(callCount).toBe(3);
   });
 
-  it('terminates with error after 3 consecutive 502 server errors', async () => {
+  it('terminates after the initial 502 plus three bounded retries', async () => {
     let callCount = 0;
     const fetch = vi.fn(async () => {
       callCount++;
@@ -548,9 +1306,518 @@ describe('runAgentLoop', () => {
 
     await expect(
       runAgentLoop(makeConfig({ fetch }))
-    ).rejects.toThrow('Server error retry cap exceeded (3 consecutive 502 errors)');
+    ).rejects.toThrow('Server error retry cap exceeded after 3 retries (latest 502)');
 
-    expect(callCount).toBe(3);
+    expect(callCount).toBe(4);
+  });
+
+  it('bounds one logical model operation across slow 503 retries and backoff', async () => {
+    vi.useFakeTimers();
+    const abortController = new AbortController();
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    let responseCount = 0;
+    const fetch = vi.fn(() => new Promise<Response>((resolve) => {
+      setTimeout(() => {
+        responseCount++;
+        resolve({
+          ok: false,
+          status: 503,
+          headers: { get: () => null },
+          text: responseCount === 1
+            ? async () => 'temporarily unavailable'
+            : () => new Promise<string>(resolveBody => {
+                setTimeout(() => resolveBody('still unavailable'), 5_000);
+              }),
+        } as unknown as Response);
+      }, 48_000);
+    }));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      signal: abortController.signal,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      abortController.abort();
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails with a typed retryable timeout when the first stream stays silent', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({ start() {} }),
+    } as unknown as Response));
+    let rejection: unknown;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).catch(error => { rejection = error; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(rejection).toMatchObject({
+        name: 'InitialModelActivityTimeoutError',
+        code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+        retryable: true,
+        usageEstimated: true,
+        usage: { outputTokens: 0 },
+        toolsUsed: [],
+      });
+      expect((rejection as { usage: { inputTokens: number } }).usage.inputTokens).toBeGreaterThan(0);
+    } finally {
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('accounts every committed retry estimate before the first-activity timeout', async () => {
+    vi.useFakeTimers();
+    const reservations: ModelSpendReservationRequest[] = [];
+    const modelSpendBudget: ModelSpendBudget = {
+      reserveModelSpend: vi.fn(request => {
+        reservations.push(request);
+        return { id: `reservation-${reservations.length}` };
+      }),
+      reconcileModelSpend: vi.fn(() => true),
+      commitReservedModelSpend: vi.fn(() => true),
+      releaseReservedModelSpend: vi.fn(() => true),
+    };
+    const fetch = vi.fn()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({ start() {} }),
+      } as unknown as Response);
+    let rejection: unknown;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      modelSpendBudget,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).catch(error => { rejection = error; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      await run;
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(modelSpendBudget.commitReservedModelSpend).toHaveBeenCalledTimes(2);
+      expect(rejection).toMatchObject({
+        code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+        usageEstimated: true,
+        usage: {
+          inputTokens: reservations.reduce((total, request) => total + request.inputTokens, 0),
+          outputTokens: 0,
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['reasoning', { reasoning_content: 'private' }],
+    ['content', { content: 'Ready.' }],
+  ])('permanently disarms the first-activity timeout for buffered Qwen %s activity', async (_kind, firstDelta) => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          setTimeout(() => controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ choices: [{ delta: firstDelta }] })}\n\n`,
+          )), 29_000);
+          setTimeout(() => {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: firstDelta.content ? {} : { content: 'Ready.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\n`,
+            ));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }, 60_000);
+        },
+      }),
+    } as unknown as Response));
+    let result: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).then(value => { result = value; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(60_000);
+      await run;
+      expect(result?.content).toBe('Ready.');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disarms the first-activity timeout on a tool-call delta and never rearms it', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const tool: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '[]'),
+    };
+    let request = 0;
+    const fetch = vi.fn(async () => {
+      request++;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            const delay = request === 1 ? 29_000 : 31_000;
+            setTimeout(() => {
+              const event = request === 1
+                ? {
+                    choices: [{
+                      delta: {
+                        tool_calls: [{
+                          index: 0,
+                          id: 'call-1',
+                          type: 'function',
+                          function: { name: 'list_skills', arguments: '{}' },
+                        }],
+                      },
+                      finish_reason: 'tool_calls',
+                    }],
+                    usage: { prompt_tokens: 10, completion_tokens: 5 },
+                  }
+                : {
+                    choices: [{ delta: { content: 'Finished.' }, finish_reason: 'stop' }],
+                    usage: { prompt_tokens: 12, completion_tokens: 4 },
+                  };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            }, delay);
+          },
+        }),
+      } as unknown as Response;
+    });
+    let result: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      tools: [tool],
+      maxTurns: 3,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).then(value => { result = value; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(61_000);
+      await run;
+      expect(result?.content).toBe('Finished.');
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(tool.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a delayed response body within the same model-operation deadline', async () => {
+    vi.useFakeTimers();
+    const tool = {
+      name: 'must_not_run',
+      description: 'Would prove a body completed after the deadline.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'unexpected'),
+    } satisfies ToolDefinition;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => new Promise((resolve) => {
+        setTimeout(() => resolve({
+          choices: [{
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [{ id: 'late_call', function: { name: 'must_not_run', arguments: '{}' } }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }), 120_000);
+      }),
+    } as unknown as Response));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(tool.execute).not.toHaveBeenCalled();
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a partial SSE stream within the same model-operation deadline', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const cancel = vi.fn();
+    const onToken = vi.fn();
+    const onReasoningActivity = vi.fn();
+    const tool = {
+      name: 'must_not_run',
+      description: 'Would prove an incomplete stream executed a tool.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'unexpected'),
+    } satisfies ToolDefinition;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'private', content: 'partial' } }] })}\n\n`,
+            ));
+          },
+          cancel,
+        }),
+    } as unknown as Response));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      tools: [tool],
+      onToken,
+      onReasoningActivity,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(tool.execute).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+    } finally {
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('suppresses late SSE callbacks from a non-cooperative reader after timeout', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const onToken = vi.fn();
+    const onReasoningActivity = vi.fn();
+    const cancel = vi.fn(async () => undefined);
+    let readCount = 0;
+    const reader = {
+      read: vi.fn(() => {
+        readCount += 1;
+        if (readCount === 1) {
+          return Promise.resolve({
+            done: false,
+            value: encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'private', content: 'partial' } }] })}\n\n`,
+            ),
+          });
+        }
+        if (readCount === 2) {
+          return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+            setTimeout(() => resolve({
+              done: false,
+              value: encoder.encode(
+                `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'late-private', content: 'late' } }] })}\n\n`,
+              ),
+            }), 120_000);
+          });
+        }
+        return Promise.resolve({ done: true, value: undefined });
+      }),
+      cancel,
+    };
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+    }) as unknown as Response);
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      onToken,
+      onReasoningActivity,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100_000);
+      expect(settlement?.kind).toBe('rejected');
+      expect(cancel).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not start response-body work after the client aborts between stages', async () => {
+    const abortController = new AbortController();
+    const json = vi.fn(async () => ({
+      choices: [{ message: { role: 'assistant', content: 'too late' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }));
+    const response = { status: 200, json } as unknown as Response;
+    Object.defineProperty(response, 'ok', {
+      get() {
+        abortController.abort();
+        return true;
+      },
+    });
+
+    await expect(runAgentLoop(makeConfig({
+      signal: abortController.signal,
+      fetch: vi.fn(async () => response),
+      modelOperationTimeoutMs: 100_000,
+    }))).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+    });
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('enforces a fresh model-operation deadline after a long tool finishes', async () => {
+    vi.useFakeTimers();
+    const slowTool: ToolDefinition = {
+      name: 'slow_tool',
+      description: 'Completes after a long-running local operation.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => new Promise<string>((resolve) => {
+        setTimeout(() => resolve('tool-finished'), 120_000);
+      })),
+    };
+    let callCount = 0;
+    const fetch = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{ id: 'call_1', function: { name: 'slow_tool', arguments: '{}' } }],
+              },
+              finish_reason: 'tool_calls',
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        } as unknown as Response;
+      }
+      return new Promise<Response>((resolve) => {
+        setTimeout(() => resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: 'too late' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        } as unknown as Response), 120_000);
+      });
+    });
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [slowTool],
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
+      );
+      expect(settlement?.value).toMatchObject({
+        name: 'ModelOperationTimeoutError',
+        code: 'MODEL_OPERATION_TIMEOUT',
+        usage: { inputTokens: 10, outputTokens: 5 },
+        toolsUsed: ['slow_tool'],
+      });
+      expect(slowTool.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
   });
 
   it('resets retry count after a successful response', async () => {
@@ -653,13 +1920,48 @@ describe('runAgentLoop', () => {
       { content: 'Should not appear.', usage: { prompt_tokens: 10, completion_tokens: 5 } },
     ]);
 
-    const result = await runAgentLoop(
+    await expect(runAgentLoop(
       makeConfig({ fetch, tools: [tool], signal: abortController.signal })
-    );
-
-    expect(result.content).toBe('Agent loop aborted (client disconnected).');
-    expect(result.toolsUsed).toEqual(['slow_tool']);
+    )).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      message: 'Agent loop aborted (client disconnected).',
+      toolsUsed: ['slow_tool'],
+    });
     // Only one fetch call — the loop exited before making a second LLM request
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an abort during a tool on the final turn with recorded tool activity', async () => {
+    const abortController = new AbortController();
+    const tool: ToolDefinition = {
+      name: 'final_turn_write',
+      description: 'Aborts after recording one final-turn tool result.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        abortController.abort();
+        return 'write-finished';
+      },
+    };
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [
+        { id: 'call_final', function: { name: 'final_turn_write', arguments: '{}' } },
+      ],
+      usage: { prompt_tokens: 14, completion_tokens: 6 },
+    }]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      signal: abortController.signal,
+      maxTurns: 1,
+    }))).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      toolsUsed: ['final_turn_write'],
+      usage: { inputTokens: 14, outputTokens: 6 },
+    });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -691,9 +1993,9 @@ describe('runAgentLoop', () => {
     expect(init.signal.aborted).toBe(true);
   });
 
-  // R3-008: an abort that fires while the in-flight response is being read must
+  // R3-008: an abort that fires while the in-flight response body is being read must
   // short-circuit the turn before tool calls run or a second request is issued.
-  it('returns promptly when aborted during the in-flight request', async () => {
+  it('rejects promptly when aborted during the in-flight response body', async () => {
     const abortController = new AbortController();
     const tool: ToolDefinition = {
       name: 'should_not_run',
@@ -702,39 +2004,39 @@ describe('runAgentLoop', () => {
       execute: vi.fn(async () => 'tool-result'),
     };
 
-    // Fetch resolves only after the signal has aborted, simulating a client
-    // disconnect during the in-flight read.
-    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => {
-      abortController.abort();
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          choices: [
-            {
-              message: {
-                role: 'assistant' as const,
-                content: null,
-                tool_calls: [
-                  { id: 'call_1', type: 'function', function: { name: 'should_not_run', arguments: '{}' } },
-                ],
-              },
-              finish_reason: 'tool_calls',
-            },
-          ],
-          usage: { prompt_tokens: 10, completion_tokens: 5 },
-        }),
-      } as unknown as Response;
+    let markBodyStarted!: () => void;
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => {
+        markBodyStarted();
+        return new Promise<never>(() => undefined);
+      },
+    }) as unknown as Response);
+
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      signal: abortController.signal,
+      modelOperationTimeoutMs: 100_000,
+    }));
+    const rejection = expect(run).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      message: 'Agent loop aborted (client disconnected).',
+      toolsUsed: [],
     });
 
-    const result = await runAgentLoop(
-      makeConfig({ fetch, tools: [tool], signal: abortController.signal })
-    );
+    await bodyStarted;
+    abortController.abort();
+    await rejection;
 
-    expect(result.content).toBe('Agent loop aborted (client disconnected).');
-    expect(result.toolsUsed).toEqual([]);
     expect(tool.execute).not.toHaveBeenCalled();
-    // Only one fetch call — the loop exited before making a second LLM request
+    // No model-deadline advancement is needed: the client signal settles the
+    // pending body immediately, before either tools or a retry can start.
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -934,6 +2236,186 @@ describe('Agent error paths (PRQ-045)', () => {
     ]);
 
     await expect(runAgentLoop(makeConfig({ fetch }))).rejects.toThrow(/empty assistant response/i);
+  });
+
+  it('retries a Qwen empty-message placeholder once before returning a real answer', async () => {
+    const fetch = mockFetch([
+      {
+        content: 'empty message',
+        usage: { prompt_tokens: 10, completion_tokens: 3 },
+      },
+      {
+        content: 'The workspace is empty.',
+        usage: { prompt_tokens: 14, completion_tokens: 6 },
+      },
+    ]);
+    const onRetry = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      onRetry,
+    }));
+
+    expect(result.content).toBe('The workspace is empty.');
+    expect(result.usage).toEqual({ inputTokens: 24, outputTokens: 9 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledWith(expect.stringMatching(/empty response.*retrying once/i));
+  });
+
+  it('rejects a second Qwen empty-message placeholder', async () => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'empty message' },
+    ]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }))).rejects.toThrow(/empty assistant response/i);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an explicitly requested Qwen empty-message literal', async () => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'not the requested literal' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: 'Reply exactly with "empty message".' }],
+    }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Respond with exactly "empty message".',
+    'Return exactly "empty message".',
+    'Your entire response must be "empty message".',
+  ])('keeps the Qwen literal for common exact-output wording: %s', async (request) => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'not the requested literal' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Do not reply exactly with "empty message". Give a substantive answer.',
+    'You must not reply exactly with "empty message".',
+    'Do not under any circumstances reply exactly with "empty message".',
+    'Explain why “Respond exactly with \'empty message\'” is a bad instruction; do not follow it.',
+  ])('does not treat quoted or negated exact-output text as affirmative intent: %s', async (request) => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'Here is the substantive answer.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(result.content).toBe('Here is the substantive answer.');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an explicitly requested Qwen empty-message literal at the token limit', async () => {
+    const fetch = mockFetch([{
+      content: 'empty message',
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: 'Output exactly `empty message`.' }],
+      maxTokenBudget: 200,
+    }));
+
+    expect(result.content).toBe('empty message');
+  });
+
+  it('does not expose a Qwen empty-message placeholder at the token limit', async () => {
+    const fetch = mockFetch([{
+      content: 'empty message',
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTokenBudget: 200,
+    }));
+
+    expect(result.content).toMatch(/token budget/i);
+    expect(result.content).not.toBe('empty message');
+  });
+
+  it('keeps the Qwen placeholder retry inside one model-operation deadline', async () => {
+    vi.useFakeTimers();
+    let callCount = 0;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(() => {
+      callCount++;
+      if (callCount === 1) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [{ message: { role: 'assistant', content: 'empty message' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 3 },
+            }),
+          } as unknown as Response), 60_000);
+        });
+      }
+      return new Promise<Response>(() => undefined);
+    });
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as { code?: string }).code).toBe('MODEL_OPERATION_TIMEOUT');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reinterpret literal empty-message text from non-Qwen models', async () => {
+    const fetch = mockFetch([{ content: 'empty message' }]);
+
+    const result = await runAgentLoop(makeConfig({ fetch, model: 'gpt-4' }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 

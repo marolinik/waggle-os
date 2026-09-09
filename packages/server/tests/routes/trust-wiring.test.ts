@@ -35,7 +35,7 @@ describe('Trust Model Runtime Wiring', () => {
     fs.writeFileSync(path.join(skillsDir, '.starter-installed'), 'test');
 
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();

@@ -141,6 +141,8 @@ export const CLOSED_WORLD_REWRITE_CONTRACT = [
   '- Preserve every supplied fact, including its polarity, status, quantity, timing, recommendation, and original certainty.',
   '- Do not add implications, explanations, rationale, risks, causes, predictions, assumptions, recommendations, or conclusions unless the source states them.',
   '- Output only the requested rewrite; omit commentary and follow-up offers unless the user explicitly requests them.',
+  '- Before responding, delete every sentence that is not entailed by the source. End immediately after the final entailed sentence; never append a closing risk, benefit, assurance, or rationale.',
+  '- When the source supplies a recommendation, its faithful paraphrase must be the final sentence. Delete anything after that recommendation.',
 ].join('\n');
 
 export function isClosedWorldRewriteRequest(query: string): boolean {

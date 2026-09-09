@@ -6,7 +6,7 @@
  *   2. Onboarding wizard completes successfully (config save/load via settings API)
  *   7. Settings saved and persisted across restart
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -67,17 +67,33 @@ describe('Startup & Settings E2E', () => {
     const { server } = await startService({ dataDir, port, skipLiteLLM: true });
     servers.push(server);
 
-    // Save onboarding config
-    const putRes = await injectWithAuth(server, {
+    // The real onboarding flow stores the verified provider credential first,
+    // then selects a model from the refreshed provider catalog.
+    const providerRes = await injectWithAuth(server, {
       method: 'PUT',
       url: '/api/settings',
       payload: {
-        defaultModel: 'anthropic/claude-sonnet-4-20250514',
         providers: {
           anthropic: { apiKey: 'sk-ant-test-key-1234567890', models: ['claude-sonnet-4-20250514'] },
         },
       },
     });
+    expect(providerRes.statusCode).toBe(200);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 })));
+    const putRes = await (async () => {
+      try {
+        return await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: { defaultModel: 'anthropic/claude-sonnet-4-20250514' },
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    })();
     expect(putRes.statusCode).toBe(200);
 
     const putBody = JSON.parse(putRes.payload);
@@ -103,16 +119,33 @@ describe('Startup & Settings E2E', () => {
     const { server: server1 } = await startService({ dataDir, port: port1, skipLiteLLM: true });
     servers.push(server1);
 
-    const putRes = await injectWithAuth(server1, {
+    const providerRes = await injectWithAuth(server1, {
       method: 'PUT',
       url: '/api/settings',
       payload: {
-        defaultModel: 'openai/gpt-4o',
         providers: {
           openai: { apiKey: 'sk-test-openai-key-1234567', models: ['gpt-4o'] },
         },
       },
     });
+    expect(providerRes.statusCode).toBe(200);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 })));
+    const putRes = await (async () => {
+      try {
+        return await injectWithAuth(server1, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            defaultModel: 'openai/gpt-4o',
+          },
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    })();
     expect(putRes.statusCode).toBe(200);
 
     await server1.close();

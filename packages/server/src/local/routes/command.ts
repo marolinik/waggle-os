@@ -225,14 +225,27 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
     // Mirror commands.ts: scope a per-request orchestrator to this workspace so
     // the alias never collides with an in-flight chat session's orchestrator.
     let commandOrch: Orchestrator = orchestrator;
+    let releaseCommandWorkspace: (() => void) | undefined;
     if (workspaceId && workspaceId !== 'default') {
+      if (!server.workspaceManager.get(workspaceId)) {
+        return reply.status(404).send({ error: 'Workspace not found' });
+      }
       const existing = server.sessionManager.get(workspaceId);
       if (existing) {
-        commandOrch = existing.orchestrator;
+        const activity = server.sessionManager.acquireActivity(workspaceId);
+        if (!activity) {
+          return reply.status(409).send({ error: 'Workspace session is not active' });
+        }
+        commandOrch = activity.session.orchestrator;
+        releaseCommandWorkspace = activity.release;
       } else {
-        const mind = server.agentState.getWorkspaceMindDb(workspaceId);
-        if (mind) {
-          commandOrch = server.agentState.createSessionOrchestrator(mind);
+        const mindLease = server.mindCache.acquireLease(workspaceId);
+        releaseCommandWorkspace = mindLease.release;
+        try {
+          commandOrch = server.agentState.createSessionOrchestrator(mindLease.db);
+        } catch (err) {
+          mindLease.release();
+          throw err;
         }
       }
     }
@@ -266,8 +279,12 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       },
     };
 
-    const result = await commandRegistry.execute(commandStr, context);
-    return reply.send({ ok: true, result });
+    try {
+      const result = await commandRegistry.execute(commandStr, context);
+      return reply.send({ ok: true, result });
+    } finally {
+      releaseCommandWorkspace?.();
+    }
   });
 
   // ── POST /api/command/interpret ───────────────────────────────────────

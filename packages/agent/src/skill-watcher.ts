@@ -40,6 +40,9 @@ export function watchSkillDirectory(
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  // Windows change notifications report the canonical long path even when the
+  // watched directory was opened through an 8.3 alias (for example MARKOM~1).
+  // libuv asserts when those prefixes differ, so always watch the real path.
   const debounceMs = opts.debounceMs ?? 150;
 
   let pending = new Set<string>();
@@ -69,7 +72,8 @@ export function watchSkillDirectory(
 
   let watcher: fs.FSWatcher | null = null;
   try {
-    watcher = fs.watch(dir, { persistent: false }, (_eventType, filename) => {
+    const watchDir = fs.realpathSync.native(dir);
+    watcher = fs.watch(watchDir, { persistent: false }, (_eventType, filename) => {
       if (!filename) return;
       // fs.watch filename may include subdir — we only care about
       // direct children that end in .md

@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  actionableMemoryDirectiveText,
   allowsAutomaticRecall,
   allowsConversationHistory,
   allowsPostResponseDecoration,
@@ -15,6 +16,7 @@ import {
   canUseBudgetModelWithoutCloudEgress,
   classifyExplicitTurnMutationPolicy,
   filterToolsByTurnMutationPolicy,
+  isAmbiguousMessage,
   isExplicitToolFreeAdvisoryRequest,
   isRegulatedContent,
   isRetryableError,
@@ -50,6 +52,18 @@ function canonicalPrompt(id: 'coder' | 'data-engineer' | 'verifier' | 'coordinat
   if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
   return acceptanceCase.prompt;
 }
+
+describe('isAmbiguousMessage', () => {
+  it('treats workspace catch-up starters as actionable continuity requests', () => {
+    for (const message of [
+      'Catch me up on this workspace',
+      'Where did we leave off?',
+      'Get me up to speed on this workspace',
+    ]) {
+      expect(isAmbiguousMessage(message), message).toBe(false);
+    }
+  });
+});
 
 // ─── isRegulatedContent ──────────────────────────────────────────────
 
@@ -440,6 +454,52 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     expect(resolveExplicitMemoryReadDirective(
       'Use, when helpful, my saved memory.',
     )).toBe('allow');
+    for (const availableMemoryRequest of [
+      'Use my saved memory if available.',
+      'Use my saved memory when relevant.',
+      'Use my saved memory provided that it is available.',
+      'Use my saved memory if available and only when relevant.',
+      'Use my saved memory if available; then summarize the answer.',
+      'Use my saved memory if available. When you answer, be concise.',
+      'Use my saved memory if available. If you find nothing, say UNKNOWN.',
+      'Use my saved memory if available; if there is no reliable result, reply UNKNOWN.',
+      'Use Waggle memory if available: what did I ask you to remember in another session?',
+      'Use Waggle memory if available: what exact project codename did I ask you to remember in another session?',
+      'Use Waggle memory if available: when did we choose the codename in another session?',
+      'Use Waggle memory if available: after which meeting did we choose the codename?',
+      'Use Waggle memory if available: when did we approve the budget in another session?',
+      'Use Waggle memory if available: after which meeting did we approve the budget?',
+      'Use Waggle memory if available: when exactly did we approve the budget in another session?',
+      'Use Waggle memory if available: after exactly which meeting did we approve the budget?',
+      'Use Waggle memory if available: when, exactly, did we approve the budget?',
+      'Use my saved memory if available. When the command finishes, summarize the output.',
+      'Use my saved memory if available. If the command fails, report the error.',
+      'Use my saved memory if available. After the build command runs, summarize the logs.',
+      'Use my saved memory if available. Once the reviewer approves the patch, merge it.',
+      'Use my saved memory if available. When file permissions allow it, read config.json.',
+      'Use my saved memory if available. When I approve the patch, merge it.',
+      'Use my saved memory if available. After I approve the draft, publish it.',
+      'Use my saved memory if available. Once the user approves the invoice, send it.',
+      'Use my saved memory if available. Once I approve memory.ts, merge it.',
+      'Use my saved memory if available. Once I authorize memory.json, publish it.',
+      'Use my saved memory if available. Once I permit it.js, ship it.',
+      'Use my saved memory if available. Once I enable that.docx, open it.',
+      'Use my saved memory if available. When I say go, launch the build.',
+      'Use my saved memory if available. Once I sign off on the release, publish it.',
+      'Use my saved memory if it might be helpful.',
+      'Use my saved memory if you can access it.',
+      'Would you mind using my saved memory if available?',
+      'Use my saved memory if available. Only on my command, deploy the app.',
+      'Use my saved memory if you need it.',
+      'Use my saved memory when it would help.',
+      'Use my saved memory provided it helps answer accurately.',
+      'Use my saved memory if possible.',
+      'Use my saved memory if accessible.',
+      'Use my saved memory if any exist.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(availableMemoryRequest), availableMemoryRequest).toBe('allow');
+      expect(classifyExplicitTurnMutationPolicy(availableMemoryRequest).denyMemoryRead, availableMemoryRequest).toBe(false);
+    }
     expect(resolveExplicitMemoryReadDirective(
       'Do not search memory, but explain why someone might search memory.',
     )).toBe('deny');
@@ -456,6 +516,90 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       'Do not search memory, but search memory later.',
       'Do not use memory, but use memory provided that I ask later.',
       'Do not use memory, but use memory as soon as I explicitly ask later.',
+      'Use my saved memory if available and only if I approve.',
+      'Use my saved memory when relevant, but only after I explicitly approve.',
+      'Use my saved memory if available, but only after I consent.',
+      'Use my saved memory when relevant, but only with my permission.',
+      'Use my saved memory if available, but only after I give permission.',
+      'Use my saved memory if available, but only once permission is granted.',
+      'Use my saved memory if available, but only after I opt in.',
+      'Use my saved memory if available, but only when I say yes.',
+      'Use my saved memory if available, provided I later agree.',
+      'Use my saved memory if available, but only after explicit permission is granted.',
+      'Use my saved memory if available; only after I approve.',
+      'Use my saved memory if available. Only after I approve.',
+      'Use my saved memory if available, but only after I allow it.',
+      'Use my saved memory if available, but only after I confirm.',
+      'Use my saved memory if available, but only after I enable memory access.',
+      'Use my saved memory if available, but only after the user consents.',
+      'Use my saved memory if available, but only after my go-ahead.',
+      'Use my saved memory if available, but only after I grant access.',
+      'Use my saved memory if available, but only after I have reviewed the summary and explicitly consent.',
+      'Use my saved memory if available, but wait until I approve.',
+      'Use my saved memory if available, but only use it after I approve.',
+      'Use my saved memory if available; do not access it until I approve.',
+      'Use my saved memory if available; wait for my approval before using it.',
+      'Use my saved memory if available, subject to my approval.',
+      'Use my saved memory if available, pending my approval.',
+      'Use my saved memory if available, contingent on my permission.',
+      'Use my saved memory if available, but not before I approve.',
+      'Use my saved memory if available, but defer using it until I approve.',
+      'Use my saved memory if available, but not without my permission.',
+      'Use my saved memory if available, but use it solely after I approve.',
+      'Use my saved memory if available, but ask me first.',
+      'Use my saved memory if available, but get my approval first.',
+      'Use my saved memory if available, but check with me first.',
+      'Use my saved memory if available, but only on my command.',
+      'Use my saved memory if available, but only after you ask me.',
+      'Use my saved memory if available, but only if I tell you to.',
+      'Use my saved memory if available, but only after I say so.',
+      'Use my saved memory if available, but first ask me.',
+      'Use my saved memory if available, but ask me before using it.',
+      'Use my saved memory if available, but get my approval before using it.',
+      'Use my saved memory if available, but please ask me first.',
+      'Use my saved memory if available, but could you ask me first.',
+      'Use my saved memory if available, but could you please ask me first.',
+      'Use my saved memory if available, but you must ask me first.',
+      'Use my saved memory if available, but wait for me to approve first.',
+      'Use my saved memory if available, but wait until I give you the go-ahead.',
+      'Use my saved memory if available, but only after I approve it.',
+      'Use my saved memory if available, but only after I consent to it.',
+      'Use my saved memory if available, but only after I authorize it.',
+      'Use my saved memory if available, but only after I permit it.',
+      'Use my saved memory if available, but only after I approve memory access.',
+      'Use my saved memory if available, but only after I approve its use.',
+      'Use my saved memory if available, but only after I approve using it.',
+      'Use my saved memory if available, but only after I give you permission.',
+      'Use my saved memory if available, but only after I grant you permission.',
+      'Use my saved memory if available, but only after I give approval for memory use.',
+      'Use my saved memory if available, but only after I grant permission to use it.',
+      'Use my saved memory if available, but only after I provide consent.',
+      'Use my saved memory if available, but only after I authorize access.',
+      'Use my saved memory if available, but only once permission from me is granted.',
+      'Use my saved memory if available, but only after I have approved it.',
+      "Use my saved memory if available, but only after I've approved it.",
+      'Use my saved memory if available, but only after I say go.',
+      'Use my saved memory if available, but wait until I tell you it is okay.',
+      'Use my saved memory if available, but not unless I approve it.',
+      'Use my saved memory if available, but do not proceed with memory until I approve it.',
+      'Use my saved memory if available, but only after I tell you to proceed.',
+      'Use my saved memory if available, but only after I give consent to you.',
+      'Use my saved memory if available, but only after I give permission to you.',
+      'Use my saved memory if available, but only after permission from me.',
+      'Use my saved memory if available, but only after I sign off.',
+      'Use my saved memory if available, but only after I sign off on it.',
+      'Use my saved memory if available. First, ask me.',
+      'Use my saved memory if available. Do not use it unless I approve.',
+      'Use my saved memory if available. Before using it, ask me.',
+      'Use my saved memory if available. Before you use it, ask me.',
+      'Use my saved memory if available. Ask for my permission first.',
+      'Use my saved memory if available. Obtain my approval first.',
+      'Use my saved memory if available. Seek my consent first.',
+      'Use my saved memory if available. Do not use it without my approval.',
+      'Use my saved memory if available. Never use it before I consent.',
+      'Use my saved memory if available. Wait for me to say it is okay.',
+      'Use my saved memory if available. Use it only after I grant you access.',
+      'Use my saved memory if available. Use it only after I say it is okay.',
     ]) {
       expect(resolveExplicitMemoryReadDirective(deferredOverride), deferredOverride).toBe('deny');
     }
@@ -613,7 +757,11 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     for (const message of [
       'Alice said: do not use conversation history. Explain her statement.',
       'Alice said: do not use saved memory. Explain her statement.',
+      'Alice said — search my saved memory for the codename. Explain her request.',
+      'Alice said, use my saved memory if available.',
       'The report states: memory access is denied. Summarize the report.',
+      'According to Alice: what did I ask you to remember in another session? Explain that.',
+      "Alice's request: use my saved memory if available. Critique it.",
     ]) {
       expect(resolveExplicitMemoryReadDirective(message), message).toBe('unspecified');
       expect(isExplicitMemoryRecallRequest(message), message).toBe(false);
@@ -1533,6 +1681,12 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     expect(policies[1]?.denyMemoryRead).toBe(true);
     expect(policies[2]?.denyConversationHistory).toBe(false);
     expect(elapsedMs).toBeLessThan(1_000);
+
+    const attributedTranscript = Array.from(
+      { length: 200 },
+      (_, index) => `alice said: search my saved memory for attributed item ${index} ${'x'.repeat(180)}`,
+    ).join('\n');
+    expect(actionableMemoryDirectiveText(attributedTranscript).length).toBeLessThan(1_000);
   });
 });
 

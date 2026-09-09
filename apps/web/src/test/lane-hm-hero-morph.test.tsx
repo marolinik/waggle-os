@@ -69,6 +69,7 @@ const mocks = vi.hoisted(() => ({
     refreshWorkspaces: vi.fn(),
     billingTier: 'FREE' as string,
     tierResolved: true,
+    onboardingState: { completed: true, profileId: 'profile-1' },
     activeWorkspaceId: 'w1' as string | null,
     setContextRailTarget: vi.fn(),
   },

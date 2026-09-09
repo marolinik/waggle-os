@@ -65,8 +65,9 @@ function parseContent(text: string): Content[] {
     }
 
     if (/^[-*]\s+/.test(trimmed)) {
+      const bulletText = trimmed.replace(/^[-*]\s+/, '');
       content.push({
-        text: trimmed.replace(/^[-*]\s+/, ''),
+        text: [{ text: '• ' }, ...parseInlineFormatting(bulletText)],
         style: 'body',
         margin: [15, 1, 0, 1],
       });
@@ -76,7 +77,7 @@ function parseContent(text: string): Content[] {
     const numMatch = trimmed.match(/^(\d+)\.\s+(.+)/);
     if (numMatch) {
       content.push({
-        text: `${numMatch[1]}. ${numMatch[2]}`,
+        text: [{ text: `${numMatch[1]}. ` }, ...parseInlineFormatting(numMatch[2])],
         style: 'body',
         margin: [15, 1, 0, 1],
       });
@@ -112,6 +113,21 @@ function parseInlineFormatting(text: string): Array<{ text: string; bold?: boole
   }
 
   return parts.length > 0 ? parts : [{ text }];
+}
+
+function omitDuplicateLeadingTitle(text: string, title: string | undefined): string {
+  if (!title?.trim()) return text;
+  const lines = text.split('\n');
+  const firstContentLine = lines.findIndex(line => line.trim().length > 0);
+  if (firstContentLine < 0) return text;
+  const heading = lines[firstContentLine].trim().match(/^#{1,3}\s+(.+)$/)?.[1]?.trim();
+  if (heading?.toLocaleLowerCase() !== title.trim().toLocaleLowerCase()) return text;
+
+  lines.splice(firstContentLine, 1);
+  while (firstContentLine < lines.length && lines[firstContentLine].trim() === '') {
+    lines.splice(firstContentLine, 1);
+  }
+  return lines.join('\n');
 }
 
 export function createPdfTools(workspace: string): ToolDefinition[] {
@@ -155,7 +171,7 @@ export function createPdfTools(workspace: string): ToolDefinition[] {
 
         try {
           const resolved = resolveSafe(workspace, filePath);
-          const bodyContent = parseContent(contentStr);
+          const bodyContent = parseContent(omitDuplicateLeadingTitle(contentStr, title));
 
           const titleContent: Content[] = title ? [
             { text: title, style: 'title', margin: [0, 80, 0, 10] },

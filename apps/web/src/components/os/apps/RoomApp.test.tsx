@@ -232,6 +232,59 @@ describe('RoomApp', () => {
 });
 
 describe('RoomApp canonical Room presentation and controls', () => {
+  it.each([
+    ['running', 'Work is still in progress', undefined],
+    ['completed', '   ', undefined],
+    ['completed', 'Complete answer', 'Assistant history could not be persisted: disk full'],
+  ] as const)('does not expose an incomplete chat result while a worker is %s', (status, summary, error) => {
+    const room = canonicalRoom();
+    const worker = canonicalWorker({
+      status,
+      result: { ...canonicalWorker().result!, summary, error },
+    });
+    setFocusedRoom(room, [worker]);
+
+    render(<RoomApp roomId={room.id} />);
+
+    expect(screen.queryByRole('link', { name: 'Open result in chat' })).not.toBeInTheDocument();
+  });
+
+  it('exposes the persisted chat result after a worker completes with a summary', () => {
+    const room = canonicalRoom({ status: 'completed' });
+    const worker = canonicalWorker({
+      status: 'completed',
+      result: { ...canonicalWorker().result!, summary: 'Complete answer', error: undefined },
+    });
+    setFocusedRoom(room, [worker]);
+
+    render(<RoomApp roomId={room.id} />);
+
+    expect(screen.getByRole('link', { name: 'Open result in chat' })).toHaveAttribute(
+      'href',
+      '/workspaces/ws1/chat?session=session-alpha',
+    );
+  });
+
+  it('keeps a persisted chat available when only result memory recording warned', () => {
+    const room = canonicalRoom({ status: 'completed' });
+    const worker = canonicalWorker({
+      status: 'completed',
+      result: {
+        ...canonicalWorker().result!,
+        summary: 'Complete answer',
+        error: 'Result memory could not be recorded: vector store unavailable',
+      },
+    });
+    setFocusedRoom(room, [worker]);
+
+    render(<RoomApp roomId={room.id} />);
+
+    expect(screen.getByRole('link', { name: 'Open result in chat' })).toHaveAttribute(
+      'href',
+      '/workspaces/ws1/chat?session=session-alpha',
+    );
+  });
+
   it('renders the root aggregate and complete exact worker details', () => {
     const room = canonicalRoom();
     const worker = canonicalWorker();

@@ -114,6 +114,25 @@ describe('auditSkill — happy path', () => {
     expect(getAuditBadge(home, 'good')).toMatchObject({ verified: true, lastAuditedHash: 'h1' });
     expect(isSkillDraft(home, 'good')).toBe(false);
   });
+
+  it('uses an injected executable skill runner instead of the toolless fallback', async () => {
+    const llm = roleLLM({ synth: [SYNTH_OK], judge: [PASS_JUDGE] });
+    const runUnderTest = vi.fn(async () => 'Y done with deterministic tool evidence');
+    const o = await auditSkill(
+      home,
+      skill('tool-backed'),
+      llm,
+      { contentHash: 'h-tool' },
+      { runUnderTest },
+    );
+
+    expect(o.verified).toBe(true);
+    expect(runUnderTest).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'tool-backed' }),
+      'do X on input Y',
+    );
+    expect(llm.count('run')).toBe(0);
+  });
 });
 
 describe('auditSkill — rewrite path (opt-in)', () => {

@@ -63,6 +63,7 @@ export const PROVIDER_MODEL_CATALOGS: Record<string, ProviderCatalogDefinition> 
     pagination: 'anthropic-cursor',
   },
   openai: { endpoint: 'https://api.openai.com/v1/models', auth: 'bearer' },
+  'openai-compatible': { endpoint: '', auth: 'bearer' },
   google: {
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
     auth: 'google-header',
@@ -188,7 +189,9 @@ function requestFor(
       },
     };
   }
-  return { url: endpoint, init: { headers: { Authorization: `Bearer ${apiKey}` } } };
+  return apiKey
+    ? { url: endpoint, init: { headers: { Authorization: `Bearer ${apiKey}` } } }
+    : { url: endpoint, init: {} };
 }
 
 function firstPageUrl(definition: ProviderCatalogDefinition, endpoint: string): string {
@@ -229,6 +232,9 @@ async function fetchCatalog(
 ): Promise<ProviderCatalogResult> {
   const definition = PROVIDER_MODEL_CATALOGS[providerId];
   if (!definition) return { models: [], status: 'unavailable', error: 'Provider does not expose model discovery.' };
+  if (!baseUrl?.trim() && !definition.endpoint) {
+    return { models: [], status: 'unavailable', error: 'Provider requires a model catalog base URL.' };
+  }
 
   const fetchImpl = options.fetchImpl ?? fetch;
   const endpoint = catalogEndpoint(definition, baseUrl);
@@ -243,6 +249,7 @@ async function fetchCatalog(
     const response = await fetchImpl(request.url, {
       ...request.init,
       signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+      ...(baseUrl?.trim() ? { redirect: 'error' as const } : {}),
     });
     if (!response.ok) throw new Error(`Provider model catalog returned HTTP ${response.status}`);
     const body = await response.json();

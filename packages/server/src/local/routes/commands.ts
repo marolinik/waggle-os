@@ -31,16 +31,27 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
     // via the shared orchestrator singleton. If no workspace is set, fall
     // back to the shared orchestrator (personal mind only).
     let commandOrch: Orchestrator = orchestrator;
+    let releaseCommandWorkspace: (() => void) | undefined;
     if (workspaceId && workspaceId !== 'default') {
-      // Prefer an existing chat session's orchestrator if one is open —
-      // matches the workspace mind the user is actively editing.
+      if (!server.workspaceManager.get(workspaceId)) {
+        return reply.status(404).send({ error: 'Workspace not found' });
+      }
       const existing = server.sessionManager.get(workspaceId);
       if (existing) {
-        commandOrch = existing.orchestrator;
+        const activity = server.sessionManager.acquireActivity(workspaceId);
+        if (!activity) {
+          return reply.status(409).send({ error: 'Workspace session is not active' });
+        }
+        commandOrch = activity.session.orchestrator;
+        releaseCommandWorkspace = activity.release;
       } else {
-        const mind = server.agentState.getWorkspaceMindDb(workspaceId);
-        if (mind) {
-          commandOrch = server.agentState.createSessionOrchestrator(mind);
+        const mindLease = server.mindCache.acquireLease(workspaceId);
+        releaseCommandWorkspace = mindLease.release;
+        try {
+          commandOrch = server.agentState.createSessionOrchestrator(mindLease.db);
+        } catch (err) {
+          mindLease.release();
+          throw err;
         }
       }
     }
@@ -105,7 +116,11 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       // will return their "not available in this context" fallback.
     };
 
-    const result = await commandRegistry.execute(command, context);
-    return reply.send({ result, command });
+    try {
+      const result = await commandRegistry.execute(command, context);
+      return reply.send({ result, command });
+    } finally {
+      releaseCommandWorkspace?.();
+    }
   });
 };

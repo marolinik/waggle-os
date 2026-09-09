@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WhoAreYouStep from './WhoAreYouStep';
 import type { OnboardingProfileFields } from './types';
@@ -49,5 +49,47 @@ describe('WhoAreYouStep', () => {
       expect(chip).toHaveClass('text-[var(--text-tertiary)]');
       expect(chip).toHaveClass('border-[var(--line-affordance)]');
     }
+  });
+
+  it('announces a save failure with explicit retry and continue-without-personalization actions', () => {
+    const onContinue = vi.fn();
+    const onContinueWithoutPersonalization = vi.fn();
+    render(
+      <WhoAreYouStep
+        profile={profile}
+        onChange={vi.fn()}
+        onContinue={onContinue}
+        onContinueWithoutPersonalization={onContinueWithoutPersonalization}
+        saving={false}
+        saveError="We couldn't confirm your profile was saved."
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't confirm your profile was saved/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saving profile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without personalization' }));
+    expect(onContinue).toHaveBeenCalledOnce();
+    expect(onContinueWithoutPersonalization).toHaveBeenCalledOnce();
+  });
+
+  it('freezes every editable profile control while persistence is pending', () => {
+    const onChange = vi.fn();
+    render(
+      <WhoAreYouStep
+        profile={profile}
+        onChange={onChange}
+        onContinue={vi.fn()}
+        saving
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Role' })).toBeDisabled();
+    expect(screen.getByLabelText('Industry')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Engineering' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Just me' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remember everything I work on' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

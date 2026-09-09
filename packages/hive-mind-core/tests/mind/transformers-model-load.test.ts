@@ -475,8 +475,8 @@ describe('local Transformers model loading', () => {
     const onnxPath = path.join(modelDir, 'model.onnx');
     fs.mkdirSync(modelDir, { recursive: true });
     fs.writeFileSync(onnxPath, 'corrupt');
-    const failure = corruptError(onnxPath);
-    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+    const failure = corruptError(fs.realpathSync.native(onnxPath));
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
       throw new Error('rename denied');
     });
 
@@ -485,6 +485,56 @@ describe('local Transformers model loading', () => {
       model,
       load: async () => { throw failure; },
     })).rejects.toBe(failure);
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(modelDir)).toBe(true);
+  });
+
+  it.each(['EPERM', 'EACCES', 'EBUSY'])(
+    'retries a transient %s quarantine rename before reloading the model',
+    async (code) => {
+      const cacheDir = path.join(makeTempRoot(`transformers-rename-${code.toLowerCase()}`), 'cache');
+      const model = `Xenova/rename-${code.toLowerCase()}-model`;
+      const modelDir = path.join(cacheDir, ...model.split('/'));
+      const onnxPath = path.join(modelDir, 'model.onnx');
+      fs.mkdirSync(modelDir, { recursive: true });
+      fs.writeFileSync(onnxPath, 'corrupt');
+      const failure = corruptError(fs.realpathSync.native(onnxPath));
+      const originalRename = fs.renameSync.bind(fs);
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error(`synthetic Windows ${code}`), { code });
+        })
+        .mockImplementation(originalRename);
+      const load = vi.fn()
+        .mockRejectedValueOnce(failure)
+        .mockResolvedValueOnce('recovered');
+
+      await expect(withTransformersModelLoad({ cacheDir, model, load }))
+        .resolves.toBe('recovered');
+      expect(rename).toHaveBeenCalledTimes(2);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(fs.existsSync(modelDir)).toBe(false);
+    },
+  );
+
+  it('bounds repeated transient quarantine rename failures and preserves the loader error', async () => {
+    const cacheDir = path.join(makeTempRoot('transformers-rename-bounded'), 'cache');
+    const model = 'Xenova/rename-bounded-model';
+    const modelDir = path.join(cacheDir, ...model.split('/'));
+    const onnxPath = path.join(modelDir, 'model.onnx');
+    fs.mkdirSync(modelDir, { recursive: true });
+    fs.writeFileSync(onnxPath, 'corrupt');
+    const failure = corruptError(fs.realpathSync.native(onnxPath));
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('synthetic Windows lock contention'), { code: 'EPERM' });
+    });
+
+    await expect(withTransformersModelLoad({
+      cacheDir,
+      model,
+      load: async () => { throw failure; },
+    })).rejects.toBe(failure);
+    expect(rename).toHaveBeenCalledTimes(2);
     expect(fs.existsSync(modelDir)).toBe(true);
   });
 

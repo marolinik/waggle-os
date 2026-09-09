@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,6 +58,185 @@ describe('WaggleConfig', () => {
     expect(providers['anthropic']).toEqual(provider);
     expect(providers['anthropic'].apiKey).toBe('sk-test-key');
     expect(providers['anthropic'].models).toHaveLength(2);
+  });
+
+  it('recovers a malformed primary from the last valid backup', () => {
+    const configDir = makeTempDir();
+    fs.writeFileSync(path.join(configDir, 'config.json'), '{"defaultModel":');
+    fs.writeFileSync(path.join(configDir, 'config.json.bak'), JSON.stringify({
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      providers: {
+        'openai-compatible': {
+          apiKey: '',
+          models: ['qwen3.8-flash-next'],
+          baseUrl: 'http://10.33.0.153:4000/v1',
+        },
+      },
+      onboarding: { completed: true },
+    }));
+
+    const config = new WaggleConfig(configDir);
+
+    expect(config.getDefaultModel()).toBe('openai-compatible/qwen3.8-flash-next');
+    expect(config.getProviders()['openai-compatible']?.baseUrl).toBe('http://10.33.0.153:4000/v1');
+  });
+
+  it('recovers an interrupted replacement when only the backup remains', () => {
+    const configDir = makeTempDir();
+    fs.writeFileSync(path.join(configDir, 'config.json.bak'), JSON.stringify({
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      providers: {},
+    }));
+
+    expect(new WaggleConfig(configDir).getDefaultModel()).toBe('openai-compatible/qwen3.8-flash-next');
+  });
+
+  it('preserves the previous config when atomic publication fails', () => {
+    const configDir = makeTempDir();
+    const config = new WaggleConfig(configDir);
+    config.setDefaultModel('stable-model');
+    config.save();
+    config.setDefaultModel('unpublished-model');
+
+    const configPath = path.join(configDir, 'config.json');
+    const renameSync = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+      if (String(source).endsWith('.tmp') && destination === configPath) {
+        const error = new Error('publication blocked') as NodeJS.ErrnoException;
+        error.code = 'EPERM';
+        throw error;
+      }
+      return renameSync(source, destination);
+    });
+
+    expect(() => config.save()).toThrow('publication blocked');
+    renameSpy.mockRestore();
+
+    expect(new WaggleConfig(configDir).getDefaultModel()).toBe('stable-model');
+    expect(fs.readdirSync(configDir).some(name => name.endsWith('.tmp'))).toBe(false);
+  });
+
+  it('repairs a recovered config without losing unknown fields', () => {
+    const configDir = makeTempDir();
+    const configPath = path.join(configDir, 'config.json');
+    fs.writeFileSync(configPath, '{broken');
+    fs.writeFileSync(`${configPath}.bak`, JSON.stringify({
+      defaultModel: 'recovered-model',
+      providers: {},
+      onboarding: { completed: true, source: 'flag' },
+    }));
+
+    const config = new WaggleConfig(configDir);
+    config.setDefaultModel('repaired-model');
+    config.save();
+
+    const repaired = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+    expect(repaired.defaultModel).toBe('repaired-model');
+    expect(repaired.onboarding).toEqual({ completed: true, source: 'flag' });
+    expect(fs.readdirSync(configDir).some(name => name.startsWith('config.json.corrupt-'))).toBe(true);
+  });
+
+  it('recovers a structurally invalid primary only from a valid backup', () => {
+    const configDir = makeTempDir();
+    fs.writeFileSync(path.join(configDir, 'config.json'), 'null');
+    fs.writeFileSync(path.join(configDir, 'config.json.bak'), JSON.stringify({
+      defaultModel: 'backup-model',
+      providers: {},
+    }));
+
+    expect(new WaggleConfig(configDir).getDefaultModel()).toBe('backup-model');
+  });
+
+  it('does not retain migrated plaintext provider secrets in recovery files', () => {
+    const configDir = makeTempDir();
+    const secret = 'sk-legacy-plaintext-must-disappear';
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
+      defaultModel: 'openai/gpt-4o',
+      providers: { openai: { apiKey: secret, models: ['gpt-4o'] } },
+    }));
+    const config = new WaggleConfig(configDir);
+    config.setProvider('openai', { apiKey: '', models: ['gpt-4o'] });
+
+    config.save();
+
+    for (const name of fs.readdirSync(configDir)) {
+      expect(fs.readFileSync(path.join(configDir, name), 'utf-8')).not.toContain(secret);
+    }
+  });
+
+  it('does not resurrect a disconnected team or its token from recovery data', () => {
+    const configDir = makeTempDir();
+    const configPath = path.join(configDir, 'config.json');
+    const token = 'team-token-must-not-survive';
+    fs.writeFileSync(configPath, JSON.stringify({
+      defaultModel: 'claude-sonnet-4-6',
+      providers: {},
+      teamServer: { url: 'https://team.example.test', token },
+    }));
+    const config = new WaggleConfig(configDir);
+    config.clearTeamServer();
+    config.save();
+    fs.writeFileSync(configPath, '{broken');
+
+    const recovered = new WaggleConfig(configDir);
+
+    expect(recovered.isTeamConnected()).toBe(false);
+    expect(recovered.getTeamServer()).toBeNull();
+    expect(fs.readFileSync(`${configPath}.bak`, 'utf-8')).not.toContain(token);
+  });
+
+  it('does not replace a valid primary with stale backup data after a transient read lock', () => {
+    const configDir = makeTempDir();
+    const configPath = path.join(configDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ defaultModel: 'current-model', providers: {} }));
+    fs.writeFileSync(`${configPath}.bak`, JSON.stringify({ defaultModel: 'stale-model', providers: {} }));
+    const readFileSync = fs.readFileSync.bind(fs);
+    let primaryReads = 0;
+    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, ...args: unknown[]) => {
+      if (file === configPath) {
+        primaryReads += 1;
+        const error = new Error('temporarily locked') as NodeJS.ErrnoException;
+        error.code = 'EACCES';
+        throw error;
+      }
+      return readFileSync(file, ...args as [BufferEncoding]);
+    }) as typeof fs.readFileSync);
+
+    expect(() => new WaggleConfig(configDir)).toThrow('temporarily locked');
+    expect(primaryReads).toBe(4);
+    readSpy.mockRestore();
+    expect(new WaggleConfig(configDir).getDefaultModel()).toBe('current-model');
+  });
+
+  it('does not retain a plaintext secret during the Windows replacement fallback', () => {
+    const configDir = makeTempDir();
+    const configPath = path.join(configDir, 'config.json');
+    const secret = 'sk-legacy-windows-fallback-must-disappear';
+    fs.writeFileSync(configPath, JSON.stringify({
+      defaultModel: 'openai/gpt-4o',
+      providers: { openai: { apiKey: secret, models: ['gpt-4o'] } },
+    }));
+    const config = new WaggleConfig(configDir);
+    config.setProvider('openai', { apiKey: '', models: ['gpt-4o'] });
+    const renameSync = fs.renameSync.bind(fs);
+    let primaryPublicationAttempts = 0;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+      if (String(source).startsWith(`${configPath}.`) && String(source).endsWith('.tmp') && destination === configPath) {
+        primaryPublicationAttempts += 1;
+        if (primaryPublicationAttempts <= 4) {
+          const error = new Error('replacement temporarily blocked') as NodeJS.ErrnoException;
+          error.code = 'EPERM';
+          throw error;
+        }
+      }
+      return renameSync(source, destination);
+    });
+
+    expect(() => config.save()).not.toThrow();
+    renameSpy.mockRestore();
+    for (const name of fs.readdirSync(configDir)) {
+      expect(fs.readFileSync(path.join(configDir, name), 'utf-8')).not.toContain(secret);
+    }
   });
 
   it('sets and gets default model', () => {

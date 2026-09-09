@@ -47,6 +47,27 @@ function makeTmpDir(): string {
   return dir;
 }
 
+/** Snapshot relative paths and bytes so rejected requests cannot hide disk writes. */
+function snapshotFileTree(root: string): Array<[string, string]> {
+  if (!fs.existsSync(root)) return [];
+  const files: Array<[string, string]> = [['./', '<directory>']];
+  const visit = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const absolute = path.join(dir, entry.name);
+      const relative = path.relative(root, absolute).split(path.sep).join('/');
+      if (entry.isDirectory()) {
+        files.push([`${relative}/`, '<directory>']);
+        visit(absolute);
+      }
+      else if (entry.isFile()) {
+        files.push([relative, fs.readFileSync(absolute).toString('base64')]);
+      }
+    }
+  };
+  visit(root);
+  return files.sort(([a], [b]) => a.localeCompare(b));
+}
+
 /** Parse an SSE response body into typed events. */
 function parseSSE(body: string): Array<{ type: string; data: unknown }> {
   const events: Array<{ type: string; data: unknown }> = [];
@@ -191,11 +212,12 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   let baseUrl: string;
   let authToken: string;
   let activeWorkspaceId: string;
+  let dataDir: string;
 
   beforeAll(async () => {
-    const tmpDir = makeTmpDir();
+    dataDir = makeTmpDir();
 
-    serverInst = await buildLocalServer({ dataDir: tmpDir });
+    serverInst = await buildLocalServer({ dataDir });
     activeWorkspaceId = serverInst.agentState.activeWorkspaceId!;
     expect(activeWorkspaceId).toBeTruthy();
 
@@ -238,6 +260,50 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     const body = await res.json() as { error: string };
     expect(body.error).toContain('message is required');
   });
+
+  it.each([
+    ['non-string message', 'message', { message: 123, workspace: activeWorkspaceId, session: 'invalid-message-type' }],
+    ['non-string workspace', 'workspace', { message: 'Hello', workspace: false, session: 'invalid-workspace-type' }],
+    ['non-string workspaceId', 'workspaceId', { message: 'Hello', workspaceId: 123, session: 'invalid-workspace-id-type' }],
+    ['non-string session', 'session', { message: 'Hello', workspace: activeWorkspaceId, session: 123 }],
+    ['non-string sessionId', 'sessionId', { message: 'Hello', workspace: activeWorkspaceId, sessionId: true }],
+    ['oversized workspace', 'workspace', { message: 'Hello', workspace: 'w'.repeat(201), session: 'oversized-workspace' }],
+    ['oversized workspaceId', 'workspaceId', { message: 'Hello', workspaceId: 'w'.repeat(201), session: 'oversized-workspace-id' }],
+    ['oversized session', 'session', { message: 'Hello', workspace: activeWorkspaceId, session: 's'.repeat(201) }],
+    ['oversized sessionId', 'sessionId', { message: 'Hello', workspace: activeWorkspaceId, sessionId: 's'.repeat(201) }],
+  ] satisfies Array<[string, string, Record<string, unknown>]>) (
+    'returns 400 for %s before running or retaining chat state',
+    async (_case, field, payload) => {
+      const originalRunner = serverInst.agentRunner;
+      const historyKeysBefore = [...serverInst.agentState.sessionHistories.keys()].sort();
+      const workspaceTreeBefore = snapshotFileTree(path.join(dataDir, 'workspaces'));
+      let runnerCalls = 0;
+      serverInst.agentRunner = async (config) => {
+        runnerCalls += 1;
+        return echoRunner(config);
+      };
+
+      try {
+        const res = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        expect(res.status).toBe(400);
+        const body = await res.json() as { error: string };
+        expect(body.error).toContain(field);
+        expect(runnerCalls).toBe(0);
+        expect([...serverInst.agentState.sessionHistories.keys()].sort()).toEqual(historyKeysBefore);
+        expect(snapshotFileTree(path.join(dataDir, 'workspaces'))).toEqual(workspaceTreeBefore);
+      } finally {
+        serverInst.agentRunner = originalRunner;
+      }
+    },
+  );
 
   it('returns 400 and INJECTION_DETECTED when message has high injection score', async () => {
     // "ignore all previous instructions" scores ≥ 0.7 — should be blocked
@@ -309,7 +375,7 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          workspaceId: 'slow-first-token',
+          workspaceId: activeWorkspaceId,
           sessionId: 'slow-first-token',
           persona: 'writer',
           message: 'Rewrite this in fewer words and add no new claims: The launch is delayed.',

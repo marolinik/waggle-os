@@ -1,48 +1,47 @@
 # Launch Recommendation — Windows Solo
 
-Updated: 2026-08-27
+Updated: 2026-09-09
 
-## Current verdict: INSTALLER/LIFECYCLE INTERNAL RC QUALIFIED; RELEASE QUALIFICATION INCOMPLETE
+## Current verdict: PM-QUALIFIED FOR CONTROLLED INTERNAL PILOT; PUBLIC RELEASE GATES OPEN
 
 The supported launch scope is Windows Solo with Claude Code, Codex, and Hermes using
 their official user-owned installations and authentication. Cursor, OpenClaw, and macOS
-packaging/certification remain roadmap work and do not block this internal RC.
+packaging/certification remain roadmap work and do not block this internal pilot.
 
 This document is the release-status authority. Historical receipts are evidence only;
 they do not certify a later behavior-changing revision unless a bounded no-impact review
 explicitly says so.
 
-## Frozen runtime candidate
+## Frozen internal-pilot candidate
 
-- Source revision: `23ad3fa5f99bddce648b84750a41365299aeb0da`
-- Source tree: `aab548f77ec64b181086664dad29c32e6bc78779`
-- Integration: private Waggle PR #66, tested head
-  `587e259166db69ff86e806fa8393a5f8974ea0a1`, merged 2026-08-27
-- Tree equivalence: the tested PR head and merge commit resolve to the same source tree
-- Repository state after merge: private `main` equals `origin/main`
+- Runtime source revision: `e4bf403ecfde8987089176ba1de216b224e1fc1c`
+- Runtime source tree: `5a42a0b9ad0937408fafc8180ad6738b6bd16bce`
+- PR merge candidate used by hosted/local packaging:
+  `b07a6173f9909e2decddb30077ef890cf16c602d`
+- Merge-candidate tree: `5a42a0b9ad0937408fafc8180ad6738b6bd16bce`
+- Branch: private `codex/solo-premium-pm-qualification-2026-08-27`
+- Integration state: pushed private draft PR #83; mergeable, not merged to private `main`
 
-The documentation-only descendant that updates this record does not replace the runtime
-candidate. Before it is merged, its diff must be limited to documentation and all required
-remote checks must remain green.
+The PR head and the tested merge candidate have the same source tree. A later
+documentation-only descendant that updates this record does not replace the frozen runtime
+candidate. Merge, tag, signing, publication, and release remain separately gated actions.
 
 ## Exact-current Windows installer
 
-- NSIS artifact:
-  `app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Waggle_0.2.0_x64-setup.exe`
-- Size: 102,923,936 bytes
-- SHA-256: `7BFA9F9B13633A51CD3336B42E3EF904B7F7A568C6DEE4F6CED967CBD4F40A59`
-- Internal signer: `CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS`
-- Signer thumbprint: `E2F028541E7A4D1FE80FFFF02079060D36579846`
-- RFC 3161 timestamp authority: DigiCert SHA256 RSA4096 Timestamp Responder 2025 1
-- Trust classification: internal pilot only; the self-signed root is not public trust
+- Stable locally certified copy:
+  `output/pm-ci-e4bf403e/managed/Waggle_0.2.0_x64-setup-managed-certified-b07a6173.exe`
+- Size: 98,698,013 bytes
+- SHA-256: `9C4A22D5540B1D26DE6A928F3268128A70994663FF2E9F1B99D12C8D63B96747`
+- Authenticode status: `NotSigned`
+- Trust classification: controlled internal pilot only; Windows may show an unknown-publisher warning
 
-Clean-profile certification passed **64/64** checks in 450.199 seconds:
+Isolated-profile certification passed **64/64** checks:
 
 - Receipt:
-  `output/installer-certification/23ad3fa5-20260827T123917Z-exact-main-clean-profile/windows-installer-certification.json`
+  `output/pm-ci-e4bf403e/managed/windows-installer-managed-model-certificate.json`
 - Receipt SHA-256:
-  `AC2A1C54119E28CC22DA931EB43E2815862B01832DD6097CE03F8F79D9D3DF4D`
-- Receipt source and bundled-sidecar revision: exact `23ad3fa5`
+  `E237DD0871F22EAF414052CE8FC91E6BA2E23318AA45A3E48B4D2AC2AC090BB6`
+- Receipt source and bundled-sidecar revision: exact `b07a6173`
 - Tier: FREE/Solo
 - Managed model: `qwen2.5:0.5b`
 - Managed-model digest:
@@ -56,30 +55,47 @@ cleanup, and preservation of external `.hive-mind` and `.ollama` roots. It also 
 that developer Node.js, Python, Docker, external LiteLLM, and a separately installed
 Ollama are not prerequisites.
 
-## Integrated test and security evidence
+The hosted PR artifact independently passed **58/58** lifecycle checks without the
+managed-model option. Its uploaded ZIP SHA-256 is
+`96BE627319349F379DAC718A20D0438064B327B661DFD9FB6B117898504CCF95`;
+the hosted installer SHA-256 is
+`A13DF953A6121B64E96E68CEA8CDC2A3FCF8A87B16AA0013F22B394F33B35989`.
 
-- PR #66: every blocking remote check passed — primary CI, Playwright smoke and full
-  E2E, Windows and both macOS Tauri verification targets, Wave 1, and Hive Mind
-  install/smoke on Windows, Ubuntu, and macOS.
-- Exact-current dependency audits: 0 Critical and 0 High in both full and production
-  dependency trees. Lower-severity maintenance remains tracked.
+## Test, PM-journey, and security evidence
+
+- Draft PR #83 head `e4bf403e` passed the full CI test, E2E smoke, E2E, Windows
+  Tauri verification, macOS x64/arm64 build verification, Hive Mind Windows/macOS/Linux
+  install smoke, and Wave 1 acceptance jobs. CodeRabbit also passed. The PR is mergeable
+  and remains unmerged.
+- The exact PR merge candidate `b07a6173` has the same tree as `e4bf403e`; its hosted
+  Windows installer passed 58/58, and the locally rebuilt installer passed 64/64 with
+  managed-model verification.
+- Production dependency audit: 0 Critical and 0 High. App build-tool dependency audit:
+  0 vulnerabilities after the exact-candidate browser-metadata patch.
 - The security-hardening integration covers workspace path/link boundaries, hook/database
   hard-link boundaries, normalized ingress, atomic consolidation/cognify, deprecated-frame
   search exclusion before limits, and knowledge-graph provenance.
 - Hosted signing policy and workflow tests remain green, but no publicly trusted hosted
   artifact has been produced.
+- Visible-browser PM journeys passed OpenAI-compatible provider persistence and restart,
+  local Qwen chat/recovery, workspace/session create-switch-delete isolation, PDF/PPTX/
+  DOCX/XLSX artifact surfacing and download, automation dry-run, memory continuity,
+  compact tool disclosure, and deterministic skill verification.
 
 ## Persona, router, and authentication evidence
 
-The historical ten-persona collection at `4c712ff6` contains 30/30 results at or above
-95/100 after documented independent semantic adjudication. It is not relabeled as an
-exact-current deterministic seal: PR #66 changed memory behavior, so public release
-qualification requires either a fresh exact-candidate collection or an explicit bounded
-semantic-impact attestation.
+The live Qwen ten-persona collection at runtime revision `ec672874` contains 30/30
+completed results at or above 95/100 after documented independent semantic adjudication.
+The collection is stored under
+`output/playwright/persona-seal-ec672874-20260909`. Five grounded answers were lexical
+false negatives and were independently adjudicated; the current scorer reports the full
+collection ready. Descendants through `e4bf403e` change only the reviewed evaluator and
+tests, not runtime persona behavior.
 
 Smart-router primary, compact-tool-context, durable-budget/fallback, and official-user-auth
-canaries for Claude Code, Codex, and Hermes remain scoped historical evidence. No PR #66
-change altered provider credential ownership or copied/read provider credential files.
+canaries for Claude Code, Codex, and Hermes are sealed with a reviewed no-impact boundary
+through the runtime candidate. A public release tag must still preserve that boundary or
+rerun affected evidence.
 
 ## Hive Mind repository state
 
@@ -98,12 +114,9 @@ release-tag commit:
 1. A protected hosted build produces a publicly trusted Authenticode artifact.
 2. The managed Codex Security workflow produces a sealed Deep Security report with no
    unresolved Critical or High findings.
-3. Current persona qualification is sealed by a fresh exact-candidate receipt or an
-   independently reviewed bounded semantic-impact attestation.
-4. Smart-router and Claude Code/Codex/Hermes official-auth qualification is either rerun
-   on the exact candidate or covered by a concrete independently reviewed no-impact
-   attestation.
-5. Protected release-tag checks are green and the exact artifact hashes are recorded.
+3. The protected release-tag commit preserves the reviewed persona, router, and official-auth
+   no-impact boundary, or affected evidence is rerun.
+4. Protected release-tag checks are green and the exact artifact hashes are recorded.
 
 Until then, the installer is suitable for controlled internal testing, not public
 distribution, and Waggle must not be described as publicly production-ready or GO.

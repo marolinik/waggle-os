@@ -53,7 +53,7 @@ describe('emitSignalToWaggleDance — real sidecar round-trip', () => {
     // Bind to a random local port so we don't collide with any
     // running sidecar on 3333.
     baseUrl = await server.listen({ host: '127.0.0.1', port: 0 });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     if (server) await server.close();

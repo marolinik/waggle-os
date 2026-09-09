@@ -1,16 +1,18 @@
 // CC Sesija A §2.5 — A10 onboarding flag shape contract test.
 //
-// The onboarding Tauri commands (is_first_launch / mark_first_launch_complete /
-// reset_first_launch) are pure Rust with their own cargo test (already passing
-// 1/1). This test validates the JS-side binding shape so the React-side
-// useOnboarding fast-path doesn't drift from the Rust-side return type.
+// The read/reset onboarding Tauri commands are pure Rust with their own cargo
+// test. Completion is deliberately server-only because the sidecar atomically
+// binds the write to the active logical profile.
 //
 // Cross-language contract: Tauri commands return Rust Result<T, String>:
 //   is_first_launch     → Result<bool>    (JS: Promise<boolean>)
-//   mark_first_launch_  → Result<()>      (JS: Promise<void>)
 //   reset_first_launch  → Result<()>      (JS: Promise<void>)
 
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
 
 describe('onboarding command JS-side contract', () => {
   it('is_first_launch returns a boolean', () => {
@@ -20,6 +22,26 @@ describe('onboarding command JS-side contract', () => {
     type _check = IsFirstLaunchReturn extends boolean ? true : false;
     const _typecheck: _check = true;
     expect(_typecheck).toBe(true);
+  });
+
+  it('completion has no identity-free Tauri binding, registration, or Rust writer', () => {
+    const bindingSource = fs.readFileSync(
+      path.join(REPO_ROOT, 'apps/web/src/lib/tauri-bindings.ts'),
+      'utf8',
+    );
+    const tauriRegistration = fs.readFileSync(
+      path.join(REPO_ROOT, 'app/src-tauri/src/lib.rs'),
+      'utf8',
+    );
+    const rustCommands = fs.readFileSync(
+      path.join(REPO_ROOT, 'app/src-tauri/src/commands/onboarding.rs'),
+      'utf8',
+    );
+
+    expect(bindingSource).not.toContain('markFirstLaunchComplete');
+    expect(bindingSource).not.toContain("'mark_first_launch_complete'");
+    expect(tauriRegistration).not.toContain('commands::onboarding::mark_first_launch_complete');
+    expect(rustCommands).not.toContain('pub async fn mark_first_launch_complete');
   });
 
   it('Phase 5 LOCKED shape names match cross-binding format', () => {

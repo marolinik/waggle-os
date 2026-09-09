@@ -6,8 +6,8 @@
  * Behavioural atoms (AskBar submit, ActivityStream toggle, InlineApprovalCard
  * Always-allow gating) get a real assertion; the rest assert mount + content.
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { Sparkles } from 'lucide-react';
 import {
   HexAvatar,
@@ -97,7 +97,7 @@ describe('warm primitives — render smoke', () => {
 
   it('AskBar submits trimmed text and clears the input', () => {
     let sent = '';
-    render(<AskBar onSubmit={(t) => (sent = t)} />);
+    render(<AskBar onSubmit={(t) => { sent = t; }} />);
     const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
     expect(input).toHaveAttribute('name', 'ask-waggle');
     expect(input).toHaveAttribute('autocomplete', 'off');
@@ -107,6 +107,204 @@ describe('warm primitives — render smoke', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(sent).toBe('draft the board update');
     expect(input.value).toBe('');
+  });
+
+  it('AskBar waits for async success, blocks duplicate submits while pending, then clears', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    const onSubmit = vi.fn(() => pending);
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft the launch memo' } });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('Draft the launch memo');
+    expect(send).toBeDisabled();
+
+    resolveSubmit(true);
+    await waitFor(() => expect(input.value).toBe(''));
+  });
+
+  it('AskBar preserves the draft and re-enables submit when async submit returns false', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(false);
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe('Keep this draft');
+    expect(send).toBeEnabled();
+  });
+
+  it('AskBar preserves the draft and re-enables submit when async submit rejects', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('workspace unavailable'));
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Do not lose this' } });
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe('Do not lose this');
+    expect(send).toBeEnabled();
+  });
+
+  it('AskBar preserves text edited while an earlier submit is pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    render(<AskBar onSubmit={() => pending} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    fireEvent.click(send);
+    fireEvent.change(input, { target: { value: 'Draft B' } });
+    resolveSubmit(true);
+
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(input.value).toBe('Draft B');
+  });
+
+  it('AskBar preserves a newly retyped identical draft while the old submit is pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    render(<AskBar onSubmit={() => pending} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    fireEvent.click(send);
+    fireEvent.change(input, { target: { value: 'Draft B' } });
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    resolveSubmit(true);
+
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(input.value).toBe('Draft A');
+  });
+
+  it('AskBar does not clear through onChange after it unmounts with a submit pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    const onChange = vi.fn();
+    const { unmount } = render(<AskBar onSubmit={() => pending} onChange={onChange} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'Keep after navigation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    unmount();
+    await act(async () => {
+      resolveSubmit(true);
+      await pending;
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalledWith('');
+  });
+
+  it('AskBar preserves a failed quick-capture draft, blocks duplicates, and clears only after success', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const firstCapture = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn()
+      .mockReturnValueOnce(firstCapture)
+      .mockResolvedValueOnce(true);
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const capture = screen.getByRole('button', { name: 'Quick capture' });
+
+    fireEvent.change(input, { target: { value: 'Remember this safely' } });
+    fireEvent.click(capture);
+    fireEvent.click(capture);
+    expect(onPlus).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('Remember this safely');
+    expect(capture).toBeDisabled();
+    expect(capture).toHaveClass('disabled:cursor-not-allowed', 'disabled:opacity-40');
+
+    resolveCapture(false);
+    await waitFor(() => expect(capture).toBeEnabled());
+    expect(input.value).toBe('Remember this safely');
+
+    fireEvent.click(capture);
+    await waitFor(() => expect(input.value).toBe(''));
+    expect(onPlus).toHaveBeenCalledTimes(2);
+  });
+
+  it('AskBar restores an in-memory quick-capture draft and pending state after remount', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce(true);
+    const draftKey = `quick-capture-remount-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    const firstInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(firstInput, { target: { value: 'Survive navigation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    const restoredInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const restoredCapture = screen.getByRole('button', { name: 'Quick capture' });
+    expect(restoredInput.value).toBe('Survive navigation');
+    expect(restoredCapture).toBeDisabled();
+
+    resolveCapture(false);
+    await waitFor(() => expect(restoredCapture).toBeEnabled());
+    expect(restoredInput.value).toBe('Survive navigation');
+
+    fireEvent.click(restoredCapture);
+    await waitFor(() => expect(restoredInput.value).toBe(''));
+    expect(onPlus).toHaveBeenCalledTimes(2);
+  });
+
+  it('AskBar clears an accepted transient draft even when success arrives while unmounted', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn().mockReturnValue(pending);
+    const draftKey = `quick-capture-unmounted-success-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Saved while away' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    await act(async () => { resolveCapture(true); });
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    expect(screen.getByLabelText('Ask Waggle')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Quick capture' })).toBeEnabled();
+  });
+
+  it('AskBar never lets an older remounted save erase a newer draft edit', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn().mockReturnValue(pending);
+    const draftKey = `quick-capture-remount-edit-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), { target: { value: 'Older draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    const restoredInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(restoredInput, { target: { value: 'Newer draft after navigation' } });
+    await act(async () => { resolveCapture(true); });
+
+    expect(restoredInput.value).toBe('Newer draft after navigation');
+    expect(screen.getByRole('button', { name: 'Quick capture' })).toBeEnabled();
   });
 
   it('ActivityStream is collapsed by default and reveals steps on click', () => {

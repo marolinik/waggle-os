@@ -71,6 +71,16 @@ async function countMemories(request: APIRequestContext, workspace = 'default') 
   return data.count ?? data.total ?? data.results?.length ?? 0;
 }
 
+async function createWorkspace(request: APIRequestContext, name: string): Promise<string> {
+  const response = await request.post(`${API}/api/workspaces`, {
+    data: { name, group: 'Workspaces' },
+  });
+  expect(response.status()).toBe(201);
+  const workspace: WorkspaceShape = await response.json();
+  expect(workspace.id).toEqual(expect.any(String));
+  return workspace.id!;
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ACT 1 — THE COLD START
 // First-time user. Blank slate. The moment Waggle has to earn trust.
@@ -196,7 +206,7 @@ test.describe('Act 2 — The Memory Hook: "It Remembers Me"', () => {
   });
 
   test('U2.3 — Multiple memories stack (no overwrite on second save)', async ({ request }) => {
-    const workspace = `stacking-${Date.now()}`;
+    const workspace = await createWorkspace(request, `stacking-${Date.now()}`);
 
     await simulateMemorySave(request, 'I like dark mode interfaces', workspace);
     await simulateMemorySave(request, 'My team uses Slack for communication', workspace);
@@ -214,8 +224,8 @@ test.describe('Act 2 — The Memory Hook: "It Remembers Me"', () => {
   });
 
   test('U2.4 — Cross-workspace isolation (no memory leakage between users)', async ({ request }) => {
-    const ws1 = `user-alice-${Date.now()}`;
-    const ws2 = `user-bob-${Date.now()}`;
+    const ws1 = await createWorkspace(request, `user-alice-${Date.now()}`);
+    const ws2 = await createWorkspace(request, `user-bob-${Date.now()}`);
 
     await simulateMemorySave(request, 'Alice secret: my API key is sk-alice-private-data', ws1);
 
@@ -877,8 +887,8 @@ test.describe('Act 9 — Workspace Identity & Ownership', () => {
   });
 
   test('U9.3 — Workspace memory is isolated per workspace ID', async ({ request }) => {
-    const ws1 = `isolation-a-${Date.now()}`;
-    const ws2 = `isolation-b-${Date.now()}`;
+    const ws1 = await createWorkspace(request, `isolation-a-${Date.now()}`);
+    const ws2 = await createWorkspace(request, `isolation-b-${Date.now()}`);
 
     // Save in ws1
     const saveRes = await simulateMemorySave(request, 'This is workspace A exclusive data', ws1);

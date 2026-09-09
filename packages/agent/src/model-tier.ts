@@ -16,6 +16,7 @@ const SMALL_PREFIXES = [
   'qwen3-',
   'qwen3.5-',
   'qwen3.6-',
+  'qwen3.8-',
   'llama-3',
   'llama-4',
 ] as const;
@@ -27,7 +28,14 @@ const MID_PREFIXES = ['claude-sonnet', 'claude-haiku'] as const;
  * Unknown models default to 'mid' (safe middle ground).
  */
 export function tierForModel(model: string): ModelTier {
-  const normalized = model.toLowerCase();
+  // Runtime model ids are provider-qualified (and OpenRouter may add an
+  // organization namespace). Tier the model leaf, not its routing prefix.
+  const normalized = model
+    .trim()
+    .toLowerCase()
+    .split('/')
+    .filter(Boolean)
+    .at(-1) ?? '';
 
   for (const prefix of FRONTIER_PREFIXES) {
     if (normalized.startsWith(prefix)) return 'frontier';

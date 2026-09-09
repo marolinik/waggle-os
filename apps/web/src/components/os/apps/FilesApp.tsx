@@ -71,6 +71,15 @@ const isImageFile = (name: string) => {
   return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
 };
 
+const saveBlobToDevice = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
 /** Route cache keyed by workspace and directory for warm file-surface returns. */
 const filesRouteCache = createSurfaceCache<FileEntry[]>();
 
@@ -338,9 +347,18 @@ const FilesApp = ({
     setRenaming(null);
   };
 
-  const handleDownload = (file: FileEntry) => {
-    adapter.downloadFile(workspaceId, file.path).catch(() => {});
+  const handleDownload = async (file: FileEntry) => {
     setContextMenu(null);
+    try {
+      const blob = await adapter.downloadFile(workspaceId, file.path);
+      saveBlobToDevice(blob, file.name);
+    } catch {
+      toast({
+        title: 'Download failed',
+        description: `${file.name} could not be downloaded. Check the file service and try again.`,
+        variant: 'destructive',
+      });
+    }
   };
 
   const handlePaste = async () => {
@@ -364,7 +382,18 @@ const FilesApp = ({
   };
   const handleBulkCopy = () => { setClipboard({ files: selectedFileObjects, operation: 'copy' }); setSelectedFiles(new Set()); };
   const handleBulkCut = () => { setClipboard({ files: selectedFileObjects, operation: 'cut' }); setSelectedFiles(new Set()); };
-  const handleBulkDownload = () => { selectedFileObjects.filter(f => f.type === 'file').forEach(f => { adapter.downloadFile(workspaceId, f.path).catch(() => {}); }); };
+  const handleBulkDownload = () => {
+    const downloadableFiles = selectedFileObjects.filter(f => f.type === 'file');
+    if (downloadableFiles.length !== 1 || selectedFileObjects.length !== 1) {
+      toast({
+        title: 'Download files one at a time',
+        description: 'Open one file and choose Download. Windows blocks multiple automatic downloads.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    void handleDownload(downloadableFiles[0]);
+  };
   const handleBulkMove = (destPath: string) => {
     selectedFileObjects.forEach(f => {
       const newPath = `${destPath === '/' ? '' : destPath}/${f.name}`;
@@ -719,8 +748,8 @@ const FilesApp = ({
                   <span className="text-[11px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
                 </div>
                 <div className="h-4 w-px bg-border/30" />
-                <HintTooltip content="Download selected files">
-                  <button onClick={handleBulkDownload} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><Download className="w-3 h-3" /> Download</button>
+                <HintTooltip content="Open one file to download it. Windows blocks multiple automatic downloads.">
+                  <span className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground cursor-not-allowed"><Download className="w-3 h-3" /> Download individually</span>
                 </HintTooltip>
                 <HintTooltip content="Copy selected">
                   <button onClick={handleBulkCopy} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><Copy className="w-3 h-3" /> Copy</button>

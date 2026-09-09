@@ -57,6 +57,8 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
       const installed = installStarterSkills(skillsDir);
       if (installed.length > 0) {
         log.info(`Installed ${installed.length} starter skills on first run`);
+        server.agentState.skills.length = 0;
+        server.agentState.skills.push(...loadSkills(waggleHome));
       }
       fs.writeFileSync(markerPath, new Date().toISOString());
     } catch { /* starter skills unavailable — non-blocking */ }

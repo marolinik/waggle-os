@@ -63,6 +63,32 @@ function renderCodeBlock(lines: string[], language: string): string {
   return `<pre class="my-2 max-w-full overflow-x-auto rounded-lg bg-muted p-3 text-xs leading-relaxed"><code class="font-mono whitespace-pre"${languageAttribute}>${lines.join('\n')}</code></pre>`;
 }
 
+function parseTableCells(line: string): string[] | null {
+  let source = line.trim();
+  if (!source.includes('|')) return null;
+  if (source.startsWith('|')) source = source.slice(1);
+  if (source.endsWith('|')) source = source.slice(0, -1);
+  const cells = source.split('|').map(cell => cell.trim());
+  return cells.length > 1 ? cells : null;
+}
+
+function isTableDivider(cells: string[] | null): cells is string[] {
+  return cells !== null && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
+function renderTable(headers: string[], rows: string[][]): string {
+  const header = headers
+    .map(cell => `<th class="border-b border-border/50 px-2 py-1.5 text-left font-semibold">${applyInline(cell)}</th>`)
+    .join('');
+  const body = rows.map(row => {
+    const cells = headers.map((_, index) => (
+      `<td class="border-b border-border/30 px-2 py-1.5 align-top">${applyInline(row[index] ?? '')}</td>`
+    )).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<div class="my-2 max-w-full overflow-x-auto rounded-lg border border-border/40"><table class="w-full min-w-max border-collapse text-xs"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 export function renderSimpleMarkdown(text: string): string {
   return applyInline(escapeHtml(text)).replace(/\n/g, '<br />');
 }
@@ -80,7 +106,8 @@ export function renderChatMarkdown(text: string): string {
   const out: string[] = [];
   let fence: { language: string; lines: string[] } | null = null;
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
     if (fence) {
       if (/^\s*```\s*$/.test(line)) {
         out.push(renderCodeBlock(fence.lines, fence.language));
@@ -94,6 +121,22 @@ export function renderChatMarkdown(text: string): string {
     const fenceStart = /^\s*```\s*([A-Za-z0-9_+-]*)\s*$/.exec(line);
     if (fenceStart) {
       fence = { language: fenceStart[1], lines: [] };
+      continue;
+    }
+
+    const tableHeaders = parseTableCells(line);
+    const tableDivider = parseTableCells(lines[index + 1] ?? '');
+    if (tableHeaders && tableHeaders.length === tableDivider?.length && isTableDivider(tableDivider)) {
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length) {
+        const row = parseTableCells(lines[index]);
+        if (!row) break;
+        rows.push(row);
+        index += 1;
+      }
+      index -= 1;
+      out.push(renderTable(tableHeaders, rows));
       continue;
     }
 

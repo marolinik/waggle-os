@@ -26,6 +26,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { adapter } from '@/lib/adapter';
+import type { AutonomyLevel } from '@/hooks/useChatWidgetState';
 import {
   shouldAutoOpenTrialModal,
   readOnboardingCompletionSnapshot,
@@ -54,6 +55,26 @@ type NotificationsBundle = ReturnType<typeof useNotifications>;
 type OnboardingBundle = ReturnType<typeof useOnboarding>;
 type OverlayBundle = ReturnType<typeof useOverlayState>;
 
+export type DefaultAutonomySource = 'pending' | 'initial' | 'settings';
+type SavedDefaultAutonomyListener = (level: AutonomyLevel) => void;
+const savedDefaultAutonomyListeners = new Set<SavedDefaultAutonomyListener>();
+
+function isDefaultAutonomy(value: unknown): value is AutonomyLevel {
+  return value === 'normal' || value === 'trusted' || value === 'yolo';
+}
+
+/** Internal same-WebView notification emitted only after Settings persists. */
+export function publishSavedDefaultAutonomy(value: unknown): boolean {
+  if (!isDefaultAutonomy(value)) return false;
+  savedDefaultAutonomyListeners.forEach(listener => listener(value));
+  return true;
+}
+
+export function subscribeSavedDefaultAutonomy(listener: SavedDefaultAutonomyListener): () => void {
+  savedDefaultAutonomyListeners.add(listener);
+  return () => { savedDefaultAutonomyListeners.delete(listener); };
+}
+
 export interface TrialInfo {
   trialDaysRemaining?: number;
   trialExpired?: boolean;
@@ -74,6 +95,8 @@ export interface ShellContextValue {
   refreshWorkspaces: WorkspacesBundle['refresh'];
   /** P1b D3: load-failure surface — an errored empty list must not render as "no workspaces". */
   workspacesError: WorkspacesBundle['error'];
+  /** Structured revocation state; never infer access loss from human-facing copy. */
+  workspacesAccessDenied: WorkspacesBundle['accessDenied'];
   /** R15-V3 s03 fix: existed in useWorkspaces but was never forwarded, so the
    *  shelf stood in a time heuristic for it (Wave U Lane A) and a slow cold
    *  fetch could still flash the empty state between skeleton and grid. */
@@ -91,7 +114,9 @@ export interface ShellContextValue {
   showTrialExpired: boolean;
   setShowTrialExpired: (open: boolean) => void;
   // ── P4 default autonomy (Desktop.tsx:160-167) ──
-  defaultAutonomy: 'normal' | 'trusted' | 'yolo';
+  defaultAutonomy: AutonomyLevel;
+  /** Distinguishes startup hydration from later Settings changes. */
+  defaultAutonomySource: DefaultAutonomySource;
   // ── Notifications (Desktop.tsx:123) ──
   notifications: NotificationsBundle['notifications'];
   unreadCount: NotificationsBundle['unreadCount'];
@@ -120,14 +145,14 @@ export const useShell = () => {
 };
 
 export const ShellProvider = ({ children }: { children: ReactNode }) => {
+  const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
     selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refresh: refreshWorkspaces,
-    error: workspacesError, loading: workspacesLoading,
-  } = useWorkspaces();
+    error: workspacesError, accessDenied: workspacesAccessDenied, loading: workspacesLoading,
+  } = useWorkspaces(onboardingState.profileId ?? null);
   const agentStatus = useAgentStatus();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
-  const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const offline = useOfflineStatus();
   const currentTier: UserTier = onboardingState.tier || 'simple';
 
@@ -199,12 +224,31 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   useRevalidateOnError(tierError !== null, refreshTier);
 
   // P4: default autonomy inherited by new chat widgets (relocated from
-  // Desktop.tsx:160-167). Fetched once on mount; SettingsApp writes via
-  // /api/settings/permissions, so a flipped setting takes effect on the next
-  // fresh chat widget. Existing widgets keep their own state.
-  const [defaultAutonomy, setDefaultAutonomy] = useState<'normal' | 'trusted' | 'yolo'>('normal');
+  // Desktop.tsx:160-167). Settings changes update this provider immediately;
+  // existing widgets keep their own state.
+  const [defaultAutonomyState, setDefaultAutonomyState] = useState<{
+    level: AutonomyLevel;
+    source: DefaultAutonomySource;
+  }>({ level: 'normal', source: 'pending' });
   useEffect(() => {
-    adapter.getPermissions().then(p => setDefaultAutonomy(p.defaultAutonomy)).catch(() => {});
+    let disposed = false;
+    let supersededByChange = false;
+    const unsubscribe = subscribeSavedDefaultAutonomy((next) => {
+      if (disposed) return;
+      supersededByChange = true;
+      setDefaultAutonomyState({ level: next, source: 'settings' });
+    });
+
+    adapter.getPermissions().then((permissions) => {
+      if (!disposed && !supersededByChange && isDefaultAutonomy(permissions.defaultAutonomy)) {
+        setDefaultAutonomyState({ level: permissions.defaultAutonomy, source: 'initial' });
+      }
+    }).catch(() => {});
+
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
   }, []);
 
   // Overlay state (relocated from Desktop.tsx:214)
@@ -216,9 +260,11 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ShellContext.Provider value={{
       workspaces, activeWorkspace, activeWorkspaceId,
-      selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refreshWorkspaces, workspacesError, workspacesLoading,
+      selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refreshWorkspaces,
+      workspacesError, workspacesAccessDenied, workspacesLoading,
       currentTier, billingTier, tierResolved, tierError, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
-      defaultAutonomy,
+      defaultAutonomy: defaultAutonomyState.level,
+      defaultAutonomySource: defaultAutonomyState.source,
       notifications, unreadCount, markRead, markAllRead,
       onboardingState, updateOnboarding, completeOnboarding,
       offline, agentStatus,

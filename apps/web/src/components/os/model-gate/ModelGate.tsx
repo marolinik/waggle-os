@@ -19,19 +19,22 @@
  * format-only pass says "looks valid" — never a confident "verified" on an unchecked key.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink, RefreshCw } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { useProviders, type Provider } from '@/hooks/useProviders';
+import { useProviders, type Provider, type ProviderModel } from '@/hooks/useProviders';
 import { Input } from '@/components/ui/input';
 import BeeLoader from '@/components/ui/BeeLoader';
 import BrandTile from '@/components/os/apps/connectors/BrandTile';
 import { getBrandIdentity } from '@/components/os/apps/connectors/brand-identity';
+import type { ModelReadinessReceipt } from '@/hooks/useHasWorkingModel';
+
+const MODEL_READINESS_UI_TIMEOUT_MS = 16_000;
 
 interface ModelGateProps {
-  /** Fires after a model becomes available (key saved or local pull ok), so a parent
-   *  (onboarding gate / Settings banner) can re-read `useHasWorkingModel`. */
-  onModelReady?: () => void;
+  /** Fires after model setup changes. `verified` is true only after a live model/provider
+   *  probe, so onboarding can distinguish proof from a format-only save. */
+  onModelReady?: (receipt: ModelReadinessReceipt) => void;
   /** Styling only — 'onboarding' is full-bleed; 'settings' is an embedded card. */
   variant?: 'onboarding' | 'settings';
   /** Let a parent-owned ready state replace this component's duplicate banner. */
@@ -101,6 +104,98 @@ export function ModelGate({
   const [selected, setSelected] = useState<string | null>(null);
   const [keyValue, setKeyValue] = useState('');
   const [validate, setValidate] = useState<ValidateState>({ status: 'idle' });
+  const [endpointValue, setEndpointValue] = useState('');
+  const [compatibleModels, setCompatibleModels] = useState<ProviderModel[]>([]);
+  const [compatibleModel, setCompatibleModel] = useState('');
+  const [compatibleModelHydrating, setCompatibleModelHydrating] = useState(false);
+  const [compatibleStatus, setCompatibleStatus] = useState<
+    'idle' | 'discovering' | 'discovered' | 'verifying' | 'saving' | 'saved' | 'error'
+  >('idle');
+  const [compatibleError, setCompatibleError] = useState<string | null>(null);
+  const compatibleRequestGeneration = useRef(0);
+  const readinessProbeGeneration = useRef(0);
+  const [readinessProbeRevision, setReadinessProbeRevision] = useState(0);
+  const manualReadinessRetryRevision = useRef<number | null>(null);
+  const explicitCompatibleOperationRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      compatibleRequestGeneration.current += 1;
+      readinessProbeGeneration.current += 1;
+      explicitCompatibleOperationRef.current = null;
+    };
+  }, []);
+
+  const selectProvider = (id: string, focusField = true) => {
+    if (compatibleStatus === 'saving') return;
+    if (explicitCompatibleOperationRef.current !== null) cancelCompatibleVerification();
+    const generation = ++compatibleRequestGeneration.current;
+    const provider = providers.find((candidate) => candidate.id === id);
+    const isCompatible = id === 'openai-compatible';
+    setSelected(id);
+    setKeyValue('');
+    setValidate({ status: 'idle' });
+    setCompatibleStatus('idle');
+    setCompatibleError(null);
+    if (isCompatible) {
+      const models = provider?.models ?? [];
+      setEndpointValue(provider?.baseUrl ?? '');
+      setCompatibleModels(models);
+      setCompatibleModel('');
+      setCompatibleModelHydrating(models.length > 0);
+      // The provider catalog has no ordering contract. Restore the actual
+      // persisted primary instead of silently replacing it with model zero
+      // when Settings is reopened.
+      if (models.length > 0) {
+        void adapter.getSettings().then((settings) => {
+          if (generation !== compatibleRequestGeneration.current) return;
+          const persisted = settings.defaultModel;
+          setCompatibleModel(
+            models.some((model) => model.id === persisted)
+              ? persisted
+              : models[0]?.id ?? '',
+          );
+        }).catch(() => {
+          if (generation !== compatibleRequestGeneration.current) return;
+          // Fail closed: catalog order is not a safe substitute for the
+          // persisted primary. Require a fresh endpoint discovery before a
+          // model can be saved.
+          setCompatibleModels([]);
+          setCompatibleModel('');
+          setCompatibleStatus('error');
+          setCompatibleError('Could not load the saved model. Discover models to choose it again.');
+        }).finally(() => {
+          if (generation === compatibleRequestGeneration.current) {
+            setCompatibleModelHydrating(false);
+          }
+        });
+      }
+    } else {
+      setEndpointValue('');
+      setCompatibleModels([]);
+      setCompatibleModel('');
+      setCompatibleModelHydrating(false);
+    }
+    if (focusField) {
+      window.setTimeout(() => {
+        const el = document.getElementById(isCompatible ? 'model-gate-endpoint' : 'model-gate-key');
+        if (el instanceof HTMLInputElement) {
+          el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+          el.focus();
+        }
+      }, 60);
+    }
+  };
+
+  const cancelCompatibleVerification = () => {
+    if (compatibleStatus === 'saving') return;
+    const hadExplicitOwner = explicitCompatibleOperationRef.current !== null;
+    explicitCompatibleOperationRef.current = null;
+    compatibleRequestGeneration.current += 1;
+    if (hadExplicitOwner) setReadinessProbeRevision((current) => current + 1);
+  };
 
   // F3: live probe of the STORED cloud key(s) so the banner stops claiming
   // readiness from mere key PRESENCE. 'unverified' = network-degrade / no cheap
@@ -171,11 +266,29 @@ export function ModelGate({
   // exist and no default model, skip — totalLocalModels is already a live query.
   const activeProviderIds = activeProviders.map((p) => p.id).join(',');
   useEffect(() => {
-    if (providersLoading) return;
+    if (providersLoading || explicitCompatibleOperationRef.current !== null) return;
     let cancelled = false;
+    const generation = ++readinessProbeGeneration.current;
+    const manualRetryRevision = manualReadinessRetryRevision.current === readinessProbeRevision
+      ? readinessProbeRevision
+      : null;
+    const isStale = () => (
+      cancelled
+      || generation !== readinessProbeGeneration.current
+      || explicitCompatibleOperationRef.current !== null
+    );
+    const finishManualRetry = (verified: boolean, modelId?: string) => {
+      if (
+        manualRetryRevision === null
+        || manualReadinessRetryRevision.current !== manualRetryRevision
+      ) return;
+      manualReadinessRetryRevision.current = null;
+      if (verified) onModelReady?.({ modelId, verified: true });
+    };
     const ids = activeProviders.map((p) => p.id);
     if (ids.length === 0) {
       setProbe({ status: 'idle' });
+      finishManualRetry(false);
       return;
     }
     setProbe({ status: 'probing' });
@@ -183,9 +296,13 @@ export function ModelGate({
     const run = (async (): Promise<void> => {
       // 1) Probe the actual default model.
       const modelRes = await adapter.probeModel().catch(() => null);
-      if (cancelled) return;
+      if (isStale()) return;
       if (modelRes?.configured) {
-        if (modelRes.verified) { setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined }); return; }
+        if (modelRes.verified) {
+          setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined });
+          finishManualRetry(true, modelRes.model ?? undefined);
+          return;
+        }
         if (modelRes.rejected) {
           // Round-6 fix 3b: derive WHICH provider owns the rejected default
           // model (trivially available from the provider→models catalog) so
@@ -196,51 +313,94 @@ export function ModelGate({
             : undefined;
           setProbe({ status: 'failed', failedProvider: owner });
           // Open the provider grid/key input so the user can fix the key now.
-          setTab('cloud');
-          const open = owner ?? ids[0];
-          if (open) setSelected(open);
+          if (explicitCompatibleOperationRef.current === null) {
+            setTab('cloud');
+            const open = owner ?? ids[0];
+            if (open) selectProvider(open, false);
+          }
+          finishManualRetry(false);
           return;
         }
         setProbe({ status: 'unverified' });
+        finishManualRetry(false);
         return;
       }
 
-      // 2) No default model → F3 per-provider stored-key fallback.
-      const outcome = await Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
-      if (cancelled) return;
-      // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
+      // 2) No default model → probe a configured keyless compatible model by
+      // exact id; probe-provider is intentionally key-only and can never verify
+      // a keyless endpoint. Other providers retain the stored-key fallback.
+      const compatibleProvider = activeProviders.find((provider) => (
+        provider.id === 'openai-compatible' && Boolean(provider.models[0]?.id)
+      ));
+      const compatibleModel = compatibleProvider?.models[0]?.id;
+      const providerProbeCandidates = activeProviders.filter((provider) => (
+        provider.id !== 'openai-compatible' || !compatibleModel
+      ));
+      const [compatibleOutcome, outcome] = await Promise.all([
+        compatibleModel
+          ? adapter.probeModel(compatibleModel).catch(() => null)
+          : Promise.resolve(null),
+        Promise.allSettled(providerProbeCandidates.map((provider) => adapter.probeProvider(provider.id))),
+      ]);
+      if (isStale()) return;
+      // outcome[i] ↔ providerProbeCandidates[i], so display names stay aligned.
+      let verifiedModel: string | undefined;
       let verifiedProvider: string | undefined;
       let failedProvider: string | undefined;
+      if (compatibleOutcome?.configured && compatibleOutcome.verified) {
+        verifiedModel = compatibleOutcome.model ?? compatibleModel;
+      } else if (compatibleOutcome?.rejected) {
+        failedProvider = compatibleProvider?.id;
+      }
       outcome.forEach((r, i) => {
         if (r.status !== 'fulfilled') return;
         const v = r.value;
-        if (v.configured && v.valid && v.verified) { if (!verifiedProvider) verifiedProvider = activeProviders[i]?.name; }
-        else if (v.configured && !v.valid && !failedProvider) failedProvider = ids[i];
+        const provider = providerProbeCandidates[i];
+        if (v.configured && v.valid && v.verified) { if (!verifiedProvider) verifiedProvider = provider?.name; }
+        else if (v.configured && !v.valid && !failedProvider) failedProvider = provider?.id;
       });
-      if (verifiedProvider) setProbe({ status: 'verified', verifiedProvider });
+      if (verifiedModel) {
+        setProbe({ status: 'verified', verifiedModel });
+        finishManualRetry(true, verifiedModel);
+      } else if (verifiedProvider) {
+        setProbe({ status: 'verified', verifiedProvider });
+        finishManualRetry(true);
+      }
       else if (failedProvider) {
         setProbe({ status: 'failed', failedProvider });
         // Open the provider grid + key input on the offending provider.
-        setTab('cloud');
-        setSelected(failedProvider);
+        if (explicitCompatibleOperationRef.current === null) {
+          setTab('cloud');
+          selectProvider(failedProvider, false);
+        }
+        finishManualRetry(false);
       } else {
         setProbe({ status: 'unverified' });
+        finishManualRetry(false);
       }
     })();
 
-    // Client-side guard on top of the server's 5s AbortSignal so a hung sidecar
-    // can't strand the banner on 'probing'.
-    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
+    // Sit just beyond the bounded 15s Qwen server probe so a slow verified
+    // endpoint is not relabelled unavailable while that probe is in flight.
+    const timeout = new Promise<'timeout'>((resolve) => (
+      setTimeout(() => resolve('timeout'), MODEL_READINESS_UI_TIMEOUT_MS)
+    ));
     void Promise.race([run, timeout]).then((outcome) => {
-      if (cancelled) return;
-      if (outcome === 'timeout') setProbe({ status: 'unverified' });
+      if (isStale()) return;
+      if (outcome === 'timeout') {
+        // Timeout is terminal for this attempt. Invalidate the still-pending
+        // run so it cannot repaint verified or refresh onboarding later.
+        readinessProbeGeneration.current += 1;
+        setProbe({ status: 'unverified' });
+        finishManualRetry(false);
+      }
     });
     return () => { cancelled = true; };
     // probe.status must NOT be a dep: setting 'probing' inside would re-run the
     // effect and its cleanup would cancel every outcome (banner stuck probing).
     // Re-probing on provider-list changes is correct; the server caches 60s.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providersLoading, activeProviderIds]);
+  }, [providersLoading, activeProviderIds, readinessProbeRevision]);
 
   // Wave V (Lane B) — single-truth resolution phase. The banner must paint EXACTLY
   // ONE verdict. While ANY probe is in flight we're "resolving" (providersLoading
@@ -256,46 +416,31 @@ export function ModelGate({
     return () => window.clearTimeout(t);
   }, [resolving]);
 
-  const keyProviders = useMemo(
-    () => providers.filter((p) => p.requiresKey && p.id !== 'ollama'),
+  const cloudProviders = useMemo(
+    () => providers.filter((p) => p.id !== 'ollama' && (p.requiresKey || p.id === 'openai-compatible')),
     [providers],
   );
   const catalogNeedsRefresh = useMemo(
-    () => providers.some((p) => p.hasKey && (p.modelsSource === 'stale-provider-api' || p.modelsSource === 'unavailable')),
+    () => providers.some((p) => (
+      (p.hasKey || (p.id === 'openai-compatible' && Boolean(p.baseUrl?.trim())))
+      && (p.modelsSource === 'stale-provider-api' || p.modelsSource === 'unavailable')
+    )),
     [providers],
   );
-  const selectedProvider = keyProviders.find((p) => p.id === selected) ?? null;
+  const selectedProvider = cloudProviders.find((p) => p.id === selected) ?? null;
 
   const handleSelect = (id: string) => {
-    setSelected(id);
-    setKeyValue('');
-    setValidate({ status: 'idle' });
-    // Keep the next action in view on compact onboarding/settings layouts.
-    // The provider grid can be taller than the viewport, so selecting a tile
-    // should land the user directly on the key field rather than leaving them
-    // to discover it below the fold.
-    window.setTimeout(() => {
-      const el = document.getElementById('model-gate-key');
-      if (el instanceof HTMLInputElement) {
-        el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-        el.focus();
-      }
-    }, 60);
+    selectProvider(id);
   };
 
   // "Fix it now" (failed banner): jump straight to the offending provider's key
   // input and focus it, so the recovery action lives IN the banner, not in prose.
   const focusFailingKey = () => {
+    if (explicitCompatibleOperationRef.current !== null) return;
     setTab('cloud');
-    if (probe.status === 'failed' && probe.failedProvider) setSelected(probe.failedProvider);
-    // Let the key input for the (re)selected provider mount before focusing it.
-    setTimeout(() => {
-      const el = document.getElementById('model-gate-key');
-      if (el instanceof HTMLInputElement) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        el.focus();
-      }
-    }, 60);
+    const failedProvider = probe.status === 'failed' ? probe.failedProvider : undefined;
+    const recoveryProvider = failedProvider ?? activeProviders[0]?.id;
+    if (recoveryProvider) selectProvider(recoveryProvider);
   };
 
   const handleRetryProviders = async () => {
@@ -310,6 +455,11 @@ export function ModelGate({
   const handleValidateAndSave = async () => {
     const key = keyValue.trim();
     if (!selectedProvider || !key) return;
+    // The explicit save owns the readiness verdict. Invalidate any retry/mount
+    // probe already in flight so its late result cannot overwrite this action.
+    manualReadinessRetryRevision.current = null;
+    readinessProbeGeneration.current += 1;
+    let readinessFinalized = false;
     setValidate({ status: 'testing' });
     try {
       const res = await adapter.testApiKey(selectedProvider.id, key, { live: true });
@@ -345,14 +495,126 @@ export function ModelGate({
       // F3: a freshly verified key upgrades the banner immediately, without
       // waiting out the 60s probe cache.
       if (saved.router?.ready === false && !localReady) {
+        readinessProbeGeneration.current += 1;
         setProbe({ status: 'idle' });
+        readinessFinalized = true;
       } else if (res.verified === true) {
+        readinessProbeGeneration.current += 1;
         setProbe({ status: 'verified', verifiedProvider: selectedProvider.name });
+        readinessFinalized = true;
       }
       setKeyValue('');
-      if (saved.router?.ready !== false || localReady) onModelReady?.();
+      if (saved.router?.ready !== false || localReady) {
+        onModelReady?.({
+          modelId: firstCloudModel,
+          verified: res.verified === true && Boolean(firstCloudModel) && !defaultModelSaveFailed,
+        });
+      }
     } catch {
       setValidate({ status: 'error', message: 'Could not save the key — check your connection and try again.' });
+    } finally {
+      if (!readinessFinalized && mountedRef.current) {
+        setReadinessProbeRevision((current) => current + 1);
+      }
+    }
+  };
+
+  const handleRetryReadiness = () => {
+    if (explicitCompatibleOperationRef.current !== null) return;
+    const nextRevision = readinessProbeRevision + 1;
+    manualReadinessRetryRevision.current = nextRevision;
+    setProbe({ status: 'probing' });
+    setReadinessProbeRevision(nextRevision);
+  };
+
+  const handleDiscoverCompatible = async () => {
+    const endpoint = endpointValue.trim();
+    if (!endpoint) {
+      setCompatibleStatus('error');
+      setCompatibleError('Enter an endpoint URL first.');
+      return;
+    }
+    setCompatibleStatus('discovering');
+    setCompatibleError(null);
+    setCompatibleModels([]);
+    setCompatibleModel('');
+    setCompatibleModelHydrating(false);
+    const apiKey = keyValue.trim() || undefined;
+    const generation = ++compatibleRequestGeneration.current;
+    try {
+      const result = await adapter.testCompatibleProvider(endpoint, apiKey);
+      if (generation !== compatibleRequestGeneration.current) return;
+      if (!result.valid || result.models.length === 0) {
+        setCompatibleStatus('error');
+        setCompatibleError(result.error || 'No models were found at that endpoint.');
+        return;
+      }
+      setEndpointValue(result.baseUrl);
+      setCompatibleModels(result.models);
+      setCompatibleModel(result.models[0]?.id ?? '');
+      setCompatibleModelHydrating(false);
+      setCompatibleStatus('discovered');
+    } catch (error) {
+      if (generation !== compatibleRequestGeneration.current) return;
+      setCompatibleStatus('error');
+      setCompatibleError(error instanceof Error ? error.message : 'Could not reach that endpoint.');
+    }
+  };
+
+  const handleSaveCompatible = async () => {
+    const endpoint = endpointValue.trim();
+    const model = compatibleModel;
+    const apiKey = keyValue.trim() || undefined;
+    if (!endpoint || !model || compatibleModelHydrating) return;
+    if (
+      selectedProvider?.hasKey
+      && !apiKey
+      && endpoint !== (selectedProvider.baseUrl ?? '').trim()
+    ) {
+      setCompatibleStatus('error');
+      setCompatibleError('The stored key is tied to the current endpoint. Enter the key to use before saving a different endpoint.');
+      return;
+    }
+    const generation = ++compatibleRequestGeneration.current;
+    explicitCompatibleOperationRef.current = generation;
+    manualReadinessRetryRevision.current = null;
+    readinessProbeGeneration.current += 1;
+    setCompatibleStatus('saving');
+    setCompatibleError(null);
+    let saved = false;
+    try {
+      if (!compatibleModels.some((candidate) => candidate.id === model)) {
+        setCompatibleStatus('error');
+        setCompatibleError('Discover the endpoint again before saving this model.');
+        return;
+      }
+      const models = compatibleModels.map((candidate) => candidate.id);
+      await adapter.setProviderConfig('openai-compatible', {
+        ...(apiKey ? { apiKey } : {}),
+        baseUrl: endpoint,
+        models,
+        defaultModel: model,
+      });
+      if (generation !== compatibleRequestGeneration.current) return;
+      await refreshProviders();
+      if (generation !== compatibleRequestGeneration.current) return;
+      setEndpointValue(endpoint);
+      setCompatibleStatus('saved');
+      setProbe({ status: 'verified', verifiedModel: model });
+      setKeyValue('');
+      onModelReady?.({ modelId: model, verified: true });
+      saved = true;
+    } catch (error) {
+      if (generation !== compatibleRequestGeneration.current) return;
+      setCompatibleStatus('error');
+      setCompatibleError(error instanceof Error ? error.message : 'Could not save that endpoint.');
+    } finally {
+      if (explicitCompatibleOperationRef.current === generation) {
+        explicitCompatibleOperationRef.current = null;
+        if (!saved && mountedRef.current) {
+          setReadinessProbeRevision((current) => current + 1);
+        }
+      }
     }
   };
 
@@ -374,7 +636,10 @@ export function ModelGate({
       if (validate.verified) {
         setProbe({ status: 'verified', verifiedProvider: selectedProvider?.name });
       }
-      onModelReady?.();
+      onModelReady?.({
+        modelId: validate.defaultModel,
+        verified: validate.verified && Boolean(validate.defaultModel) && !validate.defaultModelSaveFailed,
+      });
     } catch {
       setValidate((current) => current.status === 'saved'
         ? { ...current, routerWarning: 'Could not restart the model router.' }
@@ -406,7 +671,9 @@ export function ModelGate({
         });
         setPullName('');
         await refreshLocal();
-        if (selectedAsDefault) onModelReady?.();
+        if (selectedAsDefault) {
+          onModelReady?.({ modelId: `ollama/${res.model}`, verified: true });
+        }
       } else {
         setPullMsg({ kind: 'err', text: `Could not install and verify "${name}".` });
       }
@@ -443,16 +710,29 @@ export function ModelGate({
   // Round-P provider selector: a real filled-tile grid (not a pill row). The
   // fill/glyph encode key state at a glance; failing = the live probe rejected
   // the stored key (same `probe.failedProvider` signal the old chip carried).
-  const keyedProviders = keyProviders.filter((p) => p.hasKey);
-  const unkeyedProviders = keyProviders.filter((p) => !p.hasKey);
+  const isConfiguredProvider = (provider: Provider) => provider.hasKey || (
+    provider.id === 'openai-compatible'
+    && Boolean(provider.baseUrl?.trim())
+  );
+  const configuredProviders = cloudProviders.filter(isConfiguredProvider);
+  const unconfiguredProviders = cloudProviders.filter((provider) => !isConfiguredProvider(provider));
+  const compatibleLocked = compatibleStatus === 'saving';
 
   const renderProviderTile = (p: Provider) => {
     const failing = probe.status === 'failed' && probe.failedProvider === p.id;
     const isSelected = selected === p.id;
-    const stateWord = failing ? 'not responding' : p.hasKey ? 'Key in Vault' : 'No key yet';
-    const catalogWord = p.hasKey && p.modelsSource === 'unavailable'
+    const configured = isConfiguredProvider(p);
+    const compatible = p.id === 'openai-compatible';
+    const stateWord = failing
+      ? 'not responding'
+      : compatible
+        ? configured
+          ? p.modelsSource === 'provider-api' ? 'Endpoint ready' : 'Endpoint saved'
+          : 'No endpoint yet'
+        : p.hasKey ? 'Key in Vault' : 'No key yet';
+    const catalogWord = configured && p.modelsSource === 'unavailable'
       ? 'Catalog unavailable'
-      : p.hasKey && p.modelsSource === 'stale-provider-api'
+      : configured && p.modelsSource === 'stale-provider-api'
         ? 'Last known catalog'
         : null;
     // R9: amber is reserved for the SELECTED tile and red for the erroring one —
@@ -463,7 +743,7 @@ export function ModelGate({
       ? 'bg-[var(--risk-wash)] border-[var(--risk)]/40'
       : isSelected
         ? 'bg-card border-[var(--honey-line)]'
-        : p.hasKey
+        : configured
           ? 'bg-card border-[var(--line-soft)]'
           : 'bg-transparent border-[var(--line-soft)]';
     // Ring echoes the same one-truth-one-tone rule: risk on the erroring tile,
@@ -481,24 +761,28 @@ export function ModelGate({
       <button
         key={p.id}
         type="button"
+        disabled={compatibleLocked}
         aria-pressed={isSelected}
         onClick={() => handleSelect(p.id)}
-        className={`flex items-start gap-2.5 rounded-[12px] border p-2.5 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${ring}`}
+        className={`flex items-start gap-2.5 rounded-[12px] border p-2.5 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] disabled:cursor-not-allowed disabled:opacity-60 ${fill} ${ring}`}
       >
         {/* Brand logomark — reuses the marketplace BrandTile technique (real
             simple-icons mark when known, monogram-hex fallback otherwise). */}
         <BrandTile identity={getBrandIdentity(p.id, p.name, '')} size={28} className="mt-0.5" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
-            <span className={`truncate text-[13px] font-semibold ${p.hasKey || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
+            <span className={`truncate text-[13px] font-semibold ${configured || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
               {p.name}
             </span>
             {/* A keyed-but-failing provider shows the risk glyph — the honey check
                 must never contradict the "not responding" state. */}
             {failing ? (
-              <AlertTriangle className="size-3.5 shrink-0 text-[var(--risk)]" aria-label="key not responding" />
-            ) : p.hasKey ? (
-              <Check className="size-3.5 shrink-0 text-honey" aria-label="key configured" />
+              <AlertTriangle
+                className="size-3.5 shrink-0 text-[var(--risk)]"
+                aria-label={compatible ? 'endpoint or model not responding' : 'key not responding'}
+              />
+            ) : configured ? (
+              <Check className="size-3.5 shrink-0 text-honey" aria-label={compatible ? 'endpoint configured' : 'key configured'} />
             ) : null}
           </div>
           <span className="text-[11px] text-[var(--text-muted)]">
@@ -542,11 +826,16 @@ export function ModelGate({
         // banner announcing that state must too (two tones for one truth reads as a bug).
         <div role="status" className="flex items-center gap-2 rounded-lg border border-[var(--risk)]/30 bg-[var(--risk-wash)] px-3 py-2.5 text-sm text-foreground">
           <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
-          <span className="flex-1">Key found but not responding.</span>
+          <span className="flex-1">
+            {probe.failedProvider === 'openai-compatible'
+              ? 'Endpoint or model not responding.'
+              : 'Key found but not responding.'}
+          </span>
           <button
-            type="button"
-            onClick={focusFailingKey}
-            className="shrink-0 rounded-md border border-[var(--risk)]/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-[var(--risk)]/10"
+                type="button"
+                onClick={focusFailingKey}
+                disabled={compatibleLocked}
+                className="shrink-0 rounded-md border border-[var(--risk)]/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-[var(--risk)]/10"
           >
             Fix it now
           </button>
@@ -554,7 +843,18 @@ export function ModelGate({
       ) : probe.status === 'unverified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
           <AlertTriangle className="size-4 shrink-0" aria-hidden />
-          <span>Couldn’t verify your key just now — you can continue and check it in Settings later.</span>
+          <span className="flex-1">
+            Couldn’t confirm model access just now. Retry the check
+            {variant === 'onboarding' ? ', or choose “I’ll do this later” below.' : ' before using it.'}
+          </span>
+          <button
+            type="button"
+            onClick={handleRetryReadiness}
+            disabled={compatibleLocked || compatibleStatus === 'verifying'}
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Retry check
+          </button>
         </div>
       ) : (
         <div
@@ -587,18 +887,26 @@ export function ModelGate({
           type="button"
           role="tab"
           aria-selected={tab === 'cloud'}
-          onClick={() => setTab('cloud')}
+          disabled={compatibleLocked}
+          onClick={() => {
+            cancelCompatibleVerification();
+            setTab('cloud');
+          }}
           className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             tab === 'cloud' ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          <KeyRound className="size-3.5" aria-hidden /> API key
+          <KeyRound className="size-3.5" aria-hidden /> Cloud / API
         </button>
         <button
           type="button"
           role="tab"
           aria-selected={tab === 'local'}
-          onClick={() => setTab('local')}
+          disabled={compatibleLocked}
+          onClick={() => {
+            cancelCompatibleVerification();
+            setTab('local');
+          }}
           className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             tab === 'local' ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]' : 'text-muted-foreground hover:text-foreground'
           }`}
@@ -610,7 +918,7 @@ export function ModelGate({
       {tab === 'cloud' && (
         <div className="space-y-3" role="tabpanel">
           <p className="text-xs text-muted-foreground">
-            Bring your own key — it’s stored encrypted in your Vault and never leaves your machine.
+            Connect a cloud provider with your own key, or add an OpenAI-compatible endpoint.
           </p>
           {(providersError || catalogNeedsRefresh) && (
             <div
@@ -619,7 +927,7 @@ export function ModelGate({
             >
               <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
               <span className="min-w-0 flex-1">
-                {providersError && keyProviders.length > 0
+                {providersError && cloudProviders.length > 0
                   ? 'Provider status could not be refreshed. Your existing choices are still available.'
                   : providersError
                     ? 'Providers could not be loaded. Check that the local service is running, then retry.'
@@ -636,23 +944,23 @@ export function ModelGate({
               </button>
             </div>
           )}
-          {providersLoading && keyProviders.length === 0 ? (
+          {providersLoading && cloudProviders.length === 0 ? (
             <span className="text-sm text-muted-foreground">Loading providers…</span>
-          ) : keyedProviders.length > 0 ? (
+          ) : configuredProviders.length > 0 ? (
             // With ≥1 keyed provider, split into "yours" then "add" so the
             // configured providers read as a distinct, owned set.
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">Your providers</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                  {keyedProviders.map(renderProviderTile)}
+                  {configuredProviders.map(renderProviderTile)}
                 </div>
               </div>
-              {unkeyedProviders.length > 0 && (
+              {unconfiguredProviders.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">Add a provider</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                    {unkeyedProviders.map(renderProviderTile)}
+                    {unconfiguredProviders.map(renderProviderTile)}
                   </div>
                 </div>
               )}
@@ -660,11 +968,138 @@ export function ModelGate({
           ) : (
             // First-run (nothing keyed): one flat grid, no group labels.
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-              {keyProviders.map(renderProviderTile)}
+              {cloudProviders.map(renderProviderTile)}
             </div>
           )}
 
-          {selectedProvider && (
+          {selectedProvider?.id === 'openai-compatible' ? (
+            <div className="space-y-3 rounded-lg border border-border bg-card/60 p-3">
+              <div>
+                <label htmlFor="model-gate-endpoint" className="block text-sm font-medium text-foreground">
+                  Endpoint URL
+                </label>
+                <Input
+                  id="model-gate-endpoint"
+                  name="modelProviderEndpoint"
+                  type="url"
+                  autoComplete="url"
+                  disabled={compatibleLocked}
+                  value={endpointValue}
+                  onChange={(event) => {
+                    cancelCompatibleVerification();
+                    setEndpointValue(event.target.value);
+                    setCompatibleModels([]);
+                    setCompatibleModel('');
+                    setCompatibleModelHydrating(false);
+                    setCompatibleStatus('idle');
+                    setCompatibleError(null);
+                  }}
+                  placeholder="http://localhost:4000/v1"
+                />
+              </div>
+              <div>
+                <label htmlFor="model-gate-compatible-key" className="block text-sm font-medium text-foreground">
+                  API key (optional)
+                </label>
+                <Input
+                  id="model-gate-compatible-key"
+                  name="modelProviderKey"
+                  type="password"
+                  autoComplete="off"
+                  disabled={compatibleLocked}
+                  value={keyValue}
+                  onChange={(event) => {
+                    cancelCompatibleVerification();
+                    setKeyValue(event.target.value);
+                    setCompatibleModels([]);
+                    setCompatibleModel('');
+                    setCompatibleModelHydrating(false);
+                    setCompatibleStatus('idle');
+                    setCompatibleError(null);
+                  }}
+                  placeholder={selectedProvider.hasKey
+                    ? 'Enter a key before changing endpoints'
+                    : 'Leave blank for a keyless local endpoint'}
+                />
+              </div>
+              {selectedProvider.hasKey
+                && !keyValue.trim()
+                && endpointValue.trim() !== (selectedProvider.baseUrl ?? '').trim()
+                && (
+                  <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+                    <AlertTriangle className="size-4" aria-hidden />
+                    The stored key is tied to the current endpoint. Enter the key to use before saving a different endpoint.
+                  </p>
+                )}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => { void handleDiscoverCompatible(); }}
+                  disabled={compatibleStatus === 'discovering' || compatibleStatus === 'verifying' || compatibleStatus === 'saving' || !endpointValue.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line-soft)] px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {compatibleStatus === 'discovering' && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                  {compatibleStatus === 'discovering' ? 'Discovering…' : 'Discover models'}
+                </button>
+              </div>
+              {compatibleModelHydrating && compatibleModels.length > 0 && (
+                <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+                  Loading saved model…
+                </p>
+              )}
+              {compatibleModels.length > 0 && !compatibleModelHydrating && (
+                <div className="space-y-2">
+                  <label htmlFor="model-gate-compatible-model" className="block text-sm font-medium text-foreground">
+                    Model
+                  </label>
+                  <select
+                    id="model-gate-compatible-model"
+                    disabled={compatibleLocked}
+                    value={compatibleModel}
+                    onChange={(event) => {
+                      cancelCompatibleVerification();
+                      setCompatibleModel(event.target.value);
+                      setCompatibleStatus('discovered');
+                      setCompatibleError(null);
+                    }}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  >
+                    {compatibleModels.map((model) => (
+                      <option key={model.id} value={model.id}>{model.name}</option>
+                    ))}
+                  </select>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { void handleSaveCompatible(); }}
+                      disabled={compatibleStatus === 'verifying' || compatibleStatus === 'saving' || compatibleStatus === 'discovering' || !compatibleModel}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {(compatibleStatus === 'verifying' || compatibleStatus === 'saving') && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                      {compatibleStatus === 'verifying'
+                        ? 'Verifying…'
+                        : compatibleStatus === 'saving'
+                          ? 'Saving…'
+                          : 'Verify & save'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {compatibleStatus === 'saved' && (
+                <p role="status" className="flex items-center gap-1.5 text-sm text-honey">
+                  <Check className="size-4" aria-hidden />
+                  Verified and saved. This model is now your primary model.
+                </p>
+              )}
+              {compatibleStatus === 'error' && compatibleError && (
+                <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
+                  <AlertTriangle className="size-4" aria-hidden />
+                  {compatibleError}
+                </p>
+              )}
+            </div>
+          ) : selectedProvider ? (
             <div className="space-y-2 rounded-lg border border-border bg-card/60 p-3">
               <label htmlFor="model-gate-key" className="block text-sm font-medium text-foreground">
                 API key for {selectedProvider.name}
@@ -747,7 +1182,7 @@ export function ModelGate({
                 </p>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       )}
 

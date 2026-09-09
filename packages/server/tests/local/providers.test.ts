@@ -6,8 +6,10 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
+import type { AddressInfo } from 'node:net';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
@@ -32,6 +34,9 @@ interface ProviderResponse {
   badge: string | null;
   models: ProviderModelResponse[];
   modelsSource?: string;
+  modelsError?: string;
+  reachable?: boolean;
+  baseUrl?: string;
 }
 
 function mockProviderCatalogFetch() {
@@ -124,6 +129,7 @@ describe('Provider API', () => {
 
       expect(ids).toContain('anthropic');
       expect(ids).toContain('openai');
+      expect(ids).toContain('openai-compatible');
       expect(ids).toContain('google');
       expect(ids).toContain('deepseek');
       expect(ids).toContain('xai');
@@ -296,6 +302,665 @@ describe('Provider API', () => {
       const openrouter = providers.find((p: ProviderResponse) => p.id === 'openrouter');
       expect(openrouter.badge).toBe('Provider catalog');
     });
+
+    it('persists a normalized keyless OpenAI-compatible endpoint and retains it on key-only updates', async () => {
+      const authorizationHeaders: Array<string | undefined> = [];
+      const catalogServer = http.createServer((request, response) => {
+        authorizationHeaders.push(request.headers.authorization);
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(request.url?.endsWith('/chat/completions')
+          ? { choices: [{ message: { content: 'WAGGLE_OK' } }] }
+          : { data: [{ id: 'local-qwen', name: 'Local Qwen' }] }));
+      });
+      await new Promise<void>((resolve) => catalogServer.listen(0, '127.0.0.1', resolve));
+      const { port } = catalogServer.address() as AddressInfo;
+      const normalizedBaseUrl = `http://127.0.0.1:${port}/v1`;
+
+      try {
+        const configured = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': {
+                baseUrl: `  ${normalizedBaseUrl}/models///  `,
+                models: ['openai-compatible/local-qwen'],
+              },
+            },
+          },
+        });
+        expect(configured.statusCode).toBe(200);
+        expect(configured.json().providers['openai-compatible']).toMatchObject({
+          apiKey: '****',
+          baseUrl: normalizedBaseUrl,
+        });
+
+        const discovered = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const compatible = discovered.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        );
+        expect(compatible).toMatchObject({
+          requiresKey: false,
+          hasKey: false,
+          baseUrl: normalizedBaseUrl,
+          modelsSource: 'provider-api',
+        });
+        expect(compatible.models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/local-qwen',
+          name: 'Local Qwen',
+        }));
+        expect(authorizationHeaders).toEqual([undefined, undefined]);
+
+        const keyOnlyUpdate = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': { apiKey: 'optional-local-secret' },
+            },
+          },
+        });
+        expect(keyOnlyUpdate.statusCode).toBe(200);
+        expect(keyOnlyUpdate.json().providers['openai-compatible'].baseUrl).toBe(normalizedBaseUrl);
+        expect(authorizationHeaders.at(-1)).toBe('Bearer optional-local-secret');
+
+        const persisted = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf8')) as {
+          providers?: Record<string, { baseUrl?: string }>;
+        };
+        expect(persisted.providers?.['openai-compatible']?.baseUrl).toBe(normalizedBaseUrl);
+        expect(server.vault?.get('openai-compatible')?.metadata?.baseUrl).toBe(normalizedBaseUrl);
+      } finally {
+        await new Promise<void>((resolve, reject) => catalogServer.close((error) => error ? reject(error) : resolve()));
+        server.vault?.delete('openai-compatible');
+        const configPath = path.join(tmpDir, 'config.json');
+        const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        delete persisted.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(persisted, null, 2), 'utf8');
+      }
+    });
+
+    it('rechecks a degraded compatible endpoint quickly and caches its recovered catalog', async () => {
+      let healthy = false;
+      let catalogRequests = 0;
+      const catalogServer = http.createServer((request, response) => {
+        if (!request.url?.endsWith('/models')) {
+          response.writeHead(404).end();
+          return;
+        }
+        catalogRequests += 1;
+        if (!healthy) {
+          response.writeHead(503, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: 'warming up' }));
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ data: [{ id: 'recovered-qwen', name: 'Recovered Qwen' }] }));
+      });
+      await new Promise<void>((resolve) => catalogServer.listen(0, '127.0.0.1', resolve));
+      const { port } = catalogServer.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+
+      try {
+        const configPath = path.join(tmpDir, 'config.json');
+        const seeded = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        seeded.providers ??= {};
+        seeded.providers['openai-compatible'] = {
+          apiKey: '',
+          baseUrl,
+          models: ['openai-compatible/recovered-qwen'],
+        };
+        fs.writeFileSync(configPath, JSON.stringify(seeded, null, 2), 'utf8');
+
+        const unavailableResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const unavailable = unavailableResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(unavailable.modelsSource).toBe('unavailable');
+        expect(unavailable.modelsError).toMatch(/503/);
+        expect(catalogRequests).toBe(1);
+
+        healthy = true;
+        const stillCachedResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const stillCached = stillCachedResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(stillCached.modelsSource).toBe('unavailable');
+        expect(catalogRequests).toBe(1);
+
+        await new Promise(resolve => setTimeout(resolve, 2_050));
+        const recoveredResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const recovered = recoveredResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(recovered.modelsSource).toBe('provider-api');
+        expect(recovered.models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/recovered-qwen',
+        }));
+        expect(catalogRequests).toBe(2);
+
+        await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        expect(catalogRequests).toBe(2);
+
+        await new Promise(resolve => setTimeout(resolve, 2_050));
+        await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        expect(catalogRequests).toBe(2);
+      } finally {
+        await new Promise<void>((resolve, reject) => catalogServer.close(error => error ? reject(error) : resolve()));
+        server.vault?.delete('openai-compatible');
+        const configPath = path.join(tmpDir, 'config.json');
+        const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        delete persisted.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(persisted, null, 2), 'utf8');
+      }
+    });
+
+    it('rejects retargeting a vaulted compatible key without re-entering it and leaves all state unchanged', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.readFileSync(configPath, 'utf8');
+      const originalRuntimeModel = server.agentState.currentModel;
+      const oldBaseUrl = 'https://old-endpoint.example.test/v1';
+      const newBaseUrl = 'https://new-endpoint.example.test/v1';
+      const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const seed = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': {
+                apiKey: 'private-existing-key',
+                baseUrl: oldBaseUrl,
+                models: ['openai-compatible/old-model'],
+              },
+            },
+          },
+        });
+        expect(seed.statusCode).toBe(200);
+        const sameUrlUpdate = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            defaultModel: 'openai-compatible/old-model',
+            providers: {
+              'openai-compatible': {
+                baseUrl: `${oldBaseUrl}/models/`,
+                models: ['openai-compatible/old-model', 'openai-compatible/second-model'],
+              },
+            },
+          },
+        });
+        expect(sameUrlUpdate.statusCode).toBe(200);
+        const probeCall = fetchMock.mock.calls.find(([url]) =>
+          url === `${oldBaseUrl}/chat/completions`);
+        expect(probeCall).toBeDefined();
+        const [probeUrl, probeInit] = probeCall as [string, RequestInit];
+        expect(probeUrl).toBe(`${oldBaseUrl}/chat/completions`);
+        expect(probeInit.headers).toMatchObject({ Authorization: 'Bearer private-existing-key' });
+        expect(JSON.parse(String(probeInit.body))).toMatchObject({ model: 'old-model' });
+        expect(sameUrlUpdate.json()).toMatchObject({
+          defaultModel: 'openai-compatible/old-model',
+          providers: {
+            'openai-compatible': {
+              baseUrl: oldBaseUrl,
+              models: ['openai-compatible/old-model', 'openai-compatible/second-model'],
+            },
+          },
+        });
+        expect(server.vault?.get('openai-compatible')?.value).toBe('private-existing-key');
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+        const vaultBefore = server.vault?.get('openai-compatible');
+        const runtimeBefore = server.agentState.currentModel;
+        const callsBeforeRetarget = fetchMock.mock.calls.length;
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            defaultModel: 'openai-compatible/qwen3.8-flash-next',
+            dailyBudget: 91,
+            providers: {
+              'openai-compatible': {
+                baseUrl: newBaseUrl,
+                models: ['openai-compatible/qwen3.8-flash-next'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toEqual(vaultBefore);
+        expect(server.agentState.currentModel).toBe(runtimeBefore);
+        expect(fetchMock).toHaveBeenCalledTimes(callsBeforeRetarget);
+        expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(newBaseUrl))).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+        server.vault?.delete('openai-compatible');
+        fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
+    it('does not attach an orphaned vaulted compatible key to a new endpoint without key re-entry', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+      const originalRuntimeModel = server.agentState.currentModel;
+
+      try {
+        const withoutCompatible = originalConfig
+          ? JSON.parse(originalConfig) as { providers?: Record<string, unknown> }
+          : { defaultModel: 'claude-sonnet-4-6', providers: {} as Record<string, unknown> };
+        delete withoutCompatible.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(withoutCompatible, null, 2), 'utf8');
+        server.vault?.set('openai-compatible', 'orphaned-private-key');
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+        const vaultBefore = server.vault?.get('openai-compatible');
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            dailyBudget: 92,
+            providers: {
+              'openai-compatible': {
+                baseUrl: 'https://new-endpoint.example.test/v1',
+                models: ['openai-compatible/qwen3.8-flash-next'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toEqual(vaultBefore);
+        expect(server.agentState.currentModel).toBe(originalRuntimeModel);
+      } finally {
+        server.vault?.delete('openai-compatible');
+        if (originalConfig === null) fs.rmSync(configPath, { force: true });
+        else fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
+    it('never forwards a legacy plaintext compatible key to a changed endpoint', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.readFileSync(configPath, 'utf8');
+      const originalRuntimeModel = server.agentState.currentModel;
+      const fetchMock = vi.fn();
+
+      try {
+        const legacy = JSON.parse(originalConfig) as {
+          providers?: Record<string, unknown>;
+        };
+        legacy.providers ??= {};
+        legacy.providers['openai-compatible'] = {
+          apiKey: 'legacy-plaintext-secret',
+          baseUrl: 'https://old-endpoint.example.test/v1',
+          models: ['openai-compatible/legacy-model'],
+        };
+        fs.writeFileSync(configPath, JSON.stringify(legacy, null, 2), 'utf8');
+        server.vault?.delete('openai-compatible');
+        vi.stubGlobal('fetch', fetchMock);
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': {
+                baseUrl: 'https://attacker-endpoint.example.test/v1',
+                models: ['openai-compatible/legacy-model'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toBeNull();
+        expect(server.agentState.currentModel).toBe(originalRuntimeModel);
+      } finally {
+        vi.unstubAllGlobals();
+        server.vault?.delete('openai-compatible');
+        fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
+    it.each([
+      'file:///C:/secrets',
+      'ftp://127.0.0.1/v1',
+      'http://user:password@127.0.0.1/v1',
+      'http://127.0.0.1/v1?',
+      'http://127.0.0.1/v1#',
+      'http://127.0.0.1/v1?token=secret',
+      'http://127.0.0.1/v1#fragment',
+    ])('rejects unsafe OpenAI-compatible endpoint URL %s', async (baseUrl) => {
+      const res = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            'openai-compatible': { baseUrl },
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatch(/http/i);
+    });
+
+    it('discovers and verifies a keyless compatible model without persisting the candidate endpoint', async () => {
+      const requests: Array<{ url: string; authorization?: string; body?: unknown }> = [];
+      const candidateServer = http.createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk: Buffer) => chunks.push(chunk));
+        request.on('end', () => {
+          const rawBody = Buffer.concat(chunks).toString('utf8');
+          requests.push({
+            url: request.url ?? '',
+            authorization: request.headers.authorization,
+            ...(rawBody ? { body: JSON.parse(rawBody) } : {}),
+          });
+          response.writeHead(200, { 'content-type': 'application/json' });
+          if (request.url?.endsWith('/models')) {
+            response.end(JSON.stringify({ data: [
+              { id: 'qwen3.8-flash-next', name: 'Qwen 3.8 Flash Next' },
+              { id: 'silent-model', name: 'Silent model' },
+            ] }));
+            return;
+          }
+          const model = (JSON.parse(rawBody) as { model?: string }).model;
+          response.end(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: model === 'silent-model' ? '' : 'WAGGLE_OK' } }],
+          }));
+        });
+      });
+      await new Promise<void>((resolve) => candidateServer.listen(0, '127.0.0.1', resolve));
+      const { port } = candidateServer.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+      const configPath = path.join(tmpDir, 'config.json');
+      const configBefore = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+      const nativeFetch = globalThis.fetch;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => nativeFetch(input, init));
+      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+
+      try {
+        const discovery = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: { baseUrl: ` ${baseUrl}/models/ ` },
+        });
+        expect(discovery.statusCode).toBe(200);
+        expect(discovery.json()).toMatchObject({
+          valid: true,
+          verified: false,
+          baseUrl,
+          modelsSource: 'provider-api',
+        });
+        expect(discovery.json().models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/qwen3.8-flash-next',
+          name: 'Qwen 3.8 Flash Next',
+        }));
+
+        const verification = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl: `${baseUrl}/models`,
+            model: 'openai-compatible/qwen3.8-flash-next',
+          },
+        });
+        expect(verification.statusCode).toBe(200);
+        expect(verification.json()).toMatchObject({
+          valid: true,
+          verified: true,
+          baseUrl,
+          model: 'openai-compatible/qwen3.8-flash-next',
+        });
+
+        const emptyCompletion = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl,
+            model: 'openai-compatible/silent-model',
+          },
+        });
+        expect(emptyCompletion.json()).toMatchObject({
+          valid: false,
+          verified: false,
+          model: 'openai-compatible/silent-model',
+          error: expect.stringMatching(/no assistant response/i),
+        });
+
+        const keyedVerification = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl: `${baseUrl}/chat/completions`,
+            apiKey: 'private-local-key',
+            model: 'openai-compatible/qwen3.8-flash-next',
+          },
+        });
+        expect(keyedVerification.json()).toMatchObject({ valid: true, verified: true, baseUrl });
+        expect(keyedVerification.body).not.toContain('private-local-key');
+
+        expect(requests.filter((request) => request.url === '/v1/models')).toHaveLength(4);
+        expect(requests.slice(0, 5).every((request) => request.authorization === undefined)).toBe(true);
+        expect(requests.slice(5).every((request) => request.authorization === 'Bearer private-local-key')).toBe(true);
+        const candidateFetches = fetchSpy.mock.calls.filter(([input]) => String(input).startsWith(baseUrl));
+        expect(candidateFetches).toHaveLength(7);
+        expect(candidateFetches.every(([, init]) => init?.redirect === 'error')).toBe(true);
+        expect(timeoutSpy.mock.calls
+          .map(([milliseconds]) => milliseconds)
+          .filter(milliseconds => milliseconds >= 45_000)).toEqual([90_000, 45_000, 90_000]);
+      expect(requests).toContainEqual(expect.objectContaining({
+        url: '/v1/chat/completions',
+        body: expect.objectContaining({
+          model: 'qwen3.8-flash-next',
+          max_tokens: 512,
+          chat_template_kwargs: { enable_thinking: false },
+        }),
+      }));
+      const silentRequest = requests.find((candidate) => (
+        candidate.url === '/v1/chat/completions'
+        && (candidate.body as { model?: string } | undefined)?.model === 'silent-model'
+      ));
+      expect(silentRequest?.body).not.toHaveProperty('chat_template_kwargs');
+        expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
+        expect(server.vault?.get('openai-compatible')).toBeNull();
+      } finally {
+        timeoutSpy.mockRestore();
+        fetchSpy.mockRestore();
+        await new Promise<void>((resolve, reject) => candidateServer.close((error) => error ? reject(error) : resolve()));
+      }
+    });
+
+    it('rejects an unsafe compatible probe URL without issuing a request or changing settings', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const configPath = path.join(tmpDir, 'config.json');
+      const configBefore = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: { baseUrl: 'file:///C:/secrets' },
+        });
+
+        expect(res.statusCode).toBe(400);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+  });
+});
+
+describe('OpenAI-compatible cold restart', () => {
+  it('restores the endpoint, model lanes, Vault binding, catalog, and completion route', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-restart-'));
+    const upstreamRequests: Array<{ url: string; authorization?: string; body?: unknown }> = [];
+    let activeCompletions = 0;
+    let maxActiveCompletions = 0;
+    const upstream = http.createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        const rawBody = Buffer.concat(chunks).toString('utf8');
+        upstreamRequests.push({
+          url: request.url ?? '',
+          authorization: request.headers.authorization,
+          ...(rawBody ? { body: JSON.parse(rawBody) } : {}),
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        if (request.url?.endsWith('/models')) {
+          response.end(JSON.stringify({
+            data: [
+              { id: 'qwen-primary', name: 'Qwen Primary' },
+              { id: 'qwen-fallback', name: 'Qwen Fallback' },
+              { id: 'qwen-budget', name: 'Qwen Budget' },
+            ],
+          }));
+          return;
+        }
+        activeCompletions += 1;
+        maxActiveCompletions = Math.max(maxActiveCompletions, activeCompletions);
+        setTimeout(() => {
+          activeCompletions -= 1;
+          response.end(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Restarted Qwen answered.' } }],
+            usage: { prompt_tokens: 4, completion_tokens: 3 },
+          }));
+        }, 20);
+      });
+    });
+    let firstServer: FastifyInstance | undefined;
+    let restartedServer: FastifyInstance | undefined;
+
+    try {
+      await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+      const { port } = upstream.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+      const primary = 'openai-compatible/qwen-primary';
+      const fallback = 'openai-compatible/qwen-fallback';
+      const budget = 'openai-compatible/qwen-budget';
+      const apiKey = 'restart-private-key';
+
+      firstServer = await buildLocalServer({ dataDir, port: 0 });
+      const firstSessionToken = firstServer.agentState.wsSessionToken;
+      const save = await injectWithAuth(firstServer, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: primary,
+          fallbackModel: fallback,
+          budgetModel: budget,
+          providers: {
+            'openai-compatible': {
+              apiKey,
+              baseUrl,
+              models: [primary, fallback, budget],
+            },
+          },
+        },
+      });
+      expect(save.statusCode, save.body).toBe(200);
+      expect(maxActiveCompletions).toBe(3);
+
+      await firstServer.close();
+      firstServer = undefined;
+      restartedServer = await buildLocalServer({ dataDir, port: 0 });
+      upstreamRequests.length = 0;
+
+      expect(restartedServer.agentState.wsSessionToken).not.toBe(firstSessionToken);
+      expect(restartedServer.agentState.currentModel).toBe(primary);
+
+      const restoredSettings = await injectWithAuth(restartedServer, {
+        method: 'GET',
+        url: '/api/settings',
+      });
+      expect(restoredSettings.statusCode).toBe(200);
+      expect(restoredSettings.json()).toMatchObject({
+        defaultModel: primary,
+        fallbackModel: fallback,
+        budgetModel: budget,
+        providers: {
+          'openai-compatible': {
+            apiKey: expect.stringMatching(/^restart\.\.\.-key$/),
+            baseUrl,
+            models: [primary, fallback, budget],
+          },
+        },
+      });
+      expect(restartedServer.vault?.get('openai-compatible')).toMatchObject({
+        value: apiKey,
+        metadata: { baseUrl },
+      });
+
+      const restoredCatalog = await injectWithAuth(restartedServer, {
+        method: 'GET',
+        url: '/api/providers',
+      });
+      expect(restoredCatalog.statusCode).toBe(200);
+      const compatible = restoredCatalog.json().providers.find(
+        (provider: ProviderResponse) => provider.id === 'openai-compatible',
+      ) as ProviderResponse;
+      expect(compatible).toMatchObject({
+        hasKey: true,
+        baseUrl,
+        modelsSource: 'provider-api',
+      });
+      expect(compatible.models.map(model => model.id)).toEqual(expect.arrayContaining([
+        primary,
+        fallback,
+        budget,
+      ]));
+
+      const completion = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: primary,
+          messages: [{ role: 'user', content: 'Confirm restart routing.' }],
+        },
+      });
+      expect(completion.statusCode, completion.body).toBe(200);
+      expect(completion.json().choices[0].message.content).toBe('Restarted Qwen answered.');
+      expect(upstreamRequests.filter(request => request.url === '/v1/models')).toEqual([
+        expect.objectContaining({ authorization: `Bearer ${apiKey}` }),
+      ]);
+      expect(upstreamRequests.filter(request => request.url === '/v1/chat/completions')).toEqual([expect.objectContaining({
+        url: '/v1/chat/completions',
+        authorization: `Bearer ${apiKey}`,
+        body: expect.objectContaining({ model: 'qwen-primary' }),
+      })]);
+    } finally {
+      if (firstServer) await firstServer.close();
+      if (restartedServer) await restartedServer.close();
+      await new Promise<void>((resolve, reject) => upstream.close(error => error ? reject(error) : resolve()));
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -359,7 +1024,11 @@ describe('Model Validation', () => {
     // Set TRIAL tier so we're not capped at the FREE limit (5 workspaces).
     // Without this, ensureDefault() + 4 test workspaces = 5, making the next
     // POST hit the tier limit (403) before reaching model validation (400).
-    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TRIAL' }));
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+      tier: 'TRIAL',
+    }));
     server = await buildLocalServer({ dataDir: tmpDir });
   });
 

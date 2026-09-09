@@ -62,6 +62,25 @@ import {
 
 const logger = createCoreLogger('orchestrator');
 
+const sharedRerankerLoads = new Map<string, Promise<Reranker | undefined>>();
+const RERANKER_STARTUP_GRACE_MS = 1_000;
+
+function getSharedInProcessReranker(cacheDir?: string): Promise<Reranker | undefined> {
+  const key = cacheDir ?? '<default>';
+  const existing = sharedRerankerLoads.get(key);
+  if (existing) return existing;
+
+  const config = cacheDir ? { cacheDir } : undefined;
+  const pending = createInProcessReranker(config).catch((e: unknown) => {
+    logger.warn('reranker unavailable — falling back to RRF ordering', {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return undefined;
+  });
+  sharedRerankerLoads.set(key, pending);
+  return pending;
+}
+
 // Content-length constants now live in `./content-constants.ts` (single
 // source of truth shared with the pattern-write-back extractor). Imports
 // below pull only the ones this file still references.
@@ -323,7 +342,11 @@ export class Orchestrator {
     return compute();
   }
 
-  buildSystemPrompt(modelOverride = this.model): string {
+  buildSystemPrompt(
+    modelOverride = this.model,
+    availableTools: readonly Pick<ToolDefinition, 'name' | 'description'>[] = this.tools,
+    includeRecentContext = true,
+  ): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
     // has only second precision in SQLite, so rapid successive edits
@@ -349,7 +372,7 @@ export class Orchestrator {
         this._pendingSurfacedAwareness = awareness;
       }
       const caps: AgentCapabilities = {
-        tools: this.tools.map(t => ({ name: t.name, description: t.description })),
+        tools: availableTools.map(t => ({ name: t.name, description: t.description })),
         skills: this.skills,
         model: modelOverride,
         memoryStats: this.getMemoryStats(),
@@ -361,12 +384,12 @@ export class Orchestrator {
     });
 
     // ── PRELOADED CONTEXT (per-session memory, changes every call) ──
-    const contextSection = this.uncachedSection('recent_context', () => {
+    const contextSection = includeRecentContext ? this.uncachedSection('recent_context', () => {
       const recentContext = this.loadRecentContext();
       return recentContext
         ? '# Context From Your Memory\nThis was automatically loaded — you already know this:\n' + recentContext
         : '';
-    });
+    }) : '';
 
     const parts = [identitySection, goalAncestrySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
@@ -383,13 +406,18 @@ export class Orchestrator {
   async buildAssembledPrompt(
     query: string,
     persona: AgentPersona | null = null,
-    opts: AssembleOptions & { model?: string } = {},
+    opts: AssembleOptions & {
+      model?: string;
+      availableTools?: readonly Pick<ToolDefinition, 'name' | 'description'>[];
+    } = {},
   ): Promise<AssembledPrompt> {
     const effectiveModel = opts.model ?? this.model;
     const tier = tierForModel(effectiveModel);
     const closedWorldRewrite = isClosedWorldRewriteRequest(query);
-    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt(effectiveModel);
-    const context: ContextFramesImpl = closedWorldRewrite
+    const corePrompt = closedWorldRewrite
+      ? ''
+      : this.buildSystemPrompt(effectiveModel, opts.availableTools ?? this.tools, false);
+    let context: ContextFramesImpl = closedWorldRewrite
       ? {
           stateFrames: [],
           recentChanges: [],
@@ -444,6 +472,38 @@ export class Orchestrator {
       };
     }
 
+    if (!closedWorldRewrite && recalled.scanSafe) {
+      const recalledFrameIds = new Set(
+        [...recalled.workspace, ...recalled.personal].map(frame => frame.id),
+      );
+      const renderedRecall = recalled.renderedText ?? '';
+      const isAlreadyRecalled = (frame: MemoryFrame): boolean => {
+        if (recalledFrameIds.has(frame.id)) return true;
+        if (!renderedRecall) return false;
+
+        const content = frame.content.trim();
+        const date = frame.created_at?.slice(0, 10) ?? 'unknown';
+        const semanticNeedle = `[${date}, ${frame.importance}] ${content.slice(0, RECALL_LINE_LENGTH)}`;
+        if (renderedRecall.includes(semanticNeedle)) return true;
+
+        const isLaneFrame = content.startsWith(MIND_PROFILE_PREFIX)
+          || content.startsWith(MIND_FACT_PREFIX)
+          || content.startsWith(MIND_EVENT_PREFIX)
+          || content.startsWith(MIND_RAWTURN_PREFIX);
+        if (!isLaneFrame) return false;
+        const newline = content.indexOf('\n');
+        const body = (newline >= 0 ? content.slice(newline + 1) : content).trim();
+        return body.length > 0
+          && renderedRecall.includes(body.slice(0, RECALL_LINE_LENGTH));
+      };
+
+      context = {
+        ...context,
+        stateFrames: context.stateFrames.filter(frame => !isAlreadyRecalled(frame)),
+        recentChanges: context.recentChanges.filter(frame => !isAlreadyRecalled(frame)),
+      };
+    }
+
     return new PromptAssembler().assemble(
       {
         corePrompt,
@@ -478,29 +538,32 @@ export class Orchestrator {
    * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
   /**
-   * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
+   * W4.2/W4.5: lazy process-shared cross-encoder reranker — DEFAULT ON since the W4.5 live
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
    * model (cached at the configured managed path, or ~/.hive-mind/models for
-   * standalone callers); creation failure (offline, OOM)
-   * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
+   * standalone callers). A cold download continues in the background after a
+   * short grace period so first recall can fall back to RRF instead of blocking;
+   * creation failure (offline, OOM) memoizes undefined and never throws.
    */
-  private getReranker(): Promise<Reranker | undefined> {
-    if (this.rerankerPromise) return this.rerankerPromise;
-    if (process.env['WAGGLE_RERANKER'] === '0') {
-      this.rerankerPromise = Promise.resolve(undefined);
-      return this.rerankerPromise;
+  private async getReranker(): Promise<Reranker | undefined> {
+    if (!this.rerankerPromise) {
+      this.rerankerPromise = process.env['WAGGLE_RERANKER'] === '0'
+        ? Promise.resolve(undefined)
+        : getSharedInProcessReranker(this.rerankerCacheDir);
     }
-    const rerankerConfig = this.rerankerCacheDir
-      ? { cacheDir: this.rerankerCacheDir }
-      : undefined;
-    this.rerankerPromise = createInProcessReranker(rerankerConfig).catch((e: unknown) => {
-      logger.warn('reranker unavailable — falling back to RRF ordering', {
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return undefined;
-    });
-    return this.rerankerPromise;
+
+    let timer: ReturnType<typeof setTimeout> | number | undefined;
+    try {
+      return await Promise.race([
+        this.rerankerPromise,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(resolve, RERANKER_STARTUP_GRACE_MS);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async recallMemory(

@@ -10,6 +10,7 @@ const LOCK_RETRY_JITTER_MS = 30;
 const SAFE_HUGGING_FACE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
 const CORRUPT_ONNX_ERROR = /^Load model from (.+\.onnx) failed:\s*Protobuf parsing failed\.?$/i;
 const LOCK_DIRECTORY = '.waggle-model-locks';
+const QUARANTINE_RENAME_RETRY_DELAYS_MS = [40] as const;
 
 export interface TransformersModelLoadOptions<T> {
   cacheDir: string;
@@ -123,27 +124,43 @@ function validateQuarantinePaths(
   return { modelDir: realModelDir, quarantineRoot: realQuarantineRoot };
 }
 
-function quarantineCorruptModel(
+function isTransientQuarantineRenameError(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) return false;
+  return ['EPERM', 'EACCES', 'EBUSY'].includes(
+    String((error as NodeJS.ErrnoException).code),
+  );
+}
+
+async function quarantineCorruptModel(
   canonicalCacheDir: string,
   model: string,
   reportedOnnxPath: string,
-): string | null {
+): Promise<string | null> {
   if (!SAFE_HUGGING_FACE_MODEL_ID.test(model)) return null;
 
   const modelDir = path.join(canonicalCacheDir, ...model.split('/'));
   const firstValidation = validateQuarantinePaths(canonicalCacheDir, modelDir, reportedOnnxPath);
   if (!firstValidation) return null;
 
-  // Re-resolve immediately before the move so a changed link/path cannot redirect it.
-  const finalValidation = validateQuarantinePaths(canonicalCacheDir, modelDir, reportedOnnxPath);
-  if (!finalValidation) return null;
+  for (let attempt = 0; ; attempt += 1) {
+    // Re-resolve immediately before every move attempt so a changed link/path
+    // cannot redirect a retry outside the canonical cache directory.
+    const finalValidation = validateQuarantinePaths(canonicalCacheDir, modelDir, reportedOnnxPath);
+    if (!finalValidation) return null;
 
-  const quarantineDir = path.join(
-    finalValidation.quarantineRoot,
-    `${path.basename(finalValidation.modelDir)}.corrupt-${Date.now()}-${randomUUID()}`,
-  );
-  fs.renameSync(finalValidation.modelDir, quarantineDir);
-  return quarantineDir;
+    const quarantineDir = path.join(
+      finalValidation.quarantineRoot,
+      `${path.basename(finalValidation.modelDir)}.corrupt-${Date.now()}-${randomUUID()}`,
+    );
+    try {
+      fs.renameSync(finalValidation.modelDir, quarantineDir);
+      return quarantineDir;
+    } catch (error) {
+      const retryDelay = QUARANTINE_RENAME_RETRY_DELAYS_MS[attempt];
+      if (retryDelay === undefined || !isTransientQuarantineRenameError(error)) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
 }
 
 function reportedCorruptOnnxPath(error: unknown): string | null {
@@ -213,7 +230,7 @@ async function runModelLoad<T>(options: TransformersModelLoadOptions<T>): Promis
 
       let quarantineDir: string | null = null;
       try {
-        quarantineDir = quarantineCorruptModel(canonicalCacheDir, options.model, reportedOnnxPath);
+        quarantineDir = await quarantineCorruptModel(canonicalCacheDir, options.model, reportedOnnxPath);
       } catch {
         // Preserve the original loader error if safe quarantine cannot complete.
       }

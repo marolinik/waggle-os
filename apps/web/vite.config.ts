@@ -16,11 +16,11 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/api": {
         target: sidecarTarget,
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/health": {
         target: sidecarTarget,
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/ws": {
         target: sidecarTarget.replace(/^http/, "ws"),

@@ -1,5 +1,10 @@
-import type { ReactNode } from 'react';
-import type { ContentBlock, StepContentBlock } from '@/lib/types';
+import { useId, useState, type ReactNode } from 'react';
+import type {
+  ContentBlock,
+  StepContentBlock,
+  ToolContextContentBlock,
+  ToolUseContentBlock,
+} from '@/lib/types';
 import TextBlock from './TextBlock';
 import ToolUseBlock from './ToolUseBlock';
 import ModelSwitchBlock from './ModelSwitchBlock';
@@ -21,6 +26,12 @@ interface BlockRendererProps {
   onRetry?: () => void;
   /** Router arc B2: a route_proposal dispatch landed (ChatApp consumes the composer text). */
   onRouteProposalDispatched?: (blockId: string, result: RouteProposalConfirmResponse) => void;
+  /** The service accepted the user's route rejection. */
+  onRouteProposalRejected?: (blockId: string) => void;
+  /** Deduplicate route rejection across the card and parent cleanup. */
+  onRouteProposalReject?: (blockId: string, routeDecisionId: string) => Promise<void>;
+  /** Prevent destructive thread actions while a route handoff is in flight. */
+  onRouteProposalDispatchingChange?: (blockId: string, dispatching: boolean) => void;
   /** Router arc B2: re-run propose after a revalidation_failed confirm. */
   onRouteProposalRePropose?: (blockId: string, preferredExecutorId?: string) => void;
 }
@@ -67,10 +78,196 @@ function trustedCapabilityProposals(blocks: ContentBlock[]): Map<string, Capabil
  * between the "Recalling…" and "Recalled N…" steps) must still yield exactly
  * ONE card per turn — see the single-group anchoring in BlockRenderer below.
  */
-function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: boolean): ReactNode {
-  const anyRunning = steps.some(s => s.status === 'running');
-  const activitySteps: ActivityStep[] = steps.map(s => {
-    const sourceLabels = (s.provenance?.sources ?? [])
+function formatToolName(name: string): string {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function toolDataName(name: string): string {
+  return name.replace(/[^a-z0-9_-]/gi, '-');
+}
+
+function skillName(block: ToolUseContentBlock): string | null {
+  const raw = block.input?.name ?? block.input?.skillName;
+  return typeof raw === 'string' && raw.trim()
+    ? raw.trim().replace(/[-_]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
+    : null;
+}
+
+function toolActionLabel(block: ToolUseContentBlock): string {
+  if (block.name === 'read_skill') {
+    const name = skillName(block);
+    const suffix = name ? ` ${name} skill` : ' skill guidance';
+    if (block.status === 'running') return `Opening${suffix}`;
+    if (block.status === 'done') return `Opened${suffix}`;
+    return `Couldn't open${suffix}`;
+  }
+  if (block.name === 'search_skills') {
+    if (block.status === 'running') return 'Searching skills';
+    if (block.status === 'done') return 'Searched skills';
+    return "Couldn't search skills";
+  }
+  if (block.name === 'search_memory') {
+    if (block.status === 'running') return 'Searching memory';
+    if (block.status === 'done') return 'Searched memory';
+    return "Couldn't search memory";
+  }
+  return formatToolName(block.name);
+}
+
+function ToolActivityDetails({
+  block,
+  prelude,
+}: {
+  block: ToolUseContentBlock;
+  prelude?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+  const status = block.status === 'running'
+    ? 'Running'
+    : block.status === 'done'
+      ? 'Completed'
+      : block.status === 'denied'
+        ? 'Denied'
+        : 'Failed';
+  const hasDetails = !!block.input || typeof block.result === 'string';
+  const visiblePrelude = block.name === 'search_memory' && block.status !== 'running'
+    ? undefined
+    : prelude;
+  return (
+    <span
+      data-testid="chat-tool-activity"
+      data-tool-name={toolDataName(block.name)}
+      data-tool-status={block.status}
+      className="block min-w-0"
+    >
+      <button
+        data-testid="chat-tool-activity-toggle"
+        type="button"
+        aria-expanded={hasDetails ? open : undefined}
+        aria-controls={hasDetails ? contentId : undefined}
+        disabled={!hasDetails}
+        onClick={() => hasDetails && setOpen(value => !value)}
+        className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:cursor-default"
+      >
+        <span className="font-medium text-[var(--text-2)]">{visiblePrelude ?? toolActionLabel(block)}</span>
+        {visiblePrelude && <span className="text-xs text-[var(--text-dim)]">{toolActionLabel(block)}</span>}
+        {block.name !== 'read_skill' && block.name !== 'search_skills' && (
+          <span className="text-xs text-[var(--text-dim)]">{status}</span>
+        )}
+        {block.duration != null && <span className="text-xs text-[var(--text-dim)]">{block.duration}ms</span>}
+      </button>
+      {open && hasDetails && (
+        <span
+          id={contentId}
+          data-testid="chat-tool-activity-details"
+          className="mt-1.5 block space-y-1 text-xs text-[var(--text-dim)]"
+        >
+          {block.input && (
+            <code className="block max-h-24 overflow-auto rounded bg-[var(--bg-1)] p-1.5 whitespace-pre-wrap">
+              {JSON.stringify(block.input, null, 2).slice(0, 1000)}
+            </code>
+          )}
+          {typeof block.result === 'string' && (
+            <code className="block max-h-32 overflow-auto rounded bg-[var(--bg-1)] p-1.5 whitespace-pre-wrap">
+              {block.result.slice(0, 2000)}
+            </code>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ContextEfficiencyDetails({ block }: { block: ToolContextContentBlock }) {
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+  const { metrics } = block;
+  const timing = [
+    `selector ${metrics.selectorLatencyMs}ms`,
+    metrics.timeToFirstTokenMs === null ? null : `first token ${metrics.timeToFirstTokenMs}ms`,
+    `total ${metrics.totalServerLatencyMs}ms`,
+  ].filter(Boolean).join(' · ');
+  return (
+    <span
+      data-testid="chat-context-efficiency"
+      className="block min-w-0"
+    >
+      <button
+        data-testid="chat-context-efficiency-toggle"
+        type="button"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={() => setOpen(value => !value)}
+        className="text-left text-[var(--text-2)] hover:text-[var(--text-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+      >
+        Context efficiency
+      </button>
+      {open && (
+        <span
+          id={contentId}
+          data-testid="chat-context-efficiency-details"
+          data-tool-selected-count={metrics.toolSelectedCount}
+          data-tool-eligible-count={metrics.toolEligibleCount}
+          data-tool-omitted-count={metrics.toolOmittedCount}
+          data-tool-schema-chars={metrics.transmittedToolSchemaChars}
+          className="mt-1.5 block space-y-0.5 text-xs text-[var(--text-dim)]"
+        >
+          <span className="block">
+          Prepared {metrics.toolSelectedCount} of {metrics.toolEligibleCount} eligible tools ·{' '}
+          {metrics.toolOmittedCount} kept out of model context
+          </span>
+          <span className="block">
+          {metrics.packageMode === 'compact' ? 'Compact' : metrics.packageMode === 'full' ? 'Full' : 'Custom'} prompt package ·{' '}
+          ~{metrics.estimatedToolSchemaTokens.toLocaleString()} tool-schema tokens
+          </span>
+          <span className="block">{timing}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function renderActivityGroup(blocks: ContentBlock[], key: string, isStreaming: boolean): ReactNode {
+  const steps = blocks.filter((block): block is StepContentBlock => block.type === 'step');
+  const context = blocks.find((block): block is ToolContextContentBlock => block.type === 'tool_context');
+  const toolBlocks = blocks.filter((block): block is ToolUseContentBlock => (
+    block.type === 'tool_use' && block.name !== 'auto_recall' && !isArtifactBlock(block)
+  ));
+  const autoRecall = blocks.find((block): block is ToolUseContentBlock => (
+    block.type === 'tool_use' && block.name === 'auto_recall'
+  ));
+  const hasMemoryProvenance = steps.some(step => (step.provenance?.sources.length ?? 0) > 0);
+  const recallFailed = autoRecall?.status === 'error';
+  const recallDenied = autoRecall?.status === 'denied';
+  const recallRunning = autoRecall?.status === 'running';
+  const recallChecked = autoRecall?.status === 'done' && !hasMemoryProvenance;
+  const anyRunning = steps.some(step => step.status === 'running')
+    || toolBlocks.some(tool => tool.status === 'running')
+    || recallRunning;
+  const executionTools = blocks.filter((block): block is ToolUseContentBlock => (
+    block.type === 'tool_use' && block.name !== 'auto_recall' && block.status !== 'denied'
+  ));
+  const failedTools = executionTools.filter(tool => tool.status === 'error').length;
+  const deniedTools = toolBlocks.filter(tool => tool.status === 'denied').length;
+  const preludeByToolId = new Map<string, string>();
+  const mergedStepIds = new Set<string>();
+  for (let i = 0; i < blocks.length - 1; i++) {
+    const step = blocks[i];
+    const next = blocks[i + 1];
+    if (
+      step?.type === 'step'
+      && next?.type === 'tool_use'
+      && next.name !== 'auto_recall'
+      && !isArtifactBlock(next)
+    ) {
+      preludeByToolId.set(next.id, step.description);
+      mergedStepIds.add(step.blockId);
+    }
+  }
+
+  const activityStepFrom = (step: StepContentBlock): ActivityStep => {
+    const sourceLabels = (step.provenance?.sources ?? [])
       .map(frameSourceLabel)
       .filter((l): l is string => !!l);
     // A memory-recall step carries provenance; on the ACTIVE turn it blooms honey
@@ -79,19 +276,92 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
     // just-happened signal, never a replay.
     const isRecall = sourceLabels.length > 0;
     return {
-      tone: s.status === 'running' ? 'honey' : 'intel',
-      text: s.description,
+      tone: step.status === 'running' ? 'honey' : 'intel',
+      text: step.description,
       ...(isRecall
         ? { provenance: { source: sourceLabels.join(' · ') }, bloom: isStreaming }
         : {}),
     };
-  });
+  };
+
+  const activitySteps: ActivityStep[] = [];
+  for (const block of blocks) {
+    if (block.type === 'step' && !mergedStepIds.has(block.blockId)) {
+      activitySteps.push(activityStepFrom(block));
+    } else if (block.type === 'tool_use' && block.name === 'auto_recall' && !hasMemoryProvenance) {
+      const noRelevantMemory = block.status === 'done'
+        && /no relevant memor|nothing relevant|0 memor/i.test(block.result ?? '');
+      activitySteps.push({
+        tone: block.status === 'running' ? 'honey' : block.status === 'done' ? 'neutral' : 'risk',
+        text: block.status === 'running'
+          ? 'Checking saved memory'
+          : block.status === 'done'
+            ? `Checked saved memory${noRelevantMemory ? ' · nothing relevant found' : ''}`
+            : block.status === 'denied'
+              ? 'Memory check was denied'
+              : "Couldn't check saved memory",
+      });
+    } else if (block.type === 'tool_use' && block.name !== 'auto_recall' && !isArtifactBlock(block)) {
+      activitySteps.push({
+        tone: block.status === 'running' ? 'honey' : block.status === 'done' ? 'healthy' : 'risk',
+        text: <ToolActivityDetails block={block} prelude={preludeByToolId.get(block.id)} />,
+      });
+    }
+  }
+  if (context && activitySteps.length > 0) {
+    const lastIndex = activitySteps.length - 1;
+    const last = activitySteps[lastIndex]!;
+    activitySteps[lastIndex] = {
+      ...last,
+      text: (
+        <span className="block">
+          <span className="block">{last.text}</span>
+          <span className="mt-2 block"><ContextEfficiencyDetails block={context} /></span>
+        </span>
+      ),
+    };
+  }
+
+  let summary = 'Activity';
+  if (anyRunning) {
+    const details = [recallRunning ? 'checking saved memory' : hasMemoryProvenance ? 'saved memory' : null, executionTools.length > 0
+      ? `${executionTools.length} tool${executionTools.length === 1 ? '' : 's'}`
+      : null].filter(Boolean).join(' · ');
+    summary = details ? `Working · ${details}` : 'Working';
+  } else {
+    const memorySummary = hasMemoryProvenance
+      ? 'Used saved memory'
+      : recallDenied
+        ? 'Memory check denied'
+        : recallFailed
+          ? 'Memory check failed'
+          : recallChecked
+            ? 'Checked saved memory'
+            : null;
+    let toolSummary = executionTools.length > 0
+      ? failedTools === executionTools.length
+      ? `${failedTools} tool${failedTools === 1 ? '' : 's'} failed`
+        : `${failedTools > 0 ? 'Ran' : 'Used'} ${executionTools.length} tool${executionTools.length === 1 ? '' : 's'}${failedTools > 0 ? ` · ${failedTools} failed` : ''}`
+      : deniedTools > 0
+        ? `${deniedTools} tool${deniedTools === 1 ? '' : 's'} denied`
+        : null;
+    if (toolSummary && executionTools.length > 0 && deniedTools > 0) {
+      toolSummary += ` · ${deniedTools} denied`;
+    }
+    if (memorySummary === 'Used saved memory' && toolSummary?.startsWith('Used ')) {
+      summary = `${memorySummary} + ${toolSummary.slice('Used '.length)}`;
+    } else {
+      summary = [memorySummary, toolSummary].filter(Boolean).join(' · ') || 'Activity';
+    }
+  }
+
   return (
     <ActivityStream
       key={key}
-      summary={anyRunning ? 'Working across your memory, web & files' : 'Worked across your memory, web & files'}
+      summary={summary}
       steps={activitySteps}
       defaultOpen={isStreaming || anyRunning}
+      busy={anyRunning}
       className="my-1.5"
     />
   );
@@ -99,20 +369,49 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
 
 const BlockRenderer = ({
   blocks, isStreaming, workspaceId, sessionId, onRetry,
-  onRouteProposalDispatched, onRouteProposalRePropose,
+  onRouteProposalDispatched, onRouteProposalRejected, onRouteProposalReject,
+  onRouteProposalDispatchingChange, onRouteProposalRePropose,
 }: BlockRendererProps) => {
   const out: ReactNode[] = [];
-  // F11: one Activity card per turn. Collect every step of the turn and render
-  // the single group at the FIRST step's position; skip the rest. Non-step
-  // blocks (tool rows, artifacts, text, model_switch, error) keep their order,
-  // so a tool_use between two steps no longer splits the run into two cards.
-  const allSteps = blocks.filter((b): b is StepContentBlock => b.type === 'step');
-  const firstStepIdx = blocks.findIndex(b => b.type === 'step');
   const capabilityProposals = trustedCapabilityProposals(blocks);
+  const hasVisibleActivity = blocks.some(block => (
+    block.type === 'step'
+    || (block.type === 'tool_use' && !isArtifactBlock(block))
+  ));
+  const firstActivityIdx = hasVisibleActivity
+    ? blocks.findIndex(block => (
+        block.type === 'step'
+        || (block.type === 'tool_use' && !isArtifactBlock(block))
+      ))
+    : -1;
 
   blocks.forEach((block, i) => {
-    if (block.type === 'step') {
-      if (i === firstStepIdx) out.push(renderStepGroup(allSteps, 'activity', !!isStreaming));
+    if (block.type === 'tool_context' && !hasVisibleActivity) {
+      out.push(
+        <div key={block.blockId} className="my-1.5 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2 text-[13px]">
+          <ContextEfficiencyDetails block={block} />
+        </div>,
+      );
+      return;
+    }
+    const belongsToActivity = block.type === 'step'
+      || block.type === 'tool_context'
+      || (block.type === 'tool_use' && !isArtifactBlock(block));
+    if (belongsToActivity) {
+      if (i === firstActivityIdx) out.push(renderActivityGroup(blocks, 'activity', !!isStreaming));
+      if (block.type === 'tool_use') {
+        const capabilityProposal = capabilityProposals.get(block.id);
+        if (capabilityProposal) {
+          out.push(
+            <CapabilityRequestCard
+              key={`${getBlockKey(block, i)}-capability`}
+              request={capabilityProposal}
+              workspaceId={workspaceId}
+              sessionId={sessionId}
+            />,
+          );
+        }
+      }
       return;
     }
     const key = getBlockKey(block, i);
@@ -129,17 +428,6 @@ const BlockRenderer = ({
             ? <ArtifactBlock key={key} block={block} />
             : <ToolUseBlock key={key} block={block} />,
         );
-        const capabilityProposal = capabilityProposals.get(block.id);
-        if (capabilityProposal) {
-          out.push(
-            <CapabilityRequestCard
-              key={`${key}-capability`}
-              request={capabilityProposal}
-              workspaceId={workspaceId}
-              sessionId={sessionId}
-            />,
-          );
-        }
         break;
       }
       case 'model_switch':
@@ -156,6 +444,15 @@ const BlockRenderer = ({
             proposal={block.proposal}
             onDispatched={onRouteProposalDispatched
               ? result => onRouteProposalDispatched(block.blockId, result)
+              : undefined}
+            onRejected={onRouteProposalRejected
+              ? () => onRouteProposalRejected(block.blockId)
+              : undefined}
+            onReject={onRouteProposalReject
+              ? () => onRouteProposalReject(block.blockId, block.proposal.routeDecisionId)
+              : undefined}
+            onDispatchingChange={onRouteProposalDispatchingChange
+              ? dispatching => onRouteProposalDispatchingChange(block.blockId, dispatching)
               : undefined}
             onRePropose={onRouteProposalRePropose
               ? (preferredExecutorId?: string) => onRouteProposalRePropose(block.blockId, preferredExecutorId)

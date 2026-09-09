@@ -187,6 +187,52 @@ describe('assertsUnverifiedCompletion', () => {
     )).toBe(false);
   });
 
+  it('does not turn a negated relative clause into a verified-completion claim', () => {
+    const response = [
+      'The workspace search returned no files.',
+      'These names are path metadata, not file contents I verified, and they do not constitute evidence about the project.',
+    ].join('\n');
+
+    expect(assertsUnverifiedCompletion(response, ['search_files'])).toBe(false);
+    expect(assertsUnverifiedCompletion(
+      'I verified everything works correctly.',
+      ['search_files'],
+    )).toBe(true);
+    expect(assertsUnverifiedCompletion(
+      'I did not run tests, but I verified everything works correctly.',
+      ['search_files'],
+    )).toBe(true);
+    expect(assertsUnverifiedCompletion(
+      'These are not files I verified. All tests pass.',
+      ['search_files'],
+    )).toBe(true);
+    for (const honestNegation of [
+      'This is not the actual source code I verified.',
+      'This is not the actual project evidence I verified.',
+    ]) {
+      expect(assertsUnverifiedCompletion(honestNegation, ['search_files']), honestNegation).toBe(false);
+    }
+    for (const unsupportedClaim of [
+      'That is not the only behavior I verified.',
+      'This is not just what I verified.',
+      'This is not all I have verified.',
+      'I did not run tests before I verified the change.',
+      'I did not inspect it before I verified the change.',
+      'This is not the code I verified works correctly.',
+      'This is not the result I verified passes.',
+      'This is not the actual evidence I verified proves the fix.',
+      'This is not the file I verified, which works correctly.',
+      'This is not the actual evidence I verified, proving the fix.',
+      'This is not the result I verified: passing on Windows.',
+      'This is not the source code I verified—functioning correctly in production.',
+      'These are not files I verified, and they do not fail; the fix is proven.',
+      'These are not results I verified, and they are not broken; the release is ready.',
+      'These names are not file contents I verified, and they do not merely look correct—they are proven.',
+    ]) {
+      expect(assertsUnverifiedCompletion(unsupportedClaim, ['search_files']), unsupportedClaim).toBe(true);
+    }
+  });
+
   it('ignores trivially short content', () => {
     expect(assertsUnverifiedCompletion('', [])).toBe(false);
     expect(assertsUnverifiedCompletion('ok', [])).toBe(false);

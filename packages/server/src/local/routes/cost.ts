@@ -22,11 +22,9 @@ interface UsageEntryLike {
   output: number;
   timestamp: string;
   workspaceId?: string;
+  billingClass?: 'priced' | 'free';
+  fixedCostUsd?: number;
 }
-
-/** Default Sonnet pricing for fallback cost estimation (per 1K tokens). */
-const FALLBACK_INPUT_PER_1K = 0.003;
-const FALLBACK_OUTPUT_PER_1K = 0.015;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -55,11 +53,6 @@ function filterByDays(entries: UsageEntryLike[], days: number): UsageEntryLike[]
   return entries.filter(e => new Date(e.timestamp) >= cutoff);
 }
 
-/** Estimate cost for a single usage entry using fallback Sonnet pricing. */
-function estimateCost(input: number, output: number): number {
-  return (input / 1000) * FALLBACK_INPUT_PER_1K + (output / 1000) * FALLBACK_OUTPUT_PER_1K;
-}
-
 // ── Route Plugin ─────────────────────────────────────────────────────────
 
 export const costRoutes: FastifyPluginAsync = async (server) => {
@@ -83,15 +76,9 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
     return [];
   }
 
-  /**
-   * Calculate cost, preferring CostTracker.calculateCost if available,
-   * otherwise falling back to Sonnet pricing.
-   */
-  function calcCost(input: number, output: number, model: string): number {
-    if (typeof costTracker.calculateCost === 'function') {
-      return costTracker.calculateCost(input, output, model);
-    }
-    return estimateCost(input, output);
+  /** Calculate cost with the same billing policy used by the spend ledger. */
+  function calcCost(entry: UsageEntryLike): number {
+    return costTracker.calculateUsageCost(entry);
   }
 
   // GET /api/cost/summary — total tokens, estimated cost, daily breakdown.
@@ -112,7 +99,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
     for (const e of todayEntries) {
       todayInput += e.input;
       todayOutput += e.output;
-      todayCost += calcCost(e.input, e.output, e.model);
+      todayCost += calcCost(e);
     }
     if (!costTracker.hasDailyCarryover(todayStr)) {
       try {
@@ -143,7 +130,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
       if (bucket) {
         bucket.input += e.input;
         bucket.output += e.output;
-        bucket.cost += calcCost(e.input, e.output, e.model);
+        bucket.cost += calcCost(e);
         bucket.turns += 1;
       }
     }
@@ -163,7 +150,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
     for (const e of weekEntries) {
       weekInput += e.input;
       weekOutput += e.output;
-      weekCost += calcCost(e.input, e.output, e.model);
+      weekCost += calcCost(e);
     }
 
     // Budget alert (read from settings if available)
@@ -241,7 +228,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
       const bucket = byWorkspace.get(wsId)!;
       bucket.input += e.input;
       bucket.output += e.output;
-      bucket.cost += calcCost(e.input, e.output, e.model);
+      bucket.cost += calcCost(e);
       bucket.turns += 1;
     }
 

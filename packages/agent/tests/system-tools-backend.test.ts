@@ -6,7 +6,13 @@
  * signature keeps working for callers that haven't migrated.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { createPdfTools } from '../src/pdf-tools.js';
 import { createSystemTools, type FileBackend, type SystemToolDeps } from '../src/system-tools.js';
 import type { ToolDefinition } from '../src/tools.js';
 
@@ -32,6 +38,9 @@ class InMemoryBackend implements FileBackend {
   // Seeding helper — tests pre-populate with string content.
   seed(filePath: string, content: string): void {
     this.files.set(this.normalize(filePath), Buffer.from(content, 'utf-8'));
+  }
+  seedBuffer(filePath: string, content: Buffer): void {
+    this.files.set(this.normalize(filePath), content);
   }
   dump(filePath: string): string | null {
     const buf = this.files.get(this.normalize(filePath));
@@ -90,10 +99,45 @@ describe('createSystemTools — FileBackend routing (L-18)', () => {
       expect(out).toMatch(/not found/i);
     });
 
-    it('PDF files return a backend-specific placeholder', async () => {
-      backend.seed('/doc.pdf', 'not actually a pdf');
-      const out = await toolsByName.get('read_file')!.execute({ path: '/doc.pdf' });
-      expect(out).toContain('backend-routed read does not yet extract PDF');
+    it('extracts DOCX, PPTX, and XLSX text from backend buffers', async () => {
+      const docx = new JSZip();
+      docx.file('word/document.xml', '<w:document><w:body><w:p><w:r><w:t>Launch brief content</w:t></w:r></w:p></w:body></w:document>');
+      backend.seedBuffer('/brief.docx', await docx.generateAsync({ type: 'nodebuffer' }));
+
+      const pptx = new JSZip();
+      pptx.file('ppt/slides/slide1.xml', '<p:sld><a:t>Readiness review</a:t><a:t>All gates green</a:t></p:sld>');
+      backend.seedBuffer('/review.pptx', await pptx.generateAsync({ type: 'nodebuffer' }));
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Scorecard');
+      sheet.addRow(['Gate', 'Score']);
+      sheet.addRow(['Usability', 97]);
+      backend.seedBuffer('/scorecard.xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+
+      await expect(toolsByName.get('read_file')!.execute({ path: '/brief.docx' }))
+        .resolves.toContain('Launch brief content');
+      await expect(toolsByName.get('read_file')!.execute({ path: '/review.pptx' }))
+        .resolves.toContain('All gates green');
+      await expect(toolsByName.get('read_file')!.execute({ path: '/scorecard.xlsx' }))
+        .resolves.toContain('Usability,97');
+    });
+
+    it('extracts PDF text from a backend buffer', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-backend-pdf-'));
+      try {
+        const generated = await createPdfTools(tmpDir)[0].execute({
+          filePath: 'summary.pdf',
+          title: 'Readiness Summary',
+          content: 'Verified PDF body',
+        });
+        expect(generated).toContain('Successfully generated');
+        backend.seedBuffer('/summary.pdf', fs.readFileSync(path.join(tmpDir, 'summary.pdf')));
+
+        const out = await toolsByName.get('read_file')!.execute({ path: '/summary.pdf' });
+        expect(out).toContain('Verified PDF body');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
   });
 

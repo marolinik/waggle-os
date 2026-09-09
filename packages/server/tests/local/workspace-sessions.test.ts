@@ -119,6 +119,24 @@ describe('WorkspaceSessionManager', () => {
     expect(manager.has('ws-2')).toBe(true);
   });
 
+  it('does not close a backdated session while activity is leased', () => {
+    const manager = new WorkspaceSessionManager(3);
+    const session = manager.create(
+      'ws-1', createMockMind(), createMockOrchestrator(), createMockTools(),
+    );
+    const activity = manager.acquireActivity('ws-1');
+    expect(activity).toBeDefined();
+    session.lastActivity = Date.now() - 60_000;
+
+    expect(manager.closeIdleSessions(30_000)).toBe(0);
+    expect(manager.has('ws-1')).toBe(true);
+
+    activity!.release();
+    session.lastActivity = Date.now() - 60_000;
+    expect(manager.closeIdleSessions(30_000)).toBe(1);
+    expect(manager.has('ws-1')).toBe(false);
+  });
+
   it('each session has independent abortController', () => {
     const manager = new WorkspaceSessionManager(3);
     const s1 = manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
@@ -244,6 +262,238 @@ describe('WorkspaceSessionManager', () => {
       manager.resume('ws-1');
       manager.addTokens('ws-1', 200);
       expect(manager.get('ws-1')!.tokensUsed).toBe(500);
+    });
+  });
+
+  describe('resident session pressure', () => {
+    it('releases the oldest idle session before acquiring a replacement mind', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        const order: string[] = [];
+
+        for (let i = 0; i < 20; i += 1) {
+          vi.setSystemTime(1_700_000_000_000 + i);
+          manager.create(
+            `ws-${i}`,
+            createMockMind(),
+            createMockOrchestrator(),
+            createMockTools(),
+            undefined,
+            () => order.push(`release-${i}`),
+          );
+        }
+
+        manager.getOrCreate(
+          'replacement',
+          () => {
+            order.push('acquire-replacement');
+            return createMockMind();
+          },
+          () => createMockOrchestrator(),
+          () => createMockTools(),
+          undefined,
+          () => order.push('release-replacement'),
+        );
+
+        expect(order.slice(0, 2)).toEqual(['release-0', 'acquire-replacement']);
+        expect(manager.size).toBe(20);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('trims sequential idle sessions to the 20-mind cache budget', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        const releases = Array.from({ length: 21 }, () => vi.fn());
+
+        for (let i = 0; i < 21; i += 1) {
+          vi.setSystemTime(1_700_000_000_000 + i);
+          manager.create(
+            `ws-${i}`,
+            createMockMind(),
+            createMockOrchestrator(),
+            createMockTools(),
+            undefined,
+            releases[i],
+          );
+        }
+
+        expect(manager.size).toBe(20);
+        expect(manager.has('ws-0')).toBe(false);
+        expect(releases[0]).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('never evicts a resident session to bypass the configured session cap', () => {
+      const manager = new WorkspaceSessionManager(20);
+      for (let i = 0; i < 20; i += 1) {
+        manager.create(`ws-${i}`, createMockMind(), createMockOrchestrator(), createMockTools());
+      }
+
+      expect(() => manager.create(
+        'over-cap', createMockMind(), createMockOrchestrator(), createMockTools(),
+      )).toThrow('Max concurrent sessions reached (20)');
+      expect(manager.size).toBe(20);
+      expect(manager.has('ws-0')).toBe(true);
+
+      manager.setMaxSessions(10);
+      expect(() => manager.create(
+        'still-over-cap', createMockMind(), createMockOrchestrator(), createMockTools(),
+      )).toThrow('Max concurrent sessions reached (10)');
+      expect(manager.size).toBe(20);
+      expect(manager.has('ws-0')).toBe(true);
+    });
+
+    it('preserves an in-flight session while trimming the oldest idle session', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        const releaseBusyPin = vi.fn();
+
+        vi.setSystemTime(1_700_000_000_000);
+        manager.create(
+          'busy',
+          createMockMind(),
+          createMockOrchestrator(),
+          createMockTools(),
+          undefined,
+          releaseBusyPin,
+        );
+        const busyActivity = manager.acquireActivity('busy');
+        expect(busyActivity).toBeDefined();
+
+        const idleReleases = Array.from({ length: 20 }, () => vi.fn());
+        for (let i = 0; i < 20; i += 1) {
+          vi.setSystemTime(1_700_000_001_000 + i);
+          manager.create(
+            `idle-${i}`,
+            createMockMind(),
+            createMockOrchestrator(),
+            createMockTools(),
+            undefined,
+            idleReleases[i],
+          );
+        }
+
+        expect(manager.size).toBe(20);
+        expect(manager.has('busy')).toBe(true);
+        expect(releaseBusyPin).not.toHaveBeenCalled();
+        expect(manager.has('idle-0')).toBe(false);
+        expect(idleReleases[0]).toHaveBeenCalledTimes(1);
+
+        busyActivity!.release();
+        manager.closeAll();
+        expect(releaseBusyPin).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('defers teardown until the exact retired session generation becomes idle', () => {
+      const manager = new WorkspaceSessionManager(100);
+      const oldRelease = vi.fn();
+      const newRelease = vi.fn();
+      const oldSession = manager.create(
+        'same-id',
+        createMockMind(),
+        createMockOrchestrator(),
+        createMockTools(),
+        undefined,
+        oldRelease,
+      );
+      const oldActivity = manager.acquireActivity('same-id');
+      const secondOldActivity = manager.acquireActivity('same-id');
+      expect(oldActivity?.session).toBe(oldSession);
+      expect(secondOldActivity?.session).toBe(oldSession);
+
+      expect(manager.close('same-id')).toBe(true);
+      expect(oldSession.abortController.signal.aborted).toBe(true);
+      expect(oldRelease).not.toHaveBeenCalled();
+
+      const replacement = manager.create(
+        'same-id',
+        createMockMind(),
+        createMockOrchestrator(),
+        createMockTools(),
+        undefined,
+        newRelease,
+      );
+      const replacementActivity = manager.acquireActivity('same-id');
+      expect(replacementActivity?.session).toBe(replacement);
+      oldActivity!.release();
+      oldActivity!.release();
+
+      expect(oldRelease).not.toHaveBeenCalled();
+      expect(manager.get('same-id')).toBe(replacement);
+      expect(newRelease).not.toHaveBeenCalled();
+
+      secondOldActivity!.release();
+      expect(oldRelease).toHaveBeenCalledTimes(1);
+
+      expect(manager.close('same-id')).toBe(true);
+      expect(newRelease).not.toHaveBeenCalled();
+      replacementActivity!.release();
+      expect(newRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed when activity is requested for a paused session', () => {
+      const manager = new WorkspaceSessionManager(100);
+      manager.create('paused', createMockMind(), createMockOrchestrator(), createMockTools());
+      expect(manager.pause('paused')).toBe(true);
+      expect(manager.acquireActivity('paused')).toBeUndefined();
+    });
+
+    it('preserves a paused session under pressure and trims an idle active session', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        vi.setSystemTime(1_700_000_000_000);
+        manager.create('paused', createMockMind(), createMockOrchestrator(), createMockTools());
+        manager.pause('paused');
+
+        for (let i = 0; i < 20; i += 1) {
+          vi.setSystemTime(1_700_000_001_000 + i);
+          manager.create(`idle-${i}`, createMockMind(), createMockOrchestrator(), createMockTools());
+        }
+
+        expect(manager.size).toBe(20);
+        expect(manager.has('paused')).toBe(true);
+        expect(manager.has('idle-0')).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('temporarily exceeds the resident budget when every session is in flight and converges on release', () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new WorkspaceSessionManager(100);
+        const activities = [];
+
+        for (let i = 0; i < 20; i += 1) {
+          vi.setSystemTime(1_700_000_000_000 + i);
+          manager.create(`busy-${i}`, createMockMind(), createMockOrchestrator(), createMockTools());
+          activities.push(manager.acquireActivity(`busy-${i}`)!);
+        }
+        manager.create('overflow', createMockMind(), createMockOrchestrator(), createMockTools());
+        const overflowActivity = manager.acquireActivity('overflow')!;
+
+        expect(manager.size).toBe(21);
+        activities[0].release();
+        expect(manager.size).toBe(20);
+        expect(manager.has('busy-0')).toBe(false);
+
+        for (const activity of activities.slice(1)) activity.release();
+        overflowActivity.release();
+        manager.closeAll();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

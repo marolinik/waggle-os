@@ -4,6 +4,7 @@ import type { AgentPersona } from '../src/personas.js';
 import type { TaskShape } from '../src/task-shape.js';
 import type { ContextFrames } from '../src/orchestrator.js';
 import {
+  CLOSED_WORLD_REWRITE_CONTRACT,
   PromptAssembler,
   type AssembleInput,
   type RecalledMemory,
@@ -241,6 +242,9 @@ describe('PromptAssembler.assemble', () => {
     expect(out.system).not.toContain('Shipping now is safe.');
     expect(out.system).toContain('# Closed-world rewrite');
     expect(out.system).toContain('Do not add implications, explanations, rationale, risks');
+    expect(CLOSED_WORLD_REWRITE_CONTRACT).toMatch(/delete every sentence[^\n]+not entailed/i);
+    expect(CLOSED_WORLD_REWRITE_CONTRACT).toMatch(/end immediately after the final entailed sentence/i);
+    expect(CLOSED_WORLD_REWRITE_CONTRACT).toMatch(/recommendation[^\n]+final sentence/i);
     expect(out.debug.sectionsIncluded.at(-1)).toBe('Closed-world rewrite');
   });
 

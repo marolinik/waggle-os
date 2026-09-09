@@ -137,10 +137,68 @@ let cacheRaw: string | null = null;
 let cache: Record<string, ChatWidgetEntry> | null = null;
 
 const listeners = new Set<() => void>();
+const autonomySnapshotters = new Map<string, () => void>();
+const autonomyDefaultChangeListeners = new Set<() => void>();
+let autonomyDefaultChangePending = false;
 
 function subscribeChatState(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
+}
+
+/** Register a mounted chat that must be snapshotted before a global default changes. */
+export function subscribeChatAutonomySnapshot(workspaceId: string, snapshot: () => void): () => void {
+  autonomySnapshotters.set(workspaceId, snapshot);
+  return () => {
+    if (autonomySnapshotters.get(workspaceId) === snapshot) {
+      autonomySnapshotters.delete(workspaceId);
+    }
+  };
+}
+
+/** Synchronously flush all mounted chat snapshots before the settings write starts. */
+export function prepareChatAutonomyDefaultChange(): void {
+  autonomySnapshotters.forEach(snapshot => snapshot());
+}
+
+export function subscribeChatAutonomyDefaultChange(listener: () => void): () => void {
+  autonomyDefaultChangeListeners.add(listener);
+  return () => { autonomyDefaultChangeListeners.delete(listener); };
+}
+
+export function getChatAutonomyDefaultChangePending(): boolean {
+  return autonomyDefaultChangePending;
+}
+
+export function hasChatAutonomySnapshot(workspaceId: string): boolean {
+  return autonomySnapshotters.has(workspaceId);
+}
+
+/**
+ * Freeze first-time chat creation while an elevated default is being saved.
+ * Existing chats are snapshotted synchronously before the server request.
+ */
+export function beginChatAutonomyDefaultChange(): () => void {
+  if (autonomyDefaultChangePending) {
+    throw new Error('An autonomy default change is already pending');
+  }
+  autonomyDefaultChangePending = true;
+  autonomyDefaultChangeListeners.forEach(listener => listener());
+  try {
+    prepareChatAutonomyDefaultChange();
+  } catch (error) {
+    autonomyDefaultChangePending = false;
+    autonomyDefaultChangeListeners.forEach(listener => listener());
+    throw error;
+  }
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    autonomyDefaultChangePending = false;
+    autonomyDefaultChangeListeners.forEach(listener => listener());
+  };
 }
 
 export function loadChatEntries(): Record<string, ChatWidgetEntry> {
@@ -170,6 +228,31 @@ function persistChatEntries(chats: Record<string, ChatWidgetEntry>): void {
 export function writeChatEntry(workspaceId: string, patch: Partial<ChatWidgetEntry>): void {
   const chats = loadChatEntries();
   persistChatEntries({ ...chats, [workspaceId]: { ...chats[workspaceId], ...patch } });
+}
+
+/** Persist and verify an autonomy marker that must survive an immediate process exit. */
+export function persistChatAutonomySnapshot(workspaceId: string, level: AutonomyLevel): boolean {
+  try {
+    const active = loadChatEntries()[workspaceId];
+    const snapshotLevel = active?.autonomyLevel ?? level;
+    const snapshotExpiresAt = active?.autonomyLevel === undefined
+      ? null
+      : (active.autonomyExpiresAt ?? null);
+    const durableBefore = parseChatState(window.localStorage.getItem(CHAT_STATE_KEY));
+    if (
+      durableBefore[workspaceId]?.autonomyLevel === snapshotLevel
+      && (durableBefore[workspaceId]?.autonomyExpiresAt ?? null) === snapshotExpiresAt
+    ) return true;
+    writeChatEntry(workspaceId, {
+      autonomyLevel: snapshotLevel,
+      autonomyExpiresAt: snapshotExpiresAt,
+    });
+    const durableAfter = parseChatState(window.localStorage.getItem(CHAT_STATE_KEY));
+    return durableAfter[workspaceId]?.autonomyLevel === snapshotLevel
+      && (durableAfter[workspaceId]?.autonomyExpiresAt ?? null) === snapshotExpiresAt;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -217,6 +300,266 @@ export function takeChatSeed(workspaceId: string): ChatSeed | undefined {
   return seed;
 }
 
+// ── Reliable per-workspace new-session intent ─────────────────────────────
+
+export interface NewChatSessionIntent {
+  id: string;
+  initialMessage?: string;
+}
+
+const pendingNewChatSessions = new Map<string, NewChatSessionIntent>();
+const inFlightNewChatSessions = new Map<string, NewChatSessionIntent>();
+const newChatSessionListeners = new Map<string, Set<() => void>>();
+let newChatSessionSequence = 0;
+
+function notifyNewChatSessionListeners(workspaceId: string): void {
+  newChatSessionListeners.get(workspaceId)?.forEach(listener => listener());
+}
+
+function assertNewChatWorkspace(workspaceId: string): void {
+  if (!workspaceId || workspaceId === 'local-default') {
+    throw new Error('A real workspaceId is required for a new chat session');
+  }
+}
+
+/** Stage one coalesced new-session request until the workspace chat can consume it. */
+export function requestNewChatSession(workspaceId: string, initialMessage?: string): NewChatSessionIntent {
+  assertNewChatWorkspace(workspaceId);
+  const existing = pendingNewChatSessions.get(workspaceId)
+    ?? inFlightNewChatSessions.get(workspaceId);
+  if (existing) return existing;
+
+  const intent = {
+    id: globalThis.crypto?.randomUUID?.()
+      ?? `new-chat-session-${Date.now()}-${++newChatSessionSequence}`,
+    ...(initialMessage !== undefined
+      ? { initialMessage: normalizeChatDispatchContent(initialMessage) }
+      : {}),
+  };
+  pendingNewChatSessions.set(workspaceId, intent);
+  notifyNewChatSessionListeners(workspaceId);
+  return intent;
+}
+
+function peekPendingNewChatSession(workspaceId: string): NewChatSessionIntent | null {
+  return pendingNewChatSessions.get(workspaceId) ?? null;
+}
+
+/** Atomically claim the exact pending request; StrictMode duplicate effects fail closed. */
+export function claimNewChatSessionIntent(workspaceId: string, intentId: string): boolean {
+  const intent = pendingNewChatSessions.get(workspaceId);
+  if (!intent || intent.id !== intentId) return false;
+  pendingNewChatSessions.delete(workspaceId);
+  inFlightNewChatSessions.set(workspaceId, intent);
+  notifyNewChatSessionListeners(workspaceId);
+  return true;
+}
+
+/** Complete only the exact in-flight request, allowing a later explicit shortcut. */
+export function completeNewChatSessionIntent(workspaceId: string, intentId: string): boolean {
+  const intent = inFlightNewChatSessions.get(workspaceId);
+  if (!intent || intent.id !== intentId) return false;
+  inFlightNewChatSessions.delete(workspaceId);
+  notifyNewChatSessionListeners(workspaceId);
+  return true;
+}
+
+/** Reactive pending request for one kept-alive workspace chat. */
+export function usePendingNewChatSessionIntent(workspaceId: string): NewChatSessionIntent | null {
+  const subscribe = useCallback((listener: () => void) => {
+    let listeners = newChatSessionListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      newChatSessionListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) newChatSessionListeners.delete(workspaceId);
+    };
+  }, [workspaceId]);
+  const getSnapshot = useCallback(() => peekPendingNewChatSession(workspaceId), [workspaceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+// ── Repeatable imperative chat dispatch API ───────────────────────────────
+
+export interface ChatDispatchRequest {
+  id: string;
+  content: string;
+  targetSessionId?: string;
+}
+
+const pendingDispatches = new Map<string, readonly ChatDispatchRequest[]>();
+const dispatchListeners = new Map<string, Set<() => void>>();
+const workspaceSelectionDispatchListeners = new Set<() => void>();
+let pendingWorkspaceSelectionDispatch: ChatDispatchRequest | null = null;
+let dispatchSequence = 0;
+let pendingDispatchCount = 0;
+
+export const MAX_CHAT_DISPATCH_CONTENT_CHARS = 50_000;
+export const MAX_CHAT_DISPATCHES_PER_WORKSPACE = 20;
+export const MAX_CHAT_DISPATCHES_TOTAL = 100;
+
+function notifyDispatchListeners(workspaceId: string): void {
+  dispatchListeners.get(workspaceId)?.forEach(listener => listener());
+}
+
+function normalizeChatDispatchContent(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error('Chat dispatch content is required');
+  if (trimmed.length > MAX_CHAT_DISPATCH_CONTENT_CHARS) {
+    throw new Error(`Chat dispatch content exceeds ${MAX_CHAT_DISPATCH_CONTENT_CHARS} characters`);
+  }
+  return trimmed;
+}
+
+function createChatDispatchRequest(content: string, targetSessionId?: string): ChatDispatchRequest {
+  return {
+    id: globalThis.crypto?.randomUUID?.()
+      ?? `chat-dispatch-${Date.now()}-${++dispatchSequence}`,
+    content,
+    ...(targetSessionId ? { targetSessionId } : {}),
+  };
+}
+
+/** Queue a transient prompt for the named workspace without persisting user content. */
+export function enqueueChatDispatch(
+  workspaceId: string,
+  content: string,
+  targetSessionId?: string,
+): ChatDispatchRequest {
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const trimmed = normalizeChatDispatchContent(content);
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  if (pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
+    throw new Error('Chat dispatch queue is full');
+  }
+  const request = createChatDispatchRequest(trimmed, targetSessionId);
+  pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
+  pendingDispatchCount += 1;
+  notifyDispatchListeners(workspaceId);
+  return request;
+}
+
+/** Non-destructive FIFO head read used by ChatHost and deterministic tests. */
+export function peekChatDispatch(workspaceId: string): ChatDispatchRequest | null {
+  return pendingDispatches.get(workspaceId)?.[0] ?? null;
+}
+
+/** Remove only the current FIFO head for the exact workspace and request id. */
+export function acknowledgeChatDispatch(workspaceId: string, dispatchId: string): boolean {
+  const queue = pendingDispatches.get(workspaceId);
+  if (!queue?.length || queue[0].id !== dispatchId) return false;
+  const rest = queue.slice(1);
+  if (rest.length) pendingDispatches.set(workspaceId, rest);
+  else pendingDispatches.delete(workspaceId);
+  pendingDispatchCount -= 1;
+  notifyDispatchListeners(workspaceId);
+  return true;
+}
+
+/** Reactive FIFO head for a kept-alive workspace chat. */
+export function usePendingChatDispatch(workspaceId: string): ChatDispatchRequest | null {
+  const subscribe = useCallback((listener: () => void) => {
+    let listeners = dispatchListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      dispatchListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) dispatchListeners.delete(workspaceId);
+    };
+  }, [workspaceId]);
+  const getSnapshot = useCallback(() => peekChatDispatch(workspaceId), [workspaceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/** Stage one transient prompt until the user chooses its destination workspace. */
+export function stageWorkspaceSelectionChatDispatch(content: string): ChatDispatchRequest {
+  const trimmed = normalizeChatDispatchContent(content);
+  if (pendingWorkspaceSelectionDispatch?.content === trimmed) {
+    return pendingWorkspaceSelectionDispatch;
+  }
+  if (!pendingWorkspaceSelectionDispatch && pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
+    throw new Error('Chat dispatch queue is full');
+  }
+  const request = createChatDispatchRequest(trimmed);
+  if (!pendingWorkspaceSelectionDispatch) pendingDispatchCount += 1;
+  pendingWorkspaceSelectionDispatch = request;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  return request;
+}
+
+export function peekWorkspaceSelectionChatDispatch(): ChatDispatchRequest | null {
+  return pendingWorkspaceSelectionDispatch;
+}
+
+/** Cancel only the expected pending chooser intent; omission cancels any pending intent. */
+export function cancelWorkspaceSelectionChatDispatch(dispatchId?: string): boolean {
+  if (!pendingWorkspaceSelectionDispatch) return false;
+  if (dispatchId && pendingWorkspaceSelectionDispatch.id !== dispatchId) return false;
+  pendingWorkspaceSelectionDispatch = null;
+  pendingDispatchCount -= 1;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  return true;
+}
+
+/** Atomically move the expected chooser intent into the selected workspace FIFO. */
+export function transferWorkspaceSelectionChatDispatch(
+  workspaceId: string,
+  dispatchId: string,
+): ChatDispatchRequest | null {
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const request = pendingWorkspaceSelectionDispatch;
+  if (!request || request.id !== dispatchId) return null;
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
+  pendingWorkspaceSelectionDispatch = null;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  notifyDispatchListeners(workspaceId);
+  return request;
+}
+
+/**
+ * Run a synchronous route transition only after transfer is known to fit,
+ * then atomically move the chooser intent. A thrown transition leaves the
+ * staged request untouched for an explicit retry.
+ */
+export function completeWorkspaceSelectionChatDispatch(
+  workspaceId: string,
+  dispatchId: string,
+  beforeTransfer: () => void,
+): ChatDispatchRequest | null {
+  const request = pendingWorkspaceSelectionDispatch;
+  if (!request || request.id !== dispatchId) return null;
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  beforeTransfer();
+  return transferWorkspaceSelectionChatDispatch(workspaceId, dispatchId);
+}
+
+/** Reactive pending chooser intent for the shell's workspace-selection flow. */
+export function useWorkspaceSelectionChatDispatch(): ChatDispatchRequest | null {
+  const subscribe = useCallback((listener: () => void) => {
+    workspaceSelectionDispatchListeners.add(listener);
+    return () => { workspaceSelectionDispatchListeners.delete(listener); };
+  }, []);
+  const getSnapshot = useCallback(() => peekWorkspaceSelectionChatDispatch(), []);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
 // ── The hook ──────────────────────────────────────────────────────────────
 
 export interface UseChatWidgetStateOptions {
@@ -232,12 +575,18 @@ export interface UseChatWidgetStateOptions {
    * explicit autonomyLevel:'normal' marker so they never retro-inherit).
    */
   defaultAutonomy?: AutonomyLevel;
+  /**
+   * The caller has resolved the authoritative default. When true, even a
+   * normal default is persisted as the workspace's one-time inheritance
+   * snapshot so a later global change cannot elevate an existing chat.
+   */
+  persistNormalDefault?: boolean;
 }
 
 const EMPTY_ENTRY: ChatWidgetEntry = {};
 
 export function useChatWidgetState(workspaceId: string, opts: UseChatWidgetStateOptions = {}) {
-  const { defaultAutonomy = 'normal' } = opts;
+  const { defaultAutonomy = 'normal', persistNormalDefault = false } = opts;
   const chats = useSyncExternalStore(subscribeChatState, loadChatEntries);
   const entry = chats[workspaceId] ?? EMPTY_ENTRY;
 
@@ -252,10 +601,10 @@ export function useChatWidgetState(workspaceId: string, opts: UseChatWidgetState
   // arrives; the autonomy-exists guard keeps that late stamp from overriding
   // migrated or user-set state.
   useEffect(() => {
-    if (defaultAutonomy === 'normal') return;
+    if (defaultAutonomy === 'normal' && !persistNormalDefault) return;
     if (loadChatEntries()[workspaceId]?.autonomyLevel !== undefined) return;
     writeChatEntry(workspaceId, { autonomyLevel: defaultAutonomy, autonomyExpiresAt: null });
-  }, [workspaceId, defaultAutonomy]);
+  }, [workspaceId, defaultAutonomy, persistNormalDefault]);
 
   /**
    * Phase A.2 (relocated verbatim from setWindowPersona,

@@ -41,7 +41,7 @@ const DreamDiaryCard = () => {
     let alive = true;
     const load = async (): Promise<DreamDayView[]> => {
       try {
-        const res = await fetch(`${adapter.getServerUrl()}/api/dreams?days=7`);
+        const res = await adapter.fetch('/api/dreams?days=7');
         if (!res.ok) return [];
         const body = await res.json() as DreamDayView[];
         if (alive) setDreams(body);

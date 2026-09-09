@@ -19,7 +19,7 @@ const passingScore: ReceiptScore = {
 
 function artifact(personaId: string, repeat: number, overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     runId: 'paid-run-1',
     source: {
       gitRevision: 'da25b5097e8f735608d2ad1204ce89048008cec3',
@@ -32,8 +32,8 @@ function artifact(personaId: string, repeat: number, overrides: Record<string, u
       tokenStreamExact: 'Answer',
       renderedAssistantExact: 'Answer',
       visibleAssistantTextExact: 'Answer',
-      expectedCodeSegmentsExact: [],
-      visibleCodeSegmentsExact: [],
+      expectedCodeSegmentsExact: [] as string[],
+      visibleCodeSegmentsExact: [] as string[],
       persistedExact: 'Answer',
       persistedPromptExact: 'Prompt',
       persistedSessionId: `session-${repeat}`,
@@ -42,6 +42,7 @@ function artifact(personaId: string, repeat: number, overrides: Record<string, u
       httpStatus: 200,
       durationMs: 10,
       model: 'openrouter/anthropic/claude-sonnet-5',
+      billingClass: 'priced',
       estimatedCostUsd: 0.010001,
       tokens: { input: 10, output: 10 },
       toolsUsed: [],
@@ -50,6 +51,7 @@ function artifact(personaId: string, repeat: number, overrides: Record<string, u
         data: {
           content: 'Answer',
           model: 'openrouter/anthropic/claude-sonnet-5',
+          billingClass: 'priced',
           cost: 0.010001,
         },
       }],
@@ -61,6 +63,7 @@ function artifact(personaId: string, repeat: number, overrides: Record<string, u
       llmHealthy: true,
       expectedProvider: 'anthropic-proxy',
       expectedDetail: 'credential verified',
+      expectedBillingClass: 'priced',
       health: { llm: { provider: 'anthropic-proxy', health: 'healthy', detail: 'OpenRouter credential verified' } },
     },
     workspace: { workspaceId: `workspace-${repeat}`, personaPersisted: true },
@@ -94,12 +97,32 @@ function manifest(artifactPath: string): PersonaAcceptanceSealManifest {
     repeats: 1,
     expectedProvider: 'anthropic-proxy',
     expectedDetail: 'credential verified',
+    expectedBillingClass: 'priced',
     allowedModels: ['openrouter/anthropic/claude-sonnet-5'],
     receipts: [{ artifactPath }],
     diagnosticCostLedger: [
       { id: 'diagnostic', amountUsd: '0.000009', evidence: 'provider usage export diagnostic-1' },
     ],
   };
+}
+
+function freeReceipt() {
+  const model = 'openai-compatible/qwen3.8-flash-next';
+  const value = artifact('general-purpose', 1);
+  value.response.model = model;
+  value.response.billingClass = 'free';
+  value.response.estimatedCostUsd = 0;
+  value.response.sseEvents[0].data.model = model;
+  value.response.sseEvents[0].data.billingClass = 'free';
+  value.response.sseEvents[0].data.cost = 0;
+  value.runtime.expectedDetail = 'openai-compatible endpoint verified';
+  value.runtime.expectedBillingClass = 'free';
+  value.runtime.health.llm.detail = 'Built-in provider proxy; openai-compatible endpoint verified';
+  const receiptManifest = manifest('');
+  receiptManifest.expectedBillingClass = 'free';
+  receiptManifest.expectedDetail = 'openai-compatible endpoint verified';
+  receiptManifest.allowedModels = [model];
+  return { model, value, receiptManifest };
 }
 
 const options = {
@@ -113,7 +136,97 @@ const options = {
 };
 
 describe('persona acceptance seal', () => {
-  it('maps persisted schema-7 Python validation into a Data Engineer rescore', () => {
+  it('seals an explicitly free keyless-compatible receipt with exact zero cost', () => {
+    const { model, value, receiptManifest } = freeReceipt();
+    receiptManifest.receipts = [{ artifactPath: writeArtifact(value) }];
+
+    const seal = buildPersonaAcceptanceSeal(receiptManifest, options);
+
+    expect(seal.status).toBe('ready');
+    expect(seal.acceptedEstimatedCostUsd).toBe('0.000000');
+    expect(seal.receipts[0]).toMatchObject({
+      model,
+      billingClass: 'free',
+      estimatedCostUsd: '0.000000',
+    });
+  });
+
+  it.each([
+    ['stale schema version', (value: ReturnType<typeof artifact>) => {
+      value.schemaVersion = 7;
+    }],
+    ['missing response billing class', (value: ReturnType<typeof artifact>) => {
+      delete (value.response as Record<string, unknown>).billingClass;
+    }],
+    ['unknown response billing class', (value: ReturnType<typeof artifact>) => {
+      (value.response as Record<string, unknown>).billingClass = 'unknown';
+    }],
+    ['mismatched done billing class', (value: ReturnType<typeof artifact>) => {
+      value.response.sseEvents[0].data.billingClass = 'free';
+    }],
+    ['missing done billing class', (value: ReturnType<typeof artifact>) => {
+      delete (value.response.sseEvents[0].data as Record<string, unknown>).billingClass;
+    }],
+    ['unknown done billing class', (value: ReturnType<typeof artifact>) => {
+      (value.response.sseEvents[0].data as Record<string, unknown>).billingClass = 'unknown';
+    }],
+    ['missing runtime billing expectation', (value: ReturnType<typeof artifact>) => {
+      delete (value.runtime as Record<string, unknown>).expectedBillingClass;
+    }],
+    ['missing done event', (value: ReturnType<typeof artifact>) => {
+      value.response.sseEvents = [];
+    }],
+    ['duplicate done event', (value: ReturnType<typeof artifact>) => {
+      value.response.sseEvents.push({
+        event: 'done',
+        data: { ...value.response.sseEvents[0].data },
+      });
+    }],
+    ['zero priced cost', (value: ReturnType<typeof artifact>) => {
+      value.response.estimatedCostUsd = 0;
+      value.response.sseEvents[0].data.cost = 0;
+    }],
+    ['missing priced cost', (value: ReturnType<typeof artifact>) => {
+      delete (value.response as Record<string, unknown>).estimatedCostUsd;
+      delete (value.response.sseEvents[0].data as Record<string, unknown>).cost;
+    }],
+    ['negative priced cost', (value: ReturnType<typeof artifact>) => {
+      value.response.estimatedCostUsd = -0.01;
+      value.response.sseEvents[0].data.cost = -0.01;
+    }],
+  ])('rejects %s', (_label, mutate) => {
+    const value = artifact('general-purpose', 1);
+    mutate(value);
+    const seal = buildPersonaAcceptanceSeal(manifest(writeArtifact(value)), options);
+
+    expect(seal.status).toBe('failed');
+    expect(seal.receipts).toEqual([]);
+  });
+
+  it.each([0.01, 0.0000000001])('rejects a non-zero cost declared as free (%s)', (cost) => {
+    const { value, receiptManifest } = freeReceipt();
+    value.response.estimatedCostUsd = cost;
+    value.response.sseEvents[0].data.cost = cost;
+    receiptManifest.receipts = [{ artifactPath: writeArtifact(value) }];
+
+    const seal = buildPersonaAcceptanceSeal(receiptManifest, options);
+
+    expect(seal.status).toBe('failed');
+    expect(seal.receipts).toEqual([]);
+  });
+
+  it('rejects a runtime billing expectation that disagrees with the manifest', () => {
+    const { value, receiptManifest } = freeReceipt();
+    value.runtime.expectedBillingClass = 'priced';
+    receiptManifest.receipts = [{ artifactPath: writeArtifact(value) }];
+
+    const seal = buildPersonaAcceptanceSeal(receiptManifest, options);
+
+    expect(seal.status).toBe('failed');
+    expect(seal.receipts).toEqual([]);
+  });
+
+  it('maps persisted schema-8 Python validation into a Data Engineer rescore', () => {
     const persona = PERSONA_CASES.find(item => item.id === 'data-engineer')!;
     const python = [
       'import json',
@@ -285,7 +398,7 @@ describe('persona acceptance seal', () => {
   it('rejects artifact-backed provenance captured from a dirty relevant tree', () => {
     const sourceRevision = 'da25b5097e8f735608d2ad1204ce89048008cec3';
     const value = artifact('general-purpose', 1, {
-      schemaVersion: 7,
+      schemaVersion: 8,
       source: { gitRevision: sourceRevision, relevantWorkingTreeClean: false },
     });
     const artifactPath = writeArtifact(value);

@@ -72,6 +72,20 @@ describe('starter-skills', () => {
     }
   });
 
+  it('keeps decision-matrix arithmetic delegated to the verified calculator', () => {
+    const content = fs.readFileSync(
+      path.join(getStarterSkillsDir(), 'decision-matrix.md'),
+      'utf-8',
+    );
+
+    expect(content).toContain('read_skill');
+    expect(content).toContain('calculate_decision_matrix');
+    expect(content).toMatch(/sole numeric authority/i);
+    expect(content).toMatch(/weighted cells[\s\S]*checksums[\s\S]*totals[\s\S]*ranking/i);
+    expect(content).toContain('sensitivityCriterion');
+    expect(content).not.toContain('| Cost (5)');
+  });
+
   it('installStarterSkills() copies files to target directory', () => {
     const installed = installStarterSkills(tmpDir);
     expect(installed).toHaveLength(18);

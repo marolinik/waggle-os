@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     archiveArtifact: vi.fn(),
     patchArtifact: vi.fn(),
     createArtifact: vi.fn(),
+    downloadFile: vi.fn(),
   },
 }));
 
@@ -54,10 +55,12 @@ beforeEach(() => {
   mocks.adapter.listArtifacts.mockResolvedValue([artifact]);
   mocks.adapter.searchRelatedArtifacts.mockResolvedValue(emptyRelated);
   mocks.adapter.deleteArtifact.mockResolvedValue(undefined);
+  mocks.adapter.downloadFile.mockResolvedValue(new Blob(['artifact']));
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -130,5 +133,25 @@ describe('Artifact Center trust flows', () => {
     fireEvent.click(screen.getByTestId('approval-modal-approve'));
 
     await waitFor(() => expect(mocks.adapter.deleteArtifact).toHaveBeenCalledWith('artifact-brief', 'workspace-research'));
+  });
+
+  it('lets users download a generated artifact from its Library detail', async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:artifact'),
+      revokeObjectURL: vi.fn(),
+    });
+    renderArtifactCenter();
+
+    fireEvent.click(await screen.findByRole('button', { name: /quarterly research brief/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /download file/i }));
+
+    await waitFor(() => expect(mocks.adapter.downloadFile).toHaveBeenCalledWith(
+      'workspace-research',
+      '/artifacts/quarterly-brief.md',
+    ));
+    expect(click).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:artifact');
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
@@ -28,6 +28,8 @@ import {
   resolveActiveSettingsTab,
 } from '@/lib/settings-tier-filter';
 import { requiresYoloConfirm } from '@/lib/autonomy-confirm';
+import { beginChatAutonomyDefaultChange } from '@/hooks/useChatWidgetState';
+import { publishSavedDefaultAutonomy } from '@/providers/ShellContext';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 import EmbeddingRoutingCard from '@/components/os/EmbeddingRoutingCard';
@@ -46,6 +48,19 @@ type SettingsApproval =
   | { kind: 'clear-telemetry' }
   | { kind: 'restore-backup'; file: File };
 type BackupStatus = { tone: 'success' | 'error'; message: string };
+type ModelPilotUpdate = {
+  defaultModel?: string;
+  fallbackModel?: string | null;
+  budgetModel?: string | null;
+  budgetThreshold?: number;
+  dailyBudget?: number | null;
+};
+type ModelPilotSaveState =
+  | { status: 'idle' }
+  | { status: 'verifying' | 'saving' | 'saved'; label: string; verifiesModel: boolean }
+  | { status: 'error'; label: string; message: string };
+
+const ARCHIVE_REQUEST_TIMEOUT_MS = 30 * 60_000;
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
@@ -68,6 +83,21 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
 const SettingsApp = () => {
   // PR5 §11 "Models leads" — Settings opens on Models (the model gate + failover
   // chain), the primary thing a user configures. 'models' is Essential-tier, so it
@@ -81,6 +111,11 @@ const SettingsApp = () => {
   const [dailyBudget, setDailyBudget] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const modelPilotRequestRef = useRef(0);
+  const pendingModelPilotUpdateRef = useRef<ModelPilotUpdate>({});
+  const thresholdSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failedModelPilotUpdateRef = useRef<{ fields: ModelPilotUpdate; label: string } | null>(null);
+  const [modelPilotSaveState, setModelPilotSaveState] = useState<ModelPilotSaveState>({ status: 'idle' });
 
   // CC Session A §2.2 — Phase 1 GEPA prompt shape selection. Persisted in
   // localStorage; threaded into adapter.sendMessage body. Sidecar honors it
@@ -153,9 +188,10 @@ const SettingsApp = () => {
   // binary — it's the inherited level new chat windows start at. Per-window
   // overrides in Chat's AutonomyPicker always beat this.
   type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
-  const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel>('normal');
-  const [externalGates, setExternalGates] = useState<string[]>([]);
-  const [newGate, setNewGate] = useState('');
+  const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel | null>(null);
+  const [permissionsLoadState, setPermissionsLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
+  const permissionsRequestRef = useRef(0);
   // F18: pending in-app confirmation for the transition into `yolo` ("Never
   // ask"). Keeps the risky transition inside the app's visual language with a
   // focus-visible, testable confirm row.
@@ -193,12 +229,29 @@ const SettingsApp = () => {
   const [telemetryNotice, setTelemetryNotice] = useState<string | null>(null);
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<SettingsApproval | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
 
+  const loadPermissions = useCallback(async () => {
+    const request = ++permissionsRequestRef.current;
+    setPermissionsLoadState('loading');
+    setDefaultAutonomy(null);
+    setPendingYolo(false);
+    try {
+      const permissions = await adapter.getPermissions();
+      if (request !== permissionsRequestRef.current) return;
+      setDefaultAutonomy(permissions.defaultAutonomy);
+      setPermissionsLoadState('ready');
+    } catch {
+      if (request !== permissionsRequestRef.current) return;
+      setPermissionsLoadState('error');
+    }
+  }, []);
+
   // Load settings
   useEffect(() => {
-    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; fallbackModel?: string; budgetModel?: string; budgetThreshold?: number }) => {
+    adapter.getSettings().then((s) => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
       setFallbackModel(s.fallbackModel ?? null);
       setBudgetModel(s.budgetModel ?? null);
@@ -206,12 +259,10 @@ const SettingsApp = () => {
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
     }).catch(() => {});
 
-    // P4: permissions now live on /api/settings/permissions (separate from
-    // /api/settings). Load defaultAutonomy + externalGates here.
-    adapter.getPermissions().then(p => {
-      setDefaultAutonomy(p.defaultAutonomy);
-      setExternalGates(p.externalGates);
-    }).catch(() => {});
+    // Permission state is security-sensitive. Until its authoritative read
+    // succeeds, the controls stay unselected and disabled rather than showing
+    // a fabricated default that a later click could persist.
+    void loadPermissions();
 
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
 
@@ -222,31 +273,165 @@ const SettingsApp = () => {
       setTelemetryEnabled(s.enabled);
       setTelemetryCount(s.totalEvents);
     }).catch(() => {});
-  }, []);
+  }, [loadPermissions]);
 
-  const handleSaveModel = async () => {
-    setSaving(true);
-    try {
-      const updates: Record<string, unknown> = { defaultModel };
-      if (fallbackModel !== undefined) updates.fallbackModel = fallbackModel;
-      if (budgetModel !== undefined) updates.budgetModel = budgetModel;
-      if (budgetThreshold !== undefined) updates.budgetThreshold = budgetThreshold;
-      if (dailyBudget) updates.dailyBudget = parseFloat(dailyBudget);
-      await adapter.saveSettings(updates);
-      setSaveMsg('Saved');
-      setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed'); }
-    finally { setSaving(false); }
+  const modelPilotLabel = (fields: ModelPilotUpdate): string => {
+    const labels = [
+      fields.defaultModel !== undefined ? 'Primary' : null,
+      fields.fallbackModel !== undefined ? 'Fallback' : null,
+      fields.budgetModel !== undefined ? 'Budget Saver' : null,
+      fields.budgetThreshold !== undefined ? 'Budget threshold' : null,
+    ].filter((label): label is string => Boolean(label));
+    return labels.length === 1 ? labels[0] : 'Model chain';
   };
 
-  const handleSavePermissions = async (next?: { defaultAutonomy?: AutonomyLevel; externalGates?: string[] }) => {
-    setSaving(true);
+  useEffect(() => () => {
+    if (thresholdSaveTimerRef.current) clearTimeout(thresholdSaveTimerRef.current);
+  }, []);
+
+  const hasModelSelection = (fields: ModelPilotUpdate): boolean => (
+    [fields.defaultModel, fields.fallbackModel, fields.budgetModel]
+      .some((model) => typeof model === 'string' && model.trim().length > 0)
+  );
+
+  const saveModelPilotUpdate = async (
+    fields: ModelPilotUpdate,
+    label: string,
+    request = ++modelPilotRequestRef.current,
+  ): Promise<boolean> => {
+    const verifiesModel = hasModelSelection(fields);
+    setModelPilotSaveState({ status: verifiesModel ? 'verifying' : 'saving', label, verifiesModel });
+
+    const verifiedFields = {
+      ...fields,
+      verifyModelSettings: true as const,
+    };
     try {
-      await adapter.savePermissions(next ?? { defaultAutonomy, externalGates });
+      await adapter.saveSettings(verifiedFields);
+      if (request !== modelPilotRequestRef.current) return true;
+      pendingModelPilotUpdateRef.current = {};
+      failedModelPilotUpdateRef.current = null;
+      setModelPilotSaveState({ status: 'saved', label, verifiesModel });
+      return true;
+    } catch {
+      if (request !== modelPilotRequestRef.current) return false;
+      failedModelPilotUpdateRef.current = { fields, label };
+      setModelPilotSaveState({
+        status: 'error',
+        label,
+        message: verifiesModel
+          ? `${label} was not saved. Verify the selected model, then retry.`
+          : `${label} was not saved. Retry the change.`,
+      });
+      return false;
+    }
+  };
+
+  const handleModelPilotUpdate = (fields: ModelPilotUpdate) => {
+    if (fields.defaultModel !== undefined) setDefaultModel(fields.defaultModel);
+    if (fields.fallbackModel !== undefined) setFallbackModel(fields.fallbackModel);
+    if (fields.budgetModel !== undefined) setBudgetModel(fields.budgetModel);
+    if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
+
+    const pendingFields = { ...pendingModelPilotUpdateRef.current, ...fields };
+    pendingModelPilotUpdateRef.current = pendingFields;
+    const label = modelPilotLabel(pendingFields);
+    failedModelPilotUpdateRef.current = null;
+    const thresholdOnly = Object.keys(fields).length === 1 && fields.budgetThreshold !== undefined;
+    if (thresholdOnly) {
+      if (thresholdSaveTimerRef.current) clearTimeout(thresholdSaveTimerRef.current);
+      const request = ++modelPilotRequestRef.current;
+      const verifiesModel = hasModelSelection(pendingFields);
+      setModelPilotSaveState({ status: verifiesModel ? 'verifying' : 'saving', label, verifiesModel });
+      thresholdSaveTimerRef.current = setTimeout(() => {
+        thresholdSaveTimerRef.current = null;
+        if (request !== modelPilotRequestRef.current) return;
+        const latestFields = pendingModelPilotUpdateRef.current;
+        void saveModelPilotUpdate(latestFields, modelPilotLabel(latestFields), request);
+      }, 300);
+      return;
+    }
+    if (thresholdSaveTimerRef.current) {
+      clearTimeout(thresholdSaveTimerRef.current);
+      thresholdSaveTimerRef.current = null;
+    }
+    void saveModelPilotUpdate(pendingFields, label);
+  };
+
+  const retryModelPilotSave = () => {
+    const failed = failedModelPilotUpdateRef.current;
+    if (!failed) return;
+    void saveModelPilotUpdate(failed.fields, failed.label);
+  };
+
+  const handleSaveModel = async () => {
+    if (!defaultModel.trim()) {
+      setSaveMsg('Choose a Primary model before saving.');
+      return;
+    }
+    setSaving(true);
+    setSaveMsg('Verifying selected models…');
+    if (thresholdSaveTimerRef.current) {
+      clearTimeout(thresholdSaveTimerRef.current);
+      thresholdSaveTimerRef.current = null;
+    }
+    const updates: ModelPilotUpdate = {
+      defaultModel,
+      fallbackModel,
+      budgetModel,
+      budgetThreshold,
+      dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
+    };
+    pendingModelPilotUpdateRef.current = {
+      ...pendingModelPilotUpdateRef.current,
+      ...updates,
+    };
+    const request = ++modelPilotRequestRef.current;
+    try {
+      const saved = await saveModelPilotUpdate(
+        pendingModelPilotUpdateRef.current,
+        'Model chain',
+        request,
+      );
+      if (request !== modelPilotRequestRef.current) {
+        setSaveMsg('');
+        return;
+      }
+      if (saved) {
+        setSaveMsg('Verified & saved');
+        setTimeout(() => setSaveMsg(''), 2000);
+      } else {
+        setSaveMsg('Model settings were not saved. Check each selected model and retry.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSavePermissions = async (nextAutonomy: AutonomyLevel) => {
+    if (permissionsLoadState !== 'ready' || permissionsSaving) return;
+    setPermissionsSaving(true);
+    let releaseAutonomyChange: (() => void) | undefined;
+    try {
+      // Existing mounted chats must be durable before the global default can
+      // change, and first-time chats stay deferred until the save settles.
+      if (nextAutonomy !== 'normal') {
+        releaseAutonomyChange = beginChatAutonomyDefaultChange();
+      }
+      // Autonomy is a partial update. Never echo stale unrelated policy data.
+      await adapter.savePermissions({ defaultAutonomy: nextAutonomy });
+      // A pre-save read is now stale even if it resolves after this write.
+      permissionsRequestRef.current += 1;
+      setDefaultAutonomy(nextAutonomy);
+      publishSavedDefaultAutonomy(nextAutonomy);
       setSaveMsg('Permissions saved');
       setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed to save'); }
-    finally { setSaving(false); }
+    } catch {
+      setSaveMsg('Permissions were not saved. Try again.');
+    } finally {
+      releaseAutonomyChange?.();
+      setPermissionsSaving(false);
+    }
   };
 
   const approvalRequest: ApprovalRequest | null = pendingApproval
@@ -279,19 +464,18 @@ const SettingsApp = () => {
     setBackupBusy(true);
     setBackupStatus(null);
     try {
-      const res = await fetch(`${adapter.getServerUrl()}/api/backup`, { method: 'POST' });
+      const res = await adapter.fetchRaw(
+        '/api/backup',
+        { method: 'POST' },
+        ARCHIVE_REQUEST_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Backup failed' }));
         setBackupStatus({ tone: 'error', message: err.error ?? 'Backup failed' });
         return;
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`);
       setBackupStatus({ tone: 'success', message: 'Backup created and download started.' });
     } catch {
       setBackupStatus({ tone: 'error', message: 'Backup failed - server unreachable' });
@@ -305,11 +489,11 @@ const SettingsApp = () => {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const base64 = dataUrl.split(',')[1] ?? '';
-      const res = await fetch(`${adapter.getServerUrl()}/api/restore`, {
+      const res = await adapter.fetchRaw('/api/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backup: base64 }),
-      });
+      }, ARCHIVE_REQUEST_TIMEOUT_MS);
       if (res.ok) {
         setBackupStatus({ tone: 'success', message: 'Backup restored successfully. Restart the server to apply.' });
       } else {
@@ -318,6 +502,34 @@ const SettingsApp = () => {
       }
     } catch {
       setBackupStatus({ tone: 'error', message: 'Restore failed - server unreachable' });
+    }
+  };
+
+  const handleExportData = async () => {
+    setExportBusy(true);
+    setBackupStatus(null);
+    try {
+      const res = await adapter.fetchRaw(
+        '/api/export',
+        { method: 'POST' },
+        ARCHIVE_REQUEST_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        setBackupStatus({
+          tone: 'error',
+          message: res.status === 401 || res.status === 403
+            ? 'Export failed. Reconnect your local session and try again.'
+            : 'Export failed. Check the local service and try again.',
+        });
+        return;
+      }
+      const blob = await res.blob();
+      downloadBlob(blob, `waggle-export-${new Date().toISOString().slice(0, 10)}.zip`);
+      setBackupStatus({ tone: 'success', message: 'Export created and download started.' });
+    } catch {
+      setBackupStatus({ tone: 'error', message: 'Export failed. Check the local service and try again.' });
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -577,7 +789,15 @@ const SettingsApp = () => {
                 → vault) OR a local model, with the "≥1 working model" banner. onModelReady
                 refreshes this app's provider list so ModelPilotCard + the key list below
                 reflect a just-added key. */}
-            <ModelGate variant="settings" onModelReady={() => { void refreshProviders(); }} />
+            <ModelGate
+              variant="settings"
+              onModelReady={(receipt) => {
+                if (receipt.modelId) {
+                  setDefaultModel(receipt.modelId);
+                }
+                void refreshProviders();
+              }}
+            />
 
             <ModelPilotCard
               defaultModel={defaultModel}
@@ -586,13 +806,44 @@ const SettingsApp = () => {
               budgetThreshold={budgetThreshold}
               dailyBudget={dailyBudget ? parseFloat(dailyBudget) : null}
               providers={providers}
-              onUpdate={(fields) => {
-                if (fields.defaultModel !== undefined) setDefaultModel(fields.defaultModel);
-                if (fields.fallbackModel !== undefined) setFallbackModel(fields.fallbackModel);
-                if (fields.budgetModel !== undefined) setBudgetModel(fields.budgetModel);
-                if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
-              }}
+              onUpdate={handleModelPilotUpdate}
             />
+
+            {modelPilotSaveState.status !== 'idle' && (
+              <div
+                role={modelPilotSaveState.status === 'error' ? 'alert' : 'status'}
+                aria-live={modelPilotSaveState.status === 'error' ? 'assertive' : 'polite'}
+                className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  modelPilotSaveState.status === 'error'
+                    ? 'border-destructive/40 bg-destructive/5 text-destructive'
+                    : 'border-primary/20 bg-primary/5 text-foreground'
+                }`}
+              >
+                {(modelPilotSaveState.status === 'verifying' || modelPilotSaveState.status === 'saving') && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                )}
+                <span>
+                  {modelPilotSaveState.status === 'verifying' && `Verifying ${modelPilotSaveState.label}…`}
+                  {modelPilotSaveState.status === 'saving' && `Saving ${modelPilotSaveState.label}…`}
+                  {modelPilotSaveState.status === 'saved' && (
+                    modelPilotSaveState.verifiesModel
+                      ? `${modelPilotSaveState.label} verified & saved`
+                      : `${modelPilotSaveState.label} saved`
+                  )}
+                  {modelPilotSaveState.status === 'error' && modelPilotSaveState.message}
+                </span>
+                {modelPilotSaveState.status === 'error' && (
+                  <button
+                    type="button"
+                    onClick={retryModelPilotSave}
+                    className="ml-auto rounded-md border border-destructive/30 px-2 py-1 font-display font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Retry saving ${modelPilotSaveState.label}`}
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            )}
 
             <EmbeddingRoutingCard providers={providers} tier={tier} />
 
@@ -601,7 +852,12 @@ const SettingsApp = () => {
             {/* Default model selector — from /api/providers */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Default Model</label>
-              <ModelSelector value={defaultModel} onChange={setDefaultModel} providers={providers} variant="dropdown" />
+              <ModelSelector
+                value={defaultModel}
+                onChange={setDefaultModel}
+                providers={providers}
+                variant="dropdown"
+              />
             </div>
 
             {/* CC Session A §2.2 — Phase 1 GEPA prompt shape selector */}
@@ -638,7 +894,9 @@ const SettingsApp = () => {
               <label htmlFor="settings-daily-budget" className="text-xs text-muted-foreground block mb-1">
                 <DollarSign className="w-3 h-3 inline mr-1" />Daily Budget (USD)
               </label>
-              <Input id="settings-daily-budget" name="dailyBudget" autoComplete="off" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
+              <Input id="settings-daily-budget" name="dailyBudget" autoComplete="off" value={dailyBudget} onChange={e => {
+                setDailyBudget(e.target.value);
+              }} placeholder="No limit"
                 type="number" min="0" step="1"
                 className="w-full bg-muted/50 h-auto py-1.5" />
             </div>
@@ -836,6 +1094,24 @@ const SettingsApp = () => {
                 Inherited by <em>new</em> chat windows. Each window has its own per-session override in
                 the chat header — change one window without affecting the rest.
               </p>
+              {permissionsLoadState === 'loading' && (
+                <div role="status" className="mb-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading permission settings…
+                </div>
+              )}
+              {permissionsLoadState === 'error' && (
+                <div role="alert" className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-foreground">
+                  <p>Permissions could not be loaded. Existing settings were left unchanged.</p>
+                  <button
+                    type="button"
+                    onClick={() => { void loadPermissions(); }}
+                    className="mt-2 rounded-lg border border-border/50 bg-muted/40 px-2.5 py-1 text-foreground hover:bg-muted"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               <div className="space-y-1.5" role="radiogroup" aria-label="Default approval level">
                 {([
                   { value: 'normal',  label: 'Ask every time',      copy: 'Approve every write, edit, and mutating tool call' },
@@ -853,7 +1129,9 @@ const SettingsApp = () => {
                       type="button"
                       role="radio"
                       aria-checked={active}
+                      disabled={permissionsLoadState !== 'ready' || permissionsSaving}
                       onClick={() => {
+                        if (defaultAutonomy === null) return;
                         // F18: route the into-yolo transition through the inline
                         // confirm-row below instead of applying immediately.
                         if (requiresYoloConfirm(defaultAutonomy, opt.value)) {
@@ -861,11 +1139,10 @@ const SettingsApp = () => {
                           return;
                         }
                         setPendingYolo(false); // a safe selection cancels a pending Never-ask confirm
-                        setDefaultAutonomy(opt.value);
-                        handleSavePermissions({ defaultAutonomy: opt.value, externalGates });
+                        void handleSavePermissions(opt.value);
                       }}
                       data-testid={`default-autonomy-${opt.value}`}
-                      className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
+                      className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                         active
                           ? (isDanger ? 'bg-amber-500/15 border-amber-500/60' : 'bg-primary/15 border-primary/50')
                           : 'bg-muted/20 border-border/20 hover:border-border/40'
@@ -908,11 +1185,11 @@ const SettingsApp = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setDefaultAutonomy('yolo');
-                        handleSavePermissions({ defaultAutonomy: 'yolo', externalGates });
+                        void handleSavePermissions('yolo');
                         setPendingYolo(false);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/60 text-amber-200 text-[11px] font-display font-semibold hover:bg-amber-500/30 transition-colors"
+                      disabled={permissionsSaving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/60 text-amber-200 text-[11px] font-display font-semibold hover:bg-amber-500/30 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                       data-testid="yolo-confirm-accept"
                     >
                       Turn on Never ask
@@ -922,27 +1199,6 @@ const SettingsApp = () => {
               )}
             </div>
 
-            {/* External gates */}
-            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-              <p className="text-xs font-display font-medium text-foreground mb-2">Mutation Gates</p>
-              <p className="text-[11px] text-muted-foreground mb-2">Operations that always require approval, regardless of the default level above</p>
-              <div className="space-y-1 mb-2">
-                {externalGates.map((gate, i) => (
-                  <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30">
-                    <span className="text-[11px] text-foreground font-mono">{gate}</span>
-                    <button onClick={() => setExternalGates(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-[11px] text-destructive hover:text-destructive/80">Remove</button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-1.5">
-                <Input id="settings-mutation-gate" name="mutationGate" autoComplete="off" spellCheck={false} value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
-                  className="flex-1 bg-muted/50 text-xs h-auto py-1"
-                  onKeyDown={e => { if (e.key === 'Enter' && newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }} />
-                <button onClick={() => { if (newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }}
-                  className="px-2 py-1 text-[11px] rounded-lg bg-secondary text-foreground hover:bg-secondary/70">Add</button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1003,21 +1259,14 @@ const SettingsApp = () => {
         {activeTab === 'backup' && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Backup & Export</h3>
-            <button onClick={async () => {
-              try {
-                const blob = await fetch(`${adapter.getServerUrl()}/api/export`, { method: 'POST' }).then(r => r.blob());
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `waggle-export-${new Date().toISOString().slice(0, 10)}.zip`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch { /* ignore */ }
-            }}
-              className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
+            <button
+              onClick={() => { void handleExportData(); }}
+              disabled={backupBusy || exportBusy}
+              className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <Download className="w-4 h-4 text-honey" />
               <div>
-                <p className="text-xs font-display font-medium text-foreground">Export Data</p>
+                <p className="text-xs font-display font-medium text-foreground">{exportBusy ? 'Preparing export...' : 'Export Data'}</p>
                 <p className="text-[11px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
               </div>
             </button>
@@ -1038,7 +1287,7 @@ const SettingsApp = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => { void handleCreateBackup(); }}
-                  disabled={backupBusy}
+                  disabled={backupBusy || exportBusy}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Download className="w-3 h-3" /> {backupBusy ? 'Creating...' : 'Create Backup'}
@@ -1285,7 +1534,12 @@ const SettingsApp = () => {
 
         {/* Save status toast */}
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-honey inline-block">
+          <div
+            role={/failed|not saved|changed while saving|choose a primary/i.test(saveMsg) ? 'alert' : 'status'}
+            aria-live={/failed|not saved|changed while saving|choose a primary/i.test(saveMsg) ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-honey inline-block"
+          >
             {saveMsg}
           </div>
         )}

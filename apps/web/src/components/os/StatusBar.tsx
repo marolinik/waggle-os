@@ -245,13 +245,23 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         </button>
         {offline && (
           <div className="relative group">
-            <button className="flex items-center gap-1 text-destructive" aria-label="Backend offline — messages will be queued">
+            <span
+              className="flex items-center gap-1 rounded-sm text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              role="status"
+              tabIndex={0}
+              aria-label="Backend unavailable"
+              aria-describedby="backend-offline-recovery"
+            >
               <WifiOff className="w-3.5 h-3.5" />
               <span className="text-[10px] font-display animate-pulse motion-reduce:animate-none">Offline</span>
-            </button>
-            <div className="absolute top-full right-0 mt-2 w-48 p-2.5 rounded-xl glass-strong border border-border/50 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-              <p className="text-[11px] font-display font-semibold text-foreground mb-1">Backend Unreachable</p>
-              <p className="text-[10px] text-muted-foreground">Messages will be queued and sent when the connection is restored.</p>
+            </span>
+            <div
+              id="backend-offline-recovery"
+              role="tooltip"
+              className="absolute top-full right-0 mt-2 w-64 p-2.5 rounded-xl glass-strong border border-border/50 shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none z-50"
+            >
+              <p className="text-[11px] font-display font-semibold text-foreground mb-1">Backend Unavailable</p>
+              <p className="text-[10px] text-muted-foreground">Messages aren&apos;t sent while the local service is unavailable. When it returns, review the failed turn and retry only if needed.</p>
             </div>
           </div>
         )}

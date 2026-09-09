@@ -18,6 +18,7 @@ export function DotLive({ tone = 'healthy', live = true, size = 8, className }: 
   return (
     <span
       aria-hidden
+      data-tone={tone}
       style={{ width: size, height: size, backgroundColor: TONE_COLOR[tone] }}
       className={cn(
         'inline-block shrink-0 rounded-full',

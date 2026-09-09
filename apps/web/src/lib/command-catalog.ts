@@ -74,8 +74,8 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
 
   const doGroup: CatalogCommand[] = [
     { id: "start-task", group: "do", name: "Start a task", subtitle: "new agent run", icon: Plus, action: "spawn" },
-    { id: "launch-agent", group: "do", name: "Launch a coding agent", subtitle: "Claude Code · Cursor · Codex — shares this hive", icon: Rocket, to: "/launcher" },
-    { id: "watch-agent", group: "do", name: "Watch a coding agent live", subtitle: "Claude Code · Cursor · Codex — stream its output", keywords: "observe pty terminal live output tail", icon: Eye, to: "/launcher?watch=1" },
+    { id: "launch-agent", group: "do", name: "Launch a coding agent", subtitle: "Claude Code · Codex · Hermes — shares this hive", icon: Rocket, to: "/launcher" },
+    { id: "watch-agent", group: "do", name: "Watch a coding agent live", subtitle: "Claude Code · Codex · Hermes — stream its output", keywords: "observe pty terminal live output tail", icon: Eye, to: "/launcher?watch=1" },
     { id: "settings", group: "do", name: "Settings", subtitle: "models · failover · permissions · plan", icon: Settings, to: "/settings" },
     { id: "upgrade", group: "do", name: "Upgrade to Team", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings?tab=billing" },
   ];

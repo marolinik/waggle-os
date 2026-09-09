@@ -29,7 +29,12 @@ import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
 import { prefetchBriefing, computeAwayDays, BRIEFING_ABSENCE_DAYS } from '@/lib/briefing-source';
 import { homeCacheExists } from '@/lib/home-cache';
-import { resolveReturningUserOnboarding, isOnboardingStatusKnownSync } from '@/hooks/useOnboarding';
+import {
+  resolveReturningUserOnboarding,
+  revalidateReturningUserOnboarding,
+  isOnboardingStatusKnownSync,
+} from '@/hooks/useOnboarding';
+import { isTauri, listenDesktopServiceLifecycle } from '@/lib/tauri-bindings';
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
@@ -37,9 +42,16 @@ import { getDockForTier, BILLING_TIER_ORDER, type AppId, type DockEntry } from '
 import { TIER_LABELS } from '@waggle/shared';
 import { buildCommandCatalog, type CatalogCommand } from '@/lib/command-catalog';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
-import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
+import {
+  cancelWorkspaceSelectionChatDispatch,
+  completeWorkspaceSelectionChatDispatch,
+  peekWorkspaceSelectionChatDispatch,
+  requestNewChatSession,
+  seedChat,
+  useChatWidgetState,
+  useWorkspaceSelectionChatDispatch,
+} from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { useBumpSessionCount } from '@/hooks/useDockLabels';
 import { useDockNudge } from '@/hooks/useDockNudge';
 import { useToast } from '@/hooks/use-toast';
@@ -63,6 +75,236 @@ const TrialExpiredModal = lazy(() => import('./overlays/TrialExpiredModal'));
 const deferredShellElement = (element: ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
 );
+
+// Exported as the executable boundary between durable onboarding completion
+// and trial mutation. Keeping it pure lets the rejection path prove that no
+// irreversible billing state changes before the active profile is confirmed.
+// eslint-disable-next-line react-refresh/only-export-components
+export async function finalizeOnboarding(
+  complete: () => Promise<boolean>,
+  startTrial: () => Promise<unknown>,
+  refreshTier: () => void | Promise<void>,
+): Promise<boolean> {
+  const completed = await complete();
+  if (!completed) return false;
+
+  void startTrial().then(refreshTier).catch(refreshTier);
+  return true;
+}
+
+export const OnboardingRecoveryNotice = ({
+  retrying,
+  onRetry,
+}: {
+  retrying: boolean;
+  onRetry: () => void;
+}) => (
+  <section
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    aria-busy={retrying}
+    className="fixed bottom-8 left-1/2 z-[10000] w-[min(92vw,30rem)] -translate-x-1/2 rounded-2xl border border-border/80 bg-background/95 p-5 text-center shadow-2xl backdrop-blur"
+    onClick={(event) => event.stopPropagation()}
+  >
+    <h2 className="text-sm font-semibold text-foreground">Waiting for your local Waggle service</h2>
+    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+      Your workspace stays protected until Waggle confirms the active profile.
+    </p>
+    <button
+      type="button"
+      disabled={retrying}
+      onClick={onRetry}
+      className="mt-4 min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait disabled:opacity-60"
+    >
+      {retrying ? 'Retrying…' : 'Retry Connection'}
+    </button>
+  </section>
+);
+
+type OnboardingProfileGateResolution = 'checking' | 'confirmed' | 'unavailable';
+
+/**
+ * Keeps provisional browser state behind the neutral boot surface until the
+ * active service generation confirms its logical profile. This gate lives
+ * above ShellProvider so it can recover even while the workspace UI is hidden.
+ */
+// Exported solely as the executable AppShell gate seam; production has one owner.
+// eslint-disable-next-line react-refresh/only-export-components
+export const useOnboardingProfileGate = () => {
+  const [tauriMode] = useState(isTauri);
+  const [knownSynchronously] = useState(isOnboardingStatusKnownSync);
+  const [resolution, setResolution] = useState<OnboardingProfileGateResolution>(
+    knownSynchronously && !tauriMode ? 'confirmed' : 'checking',
+  );
+  const [recoveryVisible, setRecoveryVisible] = useState(false);
+  const mountedRef = useRef(false);
+  const resolutionRef = useRef<OnboardingProfileGateResolution>(resolution);
+  const runIdRef = useRef(0);
+  const timeoutRef = useRef<number | null>(null);
+  const successfulConnectSeenRef = useRef(false);
+  const tauriRestartPendingRef = useRef(false);
+  const lifecycleReadyRef = useRef(!tauriMode);
+  const lifecycleRegistrationPendingRef = useRef(false);
+  const lifecycleRegistrationIdRef = useRef(0);
+  const lifecycleDisposeRef = useRef<(() => void) | null>(null);
+
+  const clearGateTimeout = useCallback(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const publishResolution = useCallback((next: OnboardingProfileGateResolution) => {
+    resolutionRef.current = next;
+    setResolution(next);
+    if (next === 'unavailable') setRecoveryVisible(true);
+    if (next === 'confirmed') setRecoveryVisible(false);
+  }, []);
+
+  const beginProtectedHold = useCallback(() => {
+    const runId = ++runIdRef.current;
+    clearGateTimeout();
+    publishResolution('checking');
+    timeoutRef.current = window.setTimeout(() => {
+      if (mountedRef.current && runIdRef.current === runId) publishResolution('unavailable');
+    }, 3000);
+    return runId;
+  }, [clearGateTimeout, publishResolution]);
+
+  const runProfileCheck = useCallback((forceGeneration = false, replaceInFlight = false) => {
+    const runId = beginProtectedHold();
+    const request = forceGeneration
+      ? revalidateReturningUserOnboarding(replaceInFlight)
+      : resolveReturningUserOnboarding();
+    void request.then((result) => {
+      if (!mountedRef.current || runIdRef.current !== runId) return;
+      clearGateTimeout();
+      publishResolution(result === 'confirmed' ? 'confirmed' : 'unavailable');
+    });
+  }, [beginProtectedHold, clearGateTimeout, publishResolution]);
+
+  const registerTauriLifecycle = useCallback((replaceInFlight = false) => {
+    if (!tauriMode || lifecycleReadyRef.current) return;
+    if (lifecycleRegistrationPendingRef.current && !replaceInFlight) return;
+    const registrationId = ++lifecycleRegistrationIdRef.current;
+    lifecycleRegistrationPendingRef.current = true;
+    beginProtectedHold();
+    void listenDesktopServiceLifecycle((event) => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) return;
+      if (event.status === 'restarting') {
+        tauriRestartPendingRef.current = true;
+        beginProtectedHold();
+      } else if (event.status === 'ready' && tauriRestartPendingRef.current) {
+        tauriRestartPendingRef.current = false;
+        successfulConnectSeenRef.current = true;
+        runProfileCheck(true, true);
+      } else if (event.status === 'failed') {
+        tauriRestartPendingRef.current = false;
+        runIdRef.current += 1;
+        clearGateTimeout();
+        publishResolution('unavailable');
+      }
+    }).then((unlisten) => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) {
+        unlisten();
+        return;
+      }
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = true;
+      lifecycleDisposeRef.current?.();
+      lifecycleDisposeRef.current = unlisten;
+      runProfileCheck(true, true);
+    }).catch(() => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) return;
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = false;
+      runIdRef.current += 1;
+      clearGateTimeout();
+      publishResolution('unavailable');
+    });
+  }, [
+    beginProtectedHold,
+    clearGateTimeout,
+    publishResolution,
+    runProfileCheck,
+    tauriMode,
+  ]);
+
+  const retryGate = useCallback(() => {
+    if (tauriMode && !lifecycleReadyRef.current) {
+      registerTauriLifecycle(resolutionRef.current === 'unavailable');
+      return;
+    }
+    runProfileCheck(true, resolutionRef.current === 'unavailable');
+  }, [registerTauriLifecycle, runProfileCheck, tauriMode]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (tauriMode) registerTauriLifecycle();
+    else if (!knownSynchronously) runProfileCheck(true, true);
+    return () => {
+      mountedRef.current = false;
+      runIdRef.current += 1;
+      lifecycleRegistrationIdRef.current += 1;
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = !tauriMode;
+      lifecycleDisposeRef.current?.();
+      lifecycleDisposeRef.current = null;
+      clearGateTimeout();
+    };
+  }, [clearGateTimeout, knownSynchronously, registerTauriLifecycle, runProfileCheck, tauriMode]);
+
+  // ServiceProvider emits one initial success after boot. It confirms transport,
+  // not a new profile generation, so ignore it when the initial profile probe
+  // already succeeded. Later successes (or the first success after an offline
+  // boot) trigger exactly one profile check here—not in useOnboarding.
+  useEffect(() => {
+    const onConnectSettled = (event: Event) => {
+      const connected = (event as CustomEvent<{ connected?: boolean }>).detail?.connected === true;
+      if (!connected) return;
+      // In Tauri, the managed lifecycle listener is the sole generation owner.
+      // A queued transport-success event may belong to the endpoint being
+      // replaced, so it must never reopen or re-probe the protected shell.
+      if (tauriMode) return;
+      const seenBefore = successfulConnectSeenRef.current;
+      successfulConnectSeenRef.current = true;
+      if (!seenBefore && resolutionRef.current === 'confirmed') return;
+      runProfileCheck(true, resolutionRef.current === 'unavailable');
+    };
+    window.addEventListener('waggle:connect-settled', onConnectSettled);
+    return () => window.removeEventListener('waggle:connect-settled', onConnectSettled);
+  }, [runProfileCheck, tauriMode]);
+
+  // Recovery must not depend on ShellProvider because the shell is deliberately
+  // unmounted while profile identity is unknown. Keep manual Retry as a fast
+  // fallback, but also recover when the browser returns online/focused or after
+  // a bounded quiet interval.
+  useEffect(() => {
+    if (resolution !== 'unavailable' || knownSynchronously) return undefined;
+    const retry = () => retryGate();
+    const retryWhenVisible = () => {
+      if (document.visibilityState === 'visible') retry();
+    };
+    const timer = window.setTimeout(retry, 5000);
+    window.addEventListener('online', retry);
+    window.addEventListener('focus', retry);
+    document.addEventListener('visibilitychange', retryWhenVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', retry);
+      window.removeEventListener('focus', retry);
+      document.removeEventListener('visibilitychange', retryWhenVisible);
+    };
+  }, [knownSynchronously, resolution, retryGate]);
+
+  return {
+    resolution,
+    recoveryVisible,
+    retry: retryGate,
+  };
+};
 
 /**
  * F32: workspace sub-tab → breadcrumb label. Mirrors WorkspaceRoute.WS_TABS +
@@ -132,12 +374,10 @@ const ShellLayout = () => {
     contextRailTarget, setContextRailTarget,
   } = useShell();
 
-  const { allSignals: waggleSignals } = useWaggleDance();
   const overlaysRef = useRef(ov);
   useEffect(() => {
     overlaysRef.current = ov;
   }, [ov]);
-  const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
   // W2A: no implicit workspaces[0] fallback — the chrome shows a workspace only
   // when one was explicitly selected. Sidebar/StatusBar accept null names; the
   // Chat spine item opens the WorkspaceSwitcher when there is no real selection.
@@ -151,34 +391,44 @@ const ShellLayout = () => {
     () => workspaces.find(ws => ws.status !== 'archived')?.id ?? null,
     [workspaces],
   );
-  const chatShortcutWorkspaceId = effectiveActiveWorkspaceId ?? firstAvailableWorkspaceId;
-  const [pendingChatShortcut, setPendingChatShortcut] = useState(false);
-  const navigateToActiveChat = useCallback(() => {
+  const chatShortcutWorkspaceId = useMemo(() => {
+    const activeWorkspaceStillExists = effectiveActiveWorkspaceId
+      && workspaces.some(ws => ws.id === effectiveActiveWorkspaceId && ws.status !== 'archived');
+    return activeWorkspaceStillExists ? effectiveActiveWorkspaceId : firstAvailableWorkspaceId;
+  }, [effectiveActiveWorkspaceId, firstAvailableWorkspaceId, workspaces]);
+  const [pendingChatShortcut, setPendingChatShortcut] = useState<'navigate' | 'new-session' | null>(null);
+  const openActiveChat = useCallback((action: 'navigate' | 'new-session') => {
+    if (workspacesLoading && !workspacesError) {
+      setPendingChatShortcut(current => current === 'new-session' ? current : action);
+      return;
+    }
     if (chatShortcutWorkspaceId) {
+      if (action === 'new-session') requestNewChatSession(chatShortcutWorkspaceId);
       selectWorkspace(chatShortcutWorkspaceId);
       ov.setShowWorkspaceSwitcher(false);
       navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
       return;
     }
-    if (workspacesLoading && !workspacesError) {
-      setPendingChatShortcut(true);
-      return;
-    }
     // No workspace exists yet; ask the user to create or pick one.
     ov.toggleWorkspaceSwitcher();
   }, [chatShortcutWorkspaceId, navigate, ov, selectWorkspace, workspacesError, workspacesLoading]);
+  const navigateToActiveChat = useCallback(() => openActiveChat('navigate'), [openActiveChat]);
+  const startNewChat = useCallback(() => openActiveChat('new-session'), [openActiveChat]);
 
   useEffect(() => {
     if (!pendingChatShortcut) return;
+    if (workspacesLoading) return;
     if (chatShortcutWorkspaceId) {
-      setPendingChatShortcut(false);
+      const action = pendingChatShortcut;
+      setPendingChatShortcut(null);
+      if (action === 'new-session') requestNewChatSession(chatShortcutWorkspaceId);
       selectWorkspace(chatShortcutWorkspaceId);
       ov.setShowWorkspaceSwitcher(false);
       navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
       return;
     }
     if (!workspacesLoading) {
-      setPendingChatShortcut(false);
+      setPendingChatShortcut(null);
       ov.toggleWorkspaceSwitcher();
     }
   }, [chatShortcutWorkspaceId, navigate, ov, pendingChatShortcut, selectWorkspace, workspacesLoading]);
@@ -238,6 +488,68 @@ const ShellLayout = () => {
     },
   });
 
+  const pendingWorkspaceAsk = useWorkspaceSelectionChatDispatch();
+  const keepWorkspaceSwitcherOpenRef = useRef(false);
+  const deliverPendingWorkspaceAsk = useCallback((workspaceId: string): boolean => {
+    const pending = peekWorkspaceSelectionChatDispatch();
+    if (!pending) return false;
+    try {
+      const delivered = completeWorkspaceSelectionChatDispatch(
+        workspaceId,
+        pending.id,
+        () => {
+          navigate(routeFor('chat', { activeWorkspaceId: workspaceId }));
+          selectWorkspace(workspaceId);
+          ov.setShowWorkspaceSwitcher(false);
+        },
+      );
+      if (!delivered) return false;
+      return true;
+    } catch {
+      toast({
+        title: 'Message not sent',
+        description: 'The workspace chat could not open. Your draft is still on Home.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [navigate, ov, selectWorkspace, toast]);
+
+  useEffect(() => {
+    if (!pendingWorkspaceAsk || workspacesLoading) return;
+    if (workspacesError) {
+      if (cancelWorkspaceSelectionChatDispatch(pendingWorkspaceAsk.id)) {
+        ov.setShowWorkspaceSwitcher(false);
+        toast({
+          title: 'Workspace list unavailable',
+          description: 'Your Home draft was not sent. Retry when workspaces are available.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+    const validActiveWorkspace = activeWorkspaceId
+      ? workspaces.some(workspace => workspace.id === activeWorkspaceId)
+      : false;
+    if (activeWorkspaceId && validActiveWorkspace) {
+      deliverPendingWorkspaceAsk(activeWorkspaceId);
+    } else if (workspaces.length > 0) {
+      ov.setShowWorkspaceSwitcher(true);
+    } else {
+      cancelWorkspaceSelectionChatDispatch(pendingWorkspaceAsk.id);
+      ov.setShowCreateWorkspace(true);
+    }
+  }, [
+    activeWorkspaceId,
+    deliverPendingWorkspaceAsk,
+    ov,
+    pendingWorkspaceAsk,
+    toast,
+    workspaces,
+    workspacesError,
+    workspacesLoading,
+  ]);
+
   // §2.3: the ONE `waggle:open-app` listener (replaces Desktop.tsx:178-190).
   // Stashes the intent for mount-time consumers (AutomationCenterApp), then
   // navigates to the canonical URL. Live-listener consumers (UserProfileApp)
@@ -267,7 +579,7 @@ const ShellLayout = () => {
 
   // Keyboard shortcuts — every app shortcut is a navigate() now (§2.2).
   // Ctrl+W / Ctrl+Shift+M window handlers retire with the window manager
-  // (§3.1); Ctrl+Shift+N navigates to the active workspace's chat tab (§4.2).
+  // (§3.1); Ctrl+Shift+N starts a real session in the active workspace.
   useKeyboardShortcuts({
     onOpenApp: (id) => {
       ov.setShowWorkspaceSwitcher(false);
@@ -277,7 +589,7 @@ const ShellLayout = () => {
     onTogglePersonaSwitcher: ov.togglePersonaSwitcher,
     onToggleWorkspaceSwitcher: ov.toggleWorkspaceSwitcher,
     onToggleKeyboardHelp: ov.toggleKeyboardHelp,
-    onNewChatWindow: navigateToActiveChat,
+    onNewChatWindow: startNewChat,
   });
 
   // §2.2 row 1: palette result clicks become pure URL navigation. The
@@ -297,12 +609,13 @@ const ShellLayout = () => {
   }, [effectiveActiveWorkspaceId, selectWorkspace, navigate, ov]);
 
   // Onboarding completion handlers (relocated from Desktop.tsx:290-313).
-  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
-    completeOnboarding();
-    // Atomic start. 409 (trial already started) is fine — refresh state
-    // either way so the StatusBar countdown picks up the existing timestamp.
-    adapter.startTrial().then(refreshTier).catch(refreshTier);
-  }, [completeOnboarding, refreshTier]);
+  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => (
+    finalizeOnboarding(
+      completeOnboarding,
+      () => adapter.startTrial(),
+      refreshTier,
+    )
+  ), [completeOnboarding, refreshTier]);
 
   const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string, personaId?: string) => {
     selectWorkspace(workspaceId);
@@ -382,8 +695,8 @@ const ShellLayout = () => {
 
   // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
   // workspace's chat tab (routeFor falls back to /home with no workspace). The
-  // Agents & tasks badge surfaces unacknowledged coordination signals for now;
-  // PR3 refines it to the real pending-approvals/tasks count.
+  // Agent activity belongs in Agent swarm. The Agents spine item must not show
+  // raw start/tool/completion signal counts as if they were pending work.
   const isPro = currentTier === 'power' || currentTier === 'admin';
   const billingRank = BILLING_TIER_ORDER[billingTier] ?? 0;
   const spine: SidebarNavItem[] = useMemo(() => [
@@ -402,9 +715,9 @@ const ShellLayout = () => {
       onClick: navigateToActiveChat,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
-    { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
+    { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'] },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
-  ], [effectiveActiveWorkspaceId, navigateToActiveChat, waggleUnacknowledged]);
+  ], [effectiveActiveWorkspaceId, navigateToActiveChat]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
@@ -548,12 +861,41 @@ const ShellLayout = () => {
           onSelectGroup={(groupId) => { if (effectiveActiveWorkspaceId) patchWorkspace(effectiveActiveWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
       )}
       {ov.showWorkspaceSwitcher && deferredShellElement(
-        <WorkspaceSwitcher open onClose={() => ov.setShowWorkspaceSwitcher(false)}
+          <WorkspaceSwitcher open onClose={() => {
+            if (keepWorkspaceSwitcherOpenRef.current) {
+              keepWorkspaceSwitcherOpenRef.current = false;
+              return;
+            }
+            cancelWorkspaceSelectionChatDispatch();
+            ov.setShowWorkspaceSwitcher(false);
+        }}
           workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
           error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
-          onCreateNew={() => ov.setShowCreateWorkspace(true)}
-          onViewAll={() => { ov.setShowWorkspaceSwitcher(false); navigate('/workspaces'); }}
-          onSelect={(id) => { selectWorkspace(id); ov.setShowWorkspaceSwitcher(false); navigate(`/workspaces/${id}`); }} />
+          onCreateNew={() => {
+            cancelWorkspaceSelectionChatDispatch();
+            ov.setShowWorkspaceSwitcher(false);
+            ov.setShowCreateWorkspace(true);
+          }}
+          onViewAll={() => {
+              if (peekWorkspaceSelectionChatDispatch()) {
+                keepWorkspaceSwitcherOpenRef.current = true;
+                toast({ description: 'Choose a workspace here to send your Home message.' });
+                return;
+            }
+            ov.setShowWorkspaceSwitcher(false);
+            navigate('/workspaces');
+          }}
+            onSelect={(id) => {
+              if (peekWorkspaceSelectionChatDispatch()) {
+                if (!deliverPendingWorkspaceAsk(id)) {
+                  keepWorkspaceSwitcherOpenRef.current = true;
+                }
+                return;
+            }
+            selectWorkspace(id);
+            ov.setShowWorkspaceSwitcher(false);
+            navigate(`/workspaces/${id}`);
+          }} />
       )}
       {ov.showNotifications && deferredShellElement(
         <NotificationInbox open onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
@@ -691,21 +1033,16 @@ const AppShell = () => {
   // server-onboarded user whose webview localStorage is fresh — the P4
   // /api/onboarding/status probe only resolves AFTER the shell mounts, so the
   // wizard paints before the auto-complete lands. Hold boot until the decision
-  // is KNOWN: sync when localStorage already settles it, else probe the server
-  // (capped so a dead endpoint can't brick boot — 3s, inside the boot screen's
-  // own 3-4s runtime, because a 1.5s cap still let the wizard flash on a cold
-  // dev server where the status roundtrip runs long). resolveReturningUser-
-  // Onboarding persists the completed flag so useOnboarding reads it
-  // synchronously and never renders the wizard for an onboarded user.
-  const [onboardingResolved, setOnboardingResolved] = useState(isOnboardingStatusKnownSync);
-  useEffect(() => {
-    if (onboardingResolved) return;
-    let settled = false;
-    const finish = () => { if (!settled) { settled = true; setOnboardingResolved(true); } };
-    void resolveReturningUserOnboarding().finally(finish);
-    const cap = window.setTimeout(finish, 3000);
-    return () => window.clearTimeout(cap);
-  }, [onboardingResolved]);
+  // is KNOWN: sync only for explicit test overrides; all ordinary cached
+  // progress is provisional and reconciled with the current server profile
+  // After 3s, expose a clear recovery action while keeping provisional cache
+  // behind the neutral boot surface. A timeout is not profile confirmation.
+  const {
+    resolution: onboardingResolution,
+    recoveryVisible: onboardingRecoveryVisible,
+    retry: retryOnboardingResolution,
+  } = useOnboardingProfileGate();
+  const onboardingResolved = onboardingResolution === 'confirmed';
 
   const [booted, setBooted] = useState(initialBooted);
   const [showShell, setShowShell] = useState(() => initialBooted && isOnboardingStatusKnownSync());
@@ -714,11 +1051,12 @@ const AppShell = () => {
   // day-0 launch (nothing cached to paint) keeps the full brand moment.
   const [warmBoot] = useState(() => initialBooted && homeCacheExists());
 
-  // Fast path with no BootScreen to animate out (already booted this session):
-  // reveal the shell once onboarding resolves, since onExitComplete never fires.
+  // A service-generation change must revoke the old shell immediately. Once
+  // the replacement profile is confirmed, AnimatePresence restores the shell
+  // only after the neutral boot surface has completed its exit.
   useEffect(() => {
-    if (initialBooted && onboardingResolved) setShowShell(true);
-  }, [initialBooted, onboardingResolved]);
+    if (!onboardingResolved) setShowShell(false);
+  }, [onboardingResolved]);
 
   const handleBootComplete = () => {
     localStorage.setItem(BOOT_KEY, 'true');
@@ -741,7 +1079,13 @@ const AppShell = () => {
       <AnimatePresence onExitComplete={() => setShowShell(true)}>
         {!bootComplete && <BootScreen onComplete={handleBootComplete} ready={onboardingResolved} warm={warmBoot} />}
       </AnimatePresence>
-      {showShell && (
+      {!onboardingResolved && onboardingRecoveryVisible && (
+        <OnboardingRecoveryNotice
+          retrying={onboardingResolution === 'checking'}
+          onRetry={retryOnboardingResolution}
+        />
+      )}
+      {showShell && onboardingResolved && (
         <ShellProvider>
           <ShellLayout />
         </ShellProvider>

@@ -2,11 +2,11 @@
 //
 // Brief: briefs/2026-04-30-cc-sesija-A-waggle-apps-web-integration.md §2.3 Task A10
 //
-// Persists a flag file at `~/.waggle/first-launch.flag` so the onboarding wizard
+// Reads the flag file at `~/.waggle/first-launch.flag` so the onboarding wizard
 // state survives across app reinstalls (browser localStorage doesn't, since
-// Tauri builds may use a fresh WebView profile per install). The web `npm run
-// dev` path continues to use localStorage via useOnboarding — these commands
-// are the durable Tauri-mode addition, not a replacement.
+// Tauri builds may use a fresh WebView profile per install). Completion writes
+// are intentionally server-only so the active logical profile is checked
+// atomically before this durable state changes.
 //
 // Cross-platform user-home resolution uses std::env (USERPROFILE on Windows,
 // HOME on Unix) to avoid pulling in a new dirs/home crate dep.
@@ -51,20 +51,6 @@ pub async fn is_first_launch() -> Result<bool, String> {
         Err(_) => return Ok(true),
     };
     Ok(!path.exists())
-}
-
-/// Marks onboarding as complete by creating the flag file. Idempotent.
-/// Creates the parent `~/.waggle/` directory if needed.
-#[tauri::command]
-pub async fn mark_first_launch_complete() -> Result<(), String> {
-    let path = flag_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create_dir_all {} failed: {}", parent.display(), e))?;
-    }
-    std::fs::write(&path, b"completed\n")
-        .map_err(|e| format!("write {} failed: {}", path.display(), e))?;
-    Ok(())
 }
 
 /// Resets the first-launch flag (deletes the file). For dev / QA flows that

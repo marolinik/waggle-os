@@ -22,7 +22,12 @@ import {
 import type { AgentRunner } from './chat.js';
 import { buildWorkflowFromGroup } from '../../services/agent-group-executor.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
-import { listOllamaChatModelIds, resolveUsableModel } from '../model-availability.js';
+import {
+  isExactConfiguredKeylessCompatibleModel,
+  listOllamaChatModelIds,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { isOfflineOllamaModelReference } from './chat-helpers.js';
 import {
@@ -265,12 +270,28 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     let localExecutionModel: string | undefined;
     const workspaceModel = workspace?.model?.trim();
     const currentModel = server.agentState.currentModel?.trim();
-    const configuredModel = workspaceModel && isOfflineOllamaModelReference(workspaceModel)
+    const workspaceModelIsLocal = workspaceModel && (
+      isOfflineOllamaModelReference(workspaceModel)
+      || isExactConfiguredKeylessCompatibleModel(server, workspaceModel)
+    );
+    const configuredModel = workspaceModelIsLocal
       ? workspaceModel
       : currentModel;
-    if (configuredModel && isOfflineOllamaModelReference(configuredModel)) {
+    const configuredModelIsCompatible = configuredModel
+      ? isExactConfiguredKeylessCompatibleModel(server, configuredModel)
+      : false;
+    if (configuredModel && (
+      isOfflineOllamaModelReference(configuredModel) || configuredModelIsCompatible
+    )) {
       try {
-        localExecutionModel = await resolveUsableModel(server, configuredModel);
+        if (configuredModelIsCompatible) {
+          localExecutionModel = await resolveExplicitRoutableModel(server, configuredModel) ?? undefined;
+          if (!localExecutionModel) {
+            throw new Error(`Selected model "${configuredModel}" is not currently routable`);
+          }
+        } else {
+          localExecutionModel = await resolveUsableModel(server, configuredModel);
+        }
         if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
       } catch (error) {
         return reply.code(409).send({
@@ -411,6 +432,7 @@ async function executeGroup(
           runContext.workspaceId,
           listOllamaChatModelIds,
           () => traceId,
+          (model) => isExactConfiguredKeylessCompatibleModel(server, model),
         )
       : underlyingRunLoop;
     let availableTools = server.agentState.allTools;
@@ -524,7 +546,7 @@ async function executeGroup(
       runLoop,
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
-      defaultModel: server.agentState.currentModel,
+      defaultModel: localExecutionModel ?? server.agentState.currentModel,
       hooks: server.agentState.hookRegistry,
       signal,
     });

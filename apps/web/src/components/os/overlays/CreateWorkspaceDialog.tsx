@@ -12,13 +12,12 @@ import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { useShell } from '@/providers/ShellContext';
 import { canCreateWorkspaceAtTier } from '@/lib/workspace-limit';
 import LockedFeature from '@/components/os/LockedFeature';
 import { buildBreadcrumbs } from '@/lib/browse-breadcrumbs';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
-import type { StorageType, WorkspaceTemplate, TemplateCategory } from '@/lib/types';
+import type { StorageType, Workspace, WorkspaceTemplate, TemplateCategory } from '@/lib/types';
 import { TIER_CAPABILITIES, type ConnectorDefinition } from '@waggle/shared';
 
 /** Use native OS folder picker when running inside Tauri, falls back to custom browse modal. */
@@ -48,7 +47,7 @@ interface CreateWorkspaceDialogProps {
   onCreate: (data: {
     name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean;
     storageType?: StorageType; storagePath?: string; templateId?: string;
-  }) => void;
+  }) => Promise<Workspace | null>;
 }
 
 import { STANDARD_GROUPS } from '@/lib/workspace-groups';
@@ -728,8 +727,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
 /* ── Main Dialog ──────────────────────────────────────────────────── */
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
-  const { workspaces } = useWorkspaces();
-  const { billingTier } = useShell();
+  const { billingTier, workspaces } = useShell();
   // Gate off the SAME canonical rule the server enforces (tiers.ts
   // workspaceLimit), not the retired onboarding-complexity flag that blocked
   // Solo at workspace #2 while the backend would have allowed unlimited. Client
@@ -758,7 +756,12 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [templateSearch, setTemplateSearch] = useState('');
   const [showTemplateOptions, setShowTemplateOptions] = useState(false);
   const [showAgentOptions, setShowAgentOptions] = useState(false);
-  const dialogRef = useFocusTrap<HTMLDivElement>(open && !showTemplateCreator && !showFolderPicker && !pendingDeleteTemplate, onClose);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const requestClose = useCallback(() => {
+    if (!creating) onClose();
+  }, [creating, onClose]);
+  const dialogRef = useFocusTrap<HTMLDivElement>(open && !showTemplateCreator && !showFolderPicker && !pendingDeleteTemplate, requestClose);
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<ConnectorDefinition[]>([]);
@@ -774,6 +777,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     setShowAgentOptions(false);
     setTemplateSearch('');
     setCategoryFilter('all');
+    setCreateError(null);
   }, [open]);
 
   // Fetch templates + connectors + agent groups when dialog opens
@@ -804,21 +808,33 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     }
   }, [selectedTemplate, templates]);
 
-  const handleCreate = () => {
-    if (!name.trim() || (storageType === 'local' && !storagePath.trim())) return;
-    onCreate({
-      name: name.trim(), group,
-      persona: agentMode === 'single' ? selectedPersona : undefined,
-      agentGroupId: agentMode === 'group' ? selectedGroupId : undefined,
-      shared,
-      storageType, storagePath: storagePath.trim() || undefined,
-      templateId: selectedTemplate || undefined,
-    });
-    setName(''); setGroup('Personal'); setSelectedPersona(undefined); setShared(false);
-    setStorageType('virtual'); setStoragePath(''); setSelectedTemplate(null);
-    setShowTemplateOptions(false); setTemplateSearch(''); setCategoryFilter('all'); setShowAgentOptions(false);
-    setAgentMode('single'); setSelectedGroupId(undefined);
-    onClose();
+  const handleCreate = async () => {
+    if (creating || !name.trim() || (storageType === 'local' && !storagePath.trim())) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await onCreate({
+        name: name.trim(), group,
+        persona: agentMode === 'single' ? selectedPersona : undefined,
+        agentGroupId: agentMode === 'group' ? selectedGroupId : undefined,
+        shared,
+        storageType, storagePath: storagePath.trim() || undefined,
+        templateId: selectedTemplate || undefined,
+      });
+      if (created === null) {
+        setCreateError('Workspace wasn’t created. Your setup is still here — check your connection and try again.');
+        return;
+      }
+      setName(''); setGroup('Personal'); setSelectedPersona(undefined); setShared(false);
+      setStorageType('virtual'); setStoragePath(''); setSelectedTemplate(null);
+      setShowTemplateOptions(false); setTemplateSearch(''); setCategoryFilter('all'); setShowAgentOptions(false);
+      setAgentMode('single'); setSelectedGroupId(undefined);
+      onClose();
+    } catch {
+      setCreateError('Workspace wasn’t created. Your setup is still here — check your connection and try again.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const requestDeleteTemplate = (template: WorkspaceTemplate) => {
@@ -894,20 +910,21 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           three siblings here that collided (React duplicate-key error on every
           re-render while open). Each direct child needs an explicit key. */}
       <motion.div key="create-workspace-dialog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
+        className="fixed inset-0 z-[100] flex items-center justify-center" onClick={requestClose}>
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div ref={dialogRef} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-workspace-title"
+          aria-busy={creating}
           tabIndex={-1}
           className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden focus:outline-none flex flex-col"
           onClick={e => e.stopPropagation()}>
 
           <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border/30">
             <h2 id="create-workspace-title" className="text-lg font-display font-semibold text-foreground">Create Workspace</h2>
-            <button type="button" onClick={onClose} aria-label="Close create workspace" className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
+            <button type="button" onClick={requestClose} disabled={creating} aria-label="Close create workspace" className="p-1 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"><X aria-hidden="true" className="w-4 h-4" /></button>
           </div>
 
           <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1 min-h-0">
@@ -1314,11 +1331,18 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
             </button>
           </div>
 
+          {createError && (
+            <p role="alert" className="mx-6 mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {createError}
+            </p>
+          )}
+
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-border/30">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-            <button type="button" onClick={handleCreate} disabled={!name.trim() || (storageType === 'local' && !storagePath.trim())} aria-label="Create workspace"
+            <button type="button" onClick={requestClose} disabled={creating} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors">Cancel</button>
+            <button type="button" onClick={() => void handleCreate()} disabled={creating || !name.trim() || (storageType === 'local' && !storagePath.trim())} aria-label={creating ? 'Creating workspace' : 'Create workspace'}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Create
+              {creating ? <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /> : <Plus aria-hidden="true" className="w-3.5 h-3.5" />}
+              {creating ? 'Creating…' : 'Create'}
             </button>
           </div>
         </motion.div>

@@ -546,14 +546,14 @@ describe('SubagentOrchestrator', () => {
     expect(config.tools.map((tool) => tool.name)).toContain('read_file');
     expect(measureOpenAiToolSchemaChars(config.tools)).toBeLessThanOrEqual(8_000);
     expect(config).toMatchObject({
-      maxTurns: 9,
-      maxToolRounds: 8,
-      maxTokenBudget: 80_000,
-      synthesisReserveTokens: 14_000,
+      maxTurns: 5,
+      maxToolRounds: 4,
+      maxTokenBudget: 48_000,
+      synthesisReserveTokens: 10_000,
       toolContextBudget: {
-        maxSingleResultChars: 8_000,
+        maxSingleResultChars: 4_000,
         recentResultCount: 2,
-        historicalResultChars: 750,
+        historicalResultChars: 600,
       },
     });
 
@@ -569,7 +569,7 @@ describe('SubagentOrchestrator', () => {
       }],
       aggregation: 'last',
     });
-    expect(boundedRunner.mock.calls[1][0].maxTurns).toBe(9);
+    expect(boundedRunner.mock.calls[1][0].maxTurns).toBe(5);
   });
 
   it('rejects excessive workflow steps before worker events or model calls', async () => {
@@ -621,8 +621,7 @@ describe('SubagentOrchestrator', () => {
 
   it('rejects aggregate configured turns above the workflow ceiling', async () => {
     const steps = [
-      ...makeIndependentSteps(11, ['read_file']).map(step => ({ ...step, maxTurns: 9 })),
-      { ...makeIndependentSteps(1)[0], name: 'No tools', maxTurns: 3 },
+      ...makeIndependentSteps(20, ['read_file']).map(step => ({ ...step, maxTurns: 5 })),
     ];
 
     await expect(orchestrator.runWorkflow({
@@ -633,7 +632,7 @@ describe('SubagentOrchestrator', () => {
     })).rejects.toMatchObject({
       name: 'WorkflowLimitError',
       kind: 'turns',
-      actual: 102,
+      actual: 100,
       limit: EXPECTED_MAX_WORKFLOW_TURNS,
     });
     expect(runner).not.toHaveBeenCalled();
@@ -670,7 +669,7 @@ describe('SubagentOrchestrator', () => {
       role: 'analyst',
       task: 'Inspect this implementation',
       tools: ['read_file'],
-      maxTurns: 9,
+      maxTurns: 5,
     };
 
     await expect(orchestrator.runWorkflow({
@@ -681,7 +680,7 @@ describe('SubagentOrchestrator', () => {
     })).rejects.toMatchObject({
       name: 'WorkflowLimitError',
       kind: 'turns',
-      actual: 288,
+      actual: 160,
       limit: EXPECTED_MAX_WORKFLOW_TURNS,
     });
     expect(runner).not.toHaveBeenCalled();

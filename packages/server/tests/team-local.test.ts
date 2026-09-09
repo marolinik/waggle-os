@@ -17,7 +17,11 @@ describe('Team local routes', () => {
     // Create a personal.mind file (empty SQLite — MindDB inits schema)
     fs.writeFileSync(path.join(tmpDir, 'personal.mind'), '');
     // Set tier to TEAMS so team routes pass tier enforcement
-    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TEAMS' }));
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+      tier: 'TEAMS',
+    }));
 
     server = await buildLocalServer({
       dataDir: tmpDir,

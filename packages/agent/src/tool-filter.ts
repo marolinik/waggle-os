@@ -108,7 +108,7 @@ interface IntentBundle {
   tools: readonly string[];
 }
 
-const ACTION_PATTERN = /\b(use|using|call|invoke|create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
+const ACTION_PATTERN = /\b(use|using|call|invoke|create|build|draft|write|read|edit|modify|make|generate|regenerate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
 const CONTINUATION_PATTERN = /^\s*(?:(?:yes,?\s+please)\b|(?:(?:(?:ok(?:ay)?|yes)[,\s]+)?(?:(?:please\s+)|(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))?(?:continue|proceed|do\s+it|go\s+ahead|next\s+step|carry\s+on)\b))/i;
 const RETRY_CONTINUATION_PATTERN = /^\s*(?:(?:ok(?:ay)?|yes)[,\s]+)?(?:(?:please\s+)|(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))?(?:try\s+(?:now|again)|retry|same\s+again)\b/i;
 const TOOL_RETRY_CONTEXT_PATTERN = /\b(?:no tools? (?:are|were) serialized|tool access (?:was|is) unavailable|nothing for me to run|could not use (?:the )?tools?|couldn['\u2019]t use (?:the )?tools?)\b/i;
@@ -134,7 +134,7 @@ const REPOSITORY_EXECUTION_OR_MUTATION_PATTERN = new RegExp(
   String.raw`(?:${EXECUTION_DIRECTIVE_BOUNDARY_SOURCE}(?:then\s+)?${DIRECTIVE_LEAD_SOURCE}${REPOSITORY_EXECUTION_OR_MUTATION_VERB_SOURCE}\b|${DIRECT_REPOSITORY_DISCOVERY_PATTERN.source}\s+to\s+${REPOSITORY_EXECUTION_OR_MUTATION_VERB_SOURCE}\b|${DIRECT_REPOSITORY_DISCOVERY_PATTERN.source}${REPOSITORY_CONTINUATION_SOURCE}${DIRECTIVE_LEAD_SOURCE}${REPOSITORY_EXECUTION_OR_MUTATION_VERB_SOURCE}\b|${EXECUTION_DIRECTIVE_BOUNDARY_SOURCE}(?:then\s+)?${DIRECTIVE_LEAD_SOURCE}(?:use|using)\s+(?:bash|terminal|shell)\b|${DIRECT_REPOSITORY_DISCOVERY_PATTERN.source}${REPOSITORY_CONTINUATION_SOURCE}${DIRECTIVE_LEAD_SOURCE}(?:use|using)\s+(?:bash|terminal|shell)\b)`,
   'i',
 );
-const NEGATED_TOOL_VERB_SOURCE = String.raw`(?:use|using|call|calling|invoke|invoking|create|creating|write|writing|edit|editing|read|reading|browse|browsing|explore|exploring|search|searching|schedule|scheduling|send|sending|post|posting|commit|committing|push|pushing|delete|deleting|remove|removing|run|running|execute|executing|try|trying|retry|retrying)`;
+const NEGATED_TOOL_VERB_SOURCE = String.raw`(?:use|using|call|calling|invoke|invoking|create|creating|generate|generating|regenerate|regenerating|write|writing|edit|editing|read|reading|browse|browsing|explore|exploring|search|searching|schedule|scheduling|send|sending|post|posting|commit|committing|push|pushing|delete|deleting|remove|removing|run|running|execute|executing|try|trying|retry|retrying)`;
 const NEGATED_TOOL_DIRECTIVE_SOURCE = String.raw`(?:do\s+not|don['\u2019]t|(?:do\s+not|don['\u2019]t)\s+want\s+to|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|might\s+not|cannot|can\s+not|can['\u2019]t|will\s+not|won['\u2019]t|would\s+not|wouldn['\u2019]t|(?:am|are|is|['\u2019](?:m|re|s))\s+not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?|(?:aren['\u2019]t|isn['\u2019]t)\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to)|there\s+(?:is|['\u2019]s)\s+no\s+need\s+to|not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?)`;
 const NEGATED_TOOL_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|scripts?)`;
 const POSITIVE_TOOL_CLAUSE_RESUME_SOURCE = String.raw`(?:\b(?:but|however|instead|then)\b|\band\s+(?=(?:please\s+)?(?:${ACTION_PATTERN.source}|\bexplore\b)))`;
@@ -163,6 +163,47 @@ const REPOSITORY_DISCOVERY_BUNDLE: IntentBundle = {
   tools: ['search_files', 'search_content', 'read_file', 'git_status', 'git_log'],
 };
 const REPOSITORY_DISCOVERY_TOOL_NAMES = new Set(REPOSITORY_DISCOVERY_BUNDLE.tools);
+
+const BOUNDED_FILE_ROUND_TRIP_PATTERN = /^\s*(?:please(?:,\s*|\s+))?(?:create|write)\s+(?:a\s+)?file\s+(?:named|called)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([a-z0-9][a-z0-9._-]{0,127}))\s+(?:in\s+(?:this|the)\s+workspace\s+)?(?:containing|with(?:\s+the)?\s+content)\s+exactly\s+(?:a\s+)?single\s+line\s+([^\r\n]{1,512}?)\.\s*(?:then\s+)?(?:verify|check)\s+(?:the\s+)?(?:saved\s+)?file\s+by\s+reading\s+(?:it|the\s+same\s+file)(?:\s+back)?\s+and\s+(?:respond|reply)\s+(?:with\s+)?exactly\s+([^\r\n]{1,512}?)\.?\s*$/i;
+const GENERATED_DOCUMENT_EXTENSIONS = new Set(['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx']);
+const SPECIALIZED_ARTIFACT_REQUEST_PATTERNS = [
+  /\b(?:docx|word\s+document)\b/i,
+  /\bpdf\b/i,
+  /\b(?:xlsx|excel\s+(?:file|workbook|spreadsheet)|spreadsheet)\b/i,
+  /\b(?:pptx|powerpoint|slide\s+deck|presentation)\b/i,
+] as const;
+const GENERIC_TEXT_FILE_MUTATION_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit']);
+const WINDOWS_RESERVED_FILE_NAMES = /^(?:(?:con|prn|aux|nul|(?:com|lpt)(?:[1-9]|[¹²³]))(?:\..*)?|conin\$|conout\$)$/i;
+
+export function isBoundedSingleFileRoundTrip(message: string): boolean {
+  if (message.length > 1_200
+    || Array.from(message).some(char => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127;
+    })) {
+    return false;
+  }
+  const match = BOUNDED_FILE_ROUND_TRIP_PATTERN.exec(message);
+  if (!match) return false;
+
+  const fileName = match[1] ?? match[2] ?? match[3] ?? '';
+  if (!fileName
+    || fileName.length > 240
+    || fileName !== fileName.trim()
+    || fileName.startsWith('.')
+    || fileName.endsWith('.')
+    || fileName.endsWith(' ')
+    || /[<>:"/\\|?*%$~{}]/.test(fileName)
+    || fileName.includes('[')
+    || fileName.includes(']')
+    || WINDOWS_RESERVED_FILE_NAMES.test(fileName)) {
+    return false;
+  }
+  const extension = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : undefined;
+  if (extension && GENERATED_DOCUMENT_EXTENSIONS.has(extension)) return false;
+
+  return match[4].trim() === match[5].trim();
+}
 
 const INTENT_BUNDLES: readonly IntentBundle[] = [
   REPOSITORY_DISCOVERY_BUNDLE,
@@ -407,6 +448,29 @@ export function selectToolsForTurn(
     deduplicated.push({ tool: candidate, index });
   }
 
+  if (isBoundedSingleFileRoundTrip(options.message)) {
+    const allowedNames = new Set(['write_file', 'read_file']);
+    const hasUnrelatedMandatoryTool = (options.mandatoryToolNames ?? [])
+      .some(name => !allowedNames.has(name));
+    if (!hasUnrelatedMandatoryTool) {
+      const toolsByName = new Map(deduplicated.map(({ tool }) => [tool.name, tool]));
+      const selected = ['write_file', 'read_file']
+        .map(name => toolsByName.get(name))
+        .filter((tool): tool is ToolDefinition => tool !== undefined);
+      const schemaChars = measureOpenAiToolSchemaChars(selected);
+      if (selected.length !== 2
+        || maxTools < 2
+        || schemaChars > maxSchemaChars) {
+        return { tools: [], schemaChars: 2, omittedCount: eligibleTools.length };
+      }
+      return {
+        tools: selected,
+        schemaChars,
+        omittedCount: eligibleTools.length - selected.length,
+      };
+    }
+  }
+
   const rawMessage = options.message.toLowerCase();
   const negatedClauses = [...rawMessage.matchAll(NEGATED_TOOL_CLAUSE_PATTERN)].map(match => match[0]);
   const message = positiveIntentText(rawMessage);
@@ -443,6 +507,8 @@ export function selectToolsForTurn(
   const recent = new Set(Array.from(new Set(options.recentToolNames ?? [])).slice(-4));
   const suppressImplicitCalculationTools = hasInlineCalculationOperands(message)
     && !EXPLICIT_CALCULATION_TOOL_PATTERN.test(message);
+  const requiresSpecializedArtifactGenerator = SPECIALIZED_ARTIFACT_REQUEST_PATTERNS
+    .some(pattern => pattern.test(intentMessage));
 
   if (isContinuation
     && previousUserIntent.length === 0
@@ -475,6 +541,9 @@ export function selectToolsForTurn(
       continue;
     }
     if (!mandatory.has(tool.name) && isNegatedExecutionTool(tool, negatedClauses)) continue;
+    if (requiresSpecializedArtifactGenerator && GENERIC_TEXT_FILE_MUTATION_TOOLS.has(tool.name)) {
+      continue;
+    }
     if (suppressImplicitCalculationTools
       && IMPLICIT_CALCULATION_TOOL_NAMES.has(tool.name)
       && !mandatory.has(tool.name)) {

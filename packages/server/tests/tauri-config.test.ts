@@ -764,6 +764,7 @@ describe('Tauri Production Configuration', () => {
   it('pins patched transitive dependency versions used by desktop builds', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
       engines?: { node?: string };
+      packageManager?: string;
       overrides?: Record<string, string | Record<string, string>>;
       dependencies?: Record<string, string>;
     };
@@ -772,12 +773,19 @@ describe('Tauri Production Configuration', () => {
     ) as {
       packages: Record<string, { version?: string }>;
     };
+    const appManifest = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
+    ) as { overrides?: Record<string, string> };
+    const appLockfile = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package-lock.json'), 'utf-8'),
+    ) as { packages: Record<string, { version?: string }> };
     const expectedOverrides = {
       '@fastify/static': '>=10.1.2 <11',
       'brace-expansion@1': '1.1.18',
       'brace-expansion@2': '2.1.4',
       'brace-expansion@5': '5.0.9',
-      'fast-uri': '3.1.5',
+      'fast-uri': '3.1.7',
+      browserslist: '4.28.9',
       'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.1',
@@ -787,11 +795,13 @@ describe('Tauri Production Configuration', () => {
     };
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
+    expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
     expect(manifest.dependencies).toMatchObject({
       '@huggingface/transformers': '3.8.1',
       sharp: '0.35.3',
     });
+    expect(appManifest.overrides).toMatchObject({ browserslist: '4.28.9' });
 
     const fastifyStaticRanges = ['launcher', 'server'].map((workspace) => {
       const workspaceManifest = JSON.parse(fs.readFileSync(
@@ -829,12 +839,18 @@ describe('Tauri Production Configuration', () => {
 
     expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
-    expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.5']));
+    expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.7']));
+    expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
     expect(versionsFor('better-sqlite3')).toEqual(new Set(['12.6.2']));
+    expect(new Set(
+      Object.entries(appLockfile.packages)
+        .filter(([packagePath]) => packagePath.endsWith('node_modules/browserslist'))
+        .map(([, metadata]) => metadata.version),
+    )).toEqual(new Set(['4.28.9']));
     const sharpBindings = Object.entries(lockfile.packages)
       .filter(([packagePath]) => (
         /node_modules\/@img\/sharp-(?!libvips-)[^/]+$/.test(packagePath)
@@ -873,7 +889,7 @@ describe('Tauri Production Configuration', () => {
 
     try {
       writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
-      writeManifest('fast-uri', 'fast-uri', '3.1.5');
+      writeManifest('fast-uri', 'fast-uri', '3.1.7');
       writeManifest('ip-address', 'ip-address', '10.4.0');
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
       writeManifest('sharp', 'sharp', '0.35.3');
@@ -942,11 +958,11 @@ describe('Tauri Production Configuration', () => {
       expect(vulnerableStagedBrace.stderr).toContain('brace-expansion@5.0.7');
       writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
 
-      writeManifest('fast-uri', 'fast-uri', '3.1.4');
+      writeManifest('fast-uri', 'fast-uri', '3.1.5');
       const vulnerableFastUri = run();
       expect(vulnerableFastUri.status).toBe(1);
-      expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.4');
-      writeManifest('fast-uri', 'fast-uri', '3.1.5');
+      expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.5');
+      writeManifest('fast-uri', 'fast-uri', '3.1.7');
 
       writeManifest('ip-address', 'ip-address', '10.2.0');
       const vulnerableIpAddress = run();
@@ -1964,6 +1980,13 @@ describe('Tauri Production Configuration', () => {
 });
 
 describe('CI/CD Configuration', () => {
+  it('gives broad-suite lifecycle hooks the same contention budget as tests', () => {
+    const config = fs.readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf-8');
+
+    expect(config).toMatch(/testTimeout:\s*30_000/);
+    expect(config).toMatch(/hookTimeout:\s*30_000/);
+  });
+
   it('bounds the broad root Vitest lane to two workers', () => {
     const workflow = parseYaml(
       fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf-8'),

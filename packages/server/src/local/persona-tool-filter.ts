@@ -27,9 +27,16 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
   'search_memory', 'save_memory', 'get_identity', 'get_awareness', 'query_knowledge',
   'add_task', 'correct_knowledge', 'list_skills', 'search_skills', 'suggest_skill',
   'acquire_capability', 'install_capability',
+  // Static, read-only connector catalog discovery. Dynamic connector actions
+  // remain governed separately by the connector_ prefix policy below.
+  'find_connector', 'list_connector_categories',
   // Write-side skill tools — required for the self-evolving loop to close.
-  'create_skill', 'read_skill', 'delete_skill',
+  'create_skill', 'read_skill', 'delete_skill', 'calculate_decision_matrix',
   'compose_workflow', 'create_plan', 'add_plan_step', 'execute_step', 'show_plan',
+]);
+
+const EXPLICIT_PERSONA_ARTIFACT_TOOLS: ReadonlySet<string> = new Set([
+  'generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx',
 ]);
 
 /**
@@ -45,7 +52,8 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
  */
 export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'write_file', 'edit_file', 'git_commit', 'git_push', 'git_merge',
-  'save_memory', 'correct_knowledge', 'generate_docx', 'install_capability',
+  'save_memory', 'correct_knowledge', 'generate_docx', 'generate_pdf',
+  'generate_xlsx', 'generate_pptx', 'install_capability',
   'spawn_agent', 'execute_step', 'bash',
   // Skill authoring is a write — read-only personas must not create/delete skills.
   'create_skill', 'delete_skill',
@@ -60,6 +68,8 @@ export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
 export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...READONLY_TOOLS,
   'read_skill',
+  'calculate_decision_matrix',
+  'find_connector', 'list_connector_categories',
   // Plan authoring is read-only-safe: create_plan / add_plan_step only build an
   // in-memory Plan object in a closure (plan-tools.ts — no db/fs/persistence),
   // exactly like show_plan (already in READONLY_TOOLS). Keeping them here lets
@@ -83,11 +93,19 @@ export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
 export function applyPersonaToolFilter(
   tools: ToolDefinition[],
   persona: AgentPersona,
+  requestedToolNames: readonly string[] = [],
 ): ToolDefinition[] {
   let out = tools;
 
   if (persona.tools.length > 0) {
-    const allowed = new Set([...persona.tools, ...ALWAYS_AVAILABLE_TOOLS]);
+    const explicitlyRequestedArtifacts = requestedToolNames.filter(name => (
+      EXPLICIT_PERSONA_ARTIFACT_TOOLS.has(name)
+    ));
+    const allowed = new Set([
+      ...persona.tools,
+      ...ALWAYS_AVAILABLE_TOOLS,
+      ...explicitlyRequestedArtifacts,
+    ]);
     out = out.filter(t => allowed.has(t.name) || t.name.startsWith('connector_'));
   }
 
