@@ -345,6 +345,7 @@ export class Orchestrator {
   buildSystemPrompt(
     modelOverride = this.model,
     availableTools: readonly Pick<ToolDefinition, 'name' | 'description'>[] = this.tools,
+    includeRecentContext = true,
   ): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
@@ -383,12 +384,12 @@ export class Orchestrator {
     });
 
     // ── PRELOADED CONTEXT (per-session memory, changes every call) ──
-    const contextSection = this.uncachedSection('recent_context', () => {
+    const contextSection = includeRecentContext ? this.uncachedSection('recent_context', () => {
       const recentContext = this.loadRecentContext();
       return recentContext
         ? '# Context From Your Memory\nThis was automatically loaded — you already know this:\n' + recentContext
         : '';
-    });
+    }) : '';
 
     const parts = [identitySection, goalAncestrySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
@@ -415,8 +416,8 @@ export class Orchestrator {
     const closedWorldRewrite = isClosedWorldRewriteRequest(query);
     const corePrompt = closedWorldRewrite
       ? ''
-      : this.buildSystemPrompt(effectiveModel, opts.availableTools ?? this.tools);
-    const context: ContextFramesImpl = closedWorldRewrite
+      : this.buildSystemPrompt(effectiveModel, opts.availableTools ?? this.tools, false);
+    let context: ContextFramesImpl = closedWorldRewrite
       ? {
           stateFrames: [],
           recentChanges: [],
@@ -468,6 +469,38 @@ export class Orchestrator {
         workspace: workspaceResults.map(r => r.frame),
         personal: personalResults.map(r => r.frame),
         scanSafe,
+      };
+    }
+
+    if (!closedWorldRewrite && recalled.scanSafe) {
+      const recalledFrameIds = new Set(
+        [...recalled.workspace, ...recalled.personal].map(frame => frame.id),
+      );
+      const renderedRecall = recalled.renderedText ?? '';
+      const isAlreadyRecalled = (frame: MemoryFrame): boolean => {
+        if (recalledFrameIds.has(frame.id)) return true;
+        if (!renderedRecall) return false;
+
+        const content = frame.content.trim();
+        const date = frame.created_at?.slice(0, 10) ?? 'unknown';
+        const semanticNeedle = `[${date}, ${frame.importance}] ${content.slice(0, RECALL_LINE_LENGTH)}`;
+        if (renderedRecall.includes(semanticNeedle)) return true;
+
+        const isLaneFrame = content.startsWith(MIND_PROFILE_PREFIX)
+          || content.startsWith(MIND_FACT_PREFIX)
+          || content.startsWith(MIND_EVENT_PREFIX)
+          || content.startsWith(MIND_RAWTURN_PREFIX);
+        if (!isLaneFrame) return false;
+        const newline = content.indexOf('\n');
+        const body = (newline >= 0 ? content.slice(newline + 1) : content).trim();
+        return body.length > 0
+          && renderedRecall.includes(body.slice(0, RECALL_LINE_LENGTH));
+      };
+
+      context = {
+        ...context,
+        stateFrames: context.stateFrames.filter(frame => !isAlreadyRecalled(frame)),
+        recentChanges: context.recentChanges.filter(frame => !isAlreadyRecalled(frame)),
       };
     }
 

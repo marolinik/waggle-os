@@ -3335,6 +3335,8 @@ describe('persona acceptance prompt budget', () => {
     const config = capturedConfig!;
     expect(config.messages).toContainEqual({ role: 'user', content: LIVE_PREMIUM_WORKSPACE_PROMPT });
     expect(config.tools).toEqual([]);
+    expect(config.systemPrompt).not.toContain('# Context From Your Memory');
+    expect(config.systemPrompt.split(PERSISTED_MEMORY_SENTINEL)).toHaveLength(2);
     expect(config.systemPrompt.length).toBeLessThan(13_000);
 
     const metrics = parseSse(response.body).find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
