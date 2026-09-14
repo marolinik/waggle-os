@@ -110,3 +110,79 @@ describe('POST /api/chat request validation (characterization)', () => {
     expect(runnerCalls).toBe(1);
   });
 });
+
+describe('POST /api/chat slash-command turns (characterization)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-cmd-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
+      throw new Error('slash commands must not reach the agent runner');
+    };
+  });
+
+  afterAll(async () => {
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
+  });
+
+  /** Returns the `done` event payload of a command turn. */
+  async function commandTurn(message: string): Promise<{ content: string; toolsUsed: unknown[] }> {
+    const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload: { message } });
+    expect(res.statusCode).toBe(200);
+    const done = res.body
+      .split(/\n\n/)
+      .filter(block => block.startsWith('event: done'))
+      .map(block => JSON.parse(block.split('\n').find(l => l.startsWith('data: '))!.slice(6)));
+    expect(done).toHaveLength(1);
+    return done[0];
+  }
+
+  it('/skills lists the loaded skills when persisted memory reads are allowed', async () => {
+    const { content, toolsUsed } = await commandTurn('/skills');
+    expect(toolsUsed).toEqual([]);
+    const skillCount = server.agentState.skills.length;
+    if (skillCount === 0) {
+      expect(content).toBe('## Active Skills\n\nNo skills are currently active in this workspace.');
+    } else {
+      expect(content).toContain(`_${skillCount} skill(s) loaded._`);
+    }
+  });
+
+  it('/skills reports no skills when the turn denies persisted memory reads', async () => {
+    const { content } = await commandTurn('/skills - do not use my saved memory');
+    expect(content).toBe('## Active Skills\n\nNo skills are currently active in this workspace.');
+  });
+
+  it('/memory <query> against an empty personal mind reports no matches', async () => {
+    const { content } = await commandTurn('/memory architecture decisions');
+    expect(content).toBe('## Memory Search: "architecture decisions"\n\nNo relevant memories found.');
+  });
+
+  it('/memory <query> is refused when the turn denies persisted memory reads', async () => {
+    const { content } = await commandTurn('/memory architecture - do not use my saved memory');
+    // QUIRK: the deny suffix is part of the query text echoed back in the heading.
+    expect(content).toBe(
+      '## Memory Search: "architecture - do not use my saved memory"\n\nPersisted memory access is disabled for this turn.',
+    );
+  });
+
+  it('/status on a fresh personal chat reports only the skills count', async () => {
+    const { content } = await commandTurn('/status');
+    expect(content).toBe(`## Status Report\n\n**Skills loaded:** ${server.agentState.skills.length}`);
+  });
+
+  it('/status with persisted memory denied leaks the disabled sentinel as a report section', async () => {
+    const { content } = await commandTurn('/status - do not use my saved memory');
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-1): getWorkspaceState() returns the
+    // "disabled" sentinel, and statusCommand only filters the
+    // 'No workspace state available.' sentinel, so the disabled notice is
+    // rendered as if it were workspace state. Pinned, not fixed.
+    expect(content).toBe(
+      '## Status Report\n\nPersisted workspace state is disabled for this turn.\n\n**Skills loaded:** 0',
+    );
+  });
+});
