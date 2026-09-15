@@ -342,6 +342,66 @@ function resolveChatWorkspacePaths(
 }
 
 /**
+ * Builds the slash-command context for a chat turn (same shape as the
+ * `routes/commands.ts` route) with the turn's memory-deny directives applied:
+ * recall, workspace state and skill listing degrade to sentinel strings that
+ * the command handlers render verbatim.
+ */
+function buildChatCommandContext(input: {
+  server: ChatServer;
+  orchestrator: Orchestrator;
+  executionWorkspaceId: string | undefined;
+  sessionId: string;
+  effectiveWorkspace: string | undefined;
+  persistedMemoryReadAllowed: boolean;
+  turnMutationPolicy: TurnMutationPolicy;
+}) {
+  const {
+    server, orchestrator, executionWorkspaceId, sessionId, effectiveWorkspace,
+    persistedMemoryReadAllowed, turnMutationPolicy,
+  } = input;
+  return {
+    // Command handlers interpolate this value into user-facing agent
+    // instructions. Keep the non-workspace observability sentinel out of
+    // those prompts so personal commands cannot target a fake workspace.
+    workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+    sessionId,
+    searchMemory: async (query: string): Promise<string> => {
+      if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
+      try {
+        const recall = await orchestrator.recallMemory(query);
+        if (recall.count === 0) return 'No relevant memories found.';
+        const items = (recall.recalled ?? []).slice(0, 5);
+        return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
+      } catch {
+        return 'Memory search unavailable.';
+      }
+    },
+    getWorkspaceState: async (): Promise<string> => {
+      if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
+      if (!allowsConversationHistory(turnMutationPolicy)) {
+        return 'Conversation-derived workspace state is disabled for this turn.';
+      }
+      if (!effectiveWorkspace) return 'No workspace state available.';
+      const block = buildWorkspaceNowBlock({
+        dataDir: server.localConfig.dataDir,
+        workspaceId: effectiveWorkspace,
+        wsManager: server.workspaceManager,
+        activateWorkspaceMind: server.agentState.activateWorkspaceMind,
+        cronSchedules: server.cronStore.list(),
+      });
+      if (!block) return 'No workspace state available.';
+      return formatWorkspaceNowPrompt(block);
+    },
+    listSkills: (): string[] => {
+      return persistedMemoryReadAllowed
+        ? server.agentState.skills.map(s => s.name)
+        : [];
+    },
+  };
+}
+
+/**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
  * plus user-saved customs in `~/.waggle/personas/`).
@@ -3191,46 +3251,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const { commandRegistry } = server.agentState;
       const isSlashCommand = commandRegistry.isCommand(message);
       if (isSlashCommand) {
-        // Build a lightweight command context (same as commands.ts route)
-        const cmdContext = {
-          // Command handlers interpolate this value into user-facing agent
-          // instructions. Keep the non-workspace observability sentinel out of
-          // those prompts so personal commands cannot target a fake workspace.
-          workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+        const cmdContext = buildChatCommandContext({
+          server,
+          orchestrator: sessionOrch,
+          executionWorkspaceId,
           sessionId,
-          searchMemory: async (query: string): Promise<string> => {
-            if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
-            try {
-              const recall = await sessionOrch.recallMemory(query);
-              if (recall.count === 0) return 'No relevant memories found.';
-              const items = (recall.recalled ?? []).slice(0, 5);
-              return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
-            } catch {
-              return 'Memory search unavailable.';
-            }
-          },
-          getWorkspaceState: async (): Promise<string> => {
-            if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
-            if (!allowsConversationHistory(turnMutationPolicy)) {
-              return 'Conversation-derived workspace state is disabled for this turn.';
-            }
-            if (!effectiveWorkspace) return 'No workspace state available.';
-            const block = buildWorkspaceNowBlock({
-              dataDir: server.localConfig.dataDir,
-              workspaceId: effectiveWorkspace,
-              wsManager: server.workspaceManager,
-              activateWorkspaceMind: server.agentState.activateWorkspaceMind,
-              cronSchedules: server.cronStore.list(),
-            });
-            if (!block) return 'No workspace state available.';
-            return formatWorkspaceNowPrompt(block);
-          },
-          listSkills: (): string[] => {
-            return persistedMemoryReadAllowed
-              ? server.agentState.skills.map(s => s.name)
-              : [];
-          },
-        };
+          effectiveWorkspace,
+          persistedMemoryReadAllowed,
+          turnMutationPolicy,
+        });
         const marketplaceSubcommand = message.trim().match(
           /^\/(?:marketplace|mp|market)\s+(installed|install|sync)\b/i,
         )?.[1]?.toLowerCase();
