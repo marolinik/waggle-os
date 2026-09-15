@@ -60,9 +60,9 @@ Add-when condition becomes true.
 | 2026-09-14 | 1 | Pinch point for `chat.ts` = `POST /api/chat` through `buildLocalServer` with the `server.agentRunner` object seam; fetch-spy link seam for the real runner path | Cheapest reachable test points; the 3652-line handler has no unit seam. |
 | 2026-09-15 | 1 | Pin Node via `.node-version` (TD-ENV-1 closed) | Stops the false-red `ERR_DLOPEN_FAILED` trap for every future shell. |
 | 2026-09-15 | 1 | Phase 1 exit accepted with `chat.ts` at 86.5% lines; 24-item Characterization Backlog carried, P1 items (approval/trust hooks, retry/fallback chain, `buildSystemPrompt`) must be pinned before Phase 2 touches those ranges | Coverage follows the paths Phase 2 will change; not a dedicated testing project. |
-| 2026-09-15 | 2 | Phase 2 scope = safe Extract Method on already-pinned regions only (validation, workspace resolution, canned-reply streaming); no method object yet | Zero new pins needed; every commit structure-only with the server gate green between commits. |
+| 2026-09-15 | 2 | Phase 2 scope = safe Extract Method on pinned regions (validation, workspace resolution, canned-reply streaming); no method object yet | Intended zero new pins. Post-review correction: `acd7ec0c` also moved the 409 `WORKSPACE_NOT_READY` / `WORKSPACE_ROOT_UNAVAILABLE` exits that TESTING.md still listed as gaps (a Rule 8 breach); behavior preservation was proven by line-by-line diff review and the exits were pinned afterwards in `a55a1712`. |
 | 2026-09-15 | 2 | A red test mid-extraction (scope error on a plugin-local constant) was reverted, not debugged; re-applied with the literal hoisted to module scope | Skill rule: red means revert. The retry was a different, smaller transformation. |
-| 2026-09-15 | 2 | Extracted helpers stay in `chat.ts` (module-level) rather than a new file | Surgical change; moving files is a separate structure-only step for Phase 4/5 once the module boundary is chosen. |
+| 2026-09-15 | 2 | Extracted helpers stay in `chat.ts` — four module-level functions plus one handler-local closure (`streamCannedReply`) — rather than a new file | Surgical change; moving files is a separate structure-only step for Phase 4/5 once the module boundary is chosen. |
 
 ## Next Actions
 
@@ -72,6 +72,7 @@ Add-when condition becomes true.
 - [x] Phase 1: `docs/TESTING.md` + `docs/TECH-DEBT.md` created (agent, 2026-09-15)
 - [x] TD-ENV-1: `.node-version` (agent, `e5ff5b39`)
 - [x] Phase 2 pass 1: five structure-only extractions on `chat.ts` (agent, `302e1d29`..`9bb544a7`)
+- [x] Branch review (43-agent workflow, 3 refuters per finding): 5/5 refactor commits behavior-preserved; 9 doc/test findings fixed in `a55a1712` + this docs commit (agent, 2026-09-15)
 - [ ] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
 - [ ] Phase 3 entry: clean-code scoring of `chat.ts` helpers + the slash-command branch; error-handling audit of the 44 `try` blocks (founder + agent)

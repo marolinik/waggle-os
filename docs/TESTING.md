@@ -19,7 +19,8 @@ Safety-net record for the `/remove-technical-debt` journey (tracker:
   behavior (probe with a known-wrong assertion, read the failure, pin the real value). They
   are not specs. A bug found while pinning is pinned with a `// QUIRK` comment and a
   `docs/TECH-DEBT.md` ledger row, never fixed in the same commit.
-- **Pinch points for `routes/chat.ts`.** The 3652-line `POST /api/chat` handler is reachable
+- **Pinch points for `routes/chat.ts`.** The 3594-line `POST /api/chat` handler (measured from the
+  `}>('/api/chat', …)` line to the `// DELETE /api/chat/history` comment at base `44baa77d`) is reachable
   only through HTTP, but two seams make that cheap: (1) `server.agentRunner` — an object seam
   the route reads per turn, so a test-supplied runner replaces the whole agent loop and doubles
   as a sensing point; (2) `commandRegistry.isCommand(message)` — slash commands terminate before
@@ -50,16 +51,18 @@ Safety-net record for the `/remove-technical-debt` journey (tracker:
 
 | Module | Pinned behaviors | Test files | Gaps |
 |---|---|---|---|
-| `packages/server/src/local/routes/chat.ts` — request validation | `retry` non-boolean → 400 `INVALID_FIELD_TYPE`; malformed `retryTarget` (9 shapes) → 400 `INVALID_RETRY_TARGET`; well-formed `retryTarget` without `retry: true` → 400; non-string `workspace`/`workspaceId`/`session`/`sessionId` → 400 `INVALID_FIELD_TYPE`; >200-char segment → 400 `INVALID_FIELD_LENGTH`; 200-char boundary proceeds to SSE; rejected requests never reach `agentRunner` | `tests/local/chat-route-characterization.test.ts` | `SESSION_ID_CONFLICT`, `WORKSPACE_NOT_READY` (409, needs authorized≠supplied workspace), `WORKSPACE_ROOT_UNAVAILABLE` (409) |
-| `routes/chat.ts` — slash-command turns | `/skills`, `/status`, `/memory <q>` stream a `done` event with `toolsUsed: []` and zero usage; memory-deny directive flips `listSkills`→`[]`, `searchMemory`→"disabled" sentinel; `/status` leaks the disabled sentinel as a section (QUIRK TD-CHAT-1) | `tests/local/chat-route-characterization.test.ts` | `/catchup`, `/now`, `/marketplace *` under deny; reroute-to-agent-loop commands (`AGENT_LOOP_REROUTE_PREFIX`) with and without an available model |
+| `packages/server/src/local/routes/chat.ts` — request validation | `retry` non-boolean → 400 `INVALID_FIELD_TYPE`; malformed `retryTarget` (9 shapes) → 400 `INVALID_RETRY_TARGET`; well-formed `retryTarget` without `retry: true` → 400; non-string `workspace`/`workspaceId`/`session`/`sessionId` → 400 `INVALID_FIELD_TYPE`; >200-char segment → 400 `INVALID_FIELD_LENGTH`; 200-char boundary proceeds to SSE; rejected requests never reach `agentRunner` | `tests/local/chat-route-characterization.test.ts` | `SESSION_ID_CONFLICT` |
+| `routes/chat.ts` — workspace resolution | supplied workspace with a missing `directory` → 409 `WORKSPACE_ROOT_UNAVAILABLE`; authorized literal `default` with no config → 409 `WORKSPACE_NOT_READY`; active workspace with a missing `directory` → 409 `WORKSPACE_ROOT_UNAVAILABLE` (pinned after the fact in `a55a1712` — commit `acd7ec0c` extracted these while they were still gaps) | `tests/local/chat-route-characterization.test.ts` | `WORKSPACE_NOT_FOUND` (404), recovery-required 409 |
+| `routes/chat.ts` — slash-command turns | `/skills` renders every loaded skill verbatim; `/skills`, `/status`, `/memory <q>` stream one `done` event with `toolsUsed: []` and zero `usage`; memory-deny directive flips `listSkills`→`[]`, `searchMemory`→"disabled" sentinel; `/status` leaks the disabled sentinel as a section (QUIRK TD-CHAT-1); `/memory` echoes the directive in its heading (QUIRK TD-CHAT-2) | `tests/local/chat-route-characterization.test.ts` | `/catchup`, `/now`, `/marketplace *` under deny; reroute-to-agent-loop commands (`AGENT_LOOP_REROUTE_PREFIX`) with and without an available model |
 | `routes/chat.ts` — streaming, approvals, persistence, governance (pre-existing net) | SSE headers/ordering, single-flight per session, approval timeouts, governance tool filtering, prompt packaging, history persistence, LiteLLM key routing, retry-tail replacement | `tests/chat-api.test.ts` (92), `tests/local/chat-approval-timeout.test.ts`, `chat-governance.test.ts`, `chat-helpers.test.ts`, `chat-persistence.test.ts`, `chat-prompt-packaging.test.ts`, `sse-resilience.test.ts`, `persona-acceptance-prompt-budget.test.ts`, `smart-router-chat.test.ts`, `chat-goal-ancestry.test.ts`, +4 | See Characterization Backlog |
 | `routes/chat.ts` — `DELETE /api/chat/history` | clears session file + in-process state; 409 while a turn is active | `tests/chat-api.test.ts`, `tests/workspace-sessions-concurrency.test.ts` | 409 `recovery-required` layout branch |
 | Exported helpers (`resolveChatAncestry`, `hasRegulatedDisclaimer`, `isExplicit*`, `parseDirectReadFileDirective`, `filter*ForConversationalTurn`, `waitForApprovalDecision`, …) | Direct unit pins | `tests/chat-api.test.ts`, `tests/local/chat-prompt-packaging.test.ts`, `chat-approval-timeout.test.ts` | `isClosedDbError`, `resolveRealPath` never executed |
 
-**Coverage of `chat.ts` (15 chat-related test files, 868 tests, Node 22.23.2, 2026-09-14):**
-86.5% lines · 83.8% branches · 92.6% functions (1623/1936 branches). Before the
-characterization file, the same measurement over the 9 files that ran cleanly was
-83.9% / 82.8% / 88.2%. Re-measure with the command in `## CI Gates`.
+**Coverage of `chat.ts` (Node 22.23.2, 2026-09-14, the 15-file set listed under `## CI Gates`,
+868 tests):** 86.5% lines · 83.8% branches · 92.6% functions (1623/1936 branches). A smaller
+9-file set measured before the characterization file gave 83.9% / 82.8% / 88.2%. Different file
+sets give different numbers — always quote the set with the figure (the 7-file subset alone
+measures ≈71% lines).
 
 ## Characterization Backlog
 
@@ -76,7 +79,7 @@ behavior. Risk = blast radius if a refactor silently changes it.
 - [ ] 3591–3619 approval timeout `onHeld` audit event + abort after wait (risk: high; P1)
 - [ ] 3863–3885 compression-summary injection scan ≥0.7 blocks persistence (risk: high — injection defense; P1)
 - [ ] 5570–5591 closed-DB / post-commit observer failure after response committed (risk: medium — fail-soft path; P2)
-- [ ] 2433–2443 `WORKSPACE_NOT_READY` 409 when authorized workspace mind is not loaded (risk: medium; P2)
+- [x] 2433–2443 `WORKSPACE_NOT_READY` / `WORKSPACE_ROOT_UNAVAILABLE` 409 exits — pinned in `a55a1712`
 - [ ] 2880–2889 budget-model unavailable → fall back to primary (risk: medium — routing receipt surface; P2)
 - [ ] 3299–3310 GEPA vague-prompt expansion step + choices event (risk: medium; P2)
 - [ ] 3347–3354 template welcome context from workspace `templateId` (risk: low; P3)
@@ -95,16 +98,26 @@ behavior. Risk = blast radius if a refactor silently changes it.
 
 - `.github/workflows/ci.yml` runs the default Vitest gate; `installer-smoke.yml` and
   `tauri-build-pr.yml` cover packaging. Coverage is not enforced in CI.
-- Local re-measure for `chat.ts` (Node 22.23.2); list the chat test files explicitly — Vitest
-  treats a quoted glob as a name filter, and the summary line shows how many files ran:
+- Local re-measure for `chat.ts` (Node 22.23.2). This is the exact 15-file set behind the
+  headline above; list files explicitly — Vitest treats a quoted glob as a name filter, and the
+  summary line shows how many files ran:
 
 ```bash
-npx vitest run packages/server/tests/chat-api.test.ts \
-  packages/server/tests/local/chat-route-characterization.test.ts \
+npx vitest run \
+  packages/server/tests/chat-api.test.ts \
+  packages/server/tests/chat-goal-ancestry.test.ts \
+  packages/server/tests/smart-router-chat.test.ts \
+  packages/server/tests/skill-integration.test.ts \
   packages/server/tests/local/chat-approval-timeout.test.ts \
   packages/server/tests/local/chat-governance.test.ts \
   packages/server/tests/local/chat-helpers.test.ts \
   packages/server/tests/local/chat-persistence.test.ts \
   packages/server/tests/local/chat-prompt-packaging.test.ts \
+  packages/server/tests/local/chat-route-characterization.test.ts \
+  packages/server/tests/local/sse-resilience.test.ts \
+  packages/server/tests/local/persona-acceptance-prompt-budget.test.ts \
+  packages/server/tests/local/phase2-traversal-chat.test.ts \
+  packages/server/tests/local/ambiguity-detection.test.ts \
+  packages/server/tests/local/p5-skill-governance.test.ts \
   --coverage --coverage.include=packages/server/src/local/routes/chat.ts --coverage.reporter=text
 ```
