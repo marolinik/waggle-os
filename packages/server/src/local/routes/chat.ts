@@ -245,6 +245,94 @@ function resolveChatWorkspaceTarget(
 }
 
 /**
+ * Resolves the filesystem roots a chat turn may read and execute in: the
+ * explicit path, the trusted workspace config, or managed virtual storage —
+ * never the user's home directory. When the security middleware authorized a
+ * different workspace than the body supplied, execution moves to that
+ * workspace's root (409 if it is not loaded, 403 for team viewers).
+ */
+function resolveChatWorkspacePaths(
+  server: ChatServer,
+  input: {
+    workspace: string | undefined;
+    workspaceConfig: ReturnType<NonNullable<ChatServer['workspaceManager']>['get']> | undefined;
+    explicitWorkspacePath: string | undefined;
+    usesNamedWorkspace: boolean;
+    authorizedWorkspace: ReturnType<typeof getResolvedChatWorkspaceId>;
+  },
+) {
+  const { workspace, workspaceConfig, explicitWorkspacePath, usesNamedWorkspace, authorizedWorkspace } = input;
+  let workspacePath = workspace ? undefined : explicitWorkspacePath;
+  let workspacePathFromTrustedConfig = false;
+  if (workspace) {
+    const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
+    if (workspaceConfig && configuredPath) {
+      try {
+        workspacePath = resolveWorkspaceExecutionRoot(
+          server.localConfig.dataDir,
+          workspaceConfig,
+        );
+        workspacePathFromTrustedConfig = true;
+      } catch (error) {
+        log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
+        const rejection: ChatRequestRejection = {
+          status: 409,
+          body: { error: 'Configured workspace directory is unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
+        };
+        return { rejection };
+      }
+    } else if (usesNamedWorkspace) {
+      // Virtual workspace storage — managed files directory
+      workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
+    } else {
+      // Legacy default-workspace callers may still supply an anchored managed path.
+      workspacePath = explicitWorkspacePath;
+    }
+  }
+  let executionWorkspacePath = workspacePath;
+  if (authorizedWorkspace && authorizedWorkspace !== workspace) {
+    const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
+    if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: { error: 'Active workspace is unavailable', code: 'WORKSPACE_NOT_READY' },
+      };
+      return { rejection };
+    }
+    if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
+      const rejection: ChatRequestRejection = {
+        status: 403,
+        body: {
+          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        },
+      };
+      return { rejection };
+    }
+
+    const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
+    try {
+      executionWorkspacePath = configuredPath
+        ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
+        : path.join(
+            server.localConfig.dataDir,
+            'workspaces',
+            authorizedWorkspace,
+            'files',
+          );
+    } catch (error) {
+      log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: { error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
+      };
+      return { rejection };
+    }
+  }
+  return { rejection: undefined, workspacePath, workspacePathFromTrustedConfig, executionWorkspacePath };
+}
+
+/**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
  * plus user-saved customs in `~/.waggle/personas/`).
@@ -2499,66 +2587,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
-    let workspacePath = workspace ? undefined : explicitWorkspacePath;
-    let workspacePathFromTrustedConfig = false;
-    if (workspace) {
-      const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
-      if (workspaceConfig && configuredPath) {
-        try {
-          workspacePath = resolveWorkspaceExecutionRoot(
-            server.localConfig.dataDir,
-            workspaceConfig,
-          );
-          workspacePathFromTrustedConfig = true;
-        } catch (error) {
-          log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
-          return reply.status(409).send({
-            error: 'Configured workspace directory is unavailable',
-            code: 'WORKSPACE_ROOT_UNAVAILABLE',
-          });
-        }
-      } else if (usesNamedWorkspace) {
-        // Virtual workspace storage — managed files directory
-        workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
-      } else {
-        // Legacy default-workspace callers may still supply an anchored managed path.
-        workspacePath = explicitWorkspacePath;
-      }
+    const workspacePaths = resolveChatWorkspacePaths(server, {
+      workspace,
+      workspaceConfig,
+      explicitWorkspacePath,
+      usesNamedWorkspace,
+      authorizedWorkspace,
+    });
+    if (workspacePaths.rejection) {
+      return reply.status(workspacePaths.rejection.status).send(workspacePaths.rejection.body);
     }
-    let executionWorkspacePath = workspacePath;
-    if (authorizedWorkspace && authorizedWorkspace !== workspace) {
-      const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
-      if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
-        return reply.status(409).send({
-          error: 'Active workspace is unavailable',
-          code: 'WORKSPACE_NOT_READY',
-        });
-      }
-      if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
-        return reply.status(403).send({
-          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
-          code: 'VIEWER_READ_ONLY',
-        });
-      }
-
-      const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
-      try {
-        executionWorkspacePath = configuredPath
-          ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
-          : path.join(
-              server.localConfig.dataDir,
-              'workspaces',
-              authorizedWorkspace,
-              'files',
-            );
-      } catch (error) {
-        log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
-        return reply.status(409).send({
-          error: 'Active workspace directory unavailable',
-          code: 'WORKSPACE_ROOT_UNAVAILABLE',
-        });
-      }
-    }
+    let workspacePath = workspacePaths.workspacePath;
+    const { workspacePathFromTrustedConfig, executionWorkspacePath } = workspacePaths;
 
     // Validation and auth checks remain before reply.hijack(); once hijacked,
     // reply.status() / reply.send() become no-ops on the raw socket.
