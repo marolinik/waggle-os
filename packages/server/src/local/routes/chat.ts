@@ -58,6 +58,280 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
   return null;
 }
 
+/** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
+const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+
+type ChatRequestRejection = {
+  status: 400 | 403 | 404 | 409;
+  body: { error: string; code?: string };
+};
+
+type ChatRequestFieldInput = {
+  message: unknown;
+  workspace: unknown;
+  workspaceId: unknown;
+  session: unknown;
+  sessionId: unknown;
+  selectedSkill: unknown;
+  retry: unknown;
+  retryTarget: unknown;
+};
+
+type ValidatedChatRequestFields = {
+  rejection?: undefined;
+  selectedSkill: string | undefined;
+  retryTarget: RetryTailExpectation | null;
+};
+
+const MAX_CHAT_SEGMENT_LENGTH = 200;
+
+/**
+ * Validates the syntactic shape of a POST /api/chat body before any referenced
+ * resource is resolved. Returns the first rejection in the same order the
+ * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
+ * Unsafe path segments still throw via `assertSafeSegment`.
+ */
+export function validateChatRequestFields(
+  input: ChatRequestFieldInput,
+  isSkillInstalled: (name: string) => boolean,
+): { rejection: ChatRequestRejection } | ValidatedChatRequestFields {
+  const {
+    message,
+    selectedSkill: selectedSkillRaw,
+    retry: retryTurn,
+    retryTarget: retryTargetRaw,
+  } = input;
+  const reject = (status: ChatRequestRejection['status'], body: ChatRequestRejection['body']) => (
+    { rejection: { status, body } }
+  );
+  if (message === undefined || message === '') {
+    return reject(400, { error: 'message is required' });
+  }
+  if (typeof message !== 'string') {
+    return reject(400, { error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
+  }
+  const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return reject(400, { error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
+  }
+  let selectedSkill: string | undefined;
+  if (selectedSkillRaw !== undefined) {
+    if (typeof selectedSkillRaw !== 'string') {
+      return reject(400, { error: 'selectedSkill must be a string', code: 'INVALID_FIELD_TYPE' });
+    }
+    selectedSkill = selectedSkillRaw.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(selectedSkill)) {
+      return reject(400, { error: 'selectedSkill is invalid', code: 'INVALID_SELECTED_SKILL' });
+    }
+    if (!isSkillInstalled(selectedSkill)) {
+      return reject(409, { error: 'The selected skill is not available', code: 'SKILL_NOT_AVAILABLE' });
+    }
+  }
+  if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
+    return reject(400, { error: 'retry must be a boolean', code: 'INVALID_FIELD_TYPE' });
+  }
+  const retryTarget = retryTargetRaw === undefined
+    ? null
+    : parseRetryTailExpectation(retryTargetRaw);
+  if (retryTargetRaw !== undefined && retryTarget === null) {
+    return reject(400, { error: 'retryTarget is invalid', code: 'INVALID_RETRY_TARGET' });
+  }
+  if (retryTarget && retryTurn !== true) {
+    return reject(400, { error: 'retryTarget requires retry: true', code: 'INVALID_RETRY_TARGET' });
+  }
+  for (const [field, value] of [
+    ['workspace', input.workspace],
+    ['workspaceId', input.workspaceId],
+    ['session', input.session],
+    ['sessionId', input.sessionId],
+  ] as const) {
+    if (value === undefined) continue;
+    if (typeof value !== 'string') {
+      return reject(400, { error: `${field} must be a string`, code: 'INVALID_FIELD_TYPE' });
+    }
+    if (value.length > MAX_CHAT_SEGMENT_LENGTH) {
+      return reject(400, { error: `${field} is too long (max ${MAX_CHAT_SEGMENT_LENGTH} chars)`, code: 'INVALID_FIELD_LENGTH' });
+    }
+    assertSafeSegment(value, field);
+  }
+  return { selectedSkill, retryTarget };
+}
+
+/**
+ * Resolves the effective autonomy level for a request. Expired grants fall
+ * back to 'normal' — the client may not have auto-reverted yet on its side,
+ * so the server owns the final say.
+ */
+function resolveAutonomyLevel(
+  autonomy: { level: AutonomyLevel; expiresAt?: number } | undefined,
+): AutonomyLevel {
+  if (!autonomy || (autonomy.level !== 'trusted' && autonomy.level !== 'yolo')) return 'normal';
+  const { expiresAt } = autonomy;
+  return !expiresAt || expiresAt > Date.now() ? autonomy.level : 'normal';
+}
+
+type ChatServer = Parameters<FastifyPluginAsync>[0];
+
+/**
+ * Resolves which workspace a chat turn reads history from and executes in.
+ * `authorizedWorkspace` (from the security middleware) overrides the
+ * body-supplied `workspace`; `null` pins execution to the personal scope.
+ * Returns a 404 when a named history workspace is unknown, or a 409 when the
+ * default chat history layout still needs recovery.
+ */
+function resolveChatWorkspaceTarget(
+  server: ChatServer,
+  workspace: string | undefined,
+  authorizedWorkspace: ReturnType<typeof getResolvedChatWorkspaceId>,
+  getChatHistoryLayout: () => ReturnType<typeof isolateLegacyDefaultChatSessions>,
+) {
+  const workspaceConfig = workspace
+    ? server.workspaceManager?.get(workspace)
+    : undefined;
+  const historyWorkspace = authorizedWorkspace === undefined
+    ? workspace
+    : authorizedWorkspace ?? undefined;
+  const historyWorkspaceConfig = historyWorkspace
+    ? server.workspaceManager?.get(historyWorkspace)
+    : undefined;
+  if (
+    historyWorkspace
+    && historyWorkspace !== 'default'
+    && !historyWorkspaceConfig
+  ) {
+    const rejection: ChatRequestRejection = {
+      status: 404,
+      body: { error: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' },
+    };
+    return { rejection };
+  }
+  const historyTarget = resolveChatHistoryTarget(
+    server.localConfig.dataDir,
+    historyWorkspace,
+    !!historyWorkspaceConfig,
+  );
+  const usesNamedWorkspace = historyTarget.isManagedWorkspace;
+  const historyWorkspaceId = historyTarget.workspaceId;
+  const executionWorkspaceId = authorizedWorkspace === null
+    ? undefined
+    : authorizedWorkspace ?? historyWorkspaceId;
+  const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
+  const executionWorkspaceConfig = executionWorkspaceId
+    ? server.workspaceManager?.get(executionWorkspaceId)
+    : undefined;
+  if (historyWorkspaceId === 'default') {
+    const currentChatHistoryLayout = getChatHistoryLayout();
+    if (currentChatHistoryLayout.status === 'recovery-required') {
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: {
+          error: 'Default chat history needs recovery before it can be used.',
+          code: currentChatHistoryLayout.code,
+        },
+      };
+      return { rejection };
+    }
+  }
+  return {
+    rejection: undefined,
+    workspaceConfig,
+    historyTarget,
+    usesNamedWorkspace,
+    historyWorkspaceId,
+    executionWorkspaceId,
+    executionScopeId,
+    executionWorkspaceConfig,
+  };
+}
+
+/**
+ * Resolves the filesystem roots a chat turn may read and execute in: the
+ * explicit path, the trusted workspace config, or managed virtual storage —
+ * never the user's home directory. When the security middleware authorized a
+ * different workspace than the body supplied, execution moves to that
+ * workspace's root (409 if it is not loaded, 403 for team viewers).
+ */
+function resolveChatWorkspacePaths(
+  server: ChatServer,
+  input: {
+    workspace: string | undefined;
+    workspaceConfig: ReturnType<NonNullable<ChatServer['workspaceManager']>['get']> | undefined;
+    explicitWorkspacePath: string | undefined;
+    usesNamedWorkspace: boolean;
+    authorizedWorkspace: ReturnType<typeof getResolvedChatWorkspaceId>;
+  },
+) {
+  const { workspace, workspaceConfig, explicitWorkspacePath, usesNamedWorkspace, authorizedWorkspace } = input;
+  let workspacePath = workspace ? undefined : explicitWorkspacePath;
+  let workspacePathFromTrustedConfig = false;
+  if (workspace) {
+    const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
+    if (workspaceConfig && configuredPath) {
+      try {
+        workspacePath = resolveWorkspaceExecutionRoot(
+          server.localConfig.dataDir,
+          workspaceConfig,
+        );
+        workspacePathFromTrustedConfig = true;
+      } catch (error) {
+        log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
+        const rejection: ChatRequestRejection = {
+          status: 409,
+          body: { error: 'Configured workspace directory is unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
+        };
+        return { rejection };
+      }
+    } else if (usesNamedWorkspace) {
+      // Virtual workspace storage — managed files directory
+      workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
+    } else {
+      // Legacy default-workspace callers may still supply an anchored managed path.
+      workspacePath = explicitWorkspacePath;
+    }
+  }
+  let executionWorkspacePath = workspacePath;
+  if (authorizedWorkspace && authorizedWorkspace !== workspace) {
+    const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
+    if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: { error: 'Active workspace is unavailable', code: 'WORKSPACE_NOT_READY' },
+      };
+      return { rejection };
+    }
+    if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
+      const rejection: ChatRequestRejection = {
+        status: 403,
+        body: {
+          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        },
+      };
+      return { rejection };
+    }
+
+    const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
+    try {
+      executionWorkspacePath = configuredPath
+        ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
+        : path.join(
+            server.localConfig.dataDir,
+            'workspaces',
+            authorizedWorkspace,
+            'files',
+          );
+    } catch (error) {
+      log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: { error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
+      };
+      return { rejection };
+    }
+  }
+  return { rejection: undefined, workspacePath, workspacePathFromTrustedConfig, executionWorkspacePath };
+}
+
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
@@ -1612,8 +1886,8 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 // C3: Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
 // Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
-// Reserve a non-workspace scope for personal audit/collaboration streams.
-const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+// Reserve a non-workspace scope for personal audit/collaboration streams
+// (PERSONAL_CHAT_SCOPE_ID is module-level so route helpers can use it).
 const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
@@ -2240,78 +2514,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // A syntactically valid unknown workspace still returns 404 below, while
     // invalid message/session input remains a stable 400 regardless of whether
     // the named workspace exists.
-    if (message === undefined || message === '') {
-      return reply.status(400).send({ error: 'message is required' });
+    const validatedFields = validateChatRequestFields(
+      {
+        message,
+        workspace: _ws,
+        workspaceId: _wsId,
+        session,
+        sessionId: sessionIdAlias,
+        selectedSkill: selectedSkillRaw,
+        retry: retryTurn,
+        retryTarget: retryTargetRaw,
+      },
+      name => server.agentState.skills.some(skill => skill.name === name),
+    );
+    if (validatedFields.rejection) {
+      return reply.status(validatedFields.rejection.status).send(validatedFields.rejection.body);
     }
-    if (typeof message !== 'string') {
-      return reply.status(400).send({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
-    }
-    const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
-    if (message.length > MAX_MESSAGE_LENGTH) {
-      return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
-    }
-    let selectedSkill: string | undefined;
-    if (selectedSkillRaw !== undefined) {
-      if (typeof selectedSkillRaw !== 'string') {
-        return reply.status(400).send({
-          error: 'selectedSkill must be a string',
-          code: 'INVALID_FIELD_TYPE',
-        });
-      }
-      selectedSkill = selectedSkillRaw.trim().toLowerCase();
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(selectedSkill)) {
-        return reply.status(400).send({
-          error: 'selectedSkill is invalid',
-          code: 'INVALID_SELECTED_SKILL',
-        });
-      }
-      if (!server.agentState.skills.some(skill => skill.name === selectedSkill)) {
-        return reply.status(409).send({
-          error: 'The selected skill is not available',
-          code: 'SKILL_NOT_AVAILABLE',
-        });
-      }
-    }
-    if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
-      return reply.status(400).send({
-        error: 'retry must be a boolean',
-        code: 'INVALID_FIELD_TYPE',
-      });
-    }
-    const retryTarget = retryTargetRaw === undefined
-      ? null
-      : parseRetryTailExpectation(retryTargetRaw);
-    if (retryTargetRaw !== undefined && retryTarget === null) {
-      return reply.status(400).send({
-        error: 'retryTarget is invalid',
-        code: 'INVALID_RETRY_TARGET',
-      });
-    }
-    if (retryTarget && retryTurn !== true) {
-      return reply.status(400).send({
-        error: 'retryTarget requires retry: true',
-        code: 'INVALID_RETRY_TARGET',
-      });
-    }
-    const MAX_CHAT_SEGMENT_LENGTH = 200;
-    for (const [field, value] of [
-      ['workspace', _ws],
-      ['workspaceId', _wsId],
-      ['session', session],
-      ['sessionId', sessionIdAlias],
-    ] as const) {
-      if (value === undefined) continue;
-      if (typeof value !== 'string') {
-        return reply.status(400).send({ error: `${field} must be a string`, code: 'INVALID_FIELD_TYPE' });
-      }
-      if (value.length > MAX_CHAT_SEGMENT_LENGTH) {
-        return reply.status(400).send({
-          error: `${field} is too long (max ${MAX_CHAT_SEGMENT_LENGTH} chars)`,
-          code: 'INVALID_FIELD_LENGTH',
-        });
-      }
-      assertSafeSegment(value, field);
-    }
+    const { selectedSkill, retryTarget } = validatedFields;
 
     const suppliedWorkspace = _ws ?? _wsId;
     const authorizedWorkspace = getResolvedChatWorkspaceId(request);
@@ -2324,48 +2543,24 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       });
     }
 
-    const workspaceConfig = workspace
-      ? server.workspaceManager?.get(workspace)
-      : undefined;
-    const historyWorkspace = authorizedWorkspace === undefined
-      ? workspace
-      : authorizedWorkspace ?? undefined;
-    const historyWorkspaceConfig = historyWorkspace
-      ? server.workspaceManager?.get(historyWorkspace)
-      : undefined;
-    if (
-      historyWorkspace
-      && historyWorkspace !== 'default'
-      && !historyWorkspaceConfig
-    ) {
-      return reply.status(404).send({
-        error: 'Workspace not found',
-        code: 'WORKSPACE_NOT_FOUND',
-      });
-    }
-    const historyTarget = resolveChatHistoryTarget(
-      server.localConfig.dataDir,
-      historyWorkspace,
-      !!historyWorkspaceConfig,
+    const workspaceTarget = resolveChatWorkspaceTarget(
+      server,
+      workspace,
+      authorizedWorkspace,
+      getChatHistoryLayout,
     );
-    const usesNamedWorkspace = historyTarget.isManagedWorkspace;
-    const historyWorkspaceId = historyTarget.workspaceId;
-    const executionWorkspaceId = authorizedWorkspace === null
-      ? undefined
-      : authorizedWorkspace ?? historyWorkspaceId;
-    const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
-    const executionWorkspaceConfig = executionWorkspaceId
-      ? server.workspaceManager?.get(executionWorkspaceId)
-      : undefined;
-    if (historyWorkspaceId === 'default') {
-      const currentChatHistoryLayout = getChatHistoryLayout();
-      if (currentChatHistoryLayout.status === 'recovery-required') {
-        return reply.status(409).send({
-          error: 'Default chat history needs recovery before it can be used.',
-          code: currentChatHistoryLayout.code,
-        });
-      }
+    if (workspaceTarget.rejection) {
+      return reply.status(workspaceTarget.rejection.status).send(workspaceTarget.rejection.body);
     }
+    const {
+      workspaceConfig,
+      historyTarget,
+      usesNamedWorkspace,
+      historyWorkspaceId,
+      executionWorkspaceId,
+      executionScopeId,
+      executionWorkspaceConfig,
+    } = workspaceTarget;
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
@@ -2374,15 +2569,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
     // Phase B.5: resolve the effective autonomy level for this request.
-    // Expired grants fall back to 'normal' — the client may not have
-    // auto-reverted yet on its side, so the server owns the final say.
-    let autonomyLevel: AutonomyLevel = 'normal';
-    if (autonomyRaw && (autonomyRaw.level === 'trusted' || autonomyRaw.level === 'yolo')) {
-      const expiresAt = autonomyRaw.expiresAt;
-      if (!expiresAt || expiresAt > Date.now()) {
-        autonomyLevel = autonomyRaw.level;
-      }
-    }
+    const autonomyLevel = resolveAutonomyLevel(autonomyRaw);
 
     // H-AUDIT-1: generate per-turn trace ID at the conceptual turn boundary
     // (POST /api/chat entry). Propagated explicitly into agent-loop,
@@ -2400,66 +2587,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
-    let workspacePath = workspace ? undefined : explicitWorkspacePath;
-    let workspacePathFromTrustedConfig = false;
-    if (workspace) {
-      const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
-      if (workspaceConfig && configuredPath) {
-        try {
-          workspacePath = resolveWorkspaceExecutionRoot(
-            server.localConfig.dataDir,
-            workspaceConfig,
-          );
-          workspacePathFromTrustedConfig = true;
-        } catch (error) {
-          log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
-          return reply.status(409).send({
-            error: 'Configured workspace directory is unavailable',
-            code: 'WORKSPACE_ROOT_UNAVAILABLE',
-          });
-        }
-      } else if (usesNamedWorkspace) {
-        // Virtual workspace storage — managed files directory
-        workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
-      } else {
-        // Legacy default-workspace callers may still supply an anchored managed path.
-        workspacePath = explicitWorkspacePath;
-      }
+    const workspacePaths = resolveChatWorkspacePaths(server, {
+      workspace,
+      workspaceConfig,
+      explicitWorkspacePath,
+      usesNamedWorkspace,
+      authorizedWorkspace,
+    });
+    if (workspacePaths.rejection) {
+      return reply.status(workspacePaths.rejection.status).send(workspacePaths.rejection.body);
     }
-    let executionWorkspacePath = workspacePath;
-    if (authorizedWorkspace && authorizedWorkspace !== workspace) {
-      const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
-      if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
-        return reply.status(409).send({
-          error: 'Active workspace is unavailable',
-          code: 'WORKSPACE_NOT_READY',
-        });
-      }
-      if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
-        return reply.status(403).send({
-          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
-          code: 'VIEWER_READ_ONLY',
-        });
-      }
-
-      const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
-      try {
-        executionWorkspacePath = configuredPath
-          ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
-          : path.join(
-              server.localConfig.dataDir,
-              'workspaces',
-              authorizedWorkspace,
-              'files',
-            );
-      } catch (error) {
-        log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
-        return reply.status(409).send({
-          error: 'Active workspace directory unavailable',
-          code: 'WORKSPACE_ROOT_UNAVAILABLE',
-        });
-      }
-    }
+    let workspacePath = workspacePaths.workspacePath;
+    const { workspacePathFromTrustedConfig, executionWorkspacePath } = workspacePaths;
 
     // Validation and auth checks remain before reply.hijack(); once hijacked,
     // reply.status() / reply.send() become no-ops on the raw socket.
@@ -3032,6 +3171,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
 
+      // Streams a canned assistant reply word by word, persists it unless the
+      // turn denies conversation history, and emits the terminal `done` event.
+      // Resolves false when the turn was aborted before `done` was sent.
+      const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
+        for (const word of text.split(' ')) {
+          if (turnSignal.aborted) return false;
+          sendEvent('token', { content: word + ' ' });
+          await new Promise((r) => setTimeout(r, wordDelayMs));
+        }
+        if (turnSignal.aborted) return false;
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push({ role: 'assistant', content: text });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: text });
+        }
+        sendEvent('done', {
+          content: text,
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          toolsUsed: [],
+        });
+        return true;
+      };
+
       // ── Slash command routing (works even in echo mode) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
@@ -3101,39 +3262,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
-          const words = friendlyError.split(' ');
-          for (const word of words) {
-            if (turnSignal.aborted) return;
-            sendEvent('token', { content: word + ' ' });
-            await new Promise((r) => setTimeout(r, 10));
-          }
-          if (turnSignal.aborted) return;
-          if (!turnMutationPolicy.denyConversationHistory) {
-            history.push({ role: 'assistant', content: friendlyError });
-            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
-          }
-          sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
+          if (!(await streamCannedReply(friendlyError, 10))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
-          // Stream the command result as SSE tokens
-          const cmdWords = cmdResult.split(' ');
-          for (const word of cmdWords) {
-            if (turnSignal.aborted) return;
-            sendEvent('token', { content: word + ' ' });
-            await new Promise((r) => setTimeout(r, 10));
-          }
-          if (turnSignal.aborted) return;
-          // Persist command result
-          if (!turnMutationPolicy.denyConversationHistory) {
-            history.push({ role: 'assistant', content: cmdResult });
-            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
-          }
-          sendEvent('done', {
-            content: cmdResult,
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-            toolsUsed: [],
-          });
+          // Stream the command result as SSE tokens and persist it
+          if (!(await streamCannedReply(cmdResult, 10))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
@@ -3147,23 +3281,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Setup-required mode — respond without pretending the user's input
         // was answered. The raw turn is still persisted for continuity.
         const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
-        const words = echoResponse.split(' ');
-        for (const word of words) {
-          if (turnSignal.aborted) return;
-          sendEvent('token', { content: word + ' ' });
-          await new Promise((r) => setTimeout(r, 15));
-        }
-        if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
-        if (!turnMutationPolicy.denyConversationHistory) {
-          history.push({ role: 'assistant', content: echoResponse });
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
-        }
-        sendEvent('done', {
-          content: echoResponse,
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          toolsUsed: [],
-        });
+        if (!(await streamCannedReply(echoResponse, 15))) return;
       }
 
       if (shouldRunAgentLoop) {
