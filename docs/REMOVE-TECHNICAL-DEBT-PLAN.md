@@ -35,7 +35,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 | Phase | Skill | Status | Artifact | Date |
 |---|---|---|---|---|
 | 1 | working-with-legacy-code | done | TESTING.md + TECH-DEBT.md | 2026-09-15 |
-| 2 | refactoring-patterns | pending | TECH-DEBT.md | |
+| 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
 | 3 | clean-code | pending | TECH-DEBT.md | |
 | 4 | software-design-philosophy | pending | TECH-DEBT.md | |
 | 5 | clean-architecture | pending | ARCHITECTURE.md | |
@@ -60,6 +60,9 @@ Add-when condition becomes true.
 | 2026-09-14 | 1 | Pinch point for `chat.ts` = `POST /api/chat` through `buildLocalServer` with the `server.agentRunner` object seam; fetch-spy link seam for the real runner path | Cheapest reachable test points; the 3652-line handler has no unit seam. |
 | 2026-09-15 | 1 | Pin Node via `.node-version` (TD-ENV-1 closed) | Stops the false-red `ERR_DLOPEN_FAILED` trap for every future shell. |
 | 2026-09-15 | 1 | Phase 1 exit accepted with `chat.ts` at 86.5% lines; 24-item Characterization Backlog carried, P1 items (approval/trust hooks, retry/fallback chain, `buildSystemPrompt`) must be pinned before Phase 2 touches those ranges | Coverage follows the paths Phase 2 will change; not a dedicated testing project. |
+| 2026-09-15 | 2 | Phase 2 scope = safe Extract Method on already-pinned regions only (validation, workspace resolution, canned-reply streaming); no method object yet | Zero new pins needed; every commit structure-only with the server gate green between commits. |
+| 2026-09-15 | 2 | A red test mid-extraction (scope error on a plugin-local constant) was reverted, not debugged; re-applied with the literal hoisted to module scope | Skill rule: red means revert. The retry was a different, smaller transformation. |
+| 2026-09-15 | 2 | Extracted helpers stay in `chat.ts` (module-level) rather than a new file | Surgical change; moving files is a separate structure-only step for Phase 4/5 once the module boundary is chosen. |
 
 ## Next Actions
 
@@ -68,6 +71,7 @@ Add-when condition becomes true.
 - [x] Phase 1: characterization tests — validation + slash-command turns, 28 pins (agent, `d1bcd529`, `f7400a3a`)
 - [x] Phase 1: `docs/TESTING.md` + `docs/TECH-DEBT.md` created (agent, 2026-09-15)
 - [x] TD-ENV-1: `.node-version` (agent, `e5ff5b39`)
-- [ ] Phase 2 entry: choose smells for the first pass in `chat.ts` (founder + agent)
-- [ ] Before Phase 2 touches 3387–3620 or 4806–5146: pin the P1 backlog ranges (approval hook, trust metadata, retry/fallback chain) via the fetch-spy harness (agent)
+- [x] Phase 2 pass 1: five structure-only extractions on `chat.ts` (agent, `302e1d29`..`9bb544a7`)
 - [ ] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder)
+- [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
+- [ ] Phase 3 entry: clean-code scoring of `chat.ts` helpers + the slash-command branch; error-handling audit of the 44 `try` blocks (founder + agent)
