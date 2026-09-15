@@ -155,6 +155,19 @@ export function validateChatRequestFields(
 }
 
 /**
+ * Resolves the effective autonomy level for a request. Expired grants fall
+ * back to 'normal' — the client may not have auto-reverted yet on its side,
+ * so the server owns the final say.
+ */
+function resolveAutonomyLevel(
+  autonomy: { level: AutonomyLevel; expiresAt?: number } | undefined,
+): AutonomyLevel {
+  if (!autonomy || (autonomy.level !== 'trusted' && autonomy.level !== 'yolo')) return 'normal';
+  const { expiresAt } = autonomy;
+  return !expiresAt || expiresAt > Date.now() ? autonomy.level : 'normal';
+}
+
+/**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
  * plus user-saved customs in `~/.waggle/personas/`).
@@ -2415,15 +2428,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
     // Phase B.5: resolve the effective autonomy level for this request.
-    // Expired grants fall back to 'normal' — the client may not have
-    // auto-reverted yet on its side, so the server owns the final say.
-    let autonomyLevel: AutonomyLevel = 'normal';
-    if (autonomyRaw && (autonomyRaw.level === 'trusted' || autonomyRaw.level === 'yolo')) {
-      const expiresAt = autonomyRaw.expiresAt;
-      if (!expiresAt || expiresAt > Date.now()) {
-        autonomyLevel = autonomyRaw.level;
-      }
-    }
+    const autonomyLevel = resolveAutonomyLevel(autonomyRaw);
 
     // H-AUDIT-1: generate per-turn trace ID at the conceptual turn boundary
     // (POST /api/chat entry). Propagated explicitly into agent-loop,
