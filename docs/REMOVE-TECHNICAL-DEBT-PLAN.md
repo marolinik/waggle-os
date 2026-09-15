@@ -36,7 +36,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 |---|---|---|---|---|
 | 1 | working-with-legacy-code | done | TESTING.md + TECH-DEBT.md | 2026-09-15 |
 | 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
-| 3 | clean-code | pending | TECH-DEBT.md | |
+| 3 | clean-code | in-progress | TECH-DEBT.md | 2026-09-15 |
 | 4 | software-design-philosophy | pending | TECH-DEBT.md | |
 | 5 | clean-architecture | pending | ARCHITECTURE.md | |
 | 6 | pragmatic-programmer | pending | TECH-DEBT.md | |
@@ -73,6 +73,6 @@ Add-when condition becomes true.
 - [x] TD-ENV-1: `.node-version` (agent, `e5ff5b39`)
 - [x] Phase 2 pass 1: five structure-only extractions on `chat.ts` (agent, `302e1d29`..`9bb544a7`)
 - [x] Branch review (43-agent workflow, 3 refuters per finding): 5/5 refactor commits behavior-preserved; 9 doc/test findings fixed in `a55a1712` + this docs commit (agent, 2026-09-15)
-- [ ] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder)
+- [x] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder, PR #84 `b248ce38`)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
 - [ ] Phase 3 entry: clean-code scoring of `chat.ts` helpers + the slash-command branch; error-handling audit of the 44 `try` blocks (founder + agent)
