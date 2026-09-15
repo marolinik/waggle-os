@@ -6,7 +6,7 @@
  * not a spec: if one fails after a refactor, the refactor changed behavior.
  * Bugs found while pinning are recorded in docs/TECH-DEBT.md, never fixed here.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,8 +37,11 @@ describe('POST /api/chat request validation (characterization)', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
+  /** Posts a request that must be rejected before the agent runner seam. */
   async function post(payload: Record<string, unknown>) {
+    const runnerCallsBefore = runnerCalls;
     const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload });
+    expect(runnerCalls).toBe(runnerCallsBefore);
     return { status: res.statusCode, body: res.json() as { error?: string; code?: string } };
   }
 
@@ -94,7 +97,9 @@ describe('POST /api/chat request validation (characterization)', () => {
   );
 
   it('accepts a 200-char segment (boundary) and proceeds to the SSE turn', async () => {
-    // 200 'a's is a safe segment: the length gate passes and the turn streams.
+    // 200 'a's is a safe segment: the length gate passes and the turn streams
+    // through the agent runner seam exactly once.
+    const runnerCallsBefore = runnerCalls;
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -102,12 +107,7 @@ describe('POST /api/chat request validation (characterization)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
-  });
-
-  it('never invokes the agent runner for a rejected request', () => {
-    // Every rejection above ran before the runner seam; the boundary test is the
-    // only request that reached it.
-    expect(runnerCalls).toBe(1);
+    expect(runnerCalls).toBe(runnerCallsBefore + 1);
   });
 });
 
@@ -129,8 +129,12 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
-  /** Returns the `done` event payload of a command turn. */
-  async function commandTurn(message: string): Promise<{ content: string; toolsUsed: unknown[] }> {
+  /**
+   * Returns the `done` event payload of a command turn. Every command turn
+   * terminates before the agent loop, so it always reports empty tools and
+   * zero usage.
+   */
+  async function commandTurn(message: string): Promise<{ content: string }> {
     const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload: { message } });
     expect(res.statusCode).toBe(200);
     const done = res.body
@@ -138,18 +142,22 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
       .filter(block => block.startsWith('event: done'))
       .map(block => JSON.parse(block.split('\n').find(l => l.startsWith('data: '))!.slice(6)));
     expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({
+      toolsUsed: [],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    });
     return done[0];
   }
 
-  it('/skills lists the loaded skills when persisted memory reads are allowed', async () => {
-    const { content, toolsUsed } = await commandTurn('/skills');
-    expect(toolsUsed).toEqual([]);
-    const skillCount = server.agentState.skills.length;
-    if (skillCount === 0) {
-      expect(content).toBe('## Active Skills\n\nNo skills are currently active in this workspace.');
-    } else {
-      expect(content).toContain(`_${skillCount} skill(s) loaded._`);
-    }
+  it('/skills renders every loaded skill as a bullet when persisted memory reads are allowed', async () => {
+    // buildLocalServer seeds the starter skills into <dataDir>/skills, so the
+    // list is never empty in this harness; pin the rendered list verbatim.
+    const names = server.agentState.skills.map(skill => skill.name);
+    expect(names.length).toBeGreaterThan(0);
+    const { content } = await commandTurn('/skills');
+    expect(content).toBe(
+      `## Active Skills\n\n${names.map(name => `- \`${name}\``).join('\n')}\n\n_${names.length} skill(s) loaded._`,
+    );
   });
 
   it('/skills reports no skills when the turn denies persisted memory reads', async () => {
@@ -164,7 +172,8 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
 
   it('/memory <query> is refused when the turn denies persisted memory reads', async () => {
     const { content } = await commandTurn('/memory architecture - do not use my saved memory');
-    // QUIRK: the deny suffix is part of the query text echoed back in the heading.
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-2): the deny suffix is part of the query
+    // text echoed back in the heading.
     expect(content).toBe(
       '## Memory Search: "architecture - do not use my saved memory"\n\nPersisted memory access is disabled for this turn.',
     );
@@ -184,5 +193,78 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
     expect(content).toBe(
       '## Status Report\n\nPersisted workspace state is disabled for this turn.\n\n**Skills loaded:** 0',
     );
+  });
+});
+
+describe('POST /api/chat workspace resolution rejections (characterization)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-ws-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
+      throw new Error('a rejected workspace resolution must not reach the agent runner');
+    };
+  });
+
+  afterEach(() => {
+    server.agentState.activeWorkspaceId = null;
+  });
+
+  afterAll(async () => {
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
+  });
+
+  it('returns 409 WORKSPACE_ROOT_UNAVAILABLE when the supplied workspace directory is missing', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'missing-root',
+      group: 'test',
+      directory: path.join(tmpDir, 'no-such-dir'),
+    });
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi', workspace: workspace.id },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({
+      error: 'Configured workspace directory is unavailable',
+      code: 'WORKSPACE_ROOT_UNAVAILABLE',
+    });
+  });
+
+  it('returns 409 WORKSPACE_NOT_READY when the active workspace is the literal default with no config', async () => {
+    // 'default' skips the unknown-workspace 404 (legacy default history), and
+    // workspace minds open lazily, so the only reachable NOT_READY trigger is an
+    // authorized 'default' id that has no workspace config behind it.
+    expect(server.workspaceManager.get('default')).toBeFalsy();
+    server.agentState.activeWorkspaceId = 'default';
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'Active workspace is unavailable', code: 'WORKSPACE_NOT_READY' });
+  });
+
+  it('returns 409 WORKSPACE_ROOT_UNAVAILABLE when the active workspace directory is missing', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'active-missing-root',
+      group: 'test',
+      directory: path.join(tmpDir, 'no-such-active-dir'),
+    });
+    expect(server.agentState.activateWorkspaceMind(workspace.id)).toBe(true);
+    server.agentState.activeWorkspaceId = workspace.id;
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' });
   });
 });
