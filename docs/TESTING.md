@@ -63,8 +63,8 @@ Safety-net record for the `/remove-technical-debt` journey (tracker:
 Phase 3 branch, shifting later lines by up to +4. `persona-acceptance-prompt-budget.test.ts` and
 `sse-resilience.test.ts` are untouched on that branch.
 
-**Coverage of `chat.ts` (Node 22.23.2, 2026-09-14, the 15-file set listed under `## CI Gates`,
-868 tests):** 86.5% lines · 83.8% branches · 92.6% functions (1623/1936 branches). Re-measured 2026-09-15 at `9a9f96b7` with the 16-file set below (the 15 plus `tests/local/chat-command-context-characterization.test.ts`, 884 tests): 86.97% lines · 84.37% branches · 92.91% functions. A smaller
+**Coverage of `chat.ts` (Node 22.23.2, 2026-09-14, the 15-file set — the `## CI Gates` list below minus `chat-command-context-characterization.test.ts` —,
+868 tests):** 86.5% lines · 83.8% branches · 92.6% functions (1623/1936 branches). Re-measured 2026-09-15 at `9a9f96b7` with the 16-file set below (the 15 plus `tests/local/chat-command-context-characterization.test.ts`, 884 tests): 86.97% lines · 84.37% branches · 92.91% functions (branches read 84.36% on one of three runs). A smaller
 9-file set measured before the characterization file gave 83.9% / 82.8% / 88.2%. Different file
 sets give different numbers — always quote the set with the figure (the 7-file subset alone
 measures ≈71% lines).
