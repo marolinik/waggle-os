@@ -112,7 +112,7 @@ Use descriptive titles that indicate the type of change:
 ### Error Handling
 
 - Route handlers catch errors and return appropriate HTTP status codes
-- Non-critical operations use try/catch with empty catch (logging is acceptable)
+- Non-critical operations may use an empty catch; it carries a why-comment naming what is lost and logs when the swallow is user-visible (see docs/TECH-DEBT.md, Adopted Conventions)
 - Critical operations throw with descriptive error messages
 - Avoid swallowing errors silently in core logic
 
