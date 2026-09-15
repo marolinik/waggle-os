@@ -3171,6 +3171,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
 
+      // Streams a canned assistant reply word by word, persists it unless the
+      // turn denies conversation history, and emits the terminal `done` event.
+      // Resolves false when the turn was aborted before `done` was sent.
+      const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
+        for (const word of text.split(' ')) {
+          if (turnSignal.aborted) return false;
+          sendEvent('token', { content: word + ' ' });
+          await new Promise((r) => setTimeout(r, wordDelayMs));
+        }
+        if (turnSignal.aborted) return false;
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push({ role: 'assistant', content: text });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: text });
+        }
+        sendEvent('done', {
+          content: text,
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          toolsUsed: [],
+        });
+        return true;
+      };
+
       // ── Slash command routing (works even in echo mode) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
@@ -3240,39 +3262,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
-          const words = friendlyError.split(' ');
-          for (const word of words) {
-            if (turnSignal.aborted) return;
-            sendEvent('token', { content: word + ' ' });
-            await new Promise((r) => setTimeout(r, 10));
-          }
-          if (turnSignal.aborted) return;
-          if (!turnMutationPolicy.denyConversationHistory) {
-            history.push({ role: 'assistant', content: friendlyError });
-            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
-          }
-          sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
+          if (!(await streamCannedReply(friendlyError, 10))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
-          // Stream the command result as SSE tokens
-          const cmdWords = cmdResult.split(' ');
-          for (const word of cmdWords) {
-            if (turnSignal.aborted) return;
-            sendEvent('token', { content: word + ' ' });
-            await new Promise((r) => setTimeout(r, 10));
-          }
-          if (turnSignal.aborted) return;
-          // Persist command result
-          if (!turnMutationPolicy.denyConversationHistory) {
-            history.push({ role: 'assistant', content: cmdResult });
-            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
-          }
-          sendEvent('done', {
-            content: cmdResult,
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-            toolsUsed: [],
-          });
+          // Stream the command result as SSE tokens and persist it
+          if (!(await streamCannedReply(cmdResult, 10))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
@@ -3286,23 +3281,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Setup-required mode — respond without pretending the user's input
         // was answered. The raw turn is still persisted for continuity.
         const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
-        const words = echoResponse.split(' ');
-        for (const word of words) {
-          if (turnSignal.aborted) return;
-          sendEvent('token', { content: word + ' ' });
-          await new Promise((r) => setTimeout(r, 15));
-        }
-        if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
-        if (!turnMutationPolicy.denyConversationHistory) {
-          history.push({ role: 'assistant', content: echoResponse });
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
-        }
-        sendEvent('done', {
-          content: echoResponse,
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          toolsUsed: [],
-        });
+        if (!(await streamCannedReply(echoResponse, 15))) return;
       }
 
       if (shouldRunAgentLoop) {
