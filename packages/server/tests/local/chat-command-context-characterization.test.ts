@@ -1,14 +1,13 @@
 /**
  * Characterization tests for `buildChatCommandContext` (routes/chat.ts).
  *
- * Commit d242ec05 moved this helper out of the POST /api/chat handler, and the
- * PR #85 branch review found 13 of its lines have no executing route test: the
- * recall-hit list and the catch in `searchMemory`, the conversation-history
- * sentinel and the managed-workspace block in `getWorkspaceState`
- * (docs/TESTING.md Characterization Backlog). These pins cover them directly
- * with a stub orchestrator and a stub server. They pin CURRENT behavior and
- * are not a spec: a bug found while pinning is marked `QUIRK` and ledgered in
- * docs/TECH-DEBT.md, never fixed here.
+ * These pin the branches of the slash-command context that no route test
+ * executes: the recall-hit list and the catch in `searchMemory`, and the
+ * conversation-history sentinel and the managed-workspace block in
+ * `getWorkspaceState`. They call the helper directly with a stub orchestrator
+ * and a stub server instead of going through POST /api/chat. They pin CURRENT
+ * behavior and are not a spec: a bug found while pinning is marked `QUIRK` and
+ * ledgered, never fixed here (docs/TESTING.md Characterization Backlog).
  *
  * The policy inputs are derived the way the handler derives them
  * (`persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy)`),
@@ -105,8 +104,9 @@ describe('buildChatCommandContext (characterization)', () => {
 
     it('reports a recall outage as no matches', async () => {
       // QUIRK (docs/TECH-DEBT.md TD-CHAT-29): Orchestrator.recallMemory never
-      // throws — its own catch returns count 0 with an outage notice in
-      // `text`, which searchMemory ignores. The user sees "no matches".
+      // rejects for a string query — its own catch returns count 0 with an
+      // outage notice in `text`, which searchMemory ignores. The user sees
+      // "no matches"; the branch below is reachable only from a test double.
       const stub = stubOrchestrator(async () => OUTAGE_RECALL);
       expect(await contextFor('/memory anything', { orchestrator: stub.orchestrator }).searchMemory('anything'))
         .toBe('No relevant memories found.');
@@ -142,6 +142,11 @@ describe('buildChatCommandContext (characterization)', () => {
       const session = new SessionStore(mind).create('pinned');
       new FrameStore(mind).createIFrame(session.gop_id, ABOUT, 'normal');
       mind.close();
+      // One session file under <dataDir>/workspaces/<id>/sessions so the
+      // block's session count observes the dataDir the helper passes through.
+      const sessionsDir = path.join(tmpDir, 'workspaces', 'ws-seeded', 'sessions');
+      fs.mkdirSync(sessionsDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionsDir, 'pinned.jsonl'), '');
     });
 
     afterAll(() => {
@@ -206,6 +211,8 @@ describe('buildChatCommandContext (characterization)', () => {
       expect(state).toBe(expected);
       expect(state.startsWith(`# Workspace Now — ${workspace.name}\n\n`)).toBe(true);
       expect(state).toContain(`${ABOUT}.`);
+      // The session count comes from <dataDir>/workspaces/ws-seeded/sessions.
+      expect(state).toContain('across 1 session.');
     });
   });
 });
