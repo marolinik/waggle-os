@@ -58,8 +58,11 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
   return null;
 }
 
+/** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
+const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+
 type ChatRequestRejection = {
-  status: 400 | 409;
+  status: 400 | 403 | 404 | 409;
   body: { error: string; code?: string };
 };
 
@@ -165,6 +168,80 @@ function resolveAutonomyLevel(
   if (!autonomy || (autonomy.level !== 'trusted' && autonomy.level !== 'yolo')) return 'normal';
   const { expiresAt } = autonomy;
   return !expiresAt || expiresAt > Date.now() ? autonomy.level : 'normal';
+}
+
+type ChatServer = Parameters<FastifyPluginAsync>[0];
+
+/**
+ * Resolves which workspace a chat turn reads history from and executes in.
+ * `authorizedWorkspace` (from the security middleware) overrides the
+ * body-supplied `workspace`; `null` pins execution to the personal scope.
+ * Returns a 404 when a named history workspace is unknown, or a 409 when the
+ * default chat history layout still needs recovery.
+ */
+function resolveChatWorkspaceTarget(
+  server: ChatServer,
+  workspace: string | undefined,
+  authorizedWorkspace: ReturnType<typeof getResolvedChatWorkspaceId>,
+  getChatHistoryLayout: () => ReturnType<typeof isolateLegacyDefaultChatSessions>,
+) {
+  const workspaceConfig = workspace
+    ? server.workspaceManager?.get(workspace)
+    : undefined;
+  const historyWorkspace = authorizedWorkspace === undefined
+    ? workspace
+    : authorizedWorkspace ?? undefined;
+  const historyWorkspaceConfig = historyWorkspace
+    ? server.workspaceManager?.get(historyWorkspace)
+    : undefined;
+  if (
+    historyWorkspace
+    && historyWorkspace !== 'default'
+    && !historyWorkspaceConfig
+  ) {
+    const rejection: ChatRequestRejection = {
+      status: 404,
+      body: { error: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' },
+    };
+    return { rejection };
+  }
+  const historyTarget = resolveChatHistoryTarget(
+    server.localConfig.dataDir,
+    historyWorkspace,
+    !!historyWorkspaceConfig,
+  );
+  const usesNamedWorkspace = historyTarget.isManagedWorkspace;
+  const historyWorkspaceId = historyTarget.workspaceId;
+  const executionWorkspaceId = authorizedWorkspace === null
+    ? undefined
+    : authorizedWorkspace ?? historyWorkspaceId;
+  const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
+  const executionWorkspaceConfig = executionWorkspaceId
+    ? server.workspaceManager?.get(executionWorkspaceId)
+    : undefined;
+  if (historyWorkspaceId === 'default') {
+    const currentChatHistoryLayout = getChatHistoryLayout();
+    if (currentChatHistoryLayout.status === 'recovery-required') {
+      const rejection: ChatRequestRejection = {
+        status: 409,
+        body: {
+          error: 'Default chat history needs recovery before it can be used.',
+          code: currentChatHistoryLayout.code,
+        },
+      };
+      return { rejection };
+    }
+  }
+  return {
+    rejection: undefined,
+    workspaceConfig,
+    historyTarget,
+    usesNamedWorkspace,
+    historyWorkspaceId,
+    executionWorkspaceId,
+    executionScopeId,
+    executionWorkspaceConfig,
+  };
 }
 
 /**
@@ -1721,8 +1798,8 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 // C3: Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
 // Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
-// Reserve a non-workspace scope for personal audit/collaboration streams.
-const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+// Reserve a non-workspace scope for personal audit/collaboration streams
+// (PERSONAL_CHAT_SCOPE_ID is module-level so route helpers can use it).
 const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
@@ -2378,48 +2455,24 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       });
     }
 
-    const workspaceConfig = workspace
-      ? server.workspaceManager?.get(workspace)
-      : undefined;
-    const historyWorkspace = authorizedWorkspace === undefined
-      ? workspace
-      : authorizedWorkspace ?? undefined;
-    const historyWorkspaceConfig = historyWorkspace
-      ? server.workspaceManager?.get(historyWorkspace)
-      : undefined;
-    if (
-      historyWorkspace
-      && historyWorkspace !== 'default'
-      && !historyWorkspaceConfig
-    ) {
-      return reply.status(404).send({
-        error: 'Workspace not found',
-        code: 'WORKSPACE_NOT_FOUND',
-      });
-    }
-    const historyTarget = resolveChatHistoryTarget(
-      server.localConfig.dataDir,
-      historyWorkspace,
-      !!historyWorkspaceConfig,
+    const workspaceTarget = resolveChatWorkspaceTarget(
+      server,
+      workspace,
+      authorizedWorkspace,
+      getChatHistoryLayout,
     );
-    const usesNamedWorkspace = historyTarget.isManagedWorkspace;
-    const historyWorkspaceId = historyTarget.workspaceId;
-    const executionWorkspaceId = authorizedWorkspace === null
-      ? undefined
-      : authorizedWorkspace ?? historyWorkspaceId;
-    const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
-    const executionWorkspaceConfig = executionWorkspaceId
-      ? server.workspaceManager?.get(executionWorkspaceId)
-      : undefined;
-    if (historyWorkspaceId === 'default') {
-      const currentChatHistoryLayout = getChatHistoryLayout();
-      if (currentChatHistoryLayout.status === 'recovery-required') {
-        return reply.status(409).send({
-          error: 'Default chat history needs recovery before it can be used.',
-          code: currentChatHistoryLayout.code,
-        });
-      }
+    if (workspaceTarget.rejection) {
+      return reply.status(workspaceTarget.rejection.status).send(workspaceTarget.rejection.body);
     }
+    const {
+      workspaceConfig,
+      historyTarget,
+      usesNamedWorkspace,
+      historyWorkspaceId,
+      executionWorkspaceId,
+      executionScopeId,
+      executionWorkspaceConfig,
+    } = workspaceTarget;
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
