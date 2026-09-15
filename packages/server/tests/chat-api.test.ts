@@ -2370,21 +2370,21 @@ describe('Chat Streaming API', () => {
     server.agentRunner = async () => {
       throw new Error('LiteLLM is not available');
     };
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Hello' },
+      });
 
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Hello' },
-    });
-
-    const events = parseSSE(res.body);
-    const errorEvents = events.filter(e => e.event === 'error');
-    expect(errorEvents.length).toBe(1);
-    const errorData = JSON.parse(errorEvents[0].data);
-    expect(errorData.message).toContain('LiteLLM is not available');
-
-    // Restore original runner
-    server.agentRunner = originalRunner;
+      const events = parseSSE(res.body);
+      const errorEvents = events.filter(e => e.event === 'error');
+      expect(errorEvents.length).toBe(1);
+      const errorData = JSON.parse(errorEvents[0].data);
+      expect(errorData.message).toContain('LiteLLM is not available');
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   it.each([
@@ -3031,20 +3031,21 @@ describe('Chat Streaming API', () => {
     server.agentRunner = async () => {
       throw new Error('H-07 regression: forced failure');
     };
+    try {
+      await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'trigger-abandoned-trace' },
+      });
 
-    await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'trigger-abandoned-trace' },
-    });
-
-    const afterCounts = server.traceStore.outcomeCounts();
-    expect(afterCounts.abandoned).toBeGreaterThan(beforeCounts.abandoned);
-    // Sanity: we didn't accidentally mark it 'success' or leave it 'pending'.
-    expect(afterCounts.success).toBe(beforeCounts.success);
-    expect(afterCounts.pending).toBe(beforeCounts.pending);
-
-    server.agentRunner = originalRunner;
+      const afterCounts = server.traceStore.outcomeCounts();
+      expect(afterCounts.abandoned).toBeGreaterThan(beforeCounts.abandoned);
+      // Sanity: we didn't accidentally mark it 'success' or leave it 'pending'.
+      expect(afterCounts.success).toBe(beforeCounts.success);
+      expect(afterCounts.pending).toBe(beforeCounts.pending);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('finalizes execution trace with outcome=success on happy path', async () => {
@@ -3073,29 +3074,30 @@ describe('Chat Streaming API', () => {
         usage: { inputTokens: 20, outputTokens: 15 },
       };
     };
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Search for waggle bees' },
+      });
 
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Search for waggle bees' },
-    });
+      const events = parseSSE(res.body);
+      const tokenEvents = events.filter(e => e.event === 'token');
+      expect(tokenEvents.length).toBe(1);
+      expect(JSON.parse(tokenEvents[0].data).content).toBe('Search results: ...');
 
-    const events = parseSSE(res.body);
-    const tokenEvents = events.filter(e => e.event === 'token');
-    expect(tokenEvents.length).toBe(1);
-    expect(JSON.parse(tokenEvents[0].data).content).toBe('Search results: ...');
+      const toolEvents = events.filter(e => e.event === 'tool');
+      expect(toolEvents.length).toBe(1);
+      const toolData = JSON.parse(toolEvents[0].data);
+      expect(toolData.name).toBe('web_search');
+      expect(toolData.input).toEqual({ query: 'waggle bees' });
 
-    const toolEvents = events.filter(e => e.event === 'tool');
-    expect(toolEvents.length).toBe(1);
-    const toolData = JSON.parse(toolEvents[0].data);
-    expect(toolData.name).toBe('web_search');
-    expect(toolData.input).toEqual({ query: 'waggle bees' });
-
-    const doneEvents = events.filter(e => e.event === 'done');
-    const doneData = JSON.parse(doneEvents[0].data);
-    expect(doneData.toolsUsed).toEqual(['web_search']);
-
-    server.agentRunner = originalRunner;
+      const doneEvents = events.filter(e => e.event === 'done');
+      const doneData = JSON.parse(doneEvents[0].data);
+      expect(doneData.toolsUsed).toEqual(['web_search']);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   it.each(['workspace', 'workspaceId'] as const)(
@@ -3561,37 +3563,38 @@ describe('Chat Streaming API', () => {
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     };
+    try {
+      // Build a session with 60 messages (30 user + 30 assistant pairs)
+      const sessionId = 'window-test-' + Date.now();
+      const authorizedWorkspace = server.agentState.activeWorkspaceId;
+      expect(authorizedWorkspace).toBeTruthy();
+      const history = server.agentState.sessionHistories;
+      const messages: Array<{ role: string; content: string }> = [];
+      for (let i = 0; i < 30; i++) {
+        messages.push({ role: 'user', content: `msg-${i}` });
+        messages.push({ role: 'assistant', content: `reply-${i}` });
+      }
+      history.set(chatSessionStateKey(authorizedWorkspace!, sessionId), messages);
 
-    // Build a session with 60 messages (30 user + 30 assistant pairs)
-    const sessionId = 'window-test-' + Date.now();
-    const authorizedWorkspace = server.agentState.activeWorkspaceId;
-    expect(authorizedWorkspace).toBeTruthy();
-    const history = server.agentState.sessionHistories;
-    const messages: Array<{ role: string; content: string }> = [];
-    for (let i = 0; i < 30; i++) {
-      messages.push({ role: 'user', content: `msg-${i}` });
-      messages.push({ role: 'assistant', content: `reply-${i}` });
+      // Send one more message — total becomes 61 (60 existing + 1 new user message)
+      await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'final message', session: sessionId },
+      });
+
+      // The captured messages should have 50 + 1 truncation notice = 51
+      expect(capturedMessages).toBeDefined();
+      expect(capturedMessages!.length).toBe(MAX_CONTEXT_MESSAGES + 1);
+      // First message should be the truncation notice
+      expect(capturedMessages![0].role).toBe('system');
+      expect(capturedMessages![0].content).toContain('Context summary');
+      expect(capturedMessages![0].content).toContain('11 earlier messages');
+      // Last message should be the latest user message
+      expect(capturedMessages![capturedMessages!.length - 1].content).toBe('final message');
+    } finally {
+      server.agentRunner = originalRunner;
     }
-    history.set(chatSessionStateKey(authorizedWorkspace!, sessionId), messages);
-
-    // Send one more message — total becomes 61 (60 existing + 1 new user message)
-    await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'final message', session: sessionId },
-    });
-
-    // The captured messages should have 50 + 1 truncation notice = 51
-    expect(capturedMessages).toBeDefined();
-    expect(capturedMessages!.length).toBe(MAX_CONTEXT_MESSAGES + 1);
-    // First message should be the truncation notice
-    expect(capturedMessages![0].role).toBe('system');
-    expect(capturedMessages![0].content).toContain('Context summary');
-    expect(capturedMessages![0].content).toContain('11 earlier messages');
-    // Last message should be the latest user message
-    expect(capturedMessages![capturedMessages!.length - 1].content).toBe('final message');
-
-    server.agentRunner = originalRunner;
   });
 
   it('enforces a supplied-only verifier boundary for an injected runner', async () => {
@@ -3656,18 +3659,19 @@ describe('Chat Streaming API', () => {
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     };
+    try {
+      await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Hello' },
+      });
 
-    await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Hello' },
-    });
-
-    // The agent runner should have received an AbortSignal
-    expect(capturedSignal).toBeDefined();
-    expect(capturedSignal).toBeInstanceOf(AbortSignal);
-
-    server.agentRunner = originalRunner;
+      // The agent runner should have received an AbortSignal
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('keeps the authorized implicit workspace request-scoped when the global active workspace changes', async () => {
