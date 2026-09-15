@@ -58,6 +58,102 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
   return null;
 }
 
+type ChatRequestRejection = {
+  status: 400 | 409;
+  body: { error: string; code?: string };
+};
+
+type ChatRequestFieldInput = {
+  message: unknown;
+  workspace: unknown;
+  workspaceId: unknown;
+  session: unknown;
+  sessionId: unknown;
+  selectedSkill: unknown;
+  retry: unknown;
+  retryTarget: unknown;
+};
+
+type ValidatedChatRequestFields = {
+  rejection?: undefined;
+  selectedSkill: string | undefined;
+  retryTarget: RetryTailExpectation | null;
+};
+
+const MAX_CHAT_SEGMENT_LENGTH = 200;
+
+/**
+ * Validates the syntactic shape of a POST /api/chat body before any referenced
+ * resource is resolved. Returns the first rejection in the same order the
+ * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
+ * Unsafe path segments still throw via `assertSafeSegment`.
+ */
+export function validateChatRequestFields(
+  input: ChatRequestFieldInput,
+  isSkillInstalled: (name: string) => boolean,
+): { rejection: ChatRequestRejection } | ValidatedChatRequestFields {
+  const {
+    message,
+    selectedSkill: selectedSkillRaw,
+    retry: retryTurn,
+    retryTarget: retryTargetRaw,
+  } = input;
+  const reject = (status: ChatRequestRejection['status'], body: ChatRequestRejection['body']) => (
+    { rejection: { status, body } }
+  );
+  if (message === undefined || message === '') {
+    return reject(400, { error: 'message is required' });
+  }
+  if (typeof message !== 'string') {
+    return reject(400, { error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
+  }
+  const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return reject(400, { error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
+  }
+  let selectedSkill: string | undefined;
+  if (selectedSkillRaw !== undefined) {
+    if (typeof selectedSkillRaw !== 'string') {
+      return reject(400, { error: 'selectedSkill must be a string', code: 'INVALID_FIELD_TYPE' });
+    }
+    selectedSkill = selectedSkillRaw.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(selectedSkill)) {
+      return reject(400, { error: 'selectedSkill is invalid', code: 'INVALID_SELECTED_SKILL' });
+    }
+    if (!isSkillInstalled(selectedSkill)) {
+      return reject(409, { error: 'The selected skill is not available', code: 'SKILL_NOT_AVAILABLE' });
+    }
+  }
+  if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
+    return reject(400, { error: 'retry must be a boolean', code: 'INVALID_FIELD_TYPE' });
+  }
+  const retryTarget = retryTargetRaw === undefined
+    ? null
+    : parseRetryTailExpectation(retryTargetRaw);
+  if (retryTargetRaw !== undefined && retryTarget === null) {
+    return reject(400, { error: 'retryTarget is invalid', code: 'INVALID_RETRY_TARGET' });
+  }
+  if (retryTarget && retryTurn !== true) {
+    return reject(400, { error: 'retryTarget requires retry: true', code: 'INVALID_RETRY_TARGET' });
+  }
+  for (const [field, value] of [
+    ['workspace', input.workspace],
+    ['workspaceId', input.workspaceId],
+    ['session', input.session],
+    ['sessionId', input.sessionId],
+  ] as const) {
+    if (value === undefined) continue;
+    if (typeof value !== 'string') {
+      return reject(400, { error: `${field} must be a string`, code: 'INVALID_FIELD_TYPE' });
+    }
+    if (value.length > MAX_CHAT_SEGMENT_LENGTH) {
+      return reject(400, { error: `${field} is too long (max ${MAX_CHAT_SEGMENT_LENGTH} chars)`, code: 'INVALID_FIELD_LENGTH' });
+    }
+    assertSafeSegment(value, field);
+  }
+  return { selectedSkill, retryTarget };
+}
+
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
@@ -2240,78 +2336,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // A syntactically valid unknown workspace still returns 404 below, while
     // invalid message/session input remains a stable 400 regardless of whether
     // the named workspace exists.
-    if (message === undefined || message === '') {
-      return reply.status(400).send({ error: 'message is required' });
+    const validatedFields = validateChatRequestFields(
+      {
+        message,
+        workspace: _ws,
+        workspaceId: _wsId,
+        session,
+        sessionId: sessionIdAlias,
+        selectedSkill: selectedSkillRaw,
+        retry: retryTurn,
+        retryTarget: retryTargetRaw,
+      },
+      name => server.agentState.skills.some(skill => skill.name === name),
+    );
+    if (validatedFields.rejection) {
+      return reply.status(validatedFields.rejection.status).send(validatedFields.rejection.body);
     }
-    if (typeof message !== 'string') {
-      return reply.status(400).send({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
-    }
-    const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
-    if (message.length > MAX_MESSAGE_LENGTH) {
-      return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
-    }
-    let selectedSkill: string | undefined;
-    if (selectedSkillRaw !== undefined) {
-      if (typeof selectedSkillRaw !== 'string') {
-        return reply.status(400).send({
-          error: 'selectedSkill must be a string',
-          code: 'INVALID_FIELD_TYPE',
-        });
-      }
-      selectedSkill = selectedSkillRaw.trim().toLowerCase();
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(selectedSkill)) {
-        return reply.status(400).send({
-          error: 'selectedSkill is invalid',
-          code: 'INVALID_SELECTED_SKILL',
-        });
-      }
-      if (!server.agentState.skills.some(skill => skill.name === selectedSkill)) {
-        return reply.status(409).send({
-          error: 'The selected skill is not available',
-          code: 'SKILL_NOT_AVAILABLE',
-        });
-      }
-    }
-    if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
-      return reply.status(400).send({
-        error: 'retry must be a boolean',
-        code: 'INVALID_FIELD_TYPE',
-      });
-    }
-    const retryTarget = retryTargetRaw === undefined
-      ? null
-      : parseRetryTailExpectation(retryTargetRaw);
-    if (retryTargetRaw !== undefined && retryTarget === null) {
-      return reply.status(400).send({
-        error: 'retryTarget is invalid',
-        code: 'INVALID_RETRY_TARGET',
-      });
-    }
-    if (retryTarget && retryTurn !== true) {
-      return reply.status(400).send({
-        error: 'retryTarget requires retry: true',
-        code: 'INVALID_RETRY_TARGET',
-      });
-    }
-    const MAX_CHAT_SEGMENT_LENGTH = 200;
-    for (const [field, value] of [
-      ['workspace', _ws],
-      ['workspaceId', _wsId],
-      ['session', session],
-      ['sessionId', sessionIdAlias],
-    ] as const) {
-      if (value === undefined) continue;
-      if (typeof value !== 'string') {
-        return reply.status(400).send({ error: `${field} must be a string`, code: 'INVALID_FIELD_TYPE' });
-      }
-      if (value.length > MAX_CHAT_SEGMENT_LENGTH) {
-        return reply.status(400).send({
-          error: `${field} is too long (max ${MAX_CHAT_SEGMENT_LENGTH} chars)`,
-          code: 'INVALID_FIELD_LENGTH',
-        });
-      }
-      assertSafeSegment(value, field);
-    }
+    const { selectedSkill, retryTarget } = validatedFields;
 
     const suppliedWorkspace = _ws ?? _wsId;
     const authorizedWorkspace = getResolvedChatWorkspaceId(request);
