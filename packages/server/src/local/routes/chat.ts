@@ -347,7 +347,7 @@ function resolveChatWorkspacePaths(
  * recall, workspace state and skill listing degrade to sentinel strings that
  * the command handlers render verbatim.
  */
-function buildChatCommandContext(input: {
+export function buildChatCommandContext(input: {
   server: ChatServer;
   orchestrator: Orchestrator;
   executionWorkspaceId: string | undefined;
