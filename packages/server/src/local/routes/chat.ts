@@ -2501,7 +2501,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
     const {
-      message, workspace: _ws, workspaceId: _wsId, model, session,
+      message, workspace: workspaceRaw, workspaceId: workspaceIdRaw, model, session,
       sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       selectedSkill: selectedSkillRaw,
@@ -2517,8 +2517,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const validatedFields = validateChatRequestFields(
       {
         message,
-        workspace: _ws,
-        workspaceId: _wsId,
+        workspace: workspaceRaw,
+        workspaceId: workspaceIdRaw,
         session,
         sessionId: sessionIdAlias,
         selectedSkill: selectedSkillRaw,
@@ -2532,9 +2532,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     const { selectedSkill, retryTarget } = validatedFields;
 
-    const suppliedWorkspace = _ws ?? _wsId;
+    const workspace = workspaceRaw ?? workspaceIdRaw;
     const authorizedWorkspace = getResolvedChatWorkspaceId(request);
-    const workspace = suppliedWorkspace;
     const requestedSessionId = session ?? sessionIdAlias;
     if (session !== undefined && sessionIdAlias !== undefined && session !== sessionIdAlias) {
       return reply.status(400).send({
