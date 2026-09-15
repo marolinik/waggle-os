@@ -36,7 +36,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 |---|---|---|---|---|
 | 1 | working-with-legacy-code | done | TESTING.md + TECH-DEBT.md | 2026-09-15 |
 | 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
-| 3 | clean-code | in-progress | TECH-DEBT.md | 2026-09-15 |
+| 3 | clean-code | done (pass 1: 7 fixes applied, 15 ledgered) | TECH-DEBT.md | 2026-09-15 |
 | 4 | software-design-philosophy | pending | TECH-DEBT.md | |
 | 5 | clean-architecture | pending | ARCHITECTURE.md | |
 | 6 | pragmatic-programmer | pending | TECH-DEBT.md | |
@@ -63,6 +63,11 @@ Add-when condition becomes true.
 | 2026-09-15 | 2 | Phase 2 scope = safe Extract Method on pinned regions (validation, workspace resolution, canned-reply streaming); no method object yet | Intended zero new pins. Post-review correction: `acd7ec0c` also moved the 409 `WORKSPACE_NOT_READY` / `WORKSPACE_ROOT_UNAVAILABLE` exits that TESTING.md still listed as gaps (a Rule 8 breach); behavior preservation was proven by line-by-line diff review and the exits were pinned afterwards in `a55a1712`. |
 | 2026-09-15 | 2 | A red test mid-extraction (scope error on a plugin-local constant) was reverted, not debugged; re-applied with the literal hoisted to module scope | Skill rule: red means revert. The retry was a different, smaller transformation. |
 | 2026-09-15 | 2 | Extracted helpers stay in `chat.ts` — four module-level functions plus one handler-local closure (`streamCannedReply`) — rather than a new file | Surgical change; moving files is a separate structure-only step for Phase 4/5 once the module boundary is chosen. |
+| 2026-09-15 | 3 | Phase 3 scope = six-discipline clean-code score of the Phase 2 helpers, `streamCannedReply`, the slash-command / echo branches and the handler prelude, plus an error-handling audit of all 58 `try` blocks; apply only structure-only fixes inside Safety Net Map pinned regions (7 fixes, 7 single-purpose commits `b5f18e6b`..`d242ec05`), ledger everything else (TD-CHAT-14..28, TD-REL-3..5, TD-TEST-4..7) | Scores 5–6.5/10 (mean 5.5). Done-when met by clause 2 (every gap below 8 is a Smell Inventory row with a fix). Behavior changes — including every catch-block recommendation — wait for pins per Rule 8. |
+| 2026-09-15 | 3 | Adopted Conventions (bare-catch why-comment + structured warn, discriminated `{ rejection }` results from one constructor, error codes in one `as const` block, predicate-phrased booleans, one name per value with the `Raw` suffix, explaining variable at the third occurrence, intent-not-history comments, module-scope policy constants, `finally` / `beforeEach` in tests) recorded as agent-proposed | Rule 5: no silent decisions. Each convention is traceable to an evidence line in `chat.ts`; the founder ratifies or amends at PR review. |
+| 2026-09-15 | 3 | `buildChatCommandContext` extraction went red on the first attempt (tsc: `PERSONAL_CHAT_COMMAND_CONTEXT` is plugin-local at column 0); reverted, hoisted the constant in its own commit (`522613d6`), re-applied (`d242ec05`) | Same trap as Phase 2; red means revert, and the retry is a smaller preparatory transformation. |
+| 2026-09-15 | 3 | Error-handling audit recorded as evidence in `docs/tech-debt/CHAT-ERROR-HANDLING-AUDIT-2026-09-15.md`; no catch block changed | 27 non-ok blocks are all behavior changes; two fail open on security boundaries (TD-CHAT-23, P1) and get pins first. |
+| 2026-09-15 | 3 | `VIEWER_READ_ONLY` deliberately not added to the Safety Net Map; the `endTurnWithError` extraction and the temp-server fixture helper were refuted in review | The 403 pin at `chat-api.test.ts:4085` is emitted by `security-middleware.ts`, not `chat.ts`; the send-error-and-end helper would fold an unexecuted branch (repeat of the `acd7ec0c` breach). |
 
 ## Next Actions
 
@@ -75,4 +80,8 @@ Add-when condition becomes true.
 - [x] Branch review (43-agent workflow, 3 refuters per finding): 5/5 refactor commits behavior-preserved; 9 doc/test findings fixed in `a55a1712` + this docs commit (agent, 2026-09-15)
 - [x] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder, PR #84 `b248ce38`)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
-- [ ] Phase 3 entry: clean-code scoring of `chat.ts` helpers + the slash-command branch; error-handling audit of the 44 `try` blocks (founder + agent)
+- [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, `b5f18e6b`..`d242ec05`, 2026-09-15)
+- [ ] Review + merge `chore/tech-debt-phase3-chat-clean-code` into `main`; ratify or amend the Phase 3 Adopted Conventions (founder)
+- [ ] TD-CHAT-23 (two security-boundary catches fail open silently, P1): pin via Characterization Backlog 3499-3532, then fail closed with a structured warn, own behavior commit (agent)
+- [ ] TD-TEST-4: hoist `resetRateLimiter` to `beforeEach` in `chat-api.test.ts` after a full-file green run (agent, `test(server):` commit)
+- [ ] Phase 4 entry: software-design-philosophy on the helper set (`validateChatRequestFields`, `resolveChatWorkspaceTarget`, `resolveChatWorkspacePaths`, `buildChatCommandContext`, `streamCannedReply`) — depth vs interface, the `TurnScope` parameter object, and whether the `hasCustomRunner` seam narrows (TD-CHAT-16) (founder + agent)
