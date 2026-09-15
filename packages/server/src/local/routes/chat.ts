@@ -2603,24 +2603,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Validation and auth checks remain before reply.hijack(); once hijacked,
     // reply.status() / reply.send() become no-ops on the raw socket.
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const isPlainInteractiveTurn = autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && turnMutationPolicy.contextScope === 'default';
     const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
       message,
       Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
     );
     const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
       && (!selectedSkill || selectedSkill === 'decision-matrix')
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default';
+      && isPlainInteractiveTurn;
     const boundedExactPersistedMemoryLookup = isBoundedExactPersistedMemoryLookup(message)
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default';
+      && isPlainInteractiveTurn;
     const directReadFileDirective = parseDirectReadFileDirective(message);
     const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default'
+      && isPlainInteractiveTurn
       && Boolean(executionWorkspacePath)
       ? 'read_file'
       : undefined;
@@ -2631,9 +2628,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       ?? (selectedSkill ? 'read_skill' : undefined)
       ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
       ?? (resolvedReadOnlyToolDirective === 'list_skills'
-        && autonomyLevel === 'normal'
-        && !isAutomatedTurn
-        && turnMutationPolicy.contextScope === 'default'
+        && isPlainInteractiveTurn
         && detectTaskShape(message).complexity === 'simple'
         && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
         ? resolvedReadOnlyToolDirective
@@ -2694,9 +2689,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     const warningTierDirectReadFileCandidate = !injectionResult.safe
       && WARNING_TIER_DIRECT_READ_FILE_INTENT_RE.test(message)
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default'
+      && isPlainInteractiveTurn
       && Boolean(executionWorkspacePath)
       ? 'read_file'
       : undefined;
@@ -3196,7 +3189,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // ── Slash command routing (works even in echo mode) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
-      if (commandRegistry.isCommand(message)) {
+      const isSlashCommand = commandRegistry.isCommand(message);
+      if (isSlashCommand) {
         // Build a lightweight command context (same as commands.ts route)
         const cmdContext = {
           // Command handlers interpolate this value into user-facing agent
@@ -3274,8 +3268,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = reroutedMessage || (!commandRegistry.isCommand(message) && litellmAvailable);
-      const shouldEchoMode = !reroutedMessage && !commandRegistry.isCommand(message) && !litellmAvailable;
+      const shouldRunAgentLoop = reroutedMessage || (!isSlashCommand && litellmAvailable);
+      const shouldEchoMode = !reroutedMessage && !isSlashCommand && !litellmAvailable;
 
       if (shouldEchoMode) {
         // Setup-required mode — respond without pretending the user's input
