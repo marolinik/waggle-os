@@ -1,0 +1,110 @@
+# Testing
+
+Safety-net record for the `/remove-technical-debt` journey (tracker:
+`docs/REMOVE-TECHNICAL-DEBT-PLAN.md`). Phase 1 owner: agent, 2026-09-14.
+
+## Test Strategy
+
+- **Pyramid.** Vitest unit + route-level integration through `buildLocalServer` (Fastify
+  `inject`, real SQLite in a temp `dataDir`, LLM replaced at the `server.agentRunner` seam);
+  Playwright API/E2E on top. `npm run test -- --run` is the deterministic gate; infra suites
+  (Postgres/Redis) and `packages/server/tests/performance/**` run in dedicated lanes.
+- **Runtime.** Run tests under **Node 22.23.2** (the packaged sidecar runtime). The fnm default
+  shell is Node 24; `better-sqlite3` is built for ABI 127, so Node 24 fails 123/236 server test
+  files with `ERR_DLOPEN_FAILED`. Bash prefix:
+  `eval "$(fnm env --shell bash)" && fnm use 22.23.2`. Never `npm rebuild` for 24.
+- **Baseline (2026-09-14, Node 22.23.2):** `packages/server` 235 files passed, 1 skipped;
+  3893 tests passed, 1 skipped.
+- **Characterization discipline.** Tests in `*-characterization.test.ts` pin *observed*
+  behavior (probe with a known-wrong assertion, read the failure, pin the real value). They
+  are not specs. A bug found while pinning is pinned with a `// QUIRK` comment and a
+  `docs/TECH-DEBT.md` ledger row, never fixed in the same commit.
+- **Pinch points for `routes/chat.ts`.** The 3652-line `POST /api/chat` handler is reachable
+  only through HTTP, but two seams make that cheap: (1) `server.agentRunner` — an object seam
+  the route reads per turn, so a test-supplied runner replaces the whole agent loop and doubles
+  as a sensing point; (2) `commandRegistry.isCommand(message)` — slash commands terminate before
+  the agent loop, so `/skills`, `/status`, `/memory` exercise the request/persistence/SSE path
+  with zero LLM involvement. Message-text classifiers (`chat-helpers.ts`) select most branches,
+  so a directive suffix such as `- do not use my saved memory` steers the turn-mutation policy
+  from the request body alone.
+- **Seam caveat.** Setting `server.agentRunner` flips `hasCustomRunner`, which skips roughly two
+  thirds of the handler's side effects: tool-pool construction, automatic recall, GEPA expansion,
+  the pre-tool approval hook, knowledge-graph entity writes, correction detection, auto-save, and
+  the retry / model-fallback / credential-rotation chain (`runAgentAttempt` 4806,
+  `runModelFallbackChain` 4967, 5064–5146). The only harness that reaches those is the
+  **link seam on `globalThis.fetch`** (8 tests in `chat-api.test.ts` stub the OpenAI-compatible
+  provider and let the real `runAgentLoop` run). New pins for that region must use the fetch-spy
+  shape, not `agentRunner`.
+- **Nested closures reachable only over HTTP** (no direct unit path): `buildSystemPrompt` 1852,
+  `buildTurnContextSuffix` 2156, `acquireChatRuntime` / `releaseChatRuntime` 1641 / 1683,
+  `pruneChatRuntimes` 1632, `loadProfile` 1687, the state-key helpers 1745–1774, the pre-tool
+  hook closure 3387–3620, and every `agentConfig` callback 4455–4682. Module-level mutable state
+  (`systemPromptCache`, `chatRuntimes`, `activeChatTurns`, `compressionSummaries`,
+  `credentialPools`, `sessionToolSequences`, `dismissedCaptureSuggestions`,
+  `retainedSessionStateLru`, `profileCache`) is reachable only via
+  `server.agentState.chatStateController`. The Phase 1 effect sketch (phase table, effect exits,
+  steering inputs) is summarized in `docs/TECH-DEBT.md` TD-CHAT-3 and will be reproduced as the
+  Phase 2 extraction plan.
+
+## Safety Net Map
+
+| Module | Pinned behaviors | Test files | Gaps |
+|---|---|---|---|
+| `packages/server/src/local/routes/chat.ts` — request validation | `retry` non-boolean → 400 `INVALID_FIELD_TYPE`; malformed `retryTarget` (9 shapes) → 400 `INVALID_RETRY_TARGET`; well-formed `retryTarget` without `retry: true` → 400; non-string `workspace`/`workspaceId`/`session`/`sessionId` → 400 `INVALID_FIELD_TYPE`; >200-char segment → 400 `INVALID_FIELD_LENGTH`; 200-char boundary proceeds to SSE; rejected requests never reach `agentRunner` | `tests/local/chat-route-characterization.test.ts` | `SESSION_ID_CONFLICT`, `WORKSPACE_NOT_READY` (409, needs authorized≠supplied workspace), `WORKSPACE_ROOT_UNAVAILABLE` (409) |
+| `routes/chat.ts` — slash-command turns | `/skills`, `/status`, `/memory <q>` stream a `done` event with `toolsUsed: []` and zero usage; memory-deny directive flips `listSkills`→`[]`, `searchMemory`→"disabled" sentinel; `/status` leaks the disabled sentinel as a section (QUIRK TD-CHAT-1) | `tests/local/chat-route-characterization.test.ts` | `/catchup`, `/now`, `/marketplace *` under deny; reroute-to-agent-loop commands (`AGENT_LOOP_REROUTE_PREFIX`) with and without an available model |
+| `routes/chat.ts` — streaming, approvals, persistence, governance (pre-existing net) | SSE headers/ordering, single-flight per session, approval timeouts, governance tool filtering, prompt packaging, history persistence, LiteLLM key routing, retry-tail replacement | `tests/chat-api.test.ts` (92), `tests/local/chat-approval-timeout.test.ts`, `chat-governance.test.ts`, `chat-helpers.test.ts`, `chat-persistence.test.ts`, `chat-prompt-packaging.test.ts`, `sse-resilience.test.ts`, `persona-acceptance-prompt-budget.test.ts`, `smart-router-chat.test.ts`, `chat-goal-ancestry.test.ts`, +4 | See Characterization Backlog |
+| `routes/chat.ts` — `DELETE /api/chat/history` | clears session file + in-process state; 409 while a turn is active | `tests/chat-api.test.ts`, `tests/workspace-sessions-concurrency.test.ts` | 409 `recovery-required` layout branch |
+| Exported helpers (`resolveChatAncestry`, `hasRegulatedDisclaimer`, `isExplicit*`, `parseDirectReadFileDirective`, `filter*ForConversationalTurn`, `waitForApprovalDecision`, …) | Direct unit pins | `tests/chat-api.test.ts`, `tests/local/chat-prompt-packaging.test.ts`, `chat-approval-timeout.test.ts` | `isClosedDbError`, `resolveRealPath` never executed |
+
+**Coverage of `chat.ts` (15 chat-related test files, 868 tests, Node 22.23.2, 2026-09-14):**
+86.5% lines · 83.8% branches · 92.6% functions (1623/1936 branches). Before the
+characterization file, the same measurement over the 9 files that ran cleanly was
+83.9% / 82.8% / 88.2%. Re-measure with the command in `## CI Gates`.
+
+## Characterization Backlog
+
+Remaining uncovered ranges in `routes/chat.ts` (statement coverage, ≥8 lines), labeled by
+behavior. Risk = blast radius if a refactor silently changes it.
+
+- [ ] 4806–5146 retry / model-fallback / credential-rotation chain (`runAgentAttempt`, `runModelFallbackChain`, `runPrimaryWithSafeInterruptedRetry`) via the fetch-spy harness; includes the stale read-only-tool state carried across attempts (TD-CHAT-10) (risk: high — routing receipt surface; P1)
+- [ ] 1852–1935 `buildSystemPrompt` early-return prompt variants given `server.activeBehavioralSpec` + persona (risk: high — persona receipt surface; P1)
+- [ ] 1641–1683 `acquireChatRuntime` caching, LRU pruning, `toolContextKey` invalidation (risk: medium; P2)
+- [ ] 2805–2826 workspace chat-runtime creation failure → turn error (risk: high — user-facing failure path; priority: P1)
+- [ ] 3432–3458 `proposeHeldTurn` — headless reviewer tool proposal held/denied (risk: high — trust boundary; P1)
+- [ ] 3469–3484 "Always allow" approval-grant auto-pass (risk: high — security; P1)
+- [ ] 3499–3532 starter-skill trust assessment + `classifyGatedToolRisk` fallback when `trustMeta` absent (risk: high — security; P1)
+- [ ] 3591–3619 approval timeout `onHeld` audit event + abort after wait (risk: high; P1)
+- [ ] 3863–3885 compression-summary injection scan ≥0.7 blocks persistence (risk: high — injection defense; P1)
+- [ ] 5570–5591 closed-DB / post-commit observer failure after response committed (risk: medium — fail-soft path; P2)
+- [ ] 2433–2443 `WORKSPACE_NOT_READY` 409 when authorized workspace mind is not loaded (risk: medium; P2)
+- [ ] 2880–2889 budget-model unavailable → fall back to primary (risk: medium — routing receipt surface; P2)
+- [ ] 3299–3310 GEPA vague-prompt expansion step + choices event (risk: medium; P2)
+- [ ] 3347–3354 template welcome context from workspace `templateId` (risk: low; P3)
+- [ ] 4650–4682 TeamSync push after `save_memory` in a team workspace (risk: medium; P2 — needs team fixture)
+- [ ] 5266–5312 skill-distillation directive + entity extraction into KG (max 10/turn) (risk: medium; P2)
+- [ ] 5367–5377 capture-suggestion notification + dismissal memo (risk: low; P3)
+- [ ] 5794–5802 defensive trace finalization `outcome: 'abandoned'` on exotic exit (risk: low; P3)
+- [ ] 1547–1559 daily cost carry-over from `traceStore` at plugin init (risk: low; P3)
+- [ ] 1587–1596 capability-gap recording on memory-write lint (risk: low; P3)
+- [ ] 1830–1839 `onRestored` cache clear after backup restore (risk: medium; P2 — pair with `backup-restore.test.ts`)
+- [ ] Slash commands: `/catchup`, `/now`, `/marketplace installed|install|sync` under memory-deny; reroute prefix path (P2)
+- [ ] `apps/web/src/lib/adapter.ts` (4216 LOC, 157 commits/6mo) — 12 partial test files; map gaps before Phase 2 touches it (P2)
+- [ ] `packages/server/src/local/index.ts` (3583 LOC, 150 commits/6mo) — bootstrap wiring; characterize the decorator contract (`agentRunner`, `sessionManager`, `workspaceManager`, `agentState`) that every route test relies on (P2)
+
+## CI Gates
+
+- `.github/workflows/ci.yml` runs the default Vitest gate; `installer-smoke.yml` and
+  `tauri-build-pr.yml` cover packaging. Coverage is not enforced in CI.
+- Local re-measure for `chat.ts` (Node 22.23.2); list the chat test files explicitly — Vitest
+  treats a quoted glob as a name filter, and the summary line shows how many files ran:
+
+```bash
+npx vitest run packages/server/tests/chat-api.test.ts \
+  packages/server/tests/local/chat-route-characterization.test.ts \
+  packages/server/tests/local/chat-approval-timeout.test.ts \
+  packages/server/tests/local/chat-governance.test.ts \
+  packages/server/tests/local/chat-helpers.test.ts \
+  packages/server/tests/local/chat-persistence.test.ts \
+  packages/server/tests/local/chat-prompt-packaging.test.ts \
+  --coverage --coverage.include=packages/server/src/local/routes/chat.ts --coverage.reporter=text
+```
