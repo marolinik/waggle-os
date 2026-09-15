@@ -60,6 +60,11 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 
 /** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
 const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+// Workspace label that slash-command handlers interpolate into user-facing
+// prompts when the turn runs in the personal scope. Deliberately not
+// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
+// and must never reach a prompt as if it were a workspace.
+const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
 type ChatRequestRejection = {
   status: 400 | 403 | 404 | 409;
@@ -1889,11 +1894,6 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 
 // C3: Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
-// Workspace label that slash-command handlers interpolate into user-facing
-// prompts when the turn runs in the personal scope. Deliberately not
-// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
-// and must never reach a prompt as if it were a workspace.
-const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
   // chat-local mutable tools (plans, save counters) and orchestrator receipts
