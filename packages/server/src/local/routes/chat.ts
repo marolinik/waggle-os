@@ -89,7 +89,11 @@ const MAX_CHAT_SEGMENT_LENGTH = 200;
  * Validates the syntactic shape of a POST /api/chat body before any referenced
  * resource is resolved. Returns the first rejection in the same order the
  * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
- * Unsafe path segments still throw via `assertSafeSegment`.
+ * Unsafe path segments still throw via `assertSafeSegment` (R6-001): `workspace`
+ * and the session alias come straight from the request body and are joined into
+ * dataDir/workspaces/<workspace>/sessions/<session>.jsonl by chat-persistence
+ * (persistMessage / loadSessionMessages), so a crafted "../evil" segment would
+ * escape the sessions dir on both write and read.
  */
 export function validateChatRequestFields(
   input: ChatRequestFieldInput,
@@ -1885,9 +1889,10 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 
 // C3: Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
-// Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
-// Reserve a non-workspace scope for personal audit/collaboration streams
-// (PERSONAL_CHAT_SCOPE_ID is module-level so route helpers can use it).
+// Workspace label that slash-command handlers interpolate into user-facing
+// prompts when the turn runs in the personal scope. Deliberately not
+// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
+// and must never reach a prompt as if it were a workspace.
 const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
@@ -2667,11 +2672,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     );
     let allowResponseDecoration = turnAllowsResponseDecoration;
 
-    // R6-001: path-traversal guard on the session-persistence path segments.
-    // `workspace` and the resolved session alias come straight from the request body and are
-    // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
-    // chat-persistence (persistMessage / loadSessionMessages). A crafted
-    // "../evil" segment would escape the sessions dir on both write and read.
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
@@ -2995,7 +2995,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
 
-      // ── Conversation history management (moved before LLM check so echo mode also persists) ──
+      // ── Model resolution: confirm the selected model is routable; on failure fall
+      // back budget → primary → configured fallback, recording modelSwitchReason ──
       try {
         const selectedModelBeforeResolution = resolvedModel.trim();
         resolvedModel = await resolveUsableModel(server, resolvedModel);
