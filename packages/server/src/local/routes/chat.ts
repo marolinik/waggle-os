@@ -60,6 +60,11 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 
 /** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
 const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+// Workspace label that slash-command handlers interpolate into user-facing
+// prompts when the turn runs in the personal scope. Deliberately not
+// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
+// and must never reach a prompt as if it were a workspace.
+const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
 type ChatRequestRejection = {
   status: 400 | 403 | 404 | 409;
@@ -89,7 +94,11 @@ const MAX_CHAT_SEGMENT_LENGTH = 200;
  * Validates the syntactic shape of a POST /api/chat body before any referenced
  * resource is resolved. Returns the first rejection in the same order the
  * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
- * Unsafe path segments still throw via `assertSafeSegment`.
+ * Unsafe path segments still throw via `assertSafeSegment` (R6-001): `workspace`
+ * and the session alias come straight from the request body and are joined into
+ * dataDir/workspaces/<workspace>/sessions/<session>.jsonl by chat-persistence
+ * (persistMessage / loadSessionMessages), so a crafted "../evil" segment would
+ * escape the sessions dir on both write and read.
  */
 export function validateChatRequestFields(
   input: ChatRequestFieldInput,
@@ -330,6 +339,66 @@ function resolveChatWorkspacePaths(
     }
   }
   return { rejection: undefined, workspacePath, workspacePathFromTrustedConfig, executionWorkspacePath };
+}
+
+/**
+ * Builds the slash-command context for a chat turn (same shape as the
+ * `routes/commands.ts` route) with the turn's memory-deny directives applied:
+ * recall, workspace state and skill listing degrade to sentinel strings that
+ * the command handlers render verbatim.
+ */
+function buildChatCommandContext(input: {
+  server: ChatServer;
+  orchestrator: Orchestrator;
+  executionWorkspaceId: string | undefined;
+  sessionId: string;
+  effectiveWorkspace: string | undefined;
+  persistedMemoryReadAllowed: boolean;
+  turnMutationPolicy: TurnMutationPolicy;
+}) {
+  const {
+    server, orchestrator, executionWorkspaceId, sessionId, effectiveWorkspace,
+    persistedMemoryReadAllowed, turnMutationPolicy,
+  } = input;
+  return {
+    // Command handlers interpolate this value into user-facing agent
+    // instructions. Keep the non-workspace observability sentinel out of
+    // those prompts so personal commands cannot target a fake workspace.
+    workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+    sessionId,
+    searchMemory: async (query: string): Promise<string> => {
+      if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
+      try {
+        const recall = await orchestrator.recallMemory(query);
+        if (recall.count === 0) return 'No relevant memories found.';
+        const items = (recall.recalled ?? []).slice(0, 5);
+        return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
+      } catch {
+        return 'Memory search unavailable.';
+      }
+    },
+    getWorkspaceState: async (): Promise<string> => {
+      if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
+      if (!allowsConversationHistory(turnMutationPolicy)) {
+        return 'Conversation-derived workspace state is disabled for this turn.';
+      }
+      if (!effectiveWorkspace) return 'No workspace state available.';
+      const block = buildWorkspaceNowBlock({
+        dataDir: server.localConfig.dataDir,
+        workspaceId: effectiveWorkspace,
+        wsManager: server.workspaceManager,
+        activateWorkspaceMind: server.agentState.activateWorkspaceMind,
+        cronSchedules: server.cronStore.list(),
+      });
+      if (!block) return 'No workspace state available.';
+      return formatWorkspaceNowPrompt(block);
+    },
+    listSkills: (): string[] => {
+      return persistedMemoryReadAllowed
+        ? server.agentState.skills.map(s => s.name)
+        : [];
+    },
+  };
 }
 
 /**
@@ -1885,10 +1954,6 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 
 // C3: Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
-// Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
-// Reserve a non-workspace scope for personal audit/collaboration streams
-// (PERSONAL_CHAT_SCOPE_ID is module-level so route helpers can use it).
-const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
   // chat-local mutable tools (plans, save counters) and orchestrator receipts
@@ -2501,7 +2566,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
     const {
-      message, workspace: _ws, workspaceId: _wsId, model, session,
+      message, workspace: workspaceRaw, workspaceId: workspaceIdRaw, model, session,
       sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       selectedSkill: selectedSkillRaw,
@@ -2517,8 +2582,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const validatedFields = validateChatRequestFields(
       {
         message,
-        workspace: _ws,
-        workspaceId: _wsId,
+        workspace: workspaceRaw,
+        workspaceId: workspaceIdRaw,
         session,
         sessionId: sessionIdAlias,
         selectedSkill: selectedSkillRaw,
@@ -2532,9 +2597,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     const { selectedSkill, retryTarget } = validatedFields;
 
-    const suppliedWorkspace = _ws ?? _wsId;
+    const workspace = workspaceRaw ?? workspaceIdRaw;
     const authorizedWorkspace = getResolvedChatWorkspaceId(request);
-    const workspace = suppliedWorkspace;
     const requestedSessionId = session ?? sessionIdAlias;
     if (session !== undefined && sessionIdAlias !== undefined && session !== sessionIdAlias) {
       return reply.status(400).send({
@@ -2603,24 +2667,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Validation and auth checks remain before reply.hijack(); once hijacked,
     // reply.status() / reply.send() become no-ops on the raw socket.
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const isPlainInteractiveTurn = autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && turnMutationPolicy.contextScope === 'default';
     const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
       message,
       Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
     );
     const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
       && (!selectedSkill || selectedSkill === 'decision-matrix')
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default';
+      && isPlainInteractiveTurn;
     const boundedExactPersistedMemoryLookup = isBoundedExactPersistedMemoryLookup(message)
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default';
+      && isPlainInteractiveTurn;
     const directReadFileDirective = parseDirectReadFileDirective(message);
     const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default'
+      && isPlainInteractiveTurn
       && Boolean(executionWorkspacePath)
       ? 'read_file'
       : undefined;
@@ -2631,9 +2692,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       ?? (selectedSkill ? 'read_skill' : undefined)
       ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
       ?? (resolvedReadOnlyToolDirective === 'list_skills'
-        && autonomyLevel === 'normal'
-        && !isAutomatedTurn
-        && turnMutationPolicy.contextScope === 'default'
+        && isPlainInteractiveTurn
         && detectTaskShape(message).complexity === 'simple'
         && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
         ? resolvedReadOnlyToolDirective
@@ -2673,11 +2732,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     );
     let allowResponseDecoration = turnAllowsResponseDecoration;
 
-    // R6-001: path-traversal guard on the session-persistence path segments.
-    // `workspace` and the resolved session alias come straight from the request body and are
-    // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
-    // chat-persistence (persistMessage / loadSessionMessages). A crafted
-    // "../evil" segment would escape the sessions dir on both write and read.
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
@@ -2694,9 +2748,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     const warningTierDirectReadFileCandidate = !injectionResult.safe
       && WARNING_TIER_DIRECT_READ_FILE_INTENT_RE.test(message)
-      && autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default'
+      && isPlainInteractiveTurn
       && Boolean(executionWorkspacePath)
       ? 'read_file'
       : undefined;
@@ -3003,7 +3055,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
 
-      // ── Conversation history management (moved before LLM check so echo mode also persists) ──
+      // ── Model resolution: confirm the selected model is routable; on failure fall
+      // back budget → primary → configured fallback, recording modelSwitchReason ──
       try {
         const selectedModelBeforeResolution = resolvedModel.trim();
         resolvedModel = await resolveUsableModel(server, resolvedModel);
@@ -3196,47 +3249,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // ── Slash command routing (works even in echo mode) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
-      if (commandRegistry.isCommand(message)) {
-        // Build a lightweight command context (same as commands.ts route)
-        const cmdContext = {
-          // Command handlers interpolate this value into user-facing agent
-          // instructions. Keep the non-workspace observability sentinel out of
-          // those prompts so personal commands cannot target a fake workspace.
-          workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+      const isSlashCommand = commandRegistry.isCommand(message);
+      if (isSlashCommand) {
+        const cmdContext = buildChatCommandContext({
+          server,
+          orchestrator: sessionOrch,
+          executionWorkspaceId,
           sessionId,
-          searchMemory: async (query: string): Promise<string> => {
-            if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
-            try {
-              const recall = await sessionOrch.recallMemory(query);
-              if (recall.count === 0) return 'No relevant memories found.';
-              const items = (recall.recalled ?? []).slice(0, 5);
-              return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
-            } catch {
-              return 'Memory search unavailable.';
-            }
-          },
-          getWorkspaceState: async (): Promise<string> => {
-            if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
-            if (!allowsConversationHistory(turnMutationPolicy)) {
-              return 'Conversation-derived workspace state is disabled for this turn.';
-            }
-            if (!effectiveWorkspace) return 'No workspace state available.';
-            const block = buildWorkspaceNowBlock({
-              dataDir: server.localConfig.dataDir,
-              workspaceId: effectiveWorkspace,
-              wsManager: server.workspaceManager,
-              activateWorkspaceMind: server.agentState.activateWorkspaceMind,
-              cronSchedules: server.cronStore.list(),
-            });
-            if (!block) return 'No workspace state available.';
-            return formatWorkspaceNowPrompt(block);
-          },
-          listSkills: (): string[] => {
-            return persistedMemoryReadAllowed
-              ? server.agentState.skills.map(s => s.name)
-              : [];
-          },
-        };
+          effectiveWorkspace,
+          persistedMemoryReadAllowed,
+          turnMutationPolicy,
+        });
         const marketplaceSubcommand = message.trim().match(
           /^\/(?:marketplace|mp|market)\s+(installed|install|sync)\b/i,
         )?.[1]?.toLowerCase();
@@ -3274,8 +3297,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = reroutedMessage || (!commandRegistry.isCommand(message) && litellmAvailable);
-      const shouldEchoMode = !reroutedMessage && !commandRegistry.isCommand(message) && !litellmAvailable;
+      const shouldRunAgentLoop = reroutedMessage || (!isSlashCommand && litellmAvailable);
+      const shouldEchoMode = !reroutedMessage && !isSlashCommand && !litellmAvailable;
 
       if (shouldEchoMode) {
         // Setup-required mode — respond without pretending the user's input
