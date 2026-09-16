@@ -114,8 +114,9 @@ Add-when condition becomes true.
 - [x] TD-CHAT-36: pin the parent-path turn failure a coercion-hostile argument causes (agent, `0694c1cb`)
 - [x] Ledger reconciliation: transcribe the twelve unwritten Phase 4 rows, settle the id collision (agent, `ca949927`)
 - [x] Founder decisions taken 2026-09-16: TD-CHAT-38 denies, TD-CHAT-36 splits by site, TD-CHAT-45 is ledger-only (see Key Decisions)
-- [ ] TD-CHAT-38 implementation: deny an install whose trust assessment threw, re-pinning `1c575161`'s throw case deliberately in the same commit
-- [ ] TD-CHAT-36 implementation: total disclosure at `chat.ts:4714`; explicit deny at the hook sites, `keyForTool` and the confirmation predicates — all in one change, or `write_file` and `bash` stay broken while the row reads closed
+- [x] TD-CHAT-38 implementation: an install whose trust assessment threw is now refused (agent, `bf19f07f`)
+- [x] TD-CHAT-36 disclosure half: `describeToolUseSafe` at `chat.ts:4714` and `readableText` at `chat.ts:4871` (agent, `99d50139`) — 4871 was missing from the site list; fixing 4714 alone only moved the failure one site along
+- [ ] TD-CHAT-36 explicit-deny half: the hook sites, `keyForTool` and the confirmation predicates still coerce. Today the hook throws into `HookRegistry`'s silent swallow and the execution floor refuses the call, so the turn fails closed with no approval card and no log. Needs pins for the `proposeHeld` branch, the saved-grant lookup and the confirmation predicates first — all three are Safety Net Map Gaps
 - [ ] TD-CHAT-36 fix, once the posture is decided: `keyForTool` and the `needsConfirmation`/`isCriticalNeverAutopass` call sites must land in the same change as any `describeToolUseSafe`, or `write_file`/`bash` stay broken while the row reads closed
 - [ ] Phase 4 Wave 2 pin program (P4-03/04/05/07/08/09/10b) — still the largest unbuilt block; TD-CHAT-10's retry/fallback chain is its own recorded prerequisite
 
