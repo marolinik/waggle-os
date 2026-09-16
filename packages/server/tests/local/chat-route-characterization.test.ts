@@ -397,36 +397,32 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     }
   });
 
-  it('runs the turn with no policy when the governance lookup throws', async () => {
-    const workspaceId = createTeamWorkspace('poisoned');
-    // A policies array holding a non-object element: the helper caches it before
-    // it reads it, so the first turn swallows its own read failure and the second
-    // turn throws out of the helper entirely from the cache-hit path.
+  it('refuses the turn when the governance payload cannot be read', async () => {
+    const workspaceId = createTeamWorkspace('unreadable');
+    // A policies array holding a non-object element: the role lookup reads a
+    // field on every element, so this payload cannot be read at all.
     const fetchSpy = stubPolicyFetch([null, { role: 'member', blockedTools: ['bash'] }]);
     try {
-      // QUIRK (docs/TECH-DEBT.md TD-CHAT-30) — the unreadable payload is cached.
-      const first = await postTurn(workspaceId, 'governance poisoned turn one', 'gov-poison-1');
-      expect(first.statusCode).toBe(200);
-      expect(parseSSE(first.body).some(e => e.event === 'done')).toBe(true);
-      expect(captured.at(-1)!.governancePolicies).toBeUndefined();
+      // An unreadable answer is a fault, not an absent policy: the turn is
+      // refused rather than run with the team's restrictions dropped. The runner
+      // is never reached and the stream carries an error instead of a
+      // completion.
+      for (const session of ['gov-unreadable-1', 'gov-unreadable-2']) {
+        const res = await postTurn(workspaceId, `governance unreadable ${session}`, session);
+        expect(res.statusCode).toBe(200);
+        const events = parseSSE(res.body);
+        expect(events.some(e => e.event === 'done')).toBe(false);
+        const error = events.find(e => e.event === 'error');
+        expect(error).toBeDefined();
+        expect(JSON.parse(error!.data).message).toBe(
+          'Team governance policies could not be verified for this workspace. Try again or contact your team admin.',
+        );
+      }
+      expect(captured).toHaveLength(0);
 
-      // The throw escapes the helper from the cache-hit path. The route refuses
-      // the turn rather than running it with no policy: the runner is never
-      // reached and the stream carries an error instead of a completion.
-      const second = await postTurn(workspaceId, 'governance poisoned turn two', 'gov-poison-2');
-      expect(second.statusCode).toBe(200);
-      const secondEvents = parseSSE(second.body);
-      expect(secondEvents.some(e => e.event === 'done')).toBe(false);
-      const error = secondEvents.find(e => e.event === 'error');
-      expect(error).toBeDefined();
-      expect(JSON.parse(error!.data).message).toBe(
-        'Team governance policies could not be verified for this workspace. Try again or contact your team admin.',
-      );
-      expect(captured).toHaveLength(1);
-
-      // One call for both turns: the second read came from the cache, which is
-      // what puts the throw outside the helper's own try.
-      expect(policyCallCount(fetchSpy)).toBe(1);
+      // One call per turn: an unreadable payload is never cached, so a single
+      // bad response cannot decide the whole five-minute window.
+      expect(policyCallCount(fetchSpy)).toBe(2);
     } finally {
       fetchSpy.mockRestore();
     }

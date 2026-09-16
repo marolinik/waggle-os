@@ -4062,26 +4062,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Governance policies for team workspaces — direct call (no HTTP loopback)
         let governancePolicies: { blockedTools?: string[]; allowedSources?: string[] } | undefined;
         if (wsConfig?.teamId && effectiveWorkspace) {
-          try {
-            governancePolicies = await getGovernancePermissions(
-              server.localConfig.dataDir,
-              effectiveWorkspace,
-              wsConfig.teamRole,
-            );
-            throwIfTurnAborted();
-          } catch (err) {
-            throwIfTurnAborted();
-            // A lookup that throws is a fault, not an absent policy. Running the
-            // turn anyway drops the team's tool restrictions with no trace, so
-            // refuse it instead. A soft failure inside the helper still resolves
-            // to undefined and still runs ungoverned — see TD-CHAT-23.
-            log.warn('[chat] governance policy lookup failed; refusing the turn', {
+          const lookup = await getGovernancePermissions(
+            server.localConfig.dataDir,
+            effectiveWorkspace,
+            wsConfig.teamRole,
+          );
+          throwIfTurnAborted();
+          if (lookup.status === 'invalid') {
+            // A payload we cannot read is a fault, not an absent policy.
+            // Running the turn anyway would drop the team's tool restrictions.
+            log.warn('[chat] governance policies unreadable; refusing the turn', {
               workspaceId: effectiveWorkspace,
               sessionId,
-              error: err instanceof Error ? err.message : String(err),
+              error: lookup.reason,
             });
             throw new Error('Team governance policies could not be verified for this workspace. Try again or contact your team admin.');
           }
+          if (lookup.status === 'unavailable') {
+            // Transient: the turn proceeds without restrictions, but never
+            // silently — this is the remaining open half of TD-CHAT-23.
+            log.warn('[chat] governance policies unavailable; the turn runs ungoverned', {
+              workspaceId: effectiveWorkspace,
+              sessionId,
+              error: lookup.reason,
+            });
+          }
+          governancePolicies = lookup.status === 'policy' ? lookup.policies : undefined;
         }
 
         if (!hasCustomRunner) {
