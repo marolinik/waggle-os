@@ -48,6 +48,43 @@ vi.mock('@waggle/agent', async (importOriginal) => {
   };
 });
 
+/**
+ * Restores the pre-narrowing tool catalog for one turn.
+ *
+ * A parent chat turn never transmits `install_capability`: it survives the
+ * conversational gate into `effectiveTools` (80 eligible at chat.ts:4294) and
+ * is then dropped by `selectToolsForTurn` at chat.ts:4307, which matches it to
+ * no `INTENT_BUNDLES` entry and to no `mandatoryToolNames` branch — six
+ * phrasings of an install request all transmit only `create_skill` and
+ * `search_skills`, and the forced call returns `Tool "install_capability" not
+ * found`. The production caller that does reach the enrichment is a spawned
+ * sub-agent: `spawnAvailableTools` is captured before narrowing (chat.ts:3947),
+ * filtered only by governance (4133) and turn policy (4152), and handed to
+ * workers at 4261, so a child sees the full pool and inherits the parent's hook
+ * registry. The route harness cannot drive that child, so these two pins widen
+ * the parent's catalog to the same set instead — the same tactic, and the same
+ * reason, as CLASSIFIER_THROW_SENTINEL above.
+ */
+const toolSelection = vi.hoisted(() => ({ transmitFullCatalog: false }));
+
+vi.mock('../../src/local/persona-tool-filter.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/local/persona-tool-filter.js')>();
+  return {
+    ...actual,
+    selectToolsForTurn: (
+      eligibleTools: Parameters<typeof actual.selectToolsForTurn>[0],
+      options: Parameters<typeof actual.selectToolsForTurn>[1],
+    ) => {
+      const selection = actual.selectToolsForTurn(eligibleTools, options);
+      if (!toolSelection.transmitFullCatalog) return selection;
+      // schemaChars stays as the real selector measured it: no pin here asserts
+      // the transmitted schema budget, and recomputing it would claim a
+      // measurement this harness does not make.
+      return { ...selection, tools: [...eligibleTools], omittedCount: 0 };
+    },
+  };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
 
@@ -244,5 +281,83 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     // still completes because the denial reaches the model as a tool result.
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, CLASSIFIER_THROW_SENTINEL))).toBe(false);
+  });
+
+  /**
+   * The two `install_capability` pins below are a pair on purpose.
+   *
+   * `assessmentMode` does NOT discriminate the content-based assessment from
+   * its catch: `assessTrust` returns `'heuristic'` itself whenever the starter
+   * skill file is absent, so an absent file and a thrown assessment look
+   * identical on that field. `trustSource` is the only separator — the try
+   * branch copies it off the assessment, and the heuristic fallback omits it
+   * deliberately. Pinning the absence without the presence beside it would be
+   * vacuous.
+   */
+  it('carries a trustSource when the install_capability trust assessment succeeds', async () => {
+    stubProvider('install_capability', { name: 'research-assistant', source: 'marketplace' });
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('install-assessed'),
+        'Install the research-assistant capability',
+        'approval-install-assessed',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
+    expect(status).toBe(200);
+    const approval = events.find(e => e.event === 'approval_required');
+    expect(approval).toBeDefined();
+    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
+    expect(payload.toolName).toBe('install_capability');
+    // `marketplace` is not a case in resolveTrustSource, so provenance reads
+    // `unknown` (5 risk points) and the empty starter-skill file adds the
+    // missing-metadata point: classifyRisk(6) is `high`, whose approval class
+    // is `critical`. These are the values the catch below throws away.
+    expect(payload.trustSource).toBe('unknown');
+    expect(payload.riskLevel).toBe('high');
+    expect(payload.approvalClass).toBe('critical');
+    expect(payload.assessmentMode).toBe('heuristic');
+    expect(typeof payload.explanation).toBe('string');
+    expect(payload.permissions).toBeDefined();
+  });
+
+  it('falls back to the heuristic class when the install_capability assessment throws', async () => {
+    // `path.basename` receives the model-supplied name unvalidated, so a
+    // non-string name throws ERR_INVALID_ARG_TYPE inside the assessment try —
+    // ordinary JSON, no mock. The catch swallows it and the heuristic block
+    // below supplies the approval class, so this is not a fail-open.
+    stubProvider('install_capability', { name: 123, source: 'marketplace' });
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('install-throw'),
+        'Install capability number 123',
+        'approval-install-throw',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
+    expect(status).toBe(200);
+    const approval = events.find(e => e.event === 'approval_required');
+    expect(approval).toBeDefined();
+    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
+    expect(payload.toolName).toBe('install_capability');
+    // The catch was taken: the content-based assessment never assigned its
+    // fields, so the heuristic block supplied the class instead.
+    expect(payload.trustSource).toBeUndefined();
+    expect(payload.explanation).toBeUndefined();
+    expect(payload.permissions).toBeUndefined();
+    expect(payload.assessmentMode).toBe('heuristic');
+    expect(payload.riskLevel).toBe('medium');
+    expect(payload.approvalClass).toBe('elevated');
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-38): this is not only a missing log. The
+    // same install that the assessment rates high/critical (pin above) is
+    // offered as medium/elevated once the assessment throws, and nothing
+    // records that it did. `assessmentMode` is `heuristic` on BOTH paths, so
+    // the card gives the operator no way to tell them apart either.
   });
 });
