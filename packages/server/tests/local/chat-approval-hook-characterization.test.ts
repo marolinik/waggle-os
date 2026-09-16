@@ -324,11 +324,10 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(payload.permissions).toBeDefined();
   });
 
-  it('falls back to the heuristic class when the install_capability assessment throws', async () => {
+  it('denies the install when the install_capability trust assessment throws', async () => {
     // `path.basename` receives the model-supplied name unvalidated, so a
-    // non-string name throws ERR_INVALID_ARG_TYPE inside the assessment try —
-    // ordinary JSON, no mock. The catch swallows it and the heuristic block
-    // below supplies the approval class, so this is not a fail-open.
+    // non-string name throws ERR_INVALID_ARG_TYPE inside the assessment try --
+    // ordinary JSON, no mock.
     stubProvider('install_capability', { name: 123, source: 'marketplace' });
     toolSelection.transmitFullCatalog = true;
     let status: number, events: Array<{ event: string; data: string }>;
@@ -342,23 +341,18 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
       toolSelection.transmitFullCatalog = false;
     }
     expect(status).toBe(200);
-    const approval = events.find(e => e.event === 'approval_required');
-    expect(approval).toBeDefined();
-    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
-    expect(payload.toolName).toBe('install_capability');
-    // The catch was taken: the content-based assessment never assigned its
-    // fields, so the heuristic block supplied the class instead.
-    expect(payload.trustSource).toBeUndefined();
-    expect(payload.explanation).toBeUndefined();
-    expect(payload.permissions).toBeUndefined();
-    expect(payload.assessmentMode).toBe('heuristic');
-    expect(payload.riskLevel).toBe('medium');
-    expect(payload.approvalClass).toBe('elevated');
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-38): this is not only a missing log. The
-    // same install that the assessment rates high/critical (pin above) is
-    // offered as medium/elevated once the assessment throws, and nothing
-    // records that it did. `assessmentMode` is `heuristic` on BOTH paths, so
-    // the card gives the operator no way to tell them apart either.
+
+    // An install nobody could assess is an unknown install, not a medium one.
+    // Until 2026-09-16 the catch fell through to the heuristic block and the
+    // same install was offered as medium/elevated -- weaker than the
+    // high/critical the assessment produces for it (pinned above), with
+    // `assessmentMode: heuristic` on both paths so the card could not be told
+    // apart. It is now refused outright, like a tool nobody could classify.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+
+    // The turn still completes: the denial reaches the model as a tool result
+    // and the loop answers without the tool.
+    expect(events.some(e => e.event === 'done')).toBe(true);
   });
 
   it('fails the turn before the hook when a tool argument cannot be coerced', async () => {

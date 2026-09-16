@@ -3690,22 +3690,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 description: describeToolUse(toolName, input),
               };
             } catch (error) {
-              // The content-based assessment failed, so the heuristic block
-              // below supplies the approval class instead — a weaker one than
-              // the assessment produces for the same install (TD-CHAT-38), and
-              // nothing on the card distinguishes the two. The operator needs
-              // the cause: a non-string `name` from the model reads very
-              // differently from an unreadable starter-skill directory.
-              log.warn('[security] install_capability trust assessment failed; falling back to the heuristic class', {
+              // An install nobody could assess is an unknown install, not a
+              // medium one. Falling through to the heuristic block offered the
+              // same install as medium/elevated — weaker than the high/critical
+              // this assessment produces for it — with `assessmentMode:
+              // heuristic` on both paths, so the card could not be told apart.
+              // Refuse it instead, like a tool nobody could classify. The
+              // operator needs the cause: a non-string `name` from the model
+              // reads very differently from an unreadable starter-skill
+              // directory.
+              log.warn('[security] install_capability trust assessment failed; refusing the install', {
                 workspaceId: executionScopeId,
                 sessionId,
                 toolName,
                 error,
               });
+              return {
+                cancel: true,
+                reason: `${toolName} could not be trust-assessed, so it was not run.`,
+              };
             }
           }
-          // Track A review: if the install assessment threw, OR for any non-install
-          // gated tool, derive risk heuristically so approvalClass is NEVER absent
+          // Track A review: for any non-install gated tool, derive risk
+          // heuristically so approvalClass is NEVER absent
           // (an absent approvalClass would let the FE offer "Always allow" on a
           // critical op — fail-open). trustSource is OMITTED here: there is no real
           // provenance signal for a bash/git/connector call, and stamping
