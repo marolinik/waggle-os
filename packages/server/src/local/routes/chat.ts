@@ -3689,7 +3689,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 permissions: trust.permissions,
                 description: describeToolUse(toolName, input),
               };
-            } catch { /* content-based assessment failed — fall through to the heuristic */ }
+            } catch (error) {
+              // The content-based assessment failed, so the heuristic block
+              // below supplies the approval class instead — a weaker one than
+              // the assessment produces for the same install (TD-CHAT-38), and
+              // nothing on the card distinguishes the two. The operator needs
+              // the cause: a non-string `name` from the model reads very
+              // differently from an unreadable starter-skill directory.
+              log.warn('[security] install_capability trust assessment failed; falling back to the heuristic class', {
+                workspaceId: executionScopeId,
+                sessionId,
+                toolName,
+                error,
+              });
+            }
           }
           // Track A review: if the install assessment threw, OR for any non-install
           // gated tool, derive risk heuristically so approvalClass is NEVER absent
