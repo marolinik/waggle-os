@@ -12,12 +12,42 @@
  * They pin CURRENT behavior, not a specification. A bug found while pinning is
  * marked `QUIRK` and ledgered in docs/TECH-DEBT.md, never fixed here.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
+
+/**
+ * Argument that makes the risk classifier throw, and nothing else.
+ *
+ * The classifier is pure over the plain JSON a model can produce, so the only
+ * way to reach its catch from the chat route is to make it throw on demand. The
+ * production trigger is a coercion-hostile argument reaching the classifier
+ * through a child sub-agent, which the route harness cannot drive — see
+ * TD-CHAT-31. Every other argument delegates to the real implementation, so the
+ * other pins in this file exercise the untouched classifier.
+ */
+const CLASSIFIER_THROW_SENTINEL = 'classifier-throw-sentinel.txt';
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    classifyGatedToolRisk: (
+      toolName: string,
+      args?: Record<string, unknown>,
+      trustedRiskLevel?: Parameters<typeof actual.classifyGatedToolRisk>[2],
+    ) => {
+      if (args?.path === CLASSIFIER_THROW_SENTINEL) {
+        throw new TypeError('Cannot convert object to primitive value');
+      }
+      return actual.classifyGatedToolRisk(toolName, args, trustedRiskLevel);
+    },
+  };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
 
@@ -196,4 +226,30 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(payload.trustSource).toBeUndefined();
   });
 
+  it('sends an approval card with no risk class when the classifier throws', async () => {
+    stubProvider('write_file', { path: CLASSIFIER_THROW_SENTINEL, content: 'hello' });
+    const { status, events } = await runTurn(
+      createWorkspace('classifier-throw'),
+      'Write hello into the sentinel file',
+      'approval-classifier-throw',
+    );
+    expect(status).toBe(200);
+
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-23) — the enrichment catch swallows, so
+    // the card reaches the client carrying no risk class at all, and the web
+    // client reads an absent approval class as safe enough to offer
+    // "Always allow" on a call nobody classified.
+    const approval = events.find(e => e.event === 'approval_required');
+    expect(approval).toBeDefined();
+    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
+    expect(payload.toolName).toBe('write_file');
+    expect(payload.riskLevel).toBeUndefined();
+    expect(payload.approvalClass).toBeUndefined();
+    expect(payload.assessmentMode).toBeUndefined();
+    expect(payload.description).toBeUndefined();
+
+    // The call is still denied, but by the timeout rather than by the failure.
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, CLASSIFIER_THROW_SENTINEL))).toBe(false);
+  });
 });
