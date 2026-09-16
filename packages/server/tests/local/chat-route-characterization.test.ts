@@ -410,15 +410,19 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
       expect(parseSSE(first.body).some(e => e.event === 'done')).toBe(true);
       expect(captured.at(-1)!.governancePolicies).toBeUndefined();
 
-      // QUIRK (docs/TECH-DEBT.md TD-CHAT-23) — the throw escapes the helper and
-      // the route swallows it, so the turn runs ungoverned instead of failing.
+      // The throw escapes the helper from the cache-hit path. The route refuses
+      // the turn rather than running it with no policy: the runner is never
+      // reached and the stream carries an error instead of a completion.
       const second = await postTurn(workspaceId, 'governance poisoned turn two', 'gov-poison-2');
       expect(second.statusCode).toBe(200);
       const secondEvents = parseSSE(second.body);
-      expect(secondEvents.some(e => e.event === 'done')).toBe(true);
-      expect(secondEvents.some(e => e.event === 'error')).toBe(false);
-      expect(captured.at(-1)!.governancePolicies).toBeUndefined();
-      expect(captured).toHaveLength(2);
+      expect(secondEvents.some(e => e.event === 'done')).toBe(false);
+      const error = secondEvents.find(e => e.event === 'error');
+      expect(error).toBeDefined();
+      expect(JSON.parse(error!.data).message).toBe(
+        'Team governance policies could not be verified for this workspace. Try again or contact your team admin.',
+      );
+      expect(captured).toHaveLength(1);
 
       // One call for both turns: the second read came from the cache, which is
       // what puts the throw outside the helper's own try.

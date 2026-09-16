@@ -4053,9 +4053,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               wsConfig.teamRole,
             );
             throwIfTurnAborted();
-          } catch {
+          } catch (err) {
             throwIfTurnAborted();
-            // Governance not available — allow all.
+            // A lookup that throws is a fault, not an absent policy. Running the
+            // turn anyway drops the team's tool restrictions with no trace, so
+            // refuse it instead. A soft failure inside the helper still resolves
+            // to undefined and still runs ungoverned — see TD-CHAT-23.
+            log.warn('[chat] governance policy lookup failed; refusing the turn', {
+              workspaceId: effectiveWorkspace,
+              sessionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            throw new Error('Team governance policies could not be verified for this workspace. Try again or contact your team admin.');
           }
         }
 
