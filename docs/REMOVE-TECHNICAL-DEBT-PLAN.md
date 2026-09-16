@@ -37,7 +37,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 | 1 | working-with-legacy-code | done | TESTING.md + TECH-DEBT.md | 2026-09-15 |
 | 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
 | 3 | clean-code | done (pass 1: 7 fixes applied, 22 ledgered) | TECH-DEBT.md | 2026-09-15 |
-| 4 | software-design-philosophy | pending | TECH-DEBT.md | |
+| 4 | software-design-philosophy | in-progress | TECH-DEBT.md | 2026-09-16 |
 | 5 | clean-architecture | pending | ARCHITECTURE.md | |
 | 6 | pragmatic-programmer | pending | TECH-DEBT.md | |
 | 7 | release-it | pending | RELIABILITY.md | |
