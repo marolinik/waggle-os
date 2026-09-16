@@ -355,33 +355,51 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(events.some(e => e.event === 'done')).toBe(true);
   });
 
-  it('fails the turn before the hook when a tool argument cannot be coerced', async () => {
+  it('discloses an unreadable tool argument and blocks the tool without ending the turn', async () => {
     // `{"toString": 0}` is ordinary JSON a model can emit. `??` does not shield
     // it: the value is non-nullish, so ToString runs, `toString` is not
     // callable, and the inherited `valueOf` returns an object -- TypeError.
     stubProvider('write_file', { path: { toString: 0 }, content: 'hello' });
-    const { status, events } = await runTurn(
-      createWorkspace('coercion'),
-      'Write hello into the unreadable path',
-      'approval-coercion',
-    );
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('coercion'),
+        'Write hello into notes.txt',
+        'approval-coercion',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
     expect(status).toBe(200);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36): the approval hook is never entered.
-    // `onToolUse` runs at tool-executor.ts:126 (step 2) and calls
-    // describeToolUse, while the pre:tool hook is step 4 -- so on the parent
-    // chat path the coercion throws before any approval decision is made.
-    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    // The two disclosures survive the unreadable argument. Until 2026-09-16
+    // both coerced it bare, and the first one to run ended the whole turn with
+    // an SSE `error` carrying `Cannot convert object to primitive value`
+    // verbatim and no `done` at all.
+    const step = events.find(e => e.event === 'step' && JSON.parse(e.data).content?.startsWith('Writing file:'));
+    expect(step).toBeDefined();
+    // The prefix is a wire contract: session-utils re-parses it out of stored
+    // assistant prose, so the marker is substituted inside the sentence rather
+    // than the sentence being replaced.
+    expect(JSON.parse(step!.data).content).toBe('Writing file: <unreadable>...');
+    // The sibling disclosure asserts a fact it cannot state, so it is dropped
+    // rather than faked.
+    expect(events.some(e => e.event === 'file_created')).toBe(false);
 
-    // The throw escapes the agent loop and ends the whole turn. The client is
-    // told only `Cannot convert object to primitive value` -- an internal
-    // TypeError forwarded verbatim, with no code and no actionable text
-    // (the passthrough is TD-CHAT-15). There is no `done`, so the turn has no
-    // assistant reply at all.
-    const failure = events.find(e => e.event === 'error');
-    expect(failure).toBeDefined();
-    expect(JSON.parse(failure!.data).message).toBe('Cannot convert object to primitive value');
-    expect(events.some(e => e.event === 'done')).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, 'coercion-target.txt'))).toBe(false);
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 / TD-CHAT-37): the approval hook
+    // itself still coerces. `keyForTool` throws inside the saved-grant lookup,
+    // `HookRegistry.fire` swallows it with no log, and the execution floor is
+    // what actually refuses the call -- so the turn fails closed, but no
+    // approval card is ever offered and nothing records why. The explicit-deny
+    // half of TD-CHAT-36 replaces this path.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result).toContain('[BLOCKED]');
+
+    // The turn completes: the denial reaches the model as a tool result.
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
 });

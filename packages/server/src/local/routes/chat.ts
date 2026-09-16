@@ -453,7 +453,7 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, describeToolUseSafe, readableText, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -4731,7 +4731,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               && boundedExactPersistedMemoryLookup
               ? {}
               : input;
-            const stepText = describeToolUse(name, disclosedInput);
+            const stepText = describeToolUseSafe(name, disclosedInput);
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input: disclosedInput });
             // Waggle Dance: emit tool call signal
@@ -4868,8 +4868,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const fileAction = fileTools[name];
             const filePathInput = input.path ?? input.filePath;
             if (fileAction && filePathInput && !isError) {
-              const filePath = String(filePathInput);
-              sendEvent('file_created', { filePath, fileAction });
+              // The path is model-supplied and may not be coercible. A
+              // disclosure must never end the turn, and a `file_created` naming
+              // an unreadable path would assert something we cannot state, so
+              // the event is dropped rather than faked (TD-CHAT-36).
+              const filePath = readableText(filePathInput);
+              if (filePath !== undefined) sendEvent('file_created', { filePath, fileAction });
             }
 
           // TeamSync push — after save_memory in team workspace (fire-and-forget)
