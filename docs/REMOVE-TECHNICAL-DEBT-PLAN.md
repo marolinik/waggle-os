@@ -79,6 +79,8 @@ Add-when condition becomes true.
 
 | 2026-09-16 | 4 | Wave 3 applied: three interface comments corrected (`ad51dfb2`), the duplicate workspace id collapsed (`a6b24aa4`), the memory gate derived inside the helper (`e5ba3242`, after re-expressing its precedence pin in `582923cd`). A probe over twelve directives settled the open question from the panel: one directive does deny both memory and history, so the replacement pin is real rather than vacuous | Rule 8: the pin that the structure change would have invalidated was re-expressed first, in its own commit. The comment pass deletes false clauses rather than replacing them with new claims |
 
+| 2026-09-16 | 4 | The paired half of F2 applied: the gated-tool classification is computed once and reused (`9baa24c3`), after pinning the critical fallback it depends on (`47d85ace`). The viewer rejection inside the path resolver is pinned through the role-downgrade window (`75d3ffb7`), which also meets TD-CHAT-18's precondition | The duplicate call was not the defect; each site independently decided what a classification failure meant, and they disagreed. The failure is now a value both consumers read, so they agree by construction rather than by review |
+
 ## Next Actions
 
 - [x] Phase 1: baseline test run green under Node 22.23.2 (agent, 2026-09-14)
