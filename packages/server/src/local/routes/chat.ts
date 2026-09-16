@@ -377,18 +377,20 @@ function resolveChatWorkspacePaths(
  * `routes/commands.ts` route) with the turn's memory-deny directives applied:
  * recall, workspace state and skill listing degrade to sentinel strings that
  * the command handlers render verbatim.
+ *
+ * `executionWorkspaceId` is the workspace the turn runs in, or undefined for a
+ * personal turn, in which case commands see `PERSONAL_CHAT_COMMAND_CONTEXT`.
  */
 export function buildChatCommandContext(input: {
   server: ChatServer;
   orchestrator: Orchestrator;
   executionWorkspaceId: string | undefined;
   sessionId: string;
-  effectiveWorkspace: string | undefined;
   persistedMemoryReadAllowed: boolean;
   turnMutationPolicy: TurnMutationPolicy;
 }) {
   const {
-    server, orchestrator, executionWorkspaceId, sessionId, effectiveWorkspace,
+    server, orchestrator, executionWorkspaceId, sessionId,
     persistedMemoryReadAllowed, turnMutationPolicy,
   } = input;
   return {
@@ -413,10 +415,10 @@ export function buildChatCommandContext(input: {
       if (!allowsConversationHistory(turnMutationPolicy)) {
         return 'Conversation-derived workspace state is disabled for this turn.';
       }
-      if (!effectiveWorkspace) return 'No workspace state available.';
+      if (!executionWorkspaceId) return 'No workspace state available.';
       const block = buildWorkspaceNowBlock({
         dataDir: server.localConfig.dataDir,
-        workspaceId: effectiveWorkspace,
+        workspaceId: executionWorkspaceId,
         wsManager: server.workspaceManager,
         activateWorkspaceMind: server.agentState.activateWorkspaceMind,
         cronSchedules: server.cronStore.list(),
@@ -3291,7 +3293,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           orchestrator: sessionOrch,
           executionWorkspaceId,
           sessionId,
-          effectiveWorkspace,
           persistedMemoryReadAllowed,
           turnMutationPolicy,
         });
