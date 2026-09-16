@@ -9,6 +9,18 @@
 > `ed4a6a8a`, `f3d21adf`). Everything else is a proposal awaiting founder ratification — the
 > decision list is §6, and §7 lists facts the panel could not settle. One of those, F2, has since
 > been verified by hand and contradicts the trust-half scout: see TECH-DEBT.md TD-CHAT-31.
+>
+> **Its §5.0 id table is no longer the allocator (2026-09-16).** Two ids were transcribed
+> into `docs/TECH-DEBT.md` with different subjects than §5.0 reserved, and both are frozen
+> by commit history, by `// QUIRK` markers in test source, and by `docs/TESTING.md` and the
+> journey tracker. The ledger meanings win; the two panel subjects moved instead:
+> panel `TD-CHAT-31` (dangling `chat.turn.start`) is now **TD-CHAT-43**, and panel
+> `TD-CHAT-32` (`usesNamedWorkspace` cross-wiring) is now **TD-CHAT-44**. Every other
+> panel id (`TD-CHAT-33`…`TD-CHAT-42`, `TD-TEST-8`) kept its number. Below, lines 117,
+> 176, 287, 320 and 357 still spell the panel's `TD-CHAT-31`/`TD-CHAT-32` — read those as
+> 43/44. §5.0's "Highest existing at HEAD" line is a snapshot of `ea82185d` and is stale:
+> **`docs/TECH-DEBT.md` is the only safe source for the next free id**, which is
+> `TD-CHAT-45` / `TD-TEST-10` / `TD-REL-6` / `TD-ENV-2` as of `93326e03`.
 > Line numbers are at `ea82185d`.
 
 # Phase 4 Execution Plan — `/remove-technical-debt`, software-design-philosophy lens
@@ -277,7 +289,7 @@ TD-CHAT-30 (poisoned cache), TD-CHAT-36 (unguarded model-arg coercion — full H
 
 ## 5. Draft docs rows
 
-### 5.0 ID allocation (authoritative — five scouts each claimed `TD-CHAT-30`)
+### 5.0 ID allocation (superseded — see the header note; five scouts each claimed `TD-CHAT-30`)
 
 Highest existing at HEAD: **TD-CHAT-29**, **TD-TEST-7**, **TD-REL-5**, **TD-ENV-1**.
 
