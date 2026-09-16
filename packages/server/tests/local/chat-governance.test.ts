@@ -409,3 +409,72 @@ describe('getGovernancePermissions — edge cases', () => {
     expect(url).toBe('https://93.184.216.34/api/teams/default/capability-policies');
   });
 });
+
+// ─── Characterization: a payload cached before it is read ───────────────
+//
+// These pin observed behavior, not a specification. The role lookup reads every
+// element of the policies array, so one non-object element makes it throw; the
+// payload is stored in the cache before that read happens, so the failure is
+// served from the cache for the rest of the TTL. Recorded as TD-CHAT-30; the
+// route-level consequence is TD-CHAT-23.
+
+describe('getGovernancePermissions — unreadable payload (characterization)', () => {
+  const POISONED = [null, { role: 'member', blockedTools: ['bash'] }];
+
+  function teamServer() {
+    mockGetTeamServer.mockReturnValue({
+      url: 'https://93.184.216.34',
+      token: 'tok-123',
+      teamSlug: 'acme',
+    });
+  }
+
+  it('reports the first unreadable payload as no policy', async () => {
+    teamServer();
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(POISONED));
+    globalThis.fetch = fetchMock;
+
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-30) — indistinguishable from an
+    // unconfigured or unreachable team server, and the payload is now cached.
+    await expect(getGovernancePermissions('/fake/data', 'ws-poisoned-first-1', 'member'))
+      .resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws to the caller on the next call within the TTL', async () => {
+    teamServer();
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(POISONED));
+    globalThis.fetch = fetchMock;
+
+    const wsId = 'ws-poisoned-cached-1';
+    await expect(getGovernancePermissions('/fake/data', wsId, 'member')).resolves.toBeUndefined();
+
+    // The cache-hit read happens outside the helper's own try, so the failure
+    // escapes instead of degrading. The caller decides what that means.
+    await expect(getGovernancePermissions('/fake/data', wsId, 'member'))
+      .rejects.toThrow(TypeError);
+    // Still one call: the throw came from the cache, not from a second fetch.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws from the stale-cache fallback when a later refetch fails', async () => {
+    teamServer();
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(POISONED));
+    globalThis.fetch = fetchMock;
+
+    const wsId = 'ws-poisoned-stale-1';
+    await expect(getGovernancePermissions('/fake/data', wsId, 'member')).resolves.toBeUndefined();
+
+    const realDateNow = Date.now;
+    try {
+      Date.now = () => realDateNow() + 6 * 60 * 1000; // past the 5-minute TTL
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('timeout'));
+      // The fallback re-reads the same unreadable cached payload, so the path
+      // that exists to degrade gracefully throws as well.
+      await expect(getGovernancePermissions('/fake/data', wsId, 'member'))
+        .rejects.toThrow(TypeError);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+});
