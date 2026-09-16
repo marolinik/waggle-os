@@ -91,10 +91,23 @@ type ValidatedChatRequestFields = {
 const MAX_CHAT_SEGMENT_LENGTH = 200;
 
 /**
- * Validates the syntactic shape of a POST /api/chat body before any referenced
- * resource is resolved. Returns the first rejection in the same order the
- * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
- * Unsafe path segments still throw via `assertSafeSegment` (R6-001): `workspace`
+ * Validates the shape of a POST /api/chat body, and the one resource whose
+ * existence is cheap to check here: an installed skill.
+ *
+ * Fields are checked in source order, and the first failure is returned, so the
+ * order is part of the contract: `message` (present, a string, within the length
+ * cap), then `selectedSkill` (a string, matching the id grammar, then a 409 when
+ * it is not installed), then `retry`, then `retryTarget` (well-formed, then
+ * coupled to `retry: true`), then the `workspace` / `workspaceId` / `session` /
+ * `sessionId` segments. An uninstalled skill therefore outranks a later
+ * malformed `retry`.
+ *
+ * Returns the trimmed, lower-cased `selectedSkill` and the parsed `retryTarget`
+ * (`null` when absent). Workspace existence is left to
+ * `resolveChatWorkspaceTarget`, which answers 404 `WORKSPACE_NOT_FOUND`;
+ * a `session` that disagrees with `sessionId` is rejected by the caller.
+ *
+ * Unsafe path segments throw via `assertSafeSegment` (R6-001): `workspace`
  * and the session alias come straight from the request body and are joined into
  * dataDir/workspaces/<workspace>/sessions/<session>.jsonl by chat-persistence
  * (persistMessage / loadSessionMessages), so a crafted "../evil" segment would
@@ -185,8 +198,26 @@ type ChatServer = Parameters<FastifyPluginAsync>[0];
  * Resolves which workspace a chat turn reads history from and executes in.
  * `authorizedWorkspace` (from the security middleware) overrides the
  * body-supplied `workspace`; `null` pins execution to the personal scope.
- * Returns a 404 when a named history workspace is unknown, or a 409 when the
- * default chat history layout still needs recovery.
+ *
+ * Two workspaces are in play and the returned fields describe different ones.
+ * `workspaceConfig` is the config of the **body-supplied** workspace, while the
+ * 404 is decided against the **history** workspace's config — so a request can
+ * be answered with a config it never names. `historyTarget` and
+ * `historyWorkspaceId` describe where history is read and written;
+ * `executionWorkspaceId`, `executionScopeId` and `executionWorkspaceConfig`
+ * describe where the turn runs, which is the authorized workspace when the
+ * middleware named one. `usesNamedWorkspace` is true only for a managed
+ * workspace, not for the legacy default layout.
+ *
+ * Two cases are exempt from the 404: no history workspace at all, which is the
+ * personal scope, and the literal `'default'`, which is the legacy default
+ * history rather than a managed workspace. The recovery gate fires whenever the
+ * resolved history id is `'default'` — an explicit default and every
+ * personal-scope turn alike — and answers 409.
+ *
+ * `WorkspaceManager.get` re-reads `workspace.json` on every call, so each
+ * returned config is a value-equal snapshot taken at a different moment, never
+ * a shared reference.
  */
 function resolveChatWorkspaceTarget(
   server: ChatServer,
@@ -2575,7 +2606,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       origin, channel: channelMeta,
     } = request.body ?? {};
 
-    // Reject malformed request fields before resolving referenced resources.
+    // Reject a malformed request body before resolving the workspace it names.
     // A syntactically valid unknown workspace still returns 404 below, while
     // invalid message/session input remains a stable 400 regardless of whether
     // the named workspace exists.
@@ -3227,6 +3258,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Streams a canned assistant reply word by word, persists it unless the
       // turn denies conversation history, and emits the terminal `done` event.
       // Resolves false when the turn was aborted before `done` was sent.
+      // Does not end the stream: the caller owns `raw.end()`. The two
+      // slash-command callers call it; the setup-required echo caller
+      // deliberately does not, and reaches the handler's outer `finally`
+      // through the skipped agent-loop block instead.
       const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
         for (const word of text.split(' ')) {
           if (turnSignal.aborted) return false;
