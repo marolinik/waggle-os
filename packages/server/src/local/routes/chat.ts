@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -22,7 +22,7 @@ import {
   resolveMarketplaceApprovalIdentity,
   stripCapabilityRequestMarker,
 } from './capability-proposals.js';
-import { resolveGrantRiskLevel } from '../approval-grants.js';
+import { classifyGatedTool } from '../approval-grants.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
 import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
@@ -91,10 +91,23 @@ type ValidatedChatRequestFields = {
 const MAX_CHAT_SEGMENT_LENGTH = 200;
 
 /**
- * Validates the syntactic shape of a POST /api/chat body before any referenced
- * resource is resolved. Returns the first rejection in the same order the
- * inline checks used, or the normalized `selectedSkill` / `retryTarget`.
- * Unsafe path segments still throw via `assertSafeSegment` (R6-001): `workspace`
+ * Validates the shape of a POST /api/chat body, and the one resource whose
+ * existence is cheap to check here: an installed skill.
+ *
+ * Fields are checked in source order, and the first failure is returned, so the
+ * order is part of the contract: `message` (present, a string, within the length
+ * cap), then `selectedSkill` (a string, matching the id grammar, then a 409 when
+ * it is not installed), then `retry`, then `retryTarget` (well-formed, then
+ * coupled to `retry: true`), then the `workspace` / `workspaceId` / `session` /
+ * `sessionId` segments. An uninstalled skill therefore outranks a later
+ * malformed `retry`.
+ *
+ * Returns the trimmed, lower-cased `selectedSkill` and the parsed `retryTarget`
+ * (`null` when absent). Workspace existence is left to
+ * `resolveChatWorkspaceTarget`, which answers 404 `WORKSPACE_NOT_FOUND`;
+ * a `session` that disagrees with `sessionId` is rejected by the caller.
+ *
+ * Unsafe path segments throw via `assertSafeSegment` (R6-001): `workspace`
  * and the session alias come straight from the request body and are joined into
  * dataDir/workspaces/<workspace>/sessions/<session>.jsonl by chat-persistence
  * (persistMessage / loadSessionMessages), so a crafted "../evil" segment would
@@ -185,8 +198,26 @@ type ChatServer = Parameters<FastifyPluginAsync>[0];
  * Resolves which workspace a chat turn reads history from and executes in.
  * `authorizedWorkspace` (from the security middleware) overrides the
  * body-supplied `workspace`; `null` pins execution to the personal scope.
- * Returns a 404 when a named history workspace is unknown, or a 409 when the
- * default chat history layout still needs recovery.
+ *
+ * Two workspaces are in play and the returned fields describe different ones.
+ * `workspaceConfig` is the config of the **body-supplied** workspace, while the
+ * 404 is decided against the **history** workspace's config — so a request can
+ * be answered with a config it never names. `historyTarget` and
+ * `historyWorkspaceId` describe where history is read and written;
+ * `executionWorkspaceId`, `executionScopeId` and `executionWorkspaceConfig`
+ * describe where the turn runs, which is the authorized workspace when the
+ * middleware named one. `usesNamedWorkspace` is true only for a managed
+ * workspace, not for the legacy default layout.
+ *
+ * Two cases are exempt from the 404: no history workspace at all, which is the
+ * personal scope, and the literal `'default'`, which is the legacy default
+ * history rather than a managed workspace. The recovery gate fires whenever the
+ * resolved history id is `'default'` — an explicit default and every
+ * personal-scope turn alike — and answers 409.
+ *
+ * `WorkspaceManager.get` re-reads `workspace.json` on every call, so each
+ * returned config is a value-equal snapshot taken at a different moment, never
+ * a shared reference.
  */
 function resolveChatWorkspaceTarget(
   server: ChatServer,
@@ -346,20 +377,23 @@ function resolveChatWorkspacePaths(
  * `routes/commands.ts` route) with the turn's memory-deny directives applied:
  * recall, workspace state and skill listing degrade to sentinel strings that
  * the command handlers render verbatim.
+ *
+ * `executionWorkspaceId` is the workspace the turn runs in, or undefined for a
+ * personal turn, in which case commands see `PERSONAL_CHAT_COMMAND_CONTEXT`.
  */
 export function buildChatCommandContext(input: {
   server: ChatServer;
   orchestrator: Orchestrator;
   executionWorkspaceId: string | undefined;
   sessionId: string;
-  effectiveWorkspace: string | undefined;
-  persistedMemoryReadAllowed: boolean;
   turnMutationPolicy: TurnMutationPolicy;
 }) {
   const {
-    server, orchestrator, executionWorkspaceId, sessionId, effectiveWorkspace,
-    persistedMemoryReadAllowed, turnMutationPolicy,
+    server, orchestrator, executionWorkspaceId, sessionId, turnMutationPolicy,
   } = input;
+  // Derived, not supplied: the caller passed the policy and a flag computed
+  // from it, so the two could disagree.
+  const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
   return {
     // Command handlers interpolate this value into user-facing agent
     // instructions. Keep the non-workspace observability sentinel out of
@@ -382,10 +416,10 @@ export function buildChatCommandContext(input: {
       if (!allowsConversationHistory(turnMutationPolicy)) {
         return 'Conversation-derived workspace state is disabled for this turn.';
       }
-      if (!effectiveWorkspace) return 'No workspace state available.';
+      if (!executionWorkspaceId) return 'No workspace state available.';
       const block = buildWorkspaceNowBlock({
         dataDir: server.localConfig.dataDir,
-        workspaceId: effectiveWorkspace,
+        workspaceId: executionWorkspaceId,
         wsManager: server.workspaceManager,
         activateWorkspaceMind: server.agentState.activateWorkspaceMind,
         cronSchedules: server.cronStore.list(),
@@ -2575,7 +2609,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       origin, channel: channelMeta,
     } = request.body ?? {};
 
-    // Reject malformed request fields before resolving referenced resources.
+    // Reject a malformed request body before resolving the workspace it names.
     // A syntactically valid unknown workspace still returns 404 below, while
     // invalid message/session input remains a stable 400 regardless of whether
     // the named workspace exists.
@@ -3227,6 +3261,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Streams a canned assistant reply word by word, persists it unless the
       // turn denies conversation history, and emits the terminal `done` event.
       // Resolves false when the turn was aborted before `done` was sent.
+      // Does not end the stream: the caller owns `raw.end()`. The two
+      // slash-command callers call it; the setup-required echo caller
+      // deliberately does not, and reaches the handler's outer `finally`
+      // through the skipped agent-loop block instead.
       const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
         for (const word of text.split(' ')) {
           if (turnSignal.aborted) return false;
@@ -3256,8 +3294,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           orchestrator: sessionOrch,
           executionWorkspaceId,
           sessionId,
-          effectiveWorkspace,
-          persistedMemoryReadAllowed,
           turnMutationPolicy,
         });
         const marketplaceSubcommand = message.trim().match(
@@ -3531,11 +3567,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
             ? ctx.riskLevel as RiskLevel
             : undefined;
-          const grantRiskLevel = resolveGrantRiskLevel(
-            ctx.toolName,
-            args,
-            trustedRiskLevel,
-          );
+          // One classification per gated call, reused by the grant check below
+          // and by the approval metadata further down. Classifying twice meant
+          // deciding twice what a failure means, in two places, differently.
+          const gatedRisk = classifyGatedTool(ctx.toolName, args, trustedRiskLevel);
+          const grantRiskLevel = gatedRisk.riskLevel;
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
@@ -3662,15 +3698,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // provenance signal for a bash/git/connector call, and stamping
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
-            try {
-              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input, trustedRiskLevel);
-              trustMeta = {
-                riskLevel,
-                approvalClass,
-                assessmentMode: 'heuristic',
-                description: describeToolUse(toolName, input),
+            if (!gatedRisk.classified) {
+              // A tool nobody could classify must not be offered for approval:
+              // the card would carry no risk class, and the client reads an
+              // absent approvalClass as permission to show "Always allow".
+              // Deny here instead. The execution floor would refuse the call
+              // anyway, so this changes the reported reason, not the outcome.
+              log.warn('[security] tool risk classification failed; denying the tool', {
+                workspaceId: executionScopeId,
+                sessionId,
+                toolName,
+                error: gatedRisk.reason,
+              });
+              return {
+                cancel: true,
+                reason: `${toolName} could not be risk-assessed, so it was not run.`,
               };
-            } catch { /* enrichment is best-effort — approval still fires */ }
+            }
+            trustMeta = {
+              riskLevel: gatedRisk.riskLevel,
+              approvalClass: gatedRisk.approvalClass,
+              assessmentMode: 'heuristic',
+              description: describeToolUse(toolName, input),
+            };
           }
 
           // Send approval_required SSE event to the client.
@@ -4046,17 +4096,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Governance policies for team workspaces — direct call (no HTTP loopback)
         let governancePolicies: { blockedTools?: string[]; allowedSources?: string[] } | undefined;
         if (wsConfig?.teamId && effectiveWorkspace) {
-          try {
-            governancePolicies = await getGovernancePermissions(
-              server.localConfig.dataDir,
-              effectiveWorkspace,
-              wsConfig.teamRole,
-            );
-            throwIfTurnAborted();
-          } catch {
-            throwIfTurnAborted();
-            // Governance not available — allow all.
+          const lookup = await getGovernancePermissions(
+            server.localConfig.dataDir,
+            effectiveWorkspace,
+            wsConfig.teamRole,
+          );
+          throwIfTurnAborted();
+          if (lookup.status === 'invalid') {
+            // A payload we cannot read is a fault, not an absent policy.
+            // Running the turn anyway would drop the team's tool restrictions.
+            log.warn('[chat] governance policies unreadable; refusing the turn', {
+              workspaceId: effectiveWorkspace,
+              sessionId,
+              error: lookup.reason,
+            });
+            throw new Error('Team governance policies could not be verified for this workspace. Try again or contact your team admin.');
           }
+          if (lookup.status === 'unavailable') {
+            // Transient: the turn proceeds without restrictions, but never
+            // silently — this is the remaining open half of TD-CHAT-23.
+            log.warn('[chat] governance policies unavailable; the turn runs ungoverned', {
+              workspaceId: effectiveWorkspace,
+              sessionId,
+              error: lookup.reason,
+            });
+          }
+          governancePolicies = lookup.status === 'policy' ? lookup.policies : undefined;
         }
 
         if (!hasCustomRunner) {

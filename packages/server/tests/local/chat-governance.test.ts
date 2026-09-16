@@ -52,25 +52,25 @@ afterEach(() => {
 // ─── No team server configured ──────────────────────────────────────
 
 describe('getGovernancePermissions — no team server', () => {
-  it('returns undefined when getTeamServer() returns null', async () => {
+  it('reports no team server when getTeamServer() returns null', async () => {
     mockGetTeamServer.mockReturnValue(null);
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-server-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'none' });
   });
 
-  it('returns undefined when team server has no url', async () => {
+  it('reports no team server when the team server has no url', async () => {
     mockGetTeamServer.mockReturnValue({ token: 'tok-123' });
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-url-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'none' });
   });
 
-  it('returns undefined when team server has no token', async () => {
+  it('reports no team server when the team server has no token', async () => {
     mockGetTeamServer.mockReturnValue({ url: 'https://93.184.216.34' });
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-token-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'none' });
   });
 
   it('does not call fetch when no team server is configured', async () => {
@@ -86,7 +86,7 @@ describe('getGovernancePermissions — no team server', () => {
 // ─── Successful fetch ───────────────────────────────────────────────
 
 describe('getGovernancePermissions — successful fetch', () => {
-  it('returns blockedTools for the matching role', async () => {
+  it('returns the blockedTools of the matching role', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -101,10 +101,10 @@ describe('getGovernancePermissions — successful fetch', () => {
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(policies));
 
     const result = await getGovernancePermissions('/fake/data', 'ws-success-1', 'member');
-    expect(result).toEqual({ blockedTools: ['bash', 'write_file'] });
+    expect(result).toEqual({ status: 'policy', policies: { blockedTools: ['bash', 'write_file'] } });
   });
 
-  it('returns undefined when no policy matches the teamRole', async () => {
+  it('returns no policy when nothing matches the teamRole', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -118,10 +118,10 @@ describe('getGovernancePermissions — successful fetch', () => {
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(policies));
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-role-match-1', 'viewer');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'policy', policies: undefined });
   });
 
-  it('returns undefined when permissions is not an array', async () => {
+  it('returns no policy when permissions is not an array', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -130,11 +130,13 @@ describe('getGovernancePermissions — successful fetch', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse({ not: 'an array' }));
 
+    // Not a fault: the payload carries no policy this client can match, which
+    // is the same answer as a team with no entry for this role.
     const result = await getGovernancePermissions('/fake/data', 'ws-not-array-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'policy', policies: undefined });
   });
 
-  it('returns undefined when the matching role policy has no blockedTools', async () => {
+  it('returns no policy when the matching role has no blockedTools', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -148,7 +150,7 @@ describe('getGovernancePermissions — successful fetch', () => {
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(policies));
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-blocked-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'policy', policies: undefined });
   });
 
   it('constructs the correct URL with teamSlug and Authorization header', async () => {
@@ -202,7 +204,7 @@ describe('getGovernancePermissions — guarded Team egress', () => {
 
     const result = await getGovernancePermissions('/fake/data', 'ws-metadata-block-1', 'member');
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'unavailable', reason: expect.any(String) });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -222,7 +224,7 @@ describe('getGovernancePermissions — guarded Team egress', () => {
     try {
       const result = await getGovernancePermissions('/fake/data', 'ws-cleartext-block-1', 'member');
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ status: 'unavailable', reason: expect.any(String) });
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       if (previousAllowLocal === undefined) delete process.env.WAGGLE_ALLOW_LOCAL_FETCH;
@@ -244,7 +246,7 @@ describe('getGovernancePermissions — guarded Team egress', () => {
 
     const result = await getGovernancePermissions('/fake/data', 'ws-redirect-block-1', 'member');
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'unavailable', reason: expect.any(String) });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]?.redirect).toBe('manual');
   });
@@ -253,7 +255,7 @@ describe('getGovernancePermissions — guarded Team egress', () => {
 // ─── Fetch failure ──────────────────────────────────────────────────
 
 describe('getGovernancePermissions — fetch failure', () => {
-  it('returns undefined when fetch throws (network error)', async () => {
+  it('reports the team server unavailable when fetch throws (network error)', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -263,10 +265,10 @@ describe('getGovernancePermissions — fetch failure', () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
     const result = await getGovernancePermissions('/fake/data', 'ws-net-error-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'unavailable', reason: expect.any(String) });
   });
 
-  it('returns undefined when server responds with non-ok status', async () => {
+  it('reports the team server unavailable on a non-ok status', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -276,7 +278,7 @@ describe('getGovernancePermissions — fetch failure', () => {
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(null, false, 500));
 
     const result = await getGovernancePermissions('/fake/data', 'ws-500-error-1', 'member');
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ status: 'unavailable', reason: expect.any(String) });
   });
 });
 
@@ -302,12 +304,12 @@ describe('getGovernancePermissions — caching', () => {
 
     // First call — should fetch
     const result1 = await getGovernancePermissions('/fake/data', wsId, 'member');
-    expect(result1).toEqual({ blockedTools: ['bash'] });
+    expect(result1).toEqual({ status: 'policy', policies: { blockedTools: ['bash'] } });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     // Second call — should use cache
     const result2 = await getGovernancePermissions('/fake/data', wsId, 'member');
-    expect(result2).toEqual({ blockedTools: ['bash'] });
+    expect(result2).toEqual({ status: 'policy', policies: { blockedTools: ['bash'] } });
     // fetch should NOT have been called again
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -340,7 +342,7 @@ describe('getGovernancePermissions — caching', () => {
     globalThis.fetch = failFetch;
 
     const result = await getGovernancePermissions('/fake/data', wsId, 'admin');
-    expect(result).toEqual({ blockedTools: ['delete_all'] });
+    expect(result).toEqual({ status: 'policy', policies: { blockedTools: ['delete_all'] } });
     expect(failFetch).toHaveBeenCalledTimes(1);
 
     // Restore Date.now
@@ -365,8 +367,8 @@ describe('getGovernancePermissions — caching', () => {
     const r1 = await getGovernancePermissions('/fake/data', 'ws-diff-cache-a', 'member');
     const r2 = await getGovernancePermissions('/fake/data', 'ws-diff-cache-b', 'member');
 
-    expect(r1).toEqual({ blockedTools: ['tool-a'] });
-    expect(r2).toEqual({ blockedTools: ['tool-b'] });
+    expect(r1).toEqual({ status: 'policy', policies: { blockedTools: ['tool-a'] } });
+    expect(r2).toEqual({ status: 'policy', policies: { blockedTools: ['tool-b'] } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
@@ -374,7 +376,7 @@ describe('getGovernancePermissions — caching', () => {
 // ─── Edge cases ─────────────────────────────────────────────────────
 
 describe('getGovernancePermissions — edge cases', () => {
-  it('handles undefined teamRole gracefully', async () => {
+  it('matches a policy whose role is undefined when the teamRole is undefined', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -390,7 +392,7 @@ describe('getGovernancePermissions — edge cases', () => {
 
     const result = await getGovernancePermissions('/fake/data', 'ws-undef-role-1', undefined);
     // Should match the policy where role === undefined
-    expect(result).toEqual({ blockedTools: ['hidden_tool'] });
+    expect(result).toEqual({ status: 'policy', policies: { blockedTools: ['hidden_tool'] } });
   });
 
   it('defaults teamSlug to "default" when not set on teamServer', async () => {
@@ -407,5 +409,69 @@ describe('getGovernancePermissions — edge cases', () => {
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toBe('https://93.184.216.34/api/teams/default/capability-policies');
+  });
+});
+
+
+// ─── An unreadable payload is a fault, not an absent policy ─────────────
+//
+// The role lookup reads a field on every element, so an array holding a
+// non-object element cannot be read. The payload is validated before it is
+// cached, so one such response cannot make every later lookup fail for the
+// rest of the window (TD-CHAT-30).
+
+describe('getGovernancePermissions — unreadable payload', () => {
+  const UNREADABLE = [null, { role: 'member', blockedTools: ['bash'] }];
+
+  function teamServer() {
+    mockGetTeamServer.mockReturnValue({
+      url: 'https://93.184.216.34',
+      token: 'tok-123',
+      teamSlug: 'acme',
+    });
+  }
+
+  it('reports an unreadable payload as a fault the caller must handle', async () => {
+    teamServer();
+    globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(UNREADABLE));
+
+    await expect(getGovernancePermissions('/fake/data', 'ws-unreadable-first-1', 'member'))
+      .resolves.toEqual({ status: 'invalid', reason: expect.any(String) });
+  });
+
+  it('does not cache an unreadable payload', async () => {
+    teamServer();
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(UNREADABLE));
+    globalThis.fetch = fetchMock;
+
+    const wsId = 'ws-unreadable-uncached-1';
+    await getGovernancePermissions('/fake/data', wsId, 'member');
+    // A second lookup inside the window fetches again rather than replaying the
+    // payload it could not read, so one bad response cannot poison the window.
+    await expect(getGovernancePermissions('/fake/data', wsId, 'member'))
+      .resolves.toEqual({ status: 'invalid', reason: expect.any(String) });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('prefers a fault over a stale policy when the fresh payload is unreadable', async () => {
+    teamServer();
+    const wsId = 'ws-unreadable-stale-1';
+    globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse([
+      { role: 'member', blockedTools: ['bash'] },
+    ]));
+    await expect(getGovernancePermissions('/fake/data', wsId, 'member'))
+      .resolves.toEqual({ status: 'policy', policies: { blockedTools: ['bash'] } });
+
+    const realDateNow = Date.now;
+    try {
+      Date.now = () => realDateNow() + 6 * 60 * 1000; // past the 5-minute TTL
+      globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse(UNREADABLE));
+      // The stale-cache fallback covers a team server that cannot be reached,
+      // not one that answers with something this client cannot read.
+      await expect(getGovernancePermissions('/fake/data', wsId, 'member'))
+        .resolves.toEqual({ status: 'invalid', reason: expect.any(String) });
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 });

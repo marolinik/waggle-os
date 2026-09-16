@@ -406,4 +406,17 @@ describe('critical approval grants', () => {
       fs.rmSync(grantDir, { recursive: true, force: true });
     }
   });
+
+  it('treats a tool it cannot classify as critical', () => {
+    // The classifier coerces `command` to a string inside its never-autopass
+    // check, and it makes that check without the trusted risk level, so the
+    // short-circuit that protects the other call sites does not run here. A
+    // model can produce this argument: `{"toString": 0}` is ordinary JSON, and
+    // coercing it throws.
+    const unreadable = { command: { toString: 0 } } as unknown as Record<string, unknown>;
+    expect(resolveGrantRiskLevel('bash', unreadable, 'high')).toBe('critical');
+    // Critical is never grantable, so an unclassifiable tool cannot acquire a
+    // saved "always allow" either.
+    expect(isGrantableTool('bash', unreadable, 'high')).toBe(false);
+  });
 });

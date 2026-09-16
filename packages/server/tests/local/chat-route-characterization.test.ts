@@ -6,14 +6,31 @@
  * not a spec: if one fails after a refactor, the refactor changed behavior.
  * Bugs found while pinning are recorded in docs/TECH-DEBT.md, never fixed here.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import { WaggleConfig } from '@waggle/core';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { buildLocalServer } from '../../src/local/index.js';
-import { injectWithAuth } from '../test-utils.js';
+import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+
+/** Splits an SSE body into its `event:`/`data:` pairs. */
+function parseSSE(raw: string): Array<{ event: string; data: string }> {
+  const events: Array<{ event: string; data: string }> = [];
+  for (const block of raw.split(/\n\n/).filter(Boolean)) {
+    let event = '';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event: ')) event = line.slice(7);
+      else if (line.startsWith('data: ')) data = line.slice(6);
+    }
+    if (event || data) events.push({ event, data });
+  }
+  return events;
+}
 
 describe('POST /api/chat request validation (characterization)', () => {
   let server: FastifyInstance;
@@ -266,5 +283,181 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
     });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' });
+  });
+});
+
+/**
+ * The governance lookup for a team workspace and the swallow that follows it.
+ *
+ * The lookup is not gated by the injected-runner flag, so the object seam still
+ * runs it and the resolved policies arrive on the config the runner receives —
+ * which is the sensing point these pins use. A lookup that throws is swallowed
+ * and the turn runs with no policy at all (QUIRK TD-CHAT-23); a payload that
+ * cannot be read is cached before it is validated (QUIRK TD-CHAT-30).
+ */
+describe('POST /api/chat team governance lookup (characterization)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+  let captured: AgentLoopConfig[];
+  let runnerBehavior: 'ok' | 'throw';
+
+  const POLICY_PATH = '/api/teams/default/capability-policies';
+  const TEAM_SERVER_URL = 'https://93.184.216.34';
+  const TEAM_SERVER_TOKEN = 'gov-char-token';
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-gov-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+    captured = [];
+    runnerBehavior = 'ok';
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      captured.push(config);
+      if (runnerBehavior === 'throw') throw new Error('governance characterization runner failure');
+      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+    // The helper builds a fresh WaggleConfig per call and reads it from disk,
+    // so the team server only becomes visible once it is saved.
+    const config = new WaggleConfig(tmpDir);
+    config.setTeamServer({ url: TEAM_SERVER_URL, token: TEAM_SERVER_TOKEN });
+    config.save();
+  });
+
+  beforeEach(() => {
+    resetRateLimiter(server);
+    captured.length = 0;
+    runnerBehavior = 'ok';
+  });
+
+  afterAll(async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.clearTeamServer();
+    config.save();
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
+  });
+
+  /**
+   * A team workspace with a unique id per test. The governance policy cache is
+   * module-level, keyed by workspace id, with a five-minute TTL and no reset
+   * export, so a shared id would leak one test's payload into the next.
+   */
+  function createTeamWorkspace(label: string): string {
+    const nonce = `${label}-${Date.now()}-${Math.round(performance.now() * 1000)}`;
+    const workspace = server.workspaceManager.create({ name: `gov char ${nonce}`, group: 'test' });
+    server.workspaceManager.update(workspace.id, {
+      teamId: `gov-char-team-${nonce}`,
+      teamServerUrl: TEAM_SERVER_URL,
+      teamRole: 'member',
+    });
+    return workspace.id;
+  }
+
+  /** Answers the capability-policies call with `payload`; every other host fails. */
+  function stubPolicyFetch(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
+      String(input).endsWith(POLICY_PATH)
+        ? new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response('', { status: 503 })
+    ));
+  }
+
+  /** Counts only the governance calls — the guard layer may reach other hosts. */
+  function policyCallCount(spy: ReturnType<typeof stubPolicyFetch>): number {
+    return spy.mock.calls.filter(call => String(call[0]).endsWith(POLICY_PATH)).length;
+  }
+
+  async function postTurn(workspaceId: string, message: string, session: string) {
+    return injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message, workspace: workspaceId, session },
+    });
+  }
+
+  it('hands the role-matched blockedTools to the runner for a team workspace', async () => {
+    const workspaceId = createTeamWorkspace('resolved');
+    const fetchSpy = stubPolicyFetch([
+      { role: 'admin', blockedTools: ['delete_workspace'] },
+      { role: 'member', blockedTools: ['bash', 'write_file'] },
+    ]);
+    try {
+      const res = await postTurn(workspaceId, 'governance resolved turn', 'gov-resolved');
+      expect(res.statusCode).toBe(200);
+      expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
+      expect(captured.at(-1)!.governancePolicies).toEqual({ blockedTools: ['bash', 'write_file'] });
+      expect(policyCallCount(fetchSpy)).toBe(1);
+      // Locate the governance call by URL: the egress guard may reach other
+      // hosts first, so a positional lookup reads the wrong request.
+      const policyCall = fetchSpy.mock.calls.find(call => String(call[0]).endsWith(POLICY_PATH));
+      expect(new Headers(policyCall![1]?.headers).get('authorization'))
+        .toBe(`Bearer ${TEAM_SERVER_TOKEN}`);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('refuses the turn when the governance payload cannot be read', async () => {
+    const workspaceId = createTeamWorkspace('unreadable');
+    // A policies array holding a non-object element: the role lookup reads a
+    // field on every element, so this payload cannot be read at all.
+    const fetchSpy = stubPolicyFetch([null, { role: 'member', blockedTools: ['bash'] }]);
+    try {
+      // An unreadable answer is a fault, not an absent policy: the turn is
+      // refused rather than run with the team's restrictions dropped. The runner
+      // is never reached and the stream carries an error instead of a
+      // completion.
+      for (const session of ['gov-unreadable-1', 'gov-unreadable-2']) {
+        const res = await postTurn(workspaceId, `governance unreadable ${session}`, session);
+        expect(res.statusCode).toBe(200);
+        const events = parseSSE(res.body);
+        expect(events.some(e => e.event === 'done')).toBe(false);
+        const error = events.find(e => e.event === 'error');
+        expect(error).toBeDefined();
+        expect(JSON.parse(error!.data).message).toBe(
+          'Team governance policies could not be verified for this workspace. Try again or contact your team admin.',
+        );
+      }
+      expect(captured).toHaveLength(0);
+
+      // One call per turn: an unreadable payload is never cached, so a single
+      // bad response cannot decide the whole five-minute window.
+      expect(policyCallCount(fetchSpy)).toBe(2);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('persists a failed assistant turn when a team turn errors before commit', async () => {
+    // The territory a failing governance lookup reaches once it stops being
+    // swallowed: the pre-commit error path. Triggered here through the runner so
+    // it pins current behavior independently of the governance catch.
+    const workspaceId = createTeamWorkspace('error-path');
+    const session = 'gov-error-path';
+    const fetchSpy = stubPolicyFetch([{ role: 'member', blockedTools: [] }]);
+    try {
+      runnerBehavior = 'throw';
+      const res = await postTurn(workspaceId, 'a team turn that fails before commit', session);
+      expect(res.statusCode).toBe(200);
+      const events = parseSSE(res.body);
+      expect(events.some(e => e.event === 'done')).toBe(false);
+      const error = events.find(e => e.event === 'error');
+      expect(error).toBeDefined();
+      // The outer catch forwards an unclassified message verbatim (TD-CHAT-15).
+      expect(JSON.parse(error!.data).message).toBe('governance characterization runner failure');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const history = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(session)}`,
+    });
+    expect(history.statusCode).toBe(200);
+    const messages = history.json() as { messages?: Array<{ role: string; content: string }> };
+    const assistant = (messages.messages ?? []).filter(m => m.role === 'assistant');
+    expect(assistant.at(-1)!.content).toBe(
+      `${GENERATION_FAILED_PREFIX}governance characterization runner failure`,
+    );
   });
 });

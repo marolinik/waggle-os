@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { classifyGatedToolRisk, isCriticalNeverAutopass } from '@waggle/agent';
-import type { RiskLevel } from '@waggle/shared';
+import type { ApprovalClass, RiskLevel } from '@waggle/shared';
 
 const NON_GRANTABLE_TOOLS = new Set([
   'bash',
@@ -34,16 +34,48 @@ export function isGrantableTool(
   return !isCriticalNeverAutopass(toolName, args, effectiveRiskLevel);
 }
 
+/**
+ * The outcome of classifying one gated tool call.
+ *
+ * `classified: false` means the arguments could not be read — the classifier
+ * coerces some of them to strings, and a model can supply a value that throws
+ * when coerced. That is not a low-risk call, it is an unknown one, so it
+ * carries `critical` and callers must not offer it for approval.
+ */
+export type GatedToolRisk =
+  | { classified: true; riskLevel: RiskLevel; approvalClass: ApprovalClass }
+  | { classified: false; riskLevel: 'critical'; reason: string };
+
+/**
+ * Classify a gated tool once. Never throws.
+ *
+ * Callers that need both the risk level and the approval class, or that need to
+ * know whether classification succeeded at all, use this. `resolveGrantRiskLevel`
+ * is the narrow view for callers that only want the level.
+ */
+export function classifyGatedTool(
+  toolName: string,
+  args: Record<string, unknown> = {},
+  trustedRiskLevel?: RiskLevel,
+): GatedToolRisk {
+  try {
+    const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, args, trustedRiskLevel);
+    return { classified: true, riskLevel, approvalClass };
+  } catch (error) {
+    return {
+      classified: false,
+      riskLevel: 'critical',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function resolveGrantRiskLevel(
   toolName: string,
   args: Record<string, unknown> = {},
   trustedRiskLevel?: RiskLevel,
 ): RiskLevel {
-  try {
-    return classifyGatedToolRisk(toolName, args, trustedRiskLevel).riskLevel;
-  } catch {
-    return 'critical';
-  }
+  return classifyGatedTool(toolName, args, trustedRiskLevel).riskLevel;
 }
 
 export interface ApprovalGrant {

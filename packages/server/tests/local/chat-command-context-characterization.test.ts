@@ -9,10 +9,10 @@
  * behavior and are not a spec: a bug found while pinning is marked `QUIRK` and
  * ledgered, never fixed here (docs/TESTING.md Characterization Backlog).
  *
- * The policy inputs are derived the way the handler derives them
- * (`persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy)`),
- * so a directive suffix steers a pin from the message text alone, as in the
- * route pins in chat-route-characterization.test.ts.
+ * The turn policy is classified from the message the way the handler does it,
+ * and the helper derives its memory gates from that policy, so a directive
+ * suffix steers a pin from the message text alone, as in the route pins in
+ * chat-route-characterization.test.ts.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
@@ -76,8 +76,6 @@ function contextFor(message: string, overrides: Partial<CommandContextInput> = {
     orchestrator: stubOrchestrator(async () => EMPTY_RECALL).orchestrator,
     executionWorkspaceId: undefined,
     sessionId: 'pin-session',
-    effectiveWorkspace: undefined,
-    persistedMemoryReadAllowed: allowsPersistedMemoryRead(turnMutationPolicy),
     turnMutationPolicy,
     ...overrides,
   });
@@ -160,7 +158,7 @@ describe('buildChatCommandContext (characterization)', () => {
       const policy = classifyExplicitTurnMutationPolicy(message);
       expect(allowsPersistedMemoryRead(policy)).toBe(true);
       expect(allowsConversationHistory(policy)).toBe(false);
-      expect(await contextFor(message, { effectiveWorkspace: 'ws-1' }).getWorkspaceState())
+      expect(await contextFor(message, { executionWorkspaceId: 'ws-1' }).getWorkspaceState())
         .toBe('Conversation-derived workspace state is disabled for this turn.');
     });
 
@@ -173,13 +171,20 @@ describe('buildChatCommandContext (characterization)', () => {
       const policy = classifyExplicitTurnMutationPolicy(message);
       expect(policy.contextScope).toBe('supplied-only');
       expect(allowsConversationHistory(policy)).toBe(false);
-      expect(await contextFor(message, { effectiveWorkspace: 'ws-1' }).getWorkspaceState())
+      expect(await contextFor(message, { executionWorkspaceId: 'ws-1' }).getWorkspaceState())
         .toBe('Persisted workspace state is disabled for this turn.');
     });
 
     it('the persisted-memory denial wins over the conversation-history denial', async () => {
-      const message = '/status - do not use conversation history';
-      expect(await contextFor(message, { effectiveWorkspace: 'ws-1', persistedMemoryReadAllowed: false }).getWorkspaceState())
+      // One directive denies both, so the precedence is observed on a turn the
+      // route can actually receive rather than forced through the helper's
+      // inputs. Without the two policy assertions the pin would be vacuous:
+      // the persisted-memory gate returns before the history gate is read.
+      const message = '/now - do not use my saved memory or conversation history';
+      const policy = classifyExplicitTurnMutationPolicy(message);
+      expect(allowsPersistedMemoryRead(policy)).toBe(false);
+      expect(allowsConversationHistory(policy)).toBe(false);
+      expect(await contextFor(message, { executionWorkspaceId: 'ws-1' }).getWorkspaceState())
         .toBe('Persisted workspace state is disabled for this turn.');
     });
 
@@ -188,13 +193,13 @@ describe('buildChatCommandContext (characterization)', () => {
     });
 
     it('reports no state when the effective workspace is unknown to the workspace manager', async () => {
-      expect(await contextFor('/now', { server: stubServer(tmpDir), effectiveWorkspace: 'ws-unknown' }).getWorkspaceState())
+      expect(await contextFor('/now', { server: stubServer(tmpDir), executionWorkspaceId: 'ws-unknown' }).getWorkspaceState())
         .toBe('No workspace state available.');
     });
 
     it('reports no state when the managed workspace mind holds no frames', async () => {
       const workspace = { id: 'ws-empty', name: 'Empty Workspace', mindPath: emptyMindPath };
-      expect(await contextFor('/now', { server: stubServer(tmpDir, workspace), effectiveWorkspace: workspace.id }).getWorkspaceState())
+      expect(await contextFor('/now', { server: stubServer(tmpDir, workspace), executionWorkspaceId: workspace.id }).getWorkspaceState())
         .toBe('No workspace state available.');
     });
 
@@ -206,7 +211,7 @@ describe('buildChatCommandContext (characterization)', () => {
         wsManager: stubWorkspaceManager(tmpDir, workspace),
         cronSchedules: [],
       })!);
-      const state = await contextFor('/now', { server: stubServer(tmpDir, workspace), effectiveWorkspace: workspace.id })
+      const state = await contextFor('/now', { server: stubServer(tmpDir, workspace), executionWorkspaceId: workspace.id })
         .getWorkspaceState();
       expect(state).toBe(expected);
       expect(state.startsWith(`# Workspace Now — ${workspace.name}\n\n`)).toBe(true);
