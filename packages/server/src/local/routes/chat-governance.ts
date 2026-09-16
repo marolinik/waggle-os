@@ -48,10 +48,20 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** A readable payload is an array of plain objects; anything else is a fault. */
-function isPolicyArray(value: unknown): value is RolePolicyRecord[] {
-  return Array.isArray(value)
-    && value.every(item => typeof item === 'object' && item !== null && !Array.isArray(item));
+function isPlainObject(value: unknown): value is RolePolicyRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * An array holding something the role lookup cannot read is a fault: reading
+ * `role` off it throws, and that throw used to escape the module.
+ *
+ * A payload that is not an array at all is not a fault. It carries no policy
+ * this client can match, which is the same answer as a team with no entry for
+ * this role, and it has always been handled that way.
+ */
+function isUnreadablePolicyArray(value: unknown): boolean {
+  return Array.isArray(value) && !value.every(isPlainObject);
 }
 
 /**
@@ -94,15 +104,16 @@ export async function getGovernancePermissions(
     if (!res.ok) throw new Error(`${res.status}`);
     const payload = await res.json();
 
-    if (!isPolicyArray(payload)) {
+    if (isUnreadablePolicyArray(payload)) {
       return {
         status: 'invalid',
-        reason: 'the team server returned a capability-policies payload this client cannot read',
+        reason: 'the team server returned a capability-policies entry this client cannot read',
       };
     }
 
-    policyCache.set(cacheKey, { permissions: payload, fetchedAt: Date.now() });
-    return { status: 'policy', policies: extractRolePolicy(payload, teamRole) };
+    const permissions = Array.isArray(payload) ? payload as RolePolicyRecord[] : [];
+    policyCache.set(cacheKey, { permissions, fetchedAt: Date.now() });
+    return { status: 'policy', policies: extractRolePolicy(permissions, teamRole) };
   } catch (error) {
     // A stale policy is closer to the team's intent than no policy at all.
     if (cached) return { status: 'policy', policies: extractRolePolicy(cached.permissions, teamRole) };

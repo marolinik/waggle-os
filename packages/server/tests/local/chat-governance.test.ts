@@ -121,7 +121,7 @@ describe('getGovernancePermissions — successful fetch', () => {
     expect(result).toEqual({ status: 'policy', policies: undefined });
   });
 
-  it('reports an unreadable payload when permissions is not an array', async () => {
+  it('returns no policy when permissions is not an array', async () => {
     mockGetTeamServer.mockReturnValue({
       url: 'https://93.184.216.34',
       token: 'tok-123',
@@ -130,8 +130,10 @@ describe('getGovernancePermissions — successful fetch', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(createFetchResponse({ not: 'an array' }));
 
+    // Not a fault: the payload carries no policy this client can match, which
+    // is the same answer as a team with no entry for this role.
     const result = await getGovernancePermissions('/fake/data', 'ws-not-array-1', 'member');
-    expect(result).toEqual({ status: 'invalid', reason: expect.any(String) });
+    expect(result).toEqual({ status: 'policy', policies: undefined });
   });
 
   it('returns no policy when the matching role has no blockedTools', async () => {
