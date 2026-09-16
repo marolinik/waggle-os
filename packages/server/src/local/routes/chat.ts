@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -22,7 +22,7 @@ import {
   resolveMarketplaceApprovalIdentity,
   stripCapabilityRequestMarker,
 } from './capability-proposals.js';
-import { resolveGrantRiskLevel } from '../approval-grants.js';
+import { classifyGatedTool } from '../approval-grants.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
 import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
@@ -3567,11 +3567,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
             ? ctx.riskLevel as RiskLevel
             : undefined;
-          const grantRiskLevel = resolveGrantRiskLevel(
-            ctx.toolName,
-            args,
-            trustedRiskLevel,
-          );
+          // One classification per gated call, reused by the grant check below
+          // and by the approval metadata further down. Classifying twice meant
+          // deciding twice what a failure means, in two places, differently.
+          const gatedRisk = classifyGatedTool(ctx.toolName, args, trustedRiskLevel);
+          const grantRiskLevel = gatedRisk.riskLevel;
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
@@ -3698,15 +3698,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // provenance signal for a bash/git/connector call, and stamping
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
-            try {
-              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input, trustedRiskLevel);
-              trustMeta = {
-                riskLevel,
-                approvalClass,
-                assessmentMode: 'heuristic',
-                description: describeToolUse(toolName, input),
-              };
-            } catch (err) {
+            if (!gatedRisk.classified) {
               // A tool nobody could classify must not be offered for approval:
               // the card would carry no risk class, and the client reads an
               // absent approvalClass as permission to show "Always allow".
@@ -3716,13 +3708,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 workspaceId: executionScopeId,
                 sessionId,
                 toolName,
-                error: err instanceof Error ? err.message : String(err),
+                error: gatedRisk.reason,
               });
               return {
                 cancel: true,
                 reason: `${toolName} could not be risk-assessed, so it was not run.`,
               };
             }
+            trustMeta = {
+              riskLevel: gatedRisk.riskLevel,
+              approvalClass: gatedRisk.approvalClass,
+              assessmentMode: 'heuristic',
+              description: describeToolUse(toolName, input),
+            };
           }
 
           // Send approval_required SSE event to the client.
