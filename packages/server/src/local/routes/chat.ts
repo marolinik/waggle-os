@@ -3670,7 +3670,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 assessmentMode: 'heuristic',
                 description: describeToolUse(toolName, input),
               };
-            } catch { /* enrichment is best-effort — approval still fires */ }
+            } catch (err) {
+              // A tool nobody could classify must not be offered for approval:
+              // the card would carry no risk class, and the client reads an
+              // absent approvalClass as permission to show "Always allow".
+              // Deny here instead. The execution floor would refuse the call
+              // anyway, so this changes the reported reason, not the outcome.
+              log.warn('[security] tool risk classification failed; denying the tool', {
+                workspaceId: executionScopeId,
+                sessionId,
+                toolName,
+                error: err instanceof Error ? err.message : String(err),
+              });
+              return {
+                cancel: true,
+                reason: `${toolName} could not be risk-assessed, so it was not run.`,
+              };
+            }
           }
 
           // Send approval_required SSE event to the client.

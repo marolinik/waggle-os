@@ -226,7 +226,7 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(payload.trustSource).toBeUndefined();
   });
 
-  it('sends an approval card with no risk class when the classifier throws', async () => {
+  it('denies the tool without an approval card when the classifier throws', async () => {
     stubProvider('write_file', { path: CLASSIFIER_THROW_SENTINEL, content: 'hello' });
     const { status, events } = await runTurn(
       createWorkspace('classifier-throw'),
@@ -235,20 +235,13 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     );
     expect(status).toBe(200);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-23) — the enrichment catch swallows, so
-    // the card reaches the client carrying no risk class at all, and the web
-    // client reads an absent approval class as safe enough to offer
-    // "Always allow" on a call nobody classified.
-    const approval = events.find(e => e.event === 'approval_required');
-    expect(approval).toBeDefined();
-    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
-    expect(payload.toolName).toBe('write_file');
-    expect(payload.riskLevel).toBeUndefined();
-    expect(payload.approvalClass).toBeUndefined();
-    expect(payload.assessmentMode).toBeUndefined();
-    expect(payload.description).toBeUndefined();
+    // A tool nobody could classify is not offered for approval: the card would
+    // carry no risk class, and the client reads an absent approval class as
+    // permission to show "Always allow".
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
 
-    // The call is still denied, but by the timeout rather than by the failure.
+    // The call is denied by the classification failure itself, and the turn
+    // still completes because the denial reaches the model as a tool result.
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, CLASSIFIER_THROW_SENTINEL))).toBe(false);
   });
