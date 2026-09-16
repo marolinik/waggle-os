@@ -19,8 +19,9 @@
 > panel id (`TD-CHAT-33`…`TD-CHAT-42`, `TD-TEST-8`) kept its number. Below, lines 117,
 > 176, 287, 320 and 357 still spell the panel's `TD-CHAT-31`/`TD-CHAT-32` — read those as
 > 43/44. §5.0's "Highest existing at HEAD" line is a snapshot of `ea82185d` and is stale:
-> **`docs/TECH-DEBT.md` is the only safe source for the next free id**, which is
-> `TD-CHAT-45` / `TD-TEST-10` / `TD-REL-6` / `TD-ENV-2` as of `93326e03`.
+> **`docs/TECH-DEBT.md` is the only safe source for the next free id** — read the last
+> row of each family there rather than trusting any number written in this file, including
+> this sentence.
 > Line numbers are at `ea82185d`.
 
 # Phase 4 Execution Plan — `/remove-technical-debt`, software-design-philosophy lens
