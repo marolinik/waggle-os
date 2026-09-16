@@ -386,13 +386,14 @@ export function buildChatCommandContext(input: {
   orchestrator: Orchestrator;
   executionWorkspaceId: string | undefined;
   sessionId: string;
-  persistedMemoryReadAllowed: boolean;
   turnMutationPolicy: TurnMutationPolicy;
 }) {
   const {
-    server, orchestrator, executionWorkspaceId, sessionId,
-    persistedMemoryReadAllowed, turnMutationPolicy,
+    server, orchestrator, executionWorkspaceId, sessionId, turnMutationPolicy,
   } = input;
+  // Derived, not supplied: the caller passed the policy and a flag computed
+  // from it, so the two could disagree.
+  const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
   return {
     // Command handlers interpolate this value into user-facing agent
     // instructions. Keep the non-workspace observability sentinel out of
@@ -3293,7 +3294,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           orchestrator: sessionOrch,
           executionWorkspaceId,
           sessionId,
-          persistedMemoryReadAllowed,
           turnMutationPolicy,
         });
         const marketplaceSubcommand = message.trim().match(

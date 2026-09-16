@@ -9,10 +9,10 @@
  * behavior and are not a spec: a bug found while pinning is marked `QUIRK` and
  * ledgered, never fixed here (docs/TESTING.md Characterization Backlog).
  *
- * The policy inputs are derived the way the handler derives them
- * (`persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy)`),
- * so a directive suffix steers a pin from the message text alone, as in the
- * route pins in chat-route-characterization.test.ts.
+ * The turn policy is classified from the message the way the handler does it,
+ * and the helper derives its memory gates from that policy, so a directive
+ * suffix steers a pin from the message text alone, as in the route pins in
+ * chat-route-characterization.test.ts.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
@@ -76,7 +76,6 @@ function contextFor(message: string, overrides: Partial<CommandContextInput> = {
     orchestrator: stubOrchestrator(async () => EMPTY_RECALL).orchestrator,
     executionWorkspaceId: undefined,
     sessionId: 'pin-session',
-    persistedMemoryReadAllowed: allowsPersistedMemoryRead(turnMutationPolicy),
     turnMutationPolicy,
     ...overrides,
   });
