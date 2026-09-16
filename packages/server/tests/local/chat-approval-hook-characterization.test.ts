@@ -360,4 +360,34 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     // records that it did. `assessmentMode` is `heuristic` on BOTH paths, so
     // the card gives the operator no way to tell them apart either.
   });
+
+  it('fails the turn before the hook when a tool argument cannot be coerced', async () => {
+    // `{"toString": 0}` is ordinary JSON a model can emit. `??` does not shield
+    // it: the value is non-nullish, so ToString runs, `toString` is not
+    // callable, and the inherited `valueOf` returns an object -- TypeError.
+    stubProvider('write_file', { path: { toString: 0 }, content: 'hello' });
+    const { status, events } = await runTurn(
+      createWorkspace('coercion'),
+      'Write hello into the unreadable path',
+      'approval-coercion',
+    );
+    expect(status).toBe(200);
+
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36): the approval hook is never entered.
+    // `onToolUse` runs at tool-executor.ts:126 (step 2) and calls
+    // describeToolUse, while the pre:tool hook is step 4 -- so on the parent
+    // chat path the coercion throws before any approval decision is made.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+
+    // The throw escapes the agent loop and ends the whole turn. The client is
+    // told only `Cannot convert object to primitive value` -- an internal
+    // TypeError forwarded verbatim, with no code and no actionable text
+    // (the passthrough is TD-CHAT-15). There is no `done`, so the turn has no
+    // assistant reply at all.
+    const failure = events.find(e => e.event === 'error');
+    expect(failure).toBeDefined();
+    expect(JSON.parse(failure!.data).message).toBe('Cannot convert object to primitive value');
+    expect(events.some(e => e.event === 'done')).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'coercion-target.txt'))).toBe(false);
+  });
 });
