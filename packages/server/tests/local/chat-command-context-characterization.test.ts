@@ -177,8 +177,15 @@ describe('buildChatCommandContext (characterization)', () => {
     });
 
     it('the persisted-memory denial wins over the conversation-history denial', async () => {
-      const message = '/status - do not use conversation history';
-      expect(await contextFor(message, { executionWorkspaceId: 'ws-1', persistedMemoryReadAllowed: false }).getWorkspaceState())
+      // One directive denies both, so the precedence is observed on a turn the
+      // route can actually receive rather than forced through the helper's
+      // inputs. Without the two policy assertions the pin would be vacuous:
+      // the persisted-memory gate returns before the history gate is read.
+      const message = '/now - do not use my saved memory or conversation history';
+      const policy = classifyExplicitTurnMutationPolicy(message);
+      expect(allowsPersistedMemoryRead(policy)).toBe(false);
+      expect(allowsConversationHistory(policy)).toBe(false);
+      expect(await contextFor(message, { executionWorkspaceId: 'ws-1' }).getWorkspaceState())
         .toBe('Persisted workspace state is disabled for this turn.');
     });
 
