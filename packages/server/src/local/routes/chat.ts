@@ -500,7 +500,7 @@ import { getBoundTeamServer } from '../team-server-binding.js';
 import { fetchTeamServer } from '../team-server-egress.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
 import { addArtifact, patchArtifactInWorkspace, readArtifactIndex } from './artifact-index.js';
-import type { ArtifactKind, GoalAncestry } from '@waggle/shared';
+import type { ArtifactKind } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 import {
   DECISION_MATRIX_TOOL_SEQUENCE,
@@ -518,6 +518,10 @@ import {
   resolveExplicitReadOnlyToolChoice,
   shouldRequireCapabilityAcquisitionTools,
   shouldUsePersistedMemoryForTurn,
+  hasRegulatedDisclaimer,
+  resolveApprovalTimeoutPolicy,
+  resolveChatAncestry,
+  type ApprovalTimeoutPolicy,
   type BoundedExactMemoryRequest,
 } from './chat-turn-policy.js';
 
@@ -538,9 +542,13 @@ export {
   isExplicitMemoryRecallRequest,
   isExplicitMemorySaveRequest,
   resolveExplicitReadOnlyToolChoice,
+  hasRegulatedDisclaimer,
+  resolveApprovalTimeoutPolicy,
+  resolveChatAncestry,
   shouldNarrowToolsForConversationalTurn,
   shouldRequireCapabilityAcquisitionTools,
 } from './chat-turn-policy.js';
+export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -662,20 +670,6 @@ const GENERATED_ARTIFACT_TO_LIBRARY: Record<string, {
   },
 };
 
-/**
- * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
- * active workspace name; `goal` is omitted in chat (personas carry no goal — it
- * lights up for agent runs that carry an AgentDef.goal). Returns {} when there
- * is no workspace, so the prompt section self-suppresses.
- */
-export function resolveChatAncestry(
-  server: { workspaceManager?: { get?: (id: string) => { name?: string } | null | undefined } },
-  workspaceId: string | undefined,
-): GoalAncestry {
-  const name = workspaceId ? server.workspaceManager?.get?.(workspaceId)?.name : undefined;
-  return name ? { project: name } : {};
-}
-
 /** Injected runners still need request-scoped evidence boundaries. */
 export function shouldPackageSystemPromptForTurn(
   hasCustomRunner: boolean,
@@ -683,26 +677,6 @@ export function shouldPackageSystemPromptForTurn(
   closedWorldRewrite: boolean,
 ): boolean {
   return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
-}
-
-export function hasRegulatedDisclaimer(content: string, personaId: string): boolean {
-  const normalized = content.toLowerCase();
-  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
-  const hasAdvisorReferral = (advisor: string): boolean => (
-    new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
-    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
-  );
-
-  if (personaId === 'finance-owner') {
-    return /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
-      || hasAdvisorReferral('(?:licensed\\s+)?(?:accountant|financial advisor)');
-  }
-  if (personaId === 'hr-manager' || personaId === 'legal-professional') {
-    return normalized.includes('not legal advice')
-      || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized)
-      || hasAdvisorReferral('(?:(?:licensed\\s+)?attorney|legal team)');
-  }
-  return false;
 }
 
 
@@ -1121,22 +1095,7 @@ export function bindExactWorkspaceMemorySearchTool(
 // Read once at plugin registration — consistent for the lifetime of the server
 const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
 
-const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000;
 const APPROVAL_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
-
-export interface ApprovalTimeoutPolicy {
-  timeoutMs: number;
-  action: 'deny' | 'hold';
-}
-
-export function resolveApprovalTimeoutPolicy(env: NodeJS.ProcessEnv = process.env): ApprovalTimeoutPolicy {
-  const configuredTimeout = Number(env.WAGGLE_APPROVAL_TIMEOUT_MS);
-  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
-    ? Math.floor(configuredTimeout)
-    : DEFAULT_APPROVAL_TIMEOUT_MS;
-  const action = env.WAGGLE_APPROVAL_TIMEOUT_ACTION?.trim().toLowerCase() === 'hold' ? 'hold' : 'deny';
-  return { timeoutMs, action };
-}
 
 interface ApprovalWaitOptions {
   pendingApprovals: Map<string, {

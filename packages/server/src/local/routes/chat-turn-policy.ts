@@ -17,6 +17,7 @@
 import { READONLY_TOOLS } from '@waggle/agent/permissions';
 import { isBoundedSingleFileRoundTrip } from '@waggle/agent/tool-filter';
 import type { AgentLoopConfig, AutonomyLevel } from '@waggle/agent';
+import type { GoalAncestry } from '@waggle/shared';
 import {
   actionableMemoryDirectiveText,
   allowsConversationHistory,
@@ -732,3 +733,52 @@ export function conversationalToolPolicyPrompt(
   return `\n\n# Current Turn Tool Policy\nThis is a normal conversational turn. Some action, inspection, plugin, planning, and external research tools may be intentionally hidden until the user asks for a concrete action or lookup. Do not mention this policy. Do not infer or tell the user that a capability is missing because a tool is absent on this turn. If the user asks what Waggle can do, answer at the product level and offer one concrete next step.`;
 }
 
+/**
+ * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
+ * active workspace name; `goal` is omitted in chat (personas carry no goal — it
+ * lights up for agent runs that carry an AgentDef.goal). Returns {} when there
+ * is no workspace, so the prompt section self-suppresses.
+ */
+export function resolveChatAncestry(
+  server: { workspaceManager?: { get?: (id: string) => { name?: string } | null | undefined } },
+  workspaceId: string | undefined,
+): GoalAncestry {
+  const name = workspaceId ? server.workspaceManager?.get?.(workspaceId)?.name : undefined;
+  return name ? { project: name } : {};
+}
+
+export function hasRegulatedDisclaimer(content: string, personaId: string): boolean {
+  const normalized = content.toLowerCase();
+  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
+  const hasAdvisorReferral = (advisor: string): boolean => (
+    new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+  );
+
+  if (personaId === 'finance-owner') {
+    return /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
+      || hasAdvisorReferral('(?:licensed\\s+)?(?:accountant|financial advisor)');
+  }
+  if (personaId === 'hr-manager' || personaId === 'legal-professional') {
+    return normalized.includes('not legal advice')
+      || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized)
+      || hasAdvisorReferral('(?:(?:licensed\\s+)?attorney|legal team)');
+  }
+  return false;
+}
+
+const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000;
+
+export interface ApprovalTimeoutPolicy {
+  timeoutMs: number;
+  action: 'deny' | 'hold';
+}
+
+export function resolveApprovalTimeoutPolicy(env: NodeJS.ProcessEnv = process.env): ApprovalTimeoutPolicy {
+  const configuredTimeout = Number(env.WAGGLE_APPROVAL_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? Math.floor(configuredTimeout)
+    : DEFAULT_APPROVAL_TIMEOUT_MS;
+  const action = env.WAGGLE_APPROVAL_TIMEOUT_ACTION?.trim().toLowerCase() === 'hold' ? 'hold' : 'deny';
+  return { timeoutMs, action };
+}
