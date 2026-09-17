@@ -336,7 +336,7 @@ loads at import time in any of these paths — the cost is module graph, not SQL
 | CA-5 | `TraceRecorder` built per request in the chat handler while the composition root already built its own for `HarnessTraceBridge` — two instances over one store | `routes/chat.ts`, `local/index.ts` | decorate `server.traceRecorder` at the root and share the instance | P2 | **closed** — see the CA-5 note below |
 | CA-5b | The same duplicate construction at two fleet sites | `local/fleet-run-executor.ts:660`, `local/routes/fleet.ts:380` | same remedy, but **no fleet test touches the trace path** — pin first | P3 | open |
 | CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
-| CA-7 | Nothing but one test enforces the layer; a new module in `routes/` inherits no boundary | repo-wide | `import/no-restricted-paths` ESLint rule covering the policy layer | P3 | open — Phase 6 |
+| CA-7 | Nothing but one test enforces the layer; a new module in `routes/` inherits no boundary | `eslint.config.js` | `@typescript-eslint/no-restricted-imports` scoped to all three files of the policy graph — **not** `import/no-restricted-paths`, whose plugin is only a transitive dep of `eslint-config-next` under `apps/www` | P3 | **closed** — `a40475e2` (Phase 6) |
 
 ### The boundary that now exists
 
