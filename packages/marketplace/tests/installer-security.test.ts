@@ -412,6 +412,42 @@ describe('MarketplaceInstaller security boundaries', () => {
     expect(readFileSync(skillPath, 'utf8')).toBe('# Benign scanned skill');
   });
 
+  it('explains a catalog skill URL returning 404 without claiming a scan or installing a stub', async () => {
+    const name = `missing-skill-${randomUUID()}`;
+    const skillPath = join(homedir(), '.waggle', 'skills', `${name}.md`);
+    cleanupPaths.push(skillPath);
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      name,
+      install_manifest: { skill_url: 'https://raw.githubusercontent.com/example/collection/main/SKILL.md' },
+    }), {}, vi.fn().mockResolvedValue(new Response('', { status: 404 })) as FetchFn);
+
+    const result = await installer.install({ packageId: 1 });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/HTTP 404.*individual skill.*SKILL\.md/i);
+    expect(result.scanResult).toBeUndefined();
+    expect(existsSync(skillPath)).toBe(false);
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
+  it('does not install a generated placeholder when a catalog entry has no skill content', async () => {
+    const name = `metadata-only-skill-${randomUUID()}`;
+    const skillPath = join(homedir(), '.waggle', 'skills', `${name}.md`);
+    cleanupPaths.push(skillPath);
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      name,
+      repository_url: null,
+      install_manifest: null,
+    }));
+
+    const result = await installer.install({ packageId: 1 });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/no SKILL\.md content/i);
+    expect(existsSync(skillPath)).toBe(false);
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
   it('preserves GitHub owner/repo npm shorthand as one positional argument', () => {
     expect(assertSafeNpmPackageSpec('example/safe-package')).toBe('example/safe-package');
   });
