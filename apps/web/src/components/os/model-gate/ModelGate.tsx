@@ -873,7 +873,7 @@ export function ModelGate({
           ) : (
             <>
               <AlertTriangle className="size-4 shrink-0" aria-hidden />
-              <span>No working model yet — add a provider key or a local model below.</span>
+              <span>No working model yet — add a provider key, LAN gateway, or on-device model below.</span>
             </>
           )}
         </div>
@@ -896,7 +896,7 @@ export function ModelGate({
             tab === 'cloud' ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          <KeyRound className="size-3.5" aria-hidden /> Cloud / API
+          <KeyRound className="size-3.5" aria-hidden /> API key / LAN
         </button>
         <button
           type="button"
@@ -920,6 +920,20 @@ export function ModelGate({
           <p className="text-xs text-muted-foreground">
             Connect a cloud provider with your own key, or add an OpenAI-compatible endpoint.
           </p>
+          {cloudProviders.some((provider) => provider.id === 'openai-compatible') && (
+            <button
+              type="button"
+              onClick={() => selectProvider('openai-compatible')}
+              disabled={compatibleLocked}
+              aria-pressed={selected === 'openai-compatible'}
+              className="w-full rounded-lg border border-[var(--honey-line)] bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="block text-sm font-semibold text-foreground">Use a LAN or custom gateway</span>
+              <span className="block text-xs text-muted-foreground">
+                Connect LiteLLM, vLLM, or another API-compatible endpoint. No API key is needed if your gateway does not require one.
+              </span>
+            </button>
+          )}
           {(providersError || catalogNeedsRefresh) && (
             <div
               role={providersError ? 'alert' : 'status'}

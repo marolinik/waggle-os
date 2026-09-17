@@ -140,6 +140,22 @@ async function selectProviderAndType(providerName: RegExp, key: string) {
 }
 
 describe('ModelGate', () => {
+  it('offers a visible keyless LAN gateway path during onboarding', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    render(<ModelGate variant="onboarding" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /use a lan or custom gateway/i }));
+    expect(screen.getByLabelText(/endpoint url/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/api key \(optional\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/no api key is needed if your gateway does not require one/i)).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/endpoint url/i)));
+  });
+
   it('discovers, verifies, and atomically saves a keyless compatible endpoint', async () => {
     const endpoint = 'http://10.33.0.153:4000/v1';
     const model = 'openai-compatible/qwen3.8-flash-next';
@@ -186,6 +202,49 @@ describe('ModelGate', () => {
     expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
     expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
     expect(mocks.adapter.testCompatibleProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('discovers all LAN gateway models and saves the selected primary without a key', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const names = ['qwen3.8-flash-next', 'qwen3.8-27b-uncensored', 'qwen3.8-27b'];
+    const models = names.map((name) => ({
+      id: `openai-compatible/${name}`,
+      name,
+      cost: '$',
+      speed: 'fast',
+    }));
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models,
+      modelsSource: 'provider-api',
+    });
+    render(<ModelGate variant="onboarding" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /use a lan or custom gateway/i }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/endpoint url/i)));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: endpoint } });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    await screen.findByRole('option', { name: names[2] });
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText(/^model$/i), { target: { value: models[1].id } });
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      {
+        baseUrl: endpoint,
+        models: models.map((model) => model.id),
+        defaultModel: models[1].id,
+      },
+    ));
   });
 
   it('prefills a persisted compatible endpoint after remount', async () => {

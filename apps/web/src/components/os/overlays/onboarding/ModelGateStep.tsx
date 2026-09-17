@@ -23,8 +23,8 @@ const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
         <Cpu className="w-10 h-10 text-honey mx-auto mb-3" />
         <h2 className="text-2xl font-display font-bold text-foreground mb-2">Connect a model</h2>
         <p className="text-sm text-muted-foreground">
-          Waggle needs one model to think with. Bring your own provider key — stored encrypted
-          in your Vault — or run a model locally. Nothing leaves your machine without your key.
+          Waggle needs one model to think with. Use an on-device model, a LAN gateway,
+          or a cloud provider with your own key stored in Vault. Prompts go to the endpoint you choose.
         </p>
       </div>
 
