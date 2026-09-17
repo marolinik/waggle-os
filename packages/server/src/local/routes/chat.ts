@@ -4293,13 +4293,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
 
         // ── Start execution trace (self-evolution substrate) ──
-        // Lazy-created per request so unit tests with no traceStore decorator
-        // (legacy suites) still pass. Assigned to the hoisted outer-scope
-        // variables so the outer catch can finalize with outcome='abandoned'
-        // on any exception path (H-07 G4 fix). This operational audit trail is
-        // intentionally retained for bounded/read-only turns; it is not learned
-        // memory or a user-work mutation.
-        traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
+        // Taken from the composition root, not built here (CA-5). Still read
+        // defensively so unit tests with no decorator (legacy suites) pass.
+        // Assigned to the hoisted outer-scope variables so the outer catch can
+        // finalize with outcome='abandoned' on any exception path (H-07 G4 fix).
+        // This operational audit trail is intentionally retained for
+        // bounded/read-only turns; it is not learned memory or a user-work
+        // mutation.
+        traceRecorder = server.traceRecorder ?? null;
         traceHandle = traceRecorder
           ? traceRecorder.start({
               sessionId,
