@@ -453,7 +453,7 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, describeToolUseSafe, readableText, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -3690,22 +3690,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 description: describeToolUse(toolName, input),
               };
             } catch (error) {
-              // The content-based assessment failed, so the heuristic block
-              // below supplies the approval class instead — a weaker one than
-              // the assessment produces for the same install (TD-CHAT-38), and
-              // nothing on the card distinguishes the two. The operator needs
-              // the cause: a non-string `name` from the model reads very
-              // differently from an unreadable starter-skill directory.
-              log.warn('[security] install_capability trust assessment failed; falling back to the heuristic class', {
+              // An install nobody could assess is an unknown install, not a
+              // medium one. Falling through to the heuristic block offered the
+              // same install as medium/elevated — weaker than the high/critical
+              // this assessment produces for it — with `assessmentMode:
+              // heuristic` on both paths, so the card could not be told apart.
+              // Refuse it instead, like a tool nobody could classify. The
+              // operator needs the cause: a non-string `name` from the model
+              // reads very differently from an unreadable starter-skill
+              // directory.
+              log.warn('[security] install_capability trust assessment failed; refusing the install', {
                 workspaceId: executionScopeId,
                 sessionId,
                 toolName,
                 error,
               });
+              return {
+                cancel: true,
+                reason: `${toolName} could not be trust-assessed, so it was not run.`,
+              };
             }
           }
-          // Track A review: if the install assessment threw, OR for any non-install
-          // gated tool, derive risk heuristically so approvalClass is NEVER absent
+          // Track A review: for any non-install gated tool, derive risk
+          // heuristically so approvalClass is NEVER absent
           // (an absent approvalClass would let the FE offer "Always allow" on a
           // critical op — fail-open). trustSource is OMITTED here: there is no real
           // provenance signal for a bash/git/connector call, and stamping
@@ -4724,7 +4731,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               && boundedExactPersistedMemoryLookup
               ? {}
               : input;
-            const stepText = describeToolUse(name, disclosedInput);
+            const stepText = describeToolUseSafe(name, disclosedInput);
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input: disclosedInput });
             // Waggle Dance: emit tool call signal
@@ -4861,8 +4868,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const fileAction = fileTools[name];
             const filePathInput = input.path ?? input.filePath;
             if (fileAction && filePathInput && !isError) {
-              const filePath = String(filePathInput);
-              sendEvent('file_created', { filePath, fileAction });
+              // The path is model-supplied and may not be coercible. A
+              // disclosure must never end the turn, and a `file_created` naming
+              // an unreadable path would assert something we cannot state, so
+              // the event is dropped rather than faked (TD-CHAT-36).
+              const filePath = readableText(filePathInput);
+              if (filePath !== undefined) sendEvent('file_created', { filePath, fileAction });
             }
 
           // TeamSync push — after save_memory in team workspace (fire-and-forget)

@@ -324,11 +324,10 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(payload.permissions).toBeDefined();
   });
 
-  it('falls back to the heuristic class when the install_capability assessment throws', async () => {
+  it('denies the install when the install_capability trust assessment throws', async () => {
     // `path.basename` receives the model-supplied name unvalidated, so a
-    // non-string name throws ERR_INVALID_ARG_TYPE inside the assessment try —
-    // ordinary JSON, no mock. The catch swallows it and the heuristic block
-    // below supplies the approval class, so this is not a fail-open.
+    // non-string name throws ERR_INVALID_ARG_TYPE inside the assessment try --
+    // ordinary JSON, no mock.
     stubProvider('install_capability', { name: 123, source: 'marketplace' });
     toolSelection.transmitFullCatalog = true;
     let status: number, events: Array<{ event: string; data: string }>;
@@ -342,52 +341,65 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
       toolSelection.transmitFullCatalog = false;
     }
     expect(status).toBe(200);
-    const approval = events.find(e => e.event === 'approval_required');
-    expect(approval).toBeDefined();
-    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
-    expect(payload.toolName).toBe('install_capability');
-    // The catch was taken: the content-based assessment never assigned its
-    // fields, so the heuristic block supplied the class instead.
-    expect(payload.trustSource).toBeUndefined();
-    expect(payload.explanation).toBeUndefined();
-    expect(payload.permissions).toBeUndefined();
-    expect(payload.assessmentMode).toBe('heuristic');
-    expect(payload.riskLevel).toBe('medium');
-    expect(payload.approvalClass).toBe('elevated');
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-38): this is not only a missing log. The
-    // same install that the assessment rates high/critical (pin above) is
-    // offered as medium/elevated once the assessment throws, and nothing
-    // records that it did. `assessmentMode` is `heuristic` on BOTH paths, so
-    // the card gives the operator no way to tell them apart either.
+
+    // An install nobody could assess is an unknown install, not a medium one.
+    // Until 2026-09-16 the catch fell through to the heuristic block and the
+    // same install was offered as medium/elevated -- weaker than the
+    // high/critical the assessment produces for it (pinned above), with
+    // `assessmentMode: heuristic` on both paths so the card could not be told
+    // apart. It is now refused outright, like a tool nobody could classify.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+
+    // The turn still completes: the denial reaches the model as a tool result
+    // and the loop answers without the tool.
+    expect(events.some(e => e.event === 'done')).toBe(true);
   });
 
-  it('fails the turn before the hook when a tool argument cannot be coerced', async () => {
+  it('discloses an unreadable tool argument and blocks the tool without ending the turn', async () => {
     // `{"toString": 0}` is ordinary JSON a model can emit. `??` does not shield
     // it: the value is non-nullish, so ToString runs, `toString` is not
     // callable, and the inherited `valueOf` returns an object -- TypeError.
     stubProvider('write_file', { path: { toString: 0 }, content: 'hello' });
-    const { status, events } = await runTurn(
-      createWorkspace('coercion'),
-      'Write hello into the unreadable path',
-      'approval-coercion',
-    );
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('coercion'),
+        'Write hello into notes.txt',
+        'approval-coercion',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
     expect(status).toBe(200);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36): the approval hook is never entered.
-    // `onToolUse` runs at tool-executor.ts:126 (step 2) and calls
-    // describeToolUse, while the pre:tool hook is step 4 -- so on the parent
-    // chat path the coercion throws before any approval decision is made.
-    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    // The two disclosures survive the unreadable argument. Until 2026-09-16
+    // both coerced it bare, and the first one to run ended the whole turn with
+    // an SSE `error` carrying `Cannot convert object to primitive value`
+    // verbatim and no `done` at all.
+    const step = events.find(e => e.event === 'step' && JSON.parse(e.data).content?.startsWith('Writing file:'));
+    expect(step).toBeDefined();
+    // The prefix is a wire contract: session-utils re-parses it out of stored
+    // assistant prose, so the marker is substituted inside the sentence rather
+    // than the sentence being replaced.
+    expect(JSON.parse(step!.data).content).toBe('Writing file: <unreadable>...');
+    // The sibling disclosure asserts a fact it cannot state, so it is dropped
+    // rather than faked.
+    expect(events.some(e => e.event === 'file_created')).toBe(false);
 
-    // The throw escapes the agent loop and ends the whole turn. The client is
-    // told only `Cannot convert object to primitive value` -- an internal
-    // TypeError forwarded verbatim, with no code and no actionable text
-    // (the passthrough is TD-CHAT-15). There is no `done`, so the turn has no
-    // assistant reply at all.
-    const failure = events.find(e => e.event === 'error');
-    expect(failure).toBeDefined();
-    expect(JSON.parse(failure!.data).message).toBe('Cannot convert object to primitive value');
-    expect(events.some(e => e.event === 'done')).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, 'coercion-target.txt'))).toBe(false);
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 / TD-CHAT-37): the approval hook
+    // itself still coerces. `keyForTool` throws inside the saved-grant lookup,
+    // `HookRegistry.fire` swallows it with no log, and the execution floor is
+    // what actually refuses the call -- so the turn fails closed, but no
+    // approval card is ever offered and nothing records why. The explicit-deny
+    // half of TD-CHAT-36 replaces this path.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result).toContain('[BLOCKED]');
+
+    // The turn completes: the denial reaches the model as a tool result.
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
 });

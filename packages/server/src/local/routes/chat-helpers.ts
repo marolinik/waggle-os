@@ -1461,6 +1461,66 @@ export function buildTemplateWelcomePrompt(template: {
   return prompt;
 }
 
+/**
+ * Coerce a model-supplied value for display, or report that it cannot be read.
+ *
+ * `String(value)` throws on JSON a model can emit (`{"toString": 0}`), so every
+ * disclosure that interpolates a tool argument needs this. Returning `undefined`
+ * rather than a placeholder lets the caller drop the disclosure entirely, which
+ * is the right choice when the disclosure asserts a fact -- claiming a file was
+ * created at `<unreadable>` is worse than staying quiet (TD-CHAT-36).
+ */
+export function readableText(value: unknown): string | undefined {
+  try {
+    return String(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `describeToolUse` for the disclosure path, which must never end a turn.
+ *
+ * Tool arguments come from the model, and a value like `{"toString": 0}` is
+ * ordinary JSON: it is non-nullish, so `??` does not shield it, ToString runs,
+ * `toString` is not callable, the inherited `valueOf` returns an object, and
+ * the interpolation throws. At the disclosure call site that throw escapes the
+ * agent loop and kills the whole turn (TD-CHAT-36).
+ *
+ * The retry substitutes a marker for the values that cannot be read rather than
+ * abandoning the sentence, because the output is a duplicated wire contract:
+ * `session-utils.ts` re-parses these strings out of stored assistant prose with
+ * `TOOL_CONTENT_PATTERNS`, so `Writing file: <unreadable>...` keeps its timeline
+ * row while a generic `Using write_file...` would silently reclassify it.
+ *
+ * This is the disclosure half of TD-CHAT-36 only. The sites that make a
+ * security decision -- the approval hook, `keyForTool`, and the confirmation
+ * predicates -- refuse an unreadable argument instead of describing it, and are
+ * deliberately NOT routed through this helper.
+ */
+export function describeToolUseSafe(name: string, input: Record<string, unknown>): string {
+  try {
+    return describeToolUse(name, input);
+  } catch {
+    const readable: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+      try {
+        String(value);
+        readable[key] = value;
+      } catch {
+        readable[key] = '<unreadable>';
+      }
+    }
+    try {
+      return describeToolUse(name, readable);
+    } catch {
+      // The tool name itself is a string by the loop's own contract, so this
+      // is unreachable; it exists so the helper is total by construction.
+      return `Using ${name}...`;
+    }
+  }
+}
+
 /** Generate a human-readable description of what a tool is doing */
 export function describeToolUse(name: string, input: Record<string, unknown>): string {
   switch (name) {
