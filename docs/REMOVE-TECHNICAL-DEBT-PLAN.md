@@ -38,7 +38,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 | 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
 | 3 | clean-code | done (pass 1: 7 fixes applied, 22 ledgered) | TECH-DEBT.md | 2026-09-15 |
 | 4 | software-design-philosophy | done | TECH-DEBT.md + TESTING.md | 2026-09-17 |
-| 5 | clean-architecture | pending | ARCHITECTURE.md | |
+| 5 | clean-architecture | done (pass 1: one use case extracted, 7 violations mapped) | ARCHITECTURE.md | 2026-09-17 |
 | 6 | pragmatic-programmer | pending | TECH-DEBT.md | |
 | 7 | release-it | pending | RELIABILITY.md | |
 | 8 | domain-driven-design | pending | ARCHITECTURE.md | |
@@ -100,6 +100,11 @@ Add-when condition becomes true.
 | 2026-09-17 | 4 | **Founder: the held-proposal branch drops its derived-persistence requirement** (TD-CHAT-46) | Parking a proposal for explicit human approval is a pending decision, not a learned fact. Narrowest of the four options: memory write-back stays gated on automated turns exactly as Steal #13 intends, and `decideReviewTurnTool` becomes reachable. |
 | 2026-09-17 | 4 | **Founder: Phase 4 closes on the full Wave 2 pin program** — all seven sets (P4-03/04/05/07/08/09/10b) | Not a trimmed P1-only subset. Pins assert HTTP/SSE/persisted/audit-store observables only, per the ratified F15 constraint. |
 | 2026-09-17 | 4 | **Founder: the Phase 4 stack merges bottom-up, three PRs preserved** | #88 then #89 then #90 (and the PRs stacked above them), each keeping its own body and review trail. A squash would collapse the test and fix commits and destroy the pin-then-fix ordering every Phase 4 decision was recorded against. |
+| 2026-09-17 | 5 | Phase 5 entered on the chat turn path; scored **4/10** (2 of 7 diagnostics). Satisfied: the framework is confined to `packages/server`, and the package graph is acyclic (`shared ← hive-mind-core ← core ← agent ← server`) so ADP holds and no component split is warranted. Seven violations recorded as CA-1..CA-7 in `docs/ARCHITECTURE.md` | The tangle named at intake is real but narrower than "business rules in controllers": the rules are already pure functions — they were trapped in the delivery module. Import cost measures it: `routes/chat.ts` 1352 ms vs the leaf `chat-helpers.ts` 77 ms |
+| 2026-09-17 | 5 | The extracted use case is the **Conversational Turn Policy**, moved verbatim to `routes/chat-turn-policy.ts` (`a2f24546`) with `chat.ts` re-exporting every previously public symbol | Highest churn inside `chat.ts` picked it: 33 commits/6mo on the intent-classification block, 15 on the memory predicates, 11 on the filters. 652 non-blank lines moved; six differ, each only by a leading `export`. No test file was edited, so the 717 pins covering the cluster prove behavior preservation instead of being adjusted to fit it |
+| 2026-09-17 | 5 | Home is `routes/chat-turn-policy.ts`, beside the four existing framework-free chat modules — not a new folder, not `@waggle/agent` | The boundary is enforced by dependency direction plus a guard test, not by folder name. `@waggle/agent` is the correct long-term home, but the cluster depends on `TurnMutationPolicy` from `chat-helpers.ts`; moving it there would invert a dependency or drag the helper along. Deferred to Phase 8 |
+| 2026-09-17 | 5 | `@waggle/agent` gains additive `./permissions` and `./tool-filter` export subpaths (`86d0d19f`) rather than the policy module inlining the constants | CRP was violated at the `exports` map: the barrel was the only entry point, so one frozen array cost 937 ms against 4 ms for `permissions.ts` alone. Inlining would duplicate knowledge the domain package owns — the DRY violation Phase 6 exists to catch |
+| 2026-09-17 | 5 | Enforcement is a source-level import-graph walk (`3e380190`), verified non-vacuous; the ESLint `import/no-restricted-paths` rule is ledgered as CA-7 for Phase 6 | An outward import that only a rare branch reaches still costs every consumer the load, so a runtime probe would miss it. The guard was proven by adding `import { FrameStore } from '@waggle/core'` and watching the first case go red |
 
 ## Next Actions
 
@@ -111,6 +116,11 @@ Add-when condition becomes true.
 - [x] Phase 2 pass 1: five structure-only extractions on `chat.ts` (agent, `302e1d29`..`9bb544a7`)
 - [x] Branch review (43-agent workflow, 3 refuters per finding): 5/5 refactor commits behavior-preserved; 9 doc/test findings fixed in `a55a1712` + this docs commit (agent, 2026-09-15)
 - [x] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder, PR #84 `b248ce38`)
+- [x] Phase 5 pass 1: dependency map + 7 violations (CA-1..CA-7) in `docs/ARCHITECTURE.md`; CA-1 and CA-2 closed on `chore/tech-debt-phase5-chat-turn-policy` (agent, `86d0d19f`, `a2f24546`, `3e380190`, 2026-09-17)
+- [ ] CA-3 / CA-4: invert the memory boundary — `@waggle/agent` use cases own a `FrameStore`/`SessionStore` interface that `@waggle/core` implements; 61 files import `@waggle/core` today (agent, P1)
+- [ ] CA-5: hoist `CredentialPool` / `TraceRecorder` construction out of the handler into the composition root (agent, P2)
+- [ ] CA-6: second slice — the regulated-content disclaimer, goal ancestry and approval-timeout policy still in the route module (agent, P2)
+- [ ] CA-7: `import/no-restricted-paths` ESLint rule covering the policy layer (agent, P3 — Phase 6)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
 - [x] Review + merge `chore/tech-debt-phase3-chat-clean-code` into `main`; the nine Phase 3 Adopted Conventions ratified as amended by founder delegation (agent, session 0915 S3, 51-agent review; merged via PR #85)
