@@ -37,7 +37,7 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 | 1 | working-with-legacy-code | done | TESTING.md + TECH-DEBT.md | 2026-09-15 |
 | 2 | refactoring-patterns | done (pass 1: safe extractions) | TECH-DEBT.md | 2026-09-15 |
 | 3 | clean-code | done (pass 1: 7 fixes applied, 22 ledgered) | TECH-DEBT.md | 2026-09-15 |
-| 4 | software-design-philosophy | in-progress | TECH-DEBT.md | 2026-09-16 |
+| 4 | software-design-philosophy | done | TECH-DEBT.md + TESTING.md | 2026-09-17 |
 | 5 | clean-architecture | pending | ARCHITECTURE.md | |
 | 6 | pragmatic-programmer | pending | TECH-DEBT.md | |
 | 7 | release-it | pending | RELIABILITY.md | |
@@ -128,5 +128,5 @@ Add-when condition becomes true.
 - [x] TD-CHAT-36 disclosure half: `describeToolUseSafe` at `chat.ts:4714` and `readableText` at `chat.ts:4871` (agent, `99d50139`) — 4871 was missing from the site list; fixing 4714 alone only moved the failure one site along
 - [x] TD-CHAT-36 explicit-deny half — CLOSED 2026-09-17 (`1bf99956`, pinned first in `a23a21b4`). Covered at one point instead of site by site: `classifyGatedTool` proves readability by calling the deciders, and the hook decides on that flag first. The `proposeHeld` pin found the branch unreachable (TD-CHAT-46), so its coercion is moot.
 - [ ] TD-CHAT-36 residue: the four in-hook `describeToolUse` sites (`chat.ts:3650, 3717, 3754, 3779`) stay bare by decision — making them total is a deny-to-prompt posture change and needs the founder. Reachable with `create_skill` and a hostile `name`: every decider succeeds, 3754 throws, and the floor denies with a generic message and no card.
-- [ ] Phase 4 Wave 2 pin program (P4-03/04/05/07/08/09/10b) — still the largest unbuilt block; TD-CHAT-10's retry/fallback chain is its own recorded prerequisite
+- [x] Phase 4 Wave 2 pin program — COMPLETE 2026-09-17, all seven sets. P4-03 runtime construction, P4-04 replay + credential rotation (TD-CHAT-10's recorded prerequisite), P4-05 compaction injection scan + three helper gaps, P4-07 post-commit swallows, P4-08 TeamSync egress, P4-09 turn-trace asymmetry, P4-10b command values + sentinel contract. Each set records the reachability fact its harness needed, in the test file, so the next reader does not rediscover it
 
