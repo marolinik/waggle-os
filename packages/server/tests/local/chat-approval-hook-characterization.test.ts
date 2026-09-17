@@ -494,4 +494,43 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
+
+  it('blocks a decidable tool whose description cannot be built', async () => {
+    // Every security decider reads this call fine: the risk classifier touches
+    // no argument for `create_skill`, `needsConfirmation` is a set membership
+    // test, and `keyForTool` returns '*'. Only the human-readable description
+    // reads `name`, and it cannot.
+    stubProvider('create_skill', { name: { toString: 0 }, content: 'hello' });
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('describe-coercion'),
+        'Create a skill',
+        'approval-describe-coercion',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
+    expect(status).toBe(200);
+
+    // The disclosure outside the hook is total and says so.
+    expect(events.some(e => e.event === 'step'
+      && JSON.parse(e.data).content === 'Creating skill: <unreadable>...')).toBe(true);
+
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 residue): the description built
+    // INSIDE the hook is not. It throws, `HookRegistry.fire` swallows it, and
+    // the execution floor refuses the call with its own generic message -- for
+    // a call every security decider read without trouble. The denial is right;
+    // the silence and the message are not.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'create_skill');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result).toContain(
+      '[BLOCKED] "create_skill" changes state and requires explicit approval.',
+    );
+
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
+  });
 });
