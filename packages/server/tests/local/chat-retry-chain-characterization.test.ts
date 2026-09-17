@@ -24,22 +24,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
-
-/** Splits an SSE body into its `event:`/`data:` pairs. */
-function parseSSE(raw: string): Array<{ event: string; data: string }> {
-  const events: Array<{ event: string; data: string }> = [];
-  for (const block of raw.split(/\n\n/).filter(Boolean)) {
-    let event = '';
-    let data = '';
-    for (const line of block.split('\n')) {
-      if (line.startsWith('event: ')) event = line.slice(7);
-      else if (line.startsWith('data: ')) data = line.slice(6);
-    }
-    if (event || data) events.push({ event, data });
-  }
-  return events;
-}
+import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 
 /**
  * The exact error the safe-replay predicate recognises.

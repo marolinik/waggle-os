@@ -24,7 +24,7 @@ import type { FastifyInstance } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import { persistMessage } from '../../src/local/routes/chat-persistence.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 
 const PRIMARY_MODEL = 'primary-test-model';
 const BUDGET_MODEL = 'budget-test-model';
@@ -38,21 +38,6 @@ const POISONED_SUMMARY =
 
 const BENIGN_SUMMARY =
   'The user asked about release packaging and we agreed the installer is built on Windows first.';
-
-/** Splits an SSE body into its `event:`/`data:` pairs. */
-function parseSSE(raw: string): Array<{ event: string; data: string }> {
-  const events: Array<{ event: string; data: string }> = [];
-  for (const block of raw.split(/\n\n/).filter(Boolean)) {
-    let event = '';
-    let data = '';
-    for (const line of block.split('\n')) {
-      if (line.startsWith('event: ')) event = line.slice(7);
-      else if (line.startsWith('data: ')) data = line.slice(6);
-    }
-    if (event || data) events.push({ event, data });
-  }
-  return events;
-}
 
 function sseBody(...frames: unknown[]): Response {
   const payload = frames.map(f => `data: ${JSON.stringify(f)}\n\n`).join('') + 'data: [DONE]\n\n';
