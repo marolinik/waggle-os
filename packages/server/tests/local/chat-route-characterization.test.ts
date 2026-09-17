@@ -93,6 +93,14 @@ describe('POST /api/chat request validation (characterization)', () => {
     expect(body).toEqual({ error: 'retryTarget requires retry: true', code: 'INVALID_RETRY_TARGET' });
   });
 
+  it('rejects a non-string message', async () => {
+    // Row-54 Gap: every other wire field had a type pin except the one field
+    // the route cannot run without.
+    const { status, body } = await post({ message: 42 });
+    expect(status).toBe(400);
+    expect(body).toEqual({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
+  });
+
   it.each([
     ['workspace', { workspace: 123 }],
     ['workspaceId', { workspaceId: { id: 'x' } }],

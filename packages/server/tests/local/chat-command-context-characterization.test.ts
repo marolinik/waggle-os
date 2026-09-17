@@ -59,11 +59,15 @@ function stubWorkspaceManager(dataDir: string, workspace?: StubWorkspace) {
 }
 
 /** The four server members `buildChatCommandContext` reads, nothing else. */
-function stubServer(dataDir: string, workspace?: StubWorkspace): CommandContextInput['server'] {
+function stubServer(
+  dataDir: string,
+  workspace?: StubWorkspace,
+  skills: Array<{ name: string }> = [],
+): CommandContextInput['server'] {
   return {
     localConfig: { dataDir },
     workspaceManager: stubWorkspaceManager(dataDir, workspace),
-    agentState: { activateWorkspaceMind: () => true, skills: [] },
+    agentState: { activateWorkspaceMind: () => true, skills },
     cronStore: { list: () => [] },
   } as unknown as CommandContextInput['server'];
 }
@@ -85,6 +89,29 @@ describe('buildChatCommandContext (characterization)', () => {
   it('reports the Personal sentinel as the workspace id when there is no execution workspace', () => {
     expect(contextFor('/status').workspaceId).toBe('Personal');
     expect(contextFor('/status', { executionWorkspaceId: 'ws-1' }).workspaceId).toBe('ws-1');
+  });
+
+  describe('listSkills', () => {
+    // Row-57 Gap: `listSkills` had no direct pin, only incidental traversal.
+    const skills = [{ name: 'risk-assessment' }, { name: 'release-notes' }];
+
+    it('returns the installed skill names when a persisted memory read is allowed', () => {
+      expect(contextFor('/skills', { server: stubServer(os.tmpdir(), undefined, skills) }).listSkills())
+        .toEqual(['risk-assessment', 'release-notes']);
+    });
+
+    it('returns nothing when the turn denies a persisted memory read', () => {
+      // The skill roster is persisted state, so the same read boundary that
+      // hides saved memory hides it -- the list is empty, not withheld with an
+      // error, and the caller cannot tell "none installed" from "not allowed".
+      const message = '/skills - do not use my saved memory';
+      const denied = classifyExplicitTurnMutationPolicy(message);
+      expect(allowsPersistedMemoryRead(denied)).toBe(false);
+      expect(contextFor(message, {
+        server: stubServer(os.tmpdir(), undefined, skills),
+        turnMutationPolicy: denied,
+      }).listSkills()).toEqual([]);
+    });
   });
 
   describe('searchMemory', () => {
