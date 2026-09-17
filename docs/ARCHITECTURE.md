@@ -284,3 +284,87 @@ Instructions for the agent...
 - **Audit Trail**: Every capability install, uninstall, and security decision is recorded.
 - **Input Validation**: All route parameters validated against path traversal and injection.
 - **YOLO Mode**: Opt-in auto-approval, disabled by default.
+
+---
+
+## Layer Map & Dependency Rule
+
+Added by Phase 5 (`clean-architecture`) of the technical-debt journey — see
+[`REMOVE-TECHNICAL-DEBT-PLAN.md`](./REMOVE-TECHNICAL-DEBT-PLAN.md). The Dependency Rule:
+source dependencies point inward, and nothing in an inner circle names anything in an outer one.
+
+| Circle | What lives there | Where |
+|---|---|---|
+| Entities | tiers, wire types, Zod schemas, MCP catalog | `@waggle/shared` |
+| Use cases | agent loop, personas, routing, evolution, capability/trust | `@waggle/agent` |
+| Interface adapters | routes, persona/tool filters, governance, persistence, stores | `@waggle/server`, `@waggle/core`, `@waggle/hive-mind-core` |
+| Frameworks & drivers | Fastify, better-sqlite3 + sqlite-vec, Tauri shell, Vite/React | `sidecar/`, `app/`, `apps/web` |
+
+**Score: 4/10** (2 of 7 diagnostics satisfied, measured 2026-09-17 at `edf21ef6`).
+
+Satisfied: the framework is confined to `packages/server` (no `fastify` import anywhere in
+`@waggle/agent`, `@waggle/core` or `@waggle/shared`), and the component graph is acyclic —
+`shared ← hive-mind-core ← core ← agent ← server`, with the only apparent back-edges being
+comments in `hive-mind-core` that explain why the dependency was *avoided*. ADP holds, so no
+component split is warranted here.
+
+Failing: business rules cannot be tested without the DB and the framework; dependencies do not
+all point inward; the DB cannot be swapped without touching use cases; the chat use case *is*
+the delivery mechanism; and the composition root does not wire everything.
+
+### Measured cost of the violations
+
+| Import | Cost | Note |
+|---|---|---|
+| `routes/chat.ts` | 1352 ms | the whole server graph, for one pure predicate |
+| `routes/chat-helpers.ts` | 77 ms | leaf module, same kind of rules |
+| `@waggle/agent` (barrel) | 937 ms | the only entry point before this phase |
+| `@waggle/agent/permissions` | 4 ms | where `READONLY_TOOLS` actually lives |
+| `@waggle/agent/tool-filter` | 7 ms | where `isBoundedSingleFileRoundTrip` lives |
+
+Measured with a `process.dlopen`-instrumented `tsx` probe under Node 22.23.2. No native binding
+loads at import time in any of these paths — the cost is module graph, not SQLite.
+
+### Violations
+
+| # | Violation | Location | Fix | Priority | Status |
+|---|---|---|---|---|---|
+| CA-1 | ~770 lines of pure turn policy defined inside the Fastify plugin module, so every consumer and every test loads the delivery mechanism | `routes/chat.ts` (was lines 608–1781) | move to `routes/chat-turn-policy.ts`, re-export from `chat.ts`, guard the graph | P1 | **closed** — `a2f24546` + `3e380190` |
+| CA-2 | `@waggle/agent` published only its barrel, so importing one frozen array cost 937 ms (CRP violated at the `exports` map) | `packages/agent/package.json` | additive `./permissions` and `./tool-filter` subpaths | P1 | **closed** — `86d0d19f` |
+| CA-3 | Use cases name concrete persistence classes | `agent/src/cognify.ts`, `agent/src/orchestrator.ts` | the use case owns a `FrameStore`/`SessionStore` *interface*; `@waggle/core` implements it | P1 | open |
+| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in 61 files | package edge `agent → core` | narrow through subpaths, then invert the memory boundary per CA-3 | P1 | open |
+| CA-5 | Concrete infrastructure constructed inside the handler (`CredentialPool`, `TraceRecorder`) instead of at the composition root | `routes/chat.ts` | hoist construction to `local/index.ts`, inject through the existing decorator seam | P2 | open |
+| CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
+| CA-7 | Nothing but one test enforces the layer; a new module in `routes/` inherits no boundary | repo-wide | `import/no-restricted-paths` ESLint rule covering the policy layer | P3 | open — Phase 6 |
+
+### The boundary that now exists
+
+`routes/chat-turn-policy.ts` (814 lines) holds the rules that decide what one chat turn may do.
+Its entire transitive graph is three files — itself, `chat-helpers.ts`, and the import-free
+`provider-model-catalog.ts` — and its only runtime package dependencies are
+`@waggle/agent/permissions` and `@waggle/agent/tool-filter`. No framework, no persistence, no
+`node:` I/O. `tests/local/chat-turn-policy-boundary.test.ts` walks that graph at the source level
+and fails the first time an outward import appears; it was verified non-vacuous by adding
+`import { FrameStore } from '@waggle/core'` and watching the first case go red.
+
+Control flow still crosses inward from the route; only the source dependency was inverted.
+
+CA-6 widened the same boundary rather than drawing a new one. `resolveChatAncestry`,
+`hasRegulatedDisclaimer` and `resolveApprovalTimeoutPolicy` moved verbatim; the regulated-content
+disclaimer — a `Record` literal rebuilt inside the handler body on every turn, plus a three-way
+conjunction the route kept in step with two detectors it did not own — became
+`regulatedDisclaimerSuffix`, which answers the whole question and returns the suffix or `''`. The
+route keeps only `allowResponseDecoration`, which is turn scope, not the rule. The graph did not
+change: the one new import is `GoalAncestry`, type-only and therefore erased.
+
+## Decision Log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-09-17 | The extracted policy lives at `routes/chat-turn-policy.ts`, beside the four existing framework-free chat modules, rather than in a new folder or in `@waggle/agent` | The boundary is enforced by dependency direction and a guard test, not by folder name. `@waggle/agent` is the architecturally correct home but the cluster depends on `TurnMutationPolicy` from `chat-helpers.ts`; moving it there would either invert a dependency (agent importing server) or drag `chat-helpers.ts` along. Relocation is a Phase 8 concern, and CA-6 will use the same pattern first |
+| 2026-09-17 | The `@waggle/agent` barrel leak is fixed by additive export subpaths, not by inlining the constants | Inlining `READONLY_TOOLS` would duplicate knowledge `@waggle/agent` owns — the DRY violation Phase 6 exists to catch. The subpaths are additive: no existing barrel consumer changes, and every future inward import has a light path to take |
+| 2026-09-17 | Enforcement is a source-level import-graph walk, not a runtime probe and not a lint rule | An outward import that only a rare branch reaches still costs every consumer the load, and a runtime probe would not see it. A lint rule covers the whole layer at once and is the better long-term answer — it is ledgered as CA-7 for Phase 6, where habits that stop re-accumulation are the explicit subject |
+| 2026-09-17 | The slice is the 33-commit churn cluster, moved verbatim, with `chat.ts` re-exporting every previously public symbol | 652 non-blank lines moved; six differ, each by a leading `export` keyword, because `chat.ts` still consumes them and they were module-private. No test file was edited, so the 717 pins that cover the cluster prove behavior preservation rather than being adjusted to fit it |
+| 2026-09-17 | CA-6's disclaimer rule was pinned at the HTTP boundary before it moved, not after | `REGULATED_DISCLAIMER_MAP` is a `const` inside the handler body: no unit seam reaches it that the move itself would not have to create first, so a unit pin would have encoded the new shape and proved nothing about what shipped. An injected `agentRunner` isolates the block exactly — the neighbouring `/schedule` nudge and grounding hedge are both `!hasCustomRunner` gated. Proven non-vacuous by shortening the hr-manager string and watching that case go red |
+| 2026-09-17 | CA-6 landed as two commits — a verbatim move, then an Extract Function — never one | The two need different proofs. The move is provable by set-differencing the destination's added lines against the source's removed lines (exactly one survives: the `GoalAncestry` type import). The extraction genuinely changes shape, so its proof is the seven pins written against the old code passing unchanged against the new. Mixing them would have left a reviewer unable to trust either |
+| 2026-09-17 | No component split proposed | The package graph is already acyclic and the framework is already confined to one package. The debt is *inside* `packages/server` and at the `agent → core` edge — splitting services would add a distributed monolith on top of an unsolved boundary problem |
