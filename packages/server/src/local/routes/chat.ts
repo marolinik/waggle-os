@@ -453,7 +453,7 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, describeToolUseSafe, readableText, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, describeToolUseSafe, readableText, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -518,7 +518,7 @@ import {
   resolveExplicitReadOnlyToolChoice,
   shouldRequireCapabilityAcquisitionTools,
   shouldUsePersistedMemoryForTurn,
-  hasRegulatedDisclaimer,
+  regulatedDisclaimerSuffix,
   resolveApprovalTimeoutPolicy,
   resolveChatAncestry,
   type ApprovalTimeoutPolicy,
@@ -4978,20 +4978,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Post-processing: append professional disclaimer for regulated personas ONLY when content is substantive
         let finalContent = result.content;
-        const REGULATED_DISCLAIMER_MAP: Record<string, string> = {
-          'hr-manager': '\n\n---\n*This is general HR guidance, not legal advice. Consult your legal team for binding decisions.*',
-          'legal-professional': '\n\n---\n*This is AI-assisted legal analysis, not legal advice. This does not create an attorney-client relationship. Consult a licensed attorney for binding legal guidance.*',
-          'finance-owner': '\n\n---\n*Financial figures are estimates based on available data. Verify with your accountant or financial advisor before making decisions.*',
-        };
-        if (allowResponseDecoration
-          && activePersonaId
-          && REGULATED_DISCLAIMER_MAP[activePersonaId]
-          && finalContent) {
-          if (isRegulatedContent(finalContent, activePersonaId)) {
-            if (!hasRegulatedDisclaimer(finalContent, activePersonaId)) {
-              finalContent += REGULATED_DISCLAIMER_MAP[activePersonaId];
-            }
-          }
+        if (allowResponseDecoration && finalContent) {
+          finalContent += regulatedDisclaimerSuffix(finalContent, activePersonaId);
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work

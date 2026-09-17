@@ -25,6 +25,7 @@ import {
   classifyExplicitTurnMutationPolicy,
   filterToolsByTurnMutationPolicy,
   isExclusiveSuppliedOnlyResponseRequest,
+  isRegulatedContent,
   resolveExplicitPersistedMemoryReadDirective,
   type TurnMutationPolicy,
 } from './chat-helpers.js';
@@ -765,6 +766,35 @@ export function hasRegulatedDisclaimer(content: string, personaId: string): bool
       || hasAdvisorReferral('(?:(?:licensed\\s+)?attorney|legal team)');
   }
   return false;
+}
+
+/**
+ * The professional disclaimer a reply earns, per regulated persona. These are
+ * the user-visible half of the rule, so they are data the policy owns rather
+ * than strings the route happens to hold.
+ */
+const REGULATED_DISCLAIMER_MAP: Record<string, string> = {
+  'hr-manager': '\n\n---\n*This is general HR guidance, not legal advice. Consult your legal team for binding decisions.*',
+  'legal-professional': '\n\n---\n*This is AI-assisted legal analysis, not legal advice. This does not create an attorney-client relationship. Consult a licensed attorney for binding legal guidance.*',
+  'finance-owner': '\n\n---\n*Financial figures are estimates based on available data. Verify with your accountant or financial advisor before making decisions.*',
+};
+
+/**
+ * What to append to a reply for its persona, or `''` when nothing is owed.
+ * Three conditions, in the order the route applied them: the persona must be
+ * one of the regulated three, the reply must be substantive in that domain, and
+ * it must not already carry a disclaimer of its own.
+ */
+export function regulatedDisclaimerSuffix(
+  content: string,
+  personaId: string | null | undefined,
+): string {
+  if (!personaId) return '';
+  const disclaimer = REGULATED_DISCLAIMER_MAP[personaId];
+  if (!disclaimer) return '';
+  if (!isRegulatedContent(content, personaId)) return '';
+  if (hasRegulatedDisclaimer(content, personaId)) return '';
+  return disclaimer;
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000;
