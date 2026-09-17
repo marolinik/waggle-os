@@ -13,6 +13,14 @@
     "./external-process-env": {
       "types": "./dist/external-process-env.d.ts",
       "import": "./dist/external-process-env.js"
+    },
+    "./permissions": {
+      "types": "./dist/permissions.d.ts",
+      "import": "./dist/permissions.js"
+    },
+    "./tool-filter": {
+      "types": "./dist/tool-filter.d.ts",
+      "import": "./dist/tool-filter.js"
     }
   },
   "files": [
