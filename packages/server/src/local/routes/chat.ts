@@ -3573,6 +3573,33 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const gatedRisk = classifyGatedTool(ctx.toolName, args, trustedRiskLevel);
           const grantRiskLevel = gatedRisk.riskLevel;
 
+          // A call whose arguments cannot be read is decided here, before any
+          // site that would read them. Every reader below coerces something a
+          // model supplied — the confirmation predicate, the grant fingerprint,
+          // the held-proposal summary — and a throw in any of them escapes to
+          // `HookRegistry.fire`, which swallows it. The call still failed
+          // closed at the execution floor, but no card was offered, no reason
+          // was recorded, and for a tool whose floor check coerces the same
+          // argument the client never even saw the tool resolve.
+          //
+          // This is the same treatment `cc3e1436` gave a tool nobody could
+          // classify, for the same reason: the missing fact is the decision
+          // itself, so the call is refused rather than guessed at. It is NOT a
+          // deny-to-prompt change — the outcome was already a denial; what
+          // changes is that the denial is now explicit, logged and reported.
+          if (!gatedRisk.classified) {
+            log.warn('[security] tool arguments could not be read; denying the tool', {
+              workspaceId: executionScopeId,
+              sessionId,
+              toolName: ctx.toolName,
+              error: gatedRisk.reason,
+            });
+            return {
+              cancel: true,
+              reason: `${ctx.toolName} could not be risk-assessed, so it was not run.`,
+            };
+          }
+
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
@@ -3718,23 +3745,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // provenance signal for a bash/git/connector call, and stamping
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
-            if (!gatedRisk.classified) {
-              // A tool nobody could classify must not be offered for approval:
-              // the card would carry no risk class, and the client reads an
-              // absent approvalClass as permission to show "Always allow".
-              // Deny here instead. The execution floor would refuse the call
-              // anyway, so this changes the reported reason, not the outcome.
-              log.warn('[security] tool risk classification failed; denying the tool', {
-                workspaceId: executionScopeId,
-                sessionId,
-                toolName,
-                error: gatedRisk.reason,
-              });
-              return {
-                cancel: true,
-                reason: `${toolName} could not be risk-assessed, so it was not run.`,
-              };
-            }
+            // `gatedRisk.classified` is true here: an unclassifiable tool was
+            // denied at the top of the hook, before any decision site ran.
             trustMeta = {
               riskLevel: gatedRisk.riskLevel,
               approvalClass: gatedRisk.approvalClass,

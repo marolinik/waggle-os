@@ -164,8 +164,15 @@ export async function executeToolCall(
       riskLevel: existingTool.riskLevel,
     });
     if (hookResult.cancelled) {
+      const blockedMsg = `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`;
+      // Disclose the refusal the same way the execution floor below does. A
+      // tool the caller already announced has to resolve for that caller: when
+      // only the floor reported its denials, a hook refusal left an announced
+      // tool hanging with no result and no reason. This reports the decision;
+      // it does not change it.
+      if (onToolResult) onToolResult(fnName, fnArgs, blockedMsg);
       return {
-        content: `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`,
+        content: blockedMsg,
         toolCallId: toolCall.id,
         countedAsUsed: false,
         succeeded: false,

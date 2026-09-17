@@ -1,3 +1,7 @@
+import { createCoreLogger } from '@waggle/core';
+
+const log = createCoreLogger('hooks');
+
 export type HookEvent =
   | 'pre:tool'
   | 'post:tool'
@@ -91,8 +95,19 @@ export class HookRegistry {
           return { cancelled: true, reason: result.reason };
         }
         if (result?.authorize === true) authorized = true;
-      } catch {
-        // Hook errors are non-fatal — log but continue
+      } catch (error) {
+        // Hook errors are non-fatal for the loop, but they are never
+        // uninteresting: a hook that threw took no decision, so whatever it was
+        // registered to authorize or refuse is now undecided. The execution
+        // floor still fails closed, and this line is the only record that the
+        // gate did not actually run. Arguments are deliberately not logged —
+        // they can carry user content and secrets.
+        log.warn('[hooks] hook threw; continuing without its decision', {
+          event,
+          toolName: ctx.toolName,
+          workspaceId: ctx.workspaceId,
+          error,
+        });
       }
     }
     this.recordActivity(event, false, undefined, ctx.workspaceId);

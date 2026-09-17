@@ -395,16 +395,17 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     // rather than faked.
     expect(events.some(e => e.event === 'file_created')).toBe(false);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 / TD-CHAT-37): the approval hook
-    // itself still coerces. `keyForTool` throws inside the saved-grant lookup,
-    // `HookRegistry.fire` swallows it with no log, and the execution floor is
-    // what actually refuses the call -- so the turn fails closed, but no
-    // approval card is ever offered and nothing records why. The explicit-deny
-    // half of TD-CHAT-36 replaces this path.
+    // No approval card: a call whose arguments cannot be read is not a
+    // low-risk call, it is an undecidable one, so the hook refuses it outright
+    // rather than offering it. Until 2026-09-17 the same outcome was reached by
+    // accident -- `keyForTool` threw inside the saved-grant lookup,
+    // `HookRegistry.fire` swallowed it with no log, and the execution floor was
+    // what actually refused the call, reporting its own generic message.
     expect(events.some(e => e.event === 'approval_required')).toBe(false);
     const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
     expect(toolResult).toBeDefined();
-    expect(JSON.parse(toolResult!.data).result).toContain('[BLOCKED]');
+    expect(JSON.parse(toolResult!.data).result)
+      .toBe('[BLOCKED] write_file could not be risk-assessed, so it was not run.');
 
     // The turn completes: the denial reaches the model as a tool result.
     expect(events.some(e => e.event === 'done')).toBe(true);
@@ -443,15 +444,17 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
       && JSON.parse(e.data).content === 'Running command: <unreadable>...')).toBe(true);
     expect(events.some(e => e.event === 'tool' && JSON.parse(e.data).name === 'bash')).toBe(true);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 explicit-deny half / TD-CHAT-37): the
-    // predicate throw escapes to `HookRegistry.fire`, which swallows it with no
-    // log, and the same coercion then throws again inside the tool-executor
-    // floor -- so the call never runs, but NEITHER an approval card NOR a
-    // `tool_result` is ever emitted. The client is left with an announced tool
-    // that never resolves, and nothing anywhere records why.
+    // The hook now decides this before any predicate reads the argument, so the
+    // refusal is explicit and reported. Until 2026-09-17 the predicate throw
+    // escaped to `HookRegistry.fire`, which swallowed it with no log, and the
+    // same coercion threw AGAIN inside the tool-executor floor -- so the call
+    // never ran, but neither an approval card nor a `tool_result` was ever
+    // emitted and the client kept an announced tool that never resolved.
     expect(events.some(e => e.event === 'approval_required')).toBe(false);
-    expect(events.some(e => e.event === 'tool_result'
-      && JSON.parse(e.data).name === 'bash')).toBe(false);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'bash');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result)
+      .toBe('[BLOCKED] bash could not be risk-assessed, so it was not run.');
 
     // The turn itself still completes and the tool is counted as unused.
     expect(events.some(e => e.event === 'done')).toBe(true);
