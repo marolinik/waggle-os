@@ -4881,7 +4881,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const generatedPath = generatedArtifact
               ? String(input[generatedArtifact.pathKey] ?? '').trim()
               : '';
-            if (generatedArtifact && generatedPath && !isError) {
+            // A turn with no active workspace has no Library to index into.
+            // `executionScopeId` falls back to the `personal::default`
+            // sentinel, which is a scope id and not a path segment, and the
+            // index joins it into `dataDir/workspaces/<id>/artifacts.json`:
+            // POSIX writes a file no reader can ever reach (`/api/artifacts`
+            // rejects the sentinel through `assertSafeSegment`, and
+            // `workspaceIds()` enumerates real workspaces only), Windows throws
+            // ENOENT on the `:` into a swallowing catch. Skipping is what the
+            // sentinel already means here, and it keeps a non-path value out of
+            // a path-joining interface rather than teaching that interface a
+            // second id namespace (TD-CHAT-34, founder ruling F7). The
+            // generated file itself is still written and still disclosed.
+            if (generatedArtifact && generatedPath && !isError && activeExecutionWorkspaceId) {
               const title = String(input.title ?? path.basename(generatedPath, path.extname(generatedPath))).trim();
               const artifactInput = {
                 title: title || path.basename(generatedPath),
