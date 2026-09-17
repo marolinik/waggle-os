@@ -412,6 +412,12 @@ declare module 'fastify' {
     auditStore: import('@waggle/core').InstallAuditStore;
     cronStore: import('@waggle/core').CronStore;
     traceStore: import('@waggle/core').ExecutionTraceStore;
+    /**
+     * The one recorder over `traceStore`. Shared deliberately: its buffers are
+     * keyed by trace id, and the chat route clears them on every exit path
+     * through the defensive `finalize` in its `finally`.
+     */
+    traceRecorder: TraceRecorder;
     evolutionStore: import('@waggle/core').EvolutionRunStore;
     /**
      * Active behavioral spec — baseline `BEHAVIORAL_SPEC` with any
@@ -575,8 +581,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // aborts anywhere in the app emits on the shared `harnessEvents` emitter;
   // this bridge translates those into rows in `execution_traces` so harness
   // runs become training data for the self-evolution loop.
+  const traceRecorder = new TraceRecorder(traceStore);
+  server.decorate('traceRecorder', traceRecorder);
+
   const harnessTraceBridge = new HarnessTraceBridge({
-    recorder: new TraceRecorder(traceStore),
+    recorder: traceRecorder,
   });
   harnessTraceBridge.start();
   server.decorate('harnessTraceBridge', harnessTraceBridge);
