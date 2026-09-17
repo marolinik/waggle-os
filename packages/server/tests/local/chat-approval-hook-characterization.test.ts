@@ -221,12 +221,20 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     }).id;
   }
 
-  async function runTurn(workspaceId: string, message: string, session: string) {
+  async function runTurn(
+    workspaceId: string,
+    message: string,
+    session: string,
+    extraPayload: Record<string, unknown> = {},
+  ) {
     resetRateLimiter(server);
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message, workspace: workspaceId, session, model: 'claude-sonnet-4-6' },
+      payload: {
+        message, workspace: workspaceId, session, model: 'claude-sonnet-4-6',
+        ...extraPayload,
+      },
     });
     return { status: res.statusCode, events: parseSSE(res.body) };
   }
@@ -387,18 +395,102 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     // rather than faked.
     expect(events.some(e => e.event === 'file_created')).toBe(false);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 / TD-CHAT-37): the approval hook
-    // itself still coerces. `keyForTool` throws inside the saved-grant lookup,
-    // `HookRegistry.fire` swallows it with no log, and the execution floor is
-    // what actually refuses the call -- so the turn fails closed, but no
-    // approval card is ever offered and nothing records why. The explicit-deny
-    // half of TD-CHAT-36 replaces this path.
+    // No approval card: a call whose arguments cannot be read is not a
+    // low-risk call, it is an undecidable one, so the hook refuses it outright
+    // rather than offering it. Until 2026-09-17 the same outcome was reached by
+    // accident -- `keyForTool` threw inside the saved-grant lookup,
+    // `HookRegistry.fire` swallowed it with no log, and the execution floor was
+    // what actually refused the call, reporting its own generic message.
     expect(events.some(e => e.event === 'approval_required')).toBe(false);
     const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
     expect(toolResult).toBeDefined();
-    expect(JSON.parse(toolResult!.data).result).toContain('[BLOCKED]');
+    expect(JSON.parse(toolResult!.data).result)
+      .toBe('[BLOCKED] write_file could not be risk-assessed, so it was not run.');
 
     // The turn completes: the denial reaches the model as a tool result.
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
+  });
+
+  it('blocks a gated tool whose confirmation predicate cannot read its argument', async () => {
+    // `bash` gates on its command text: `needsConfirmation` coerces
+    // `args.command` to look for chain operators. `{"toString": 0}` is ordinary
+    // JSON, so the predicate throws at the FIRST hook site -- before the
+    // saved-grant lookup the sibling pin below reaches, and before any
+    // approval decision is taken.
+    //
+    // `classifyGatedTool` already survives this argument: it catches the same
+    // coercion and returns `classified: false`. But the hook only reads that
+    // flag deep inside the approval enrichment, long after the predicate above
+    // has thrown. Totality at the classifier buys nothing while the check that
+    // reads it runs last.
+    stubProvider('bash', { command: { toString: 0 } });
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('predicate-coercion'),
+        'Run a shell command',
+        'approval-predicate-coercion',
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
+    expect(status).toBe(200);
+
+    // The disclosure survives the unreadable argument (the half of TD-CHAT-36
+    // closed by `99d50139`), so the client is told a command is starting.
+    expect(events.some(e => e.event === 'step'
+      && JSON.parse(e.data).content === 'Running command: <unreadable>...')).toBe(true);
+    expect(events.some(e => e.event === 'tool' && JSON.parse(e.data).name === 'bash')).toBe(true);
+
+    // The hook now decides this before any predicate reads the argument, so the
+    // refusal is explicit and reported. Until 2026-09-17 the predicate throw
+    // escaped to `HookRegistry.fire`, which swallowed it with no log, and the
+    // same coercion threw AGAIN inside the tool-executor floor -- so the call
+    // never ran, but neither an approval card nor a `tool_result` was ever
+    // emitted and the client kept an announced tool that never resolved.
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'bash');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result)
+      .toBe('[BLOCKED] bash could not be risk-assessed, so it was not run.');
+
+    // The turn itself still completes and the tool is counted as unused.
+    expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
+  });
+
+  it('denies every held proposal, because a proposeHeld turn is an automated turn', async () => {
+    // A `proposeHeld` turn is meant to convert a gated proposable tool into a
+    // DURABLE held action that ApprovalsApp shows, rather than a live SSE
+    // prompt no headless caller can answer. The arguments here are perfectly
+    // readable -- this pin is about the branch, not about coercion.
+    stubProvider('write_file', { path: 'notes.txt', content: 'hello' });
+    toolSelection.transmitFullCatalog = true;
+    let status: number, events: Array<{ event: string; data: string }>;
+    try {
+      ({ status, events } = await runTurn(
+        createWorkspace('held-proposal'),
+        'Write hello into notes.txt',
+        'approval-held-proposal',
+        { proposeHeld: true },
+      ));
+    } finally {
+      toolSelection.transmitFullCatalog = false;
+    }
+    expect(status).toBe(200);
+
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-46): `proposeHeld` is one of the two
+    // inputs to `isAutomatedTurn` (chat.ts:2667), an automated turn is a
+    // read-only persistence boundary, and the held branch refuses to enqueue
+    // when derived persistence is off (chat.ts:3611). So the guard fires on
+    // EVERY proposeHeld turn and `decideReviewTurnTool` -- whose only caller is
+    // chat.ts:3618 -- is unreachable in production.
+    expect(events.some(e => e.event === 'step'
+      && JSON.parse(e.data).content === 'Tool proposal denied because memory is disabled for this turn.')).toBe(true);
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
