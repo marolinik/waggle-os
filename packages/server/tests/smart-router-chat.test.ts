@@ -114,6 +114,53 @@ describe('chat smart-router integration', () => {
     expect(response.body).not.toContain('event: model_switch');
   });
 
+  it('indexes nothing when the turn has no active workspace', async () => {
+    // TD-CHAT-34 / F7: a no-active-workspace turn resolves `executionScopeId`
+    // to the `personal::default` sentinel, which is a scope id, not a path
+    // segment -- and the artifact index joins it straight into
+    // `dataDir/workspaces/<id>/artifacts.json`.
+    //
+    // PLATFORM ASYMMETRY, deliberate: on POSIX (this repo's CI is
+    // ubuntu-latest) the write SUCCEEDS and leaves an index no reader can ever
+    // reach, because `/api/artifacts` rejects the sentinel through
+    // `assertSafeSegment` and `workspaceIds()` enumerates real workspaces only.
+    // On Windows `mkdirSync` throws ENOENT on the `:` and the catch swallows
+    // it. So this assertion is the behavior change on CI and a regression
+    // guard on a developer's Windows box.
+    const restoreWorkspace = server.agentState.activeWorkspaceId;
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'Unscoped-Brief.docx', title: 'Unscoped Brief' },
+        'Successfully generated Unscoped-Brief.docx (9.1 KB)',
+      );
+      return {
+        content: 'Created the brief.',
+        toolsUsed: ['generate_docx'],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    let response;
+    try {
+      server.agentState.activeWorkspaceId = null;
+      response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Create a Word launch brief.',
+          session: 'unscoped-artifact-index',
+        },
+      });
+    } finally {
+      server.agentState.activeWorkspaceId = restoreWorkspace;
+    }
+
+    expect(response.statusCode).toBe(200);
+    // The sentinel never reaches the path-joining interface, so no scope
+    // directory is minted for it.
+    expect(fs.existsSync(path.join(tmpDir, 'workspaces', 'personal::default'))).toBe(false);
+  });
+
   it('indexes successful Office and PDF outputs in the workspace Library', async () => {
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       agentConfig.onToolResult?.(

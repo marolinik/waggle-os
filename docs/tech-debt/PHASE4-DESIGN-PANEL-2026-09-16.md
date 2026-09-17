@@ -362,6 +362,11 @@ Highest existing at HEAD: **TD-CHAT-29**, **TD-TEST-7**, **TD-REL-5**, **TD-ENV-
 
 ## 6. Founder ratification list (Rule 5)
 
+> **CLOSED 2026-09-17.** All sixteen decisions are ratified. F1, F2, F3, F5, F8, F12, F14 and F15 were
+> ratified 2026-09-16; F4, F6, F7, F9, F10, F11, F13 and F16 were ratified 2026-09-17, each **as the
+> agent recommended**. The authoritative record is the Key Decisions table in
+> `docs/REMOVE-TECHNICAL-DEBT-PLAN.md`; this section is the question set that produced it.
+
 | # | Decision | Agent recommendation |
 |---|---|---|
 | **F1** | Convention 138 says a security-boundary swallow "fails closed **instead of** logging". P4-18 does both. | **Amend the bullet**: fail-closed is the boundary rule; a `log.warn` carrying the original cause is required, not optional — the turn now fails and the operator needs the `TypeError` text. Do not ship an unreconciled deviation. |
