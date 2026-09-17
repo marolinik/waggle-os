@@ -71,6 +71,22 @@ type ChatRequestRejection = {
   body: { error: string; code?: string };
 };
 
+/**
+ * The one way a request-resolution helper refuses a chat turn (TD-CHAT-18).
+ * Every such helper returns `{ rejection } | { rejection?: undefined; ...fields }`,
+ * and builds the rejection here rather than assembling the shape again, so
+ * "what a refusal looks like" is knowledge this module holds once.
+ *
+ * It deliberately adds no body of its own: the caller still supplies the exact
+ * status, message and code its own pins assert.
+ */
+function rejectChatRequest(
+  status: ChatRequestRejection['status'],
+  body: ChatRequestRejection['body'],
+): { rejection: ChatRequestRejection } {
+  return { rejection: { status, body } };
+}
+
 type ChatRequestFieldInput = {
   message: unknown;
   workspace: unknown;
@@ -123,9 +139,7 @@ export function validateChatRequestFields(
     retry: retryTurn,
     retryTarget: retryTargetRaw,
   } = input;
-  const reject = (status: ChatRequestRejection['status'], body: ChatRequestRejection['body']) => (
-    { rejection: { status, body } }
-  );
+  const reject = rejectChatRequest;
   if (message === undefined || message === '') {
     return reject(400, { error: 'message is required' });
   }
@@ -239,11 +253,7 @@ function resolveChatWorkspaceTarget(
     && historyWorkspace !== 'default'
     && !historyWorkspaceConfig
   ) {
-    const rejection: ChatRequestRejection = {
-      status: 404,
-      body: { error: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' },
-    };
-    return { rejection };
+    return rejectChatRequest(404, { error: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' });
   }
   const historyTarget = resolveChatHistoryTarget(
     server.localConfig.dataDir,
@@ -262,14 +272,10 @@ function resolveChatWorkspaceTarget(
   if (historyWorkspaceId === 'default') {
     const currentChatHistoryLayout = getChatHistoryLayout();
     if (currentChatHistoryLayout.status === 'recovery-required') {
-      const rejection: ChatRequestRejection = {
-        status: 409,
-        body: {
-          error: 'Default chat history needs recovery before it can be used.',
-          code: currentChatHistoryLayout.code,
-        },
-      };
-      return { rejection };
+      return rejectChatRequest(409, {
+        error: 'Default chat history needs recovery before it can be used.',
+        code: currentChatHistoryLayout.code,
+      });
     }
   }
   return {
@@ -315,11 +321,7 @@ function resolveChatWorkspacePaths(
         workspacePathFromTrustedConfig = true;
       } catch (error) {
         log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
-        const rejection: ChatRequestRejection = {
-          status: 409,
-          body: { error: 'Configured workspace directory is unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
-        };
-        return { rejection };
+        return rejectChatRequest(409, { error: 'Configured workspace directory is unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' });
       }
     } else if (usesNamedWorkspace) {
       // Virtual workspace storage — managed files directory
@@ -333,21 +335,13 @@ function resolveChatWorkspacePaths(
   if (authorizedWorkspace && authorizedWorkspace !== workspace) {
     const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
     if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
-      const rejection: ChatRequestRejection = {
-        status: 409,
-        body: { error: 'Active workspace is unavailable', code: 'WORKSPACE_NOT_READY' },
-      };
-      return { rejection };
+      return rejectChatRequest(409, { error: 'Active workspace is unavailable', code: 'WORKSPACE_NOT_READY' });
     }
     if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
-      const rejection: ChatRequestRejection = {
-        status: 403,
-        body: {
-          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
-          code: 'VIEWER_READ_ONLY',
-        },
-      };
-      return { rejection };
+      return rejectChatRequest(403, {
+        error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+        code: 'VIEWER_READ_ONLY',
+      });
     }
 
     const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
@@ -362,11 +356,7 @@ function resolveChatWorkspacePaths(
           );
     } catch (error) {
       log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
-      const rejection: ChatRequestRejection = {
-        status: 409,
-        body: { error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' },
-      };
-      return { rejection };
+      return rejectChatRequest(409, { error: 'Active workspace directory unavailable', code: 'WORKSPACE_ROOT_UNAVAILABLE' });
     }
   }
   return { rejection: undefined, workspacePath, workspacePathFromTrustedConfig, executionWorkspacePath };
