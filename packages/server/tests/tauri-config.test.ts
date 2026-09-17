@@ -535,6 +535,52 @@ describe('Tauri Production Configuration', () => {
     expect(result.outputFiles[0]?.text).toContain('buildExternalProcessEnv');
   });
 
+  it('build-sidecar aliases every published @waggle/agent subpath, not only the first one', async () => {
+    const esbuild = await import('esbuild');
+    // The alias map is hand-maintained and the package `exports` map is not:
+    // adding a subpath export without its alias leaves `tsc` and Node happy and
+    // breaks only the sidecar bundle, on the launch-gate platform. The earlier
+    // test pins one alias by name, which is an example rather than the rule -
+    // so this derives the rule from the exports map itself.
+    const pkg = JSON.parse(fs.readFileSync(
+      path.join(ROOT, 'packages', 'agent', 'package.json'), 'utf-8',
+    )) as { exports?: Record<string, unknown> };
+    const subpaths = Object.keys(pkg.exports ?? {})
+      .filter(key => key.startsWith('./'))
+      .map(key => `@waggle/agent${key.slice(1)}`);
+    expect(subpaths.length).toBeGreaterThan(0);
+
+    // Read the script's OWN alias entries, so the probe bundles the real values
+    // in their real declaration order rather than a reconstruction of them.
+    const script = fs.readFileSync(path.join(ROOT, 'scripts', 'build-sidecar.mjs'), 'utf-8');
+    const alias: Record<string, string> = {};
+    for (const match of script.matchAll(/'(@waggle\/agent[^']*)':\s*path\.join\(root,([^)]*)\)/g)) {
+      const segments = match[2].split(',').map(part => part.trim().replace(/^'|'$/g, '')).filter(Boolean);
+      alias[match[1]] = path.join(ROOT, ...segments);
+    }
+    expect(Object.keys(alias)).toEqual(expect.arrayContaining(subpaths));
+
+    const result = await esbuild.build({
+      stdin: {
+        contents: subpaths
+          .map((specifier, index) => `export * as ns${index} from '${specifier}';`)
+          .join('\n'),
+        loader: 'ts',
+        resolveDir: ROOT,
+        sourcefile: 'sidecar-agent-exports-probe.ts',
+      },
+      absWorkingDir: ROOT,
+      bundle: true,
+      platform: 'node',
+      target: 'node20',
+      format: 'esm',
+      write: false,
+      logLevel: 'silent',
+      alias,
+    });
+    expect(result.errors).toEqual([]);
+  });
+
   it('build-sidecar provenance follows transitive tsconfig inheritance', () => {
     const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-sidecar-tsconfig-'));
     const writeRelative = (relative: string, content: string | Buffer) => {
