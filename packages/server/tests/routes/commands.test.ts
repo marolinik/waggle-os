@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { Orchestrator } from '@waggle/agent';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
@@ -858,6 +859,66 @@ describe('Command Execution Route', () => {
     const body = JSON.parse(res.body);
     expect(body.command).toBe('/catchup');
     expect(body.result).toContain('Catch-Up Briefing');
+  });
+
+  describe('command context values (characterization)', () => {
+    // The pins above assert only the rendered heading, which every branch of
+    // these helpers emits. These assert the VALUES - the three outcomes of a
+    // memory search, and the skill roster - because a refactor that returned
+    // the wrong one of them would keep every heading intact.
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function execute(command: string) {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/commands/execute',
+        payload: { command },
+      });
+      expect(res.statusCode).toBe(200);
+      return JSON.parse(res.body).result as string;
+    }
+
+    it('numbers the first five recall hits and drops the rest', async () => {
+      vi.spyOn(Orchestrator.prototype, 'recallMemory').mockResolvedValue({
+        count: 7,
+        recalled: ['one', 'two', 'three', 'four', 'five', 'six', 'seven'],
+      } as Awaited<ReturnType<Orchestrator['recallMemory']>>);
+      const result = await execute('/memory packaging');
+      expect(result).toContain('1. one');
+      expect(result).toContain('5. five');
+      expect(result).not.toContain('6. six');
+    });
+
+    it('says so when a recall returns nothing', async () => {
+      vi.spyOn(Orchestrator.prototype, 'recallMemory').mockResolvedValue({
+        count: 0,
+        recalled: [],
+      } as Awaited<ReturnType<Orchestrator['recallMemory']>>);
+      expect(await execute('/memory packaging')).toContain('No relevant memories found.');
+    });
+
+    it('reports a failed recall as unavailable rather than as empty', async () => {
+      // The distinction matters: "none found" is an answer, "unavailable" is
+      // not, and the catch is what keeps them apart.
+      vi.spyOn(Orchestrator.prototype, 'recallMemory').mockRejectedValue(new Error('mind closed'));
+      const result = await execute('/memory packaging');
+      expect(result).toContain('Memory search unavailable.');
+      expect(result).not.toContain('No relevant memories found.');
+    });
+
+    it('lists the installed skill names', async () => {
+      const realSkills = server.agentState.skills;
+      server.agentState.skills = [{ name: 'risk-assessment' }, { name: 'release-notes' }] as typeof realSkills;
+      try {
+        const result = await execute('/skills');
+        expect(result).toContain('risk-assessment');
+        expect(result).toContain('release-notes');
+      } finally {
+        server.agentState.skills = realSkills;
+      }
+    });
   });
 
   it('POST /api/commands/execute with empty command returns 400', async () => {

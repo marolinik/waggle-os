@@ -534,6 +534,33 @@ describe('persona acceptance prompt budget', () => {
       .toEqual(['risk-assessment']);
   });
 
+  it('normalizes a padded, differently-cased selected skill', async () => {
+    // Row-54 Gap: the rejection shapes beside this were pinned, the accepting
+    // one was not. The normalized name has to reach the tool schema, because
+    // the enum is what constrains the model's argument -- a name that survives
+    // validation but not normalization would gate on one spelling and offer
+    // another.
+    capturedConfig = null;
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Assess the risk of shipping on Friday.',
+        selectedSkill: '  Risk-Assessment  ',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: 'selected-skill-normalized',
+        workspace: collaborationWorkspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+      .toEqual(['risk-assessment']);
+  });
+
   it.each([
     ['unknown skill', 'not-installed', 409, 'SKILL_NOT_AVAILABLE'],
     ['malformed skill', '../decision-matrix', 400, 'INVALID_SELECTED_SKILL'],
