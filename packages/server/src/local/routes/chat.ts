@@ -1130,6 +1130,11 @@ function hasExplicitPersistedMemoryRecallSignal(message: string): boolean {
 function isReportedToolFailure(result: string): boolean {
   const trimmed = result.trim();
   if (/^(?:error|failed|denied|blocked)(?::|\s|$)/i.test(trimmed)) return true;
+  // The same concept in the marker form the tool executor actually emits. A
+  // blocked tool did not run, so every consumer that reads `!isError` as "the
+  // effect happened" — the `file_created` disclosure, the artifact index — was
+  // being told a denied write had succeeded.
+  if (trimmed.startsWith('[BLOCKED]')) return true;
   try {
     const parsed = JSON.parse(trimmed) as { error?: unknown; ok?: unknown; success?: unknown };
     return parsed.ok === false
@@ -3600,6 +3605,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             };
           }
 
+          // Every approval surface below describes this same call, and the
+          // description reads arguments the deciders never touch, so a call
+          // they all read fine can still have an undescribable name or path.
+          // Build it once here, so "the description could not be built" is
+          // decided in one place instead of at four sites that would each
+          // decide it differently.
+          //
+          // Failure refuses the call rather than substituting a marker.
+          // A description is not a security decision — but it runs INSIDE the
+          // hook, so making it total would convert this denial into an
+          // approval prompt, and the operator would be approving a card whose
+          // "what will happen" line it could not render. Founder ruling
+          // 2026-09-17, the third against deny-to-prompt at a hook site; the
+          // disclosure sites OUTSIDE the hook stay total (`describeToolUseSafe`).
+          let toolDescription: string;
+          try {
+            toolDescription = describeToolUse(ctx.toolName, args);
+          } catch (error) {
+            log.warn('[security] tool description could not be built; denying the tool', {
+              workspaceId: executionScopeId,
+              sessionId,
+              toolName: ctx.toolName,
+              error,
+            });
+            return {
+              cancel: true,
+              reason: `${ctx.toolName} could not be described, so it was not run.`,
+            };
+          }
+
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
@@ -3634,11 +3669,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // grant-store shortcut on purpose \u2014 a saved "Always allow" grant must
           // NOT let a headless reviewer write a skill to disk. The trust boundary:
           // the reviewer can never persist a skill without explicit human approval.
+          //
+          // This branch deliberately does NOT require derived persistence.
+          // `proposeHeld` is one of the two inputs to `isAutomatedTurn`, and an
+          // automated turn is a read-only persistence boundary, so requiring it
+          // here made the guard fire on every proposeHeld turn and left
+          // `decideReviewTurnTool` unreachable — the feature was never
+          // delivered and proposals were dropped instead of parked
+          // (TD-CHAT-46). Parking a proposal is a pending decision awaiting a
+          // human, not a learned fact, so the memory boundary does not govern
+          // it. Memory write-back on an automated turn — auto-save, skill
+          // distillation, KG extraction, correction detection — stays gated by
+          // `allowDerivedPersistence` exactly as Steal #13 intends.
           if (proposeHeldTurn) {
-            if (!allowDerivedPersistence) {
-              sendEvent('step', { content: 'Tool proposal denied because memory is disabled for this turn.' });
-              return { cancel: true, reason: 'Cannot retain an approval while memory is disabled' };
-            }
             const heldSource = sessionId.startsWith('channel-')
               ? `channel:${sessionId}`
               : `session-reviewer:${sessionId}`;
@@ -3647,7 +3690,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               source: heldSource,
               tool: ctx.toolName,
               args,
-              summary: describeToolUse(ctx.toolName, args),
+              summary: toolDescription,
             });
             if (decision.enqueued && 'id' in decision.enqueued) {
               sendEvent('approval_required', {
@@ -3714,7 +3757,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 assessmentMode: trust.assessmentMode,
                 explanation: trust.explanation,
                 permissions: trust.permissions,
-                description: describeToolUse(toolName, input),
+                description: toolDescription,
               };
             } catch (error) {
               // An install nobody could assess is an unknown install, not a
@@ -3751,7 +3794,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               riskLevel: gatedRisk.riskLevel,
               approvalClass: gatedRisk.approvalClass,
               assessmentMode: 'heuristic',
-              description: describeToolUse(toolName, input),
+              description: toolDescription,
             };
           }
 
@@ -3776,7 +3819,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Wait for the client to approve or deny. A configured hold timeout
           // still cancels this live execution, but preserves the proposed call
           // in the durable Approvals inbox for an explicit later decision.
-          const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : describeToolUse(toolName, input);
+          const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : toolDescription;
           const riskLevel = typeof trustMeta?.riskLevel === 'string'
             && (RISK_LEVELS as readonly string[]).includes(trustMeta.riskLevel)
             ? trustMeta.riskLevel as RiskLevel

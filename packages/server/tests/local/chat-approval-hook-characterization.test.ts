@@ -481,15 +481,32 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     }
     expect(status).toBe(200);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-46): `proposeHeld` is one of the two
-    // inputs to `isAutomatedTurn` (chat.ts:2667), an automated turn is a
-    // read-only persistence boundary, and the held branch refuses to enqueue
-    // when derived persistence is off (chat.ts:3611). So the guard fires on
-    // EVERY proposeHeld turn and `decideReviewTurnTool` -- whose only caller is
-    // chat.ts:3618 -- is unreachable in production.
+    // The proposal is PARKED, not dropped. Until 2026-09-17 `proposeHeld` fed
+    // `isAutomatedTurn`, an automated turn was a read-only persistence
+    // boundary, and this branch refused to enqueue without derived persistence
+    // -- so the guard fired on every proposeHeld turn and
+    // `decideReviewTurnTool`, whose only caller is this branch, was unreachable
+    // (TD-CHAT-46). Parking a proposal is a pending decision, not a learned
+    // fact, so the memory boundary no longer governs it.
+    const approval = events.find(e => e.event === 'approval_required');
+    expect(approval).toBeDefined();
+    const payload = JSON.parse(approval!.data) as Record<string, unknown>;
+    expect(payload.toolName).toBe('write_file');
+    expect(payload.held).toBe(true);
     expect(events.some(e => e.event === 'step'
-      && JSON.parse(e.data).content === 'Tool proposal denied because memory is disabled for this turn.')).toBe(true);
-    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+      && JSON.parse(e.data).content === '\u{1F4CB} write_file held for your approval')).toBe(true);
+
+    // The tool is blocked while the proposal waits for a human.
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
+    expect(toolResult).toBeDefined();
+    expect(JSON.parse(toolResult!.data).result).toBe('[BLOCKED] Review turn: write_file held for approval');
+    expect(JSON.parse(toolResult!.data).isError).toBe(true);
+
+    // Nothing was written, so nothing claims it was. `file_created` keys off
+    // `!isError`, and a `[BLOCKED]` result is a failure -- without that, a
+    // denied write announced a file that does not exist.
+    expect(events.some(e => e.event === 'file_created')).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'notes.txt'))).toBe(false);
 
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
@@ -518,17 +535,16 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(events.some(e => e.event === 'step'
       && JSON.parse(e.data).content === 'Creating skill: <unreadable>...')).toBe(true);
 
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-36 residue): the description built
-    // INSIDE the hook is not. It throws, `HookRegistry.fire` swallows it, and
-    // the execution floor refuses the call with its own generic message -- for
-    // a call every security decider read without trouble. The denial is right;
-    // the silence and the message are not.
+    // The description built INSIDE the hook is deliberately not total: it is
+    // how the operator reads the card, so a card it cannot render is refused
+    // rather than offered with a marker (founder 2026-09-17). What changed is
+    // that the refusal is now taken here, with a reason, instead of being a
+    // swallowed throw the execution floor cleaned up with a generic message.
     expect(events.some(e => e.event === 'approval_required')).toBe(false);
     const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'create_skill');
     expect(toolResult).toBeDefined();
-    expect(JSON.parse(toolResult!.data).result).toContain(
-      '[BLOCKED] "create_skill" changes state and requires explicit approval.',
-    );
+    expect(JSON.parse(toolResult!.data).result)
+      .toBe('[BLOCKED] create_skill could not be described, so it was not run.');
 
     expect(events.some(e => e.event === 'done')).toBe(true);
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
