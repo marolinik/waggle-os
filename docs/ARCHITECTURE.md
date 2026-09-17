@@ -333,7 +333,8 @@ loads at import time in any of these paths — the cost is module graph, not SQL
 | CA-2 | `@waggle/agent` published only its barrel, so importing one frozen array cost 937 ms (CRP violated at the `exports` map) | `packages/agent/package.json` | additive `./permissions` and `./tool-filter` subpaths | P1 | **closed** — `86d0d19f` |
 | CA-3 | Use cases name concrete persistence classes | `agent/src/cognify.ts`, `agent/src/orchestrator.ts` | the use case owns a `FrameStore`/`SessionStore` *interface*; `@waggle/core` implements it | P1 | open |
 | CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in 61 files | package edge `agent → core` | narrow through subpaths, then invert the memory boundary per CA-3 | P1 | open |
-| CA-5 | Concrete infrastructure constructed inside the handler (`CredentialPool`, `TraceRecorder`) instead of at the composition root | `routes/chat.ts` | hoist construction to `local/index.ts`, inject through the existing decorator seam | P2 | open |
+| CA-5 | `TraceRecorder` built per request in the chat handler while the composition root already built its own for `HarnessTraceBridge` — two instances over one store | `routes/chat.ts`, `local/index.ts` | decorate `server.traceRecorder` at the root and share the instance | P2 | **closed** — see the CA-5 note below |
+| CA-5b | The same duplicate construction at two fleet sites | `local/fleet-run-executor.ts:660`, `local/routes/fleet.ts:380` | same remedy, but **no fleet test touches the trace path** — pin first | P3 | open |
 | CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
 | CA-7 | Nothing but one test enforces the layer; a new module in `routes/` inherits no boundary | repo-wide | `import/no-restricted-paths` ESLint rule covering the policy layer | P3 | open — Phase 6 |
 
@@ -357,6 +358,25 @@ conjunction the route kept in step with two detectors it did not own — became
 route keeps only `allowResponseDecoration`, which is turn scope, not the rule. The graph did not
 change: the one new import is `GoalAncestry`, type-only and therefore erased.
 
+### CA-5 — what the row actually was
+
+The row said `CredentialPool` **and** `TraceRecorder` were constructed inside the handler.
+Only half held. `credentialPools` is a `Map` at plugin-registration scope with a lazy
+per-provider loader — built once for the plugin's lifetime, not per request — so it was never
+the violation the row described and it was left alone.
+
+`TraceRecorder` was. The handler ran `new TraceRecorder(server.traceStore)` on every turn while
+`local/index.ts` already constructed one and buried it inside `HarnessTraceBridge` instead of
+decorating it. So the defect was a duplicate instance over a single store, not a misplaced
+construction.
+
+Sharing one recorder is only safe because of a property worth stating: its `reasoningBuffer`,
+`toolCallBuffer`, `artifactBuffer` and `pendingTools` are keyed by trace id and cleared only by
+`flush` / `finalize`. A per-request instance made any un-finalized turn's leak invisible rather
+than absent; a shared one accumulates for the server's lifetime. The chat route survives that
+because the defensive `finalize` at `chat.ts:5376` sits inside the `finally` at `chat.ts:5348`,
+so every exit path clears. Any future consumer of `server.traceRecorder` owes the same guarantee.
+
 ## Decision Log
 
 | Date | Decision | Rationale |
@@ -365,6 +385,8 @@ change: the one new import is `GoalAncestry`, type-only and therefore erased.
 | 2026-09-17 | The `@waggle/agent` barrel leak is fixed by additive export subpaths, not by inlining the constants | Inlining `READONLY_TOOLS` would duplicate knowledge `@waggle/agent` owns — the DRY violation Phase 6 exists to catch. The subpaths are additive: no existing barrel consumer changes, and every future inward import has a light path to take |
 | 2026-09-17 | Enforcement is a source-level import-graph walk, not a runtime probe and not a lint rule | An outward import that only a rare branch reaches still costs every consumer the load, and a runtime probe would not see it. A lint rule covers the whole layer at once and is the better long-term answer — it is ledgered as CA-7 for Phase 6, where habits that stop re-accumulation are the explicit subject |
 | 2026-09-17 | The slice is the 33-commit churn cluster, moved verbatim, with `chat.ts` re-exporting every previously public symbol | 652 non-blank lines moved; six differ, each by a leading `export` keyword, because `chat.ts` still consumes them and they were module-private. No test file was edited, so the 717 pins that cover the cluster prove behavior preservation rather than being adjusted to fit it |
+| 2026-09-17 | CA-5 closed for the chat route only; the two fleet sites became CA-5b rather than riding along | Phase 1 forbids touching code absent from the Safety Net Map, and **no** fleet test asserts anything about traces — `fleet.test.ts`, `fleet-isolation.test.ts` and `fleet-ancestry.test.ts` never mention `traceStore`, `traceId` or `outcomeCounts`. Widening the change there would have been an unpinned edit to production code; narrowing it silently would have left CA-5 looking closed when a third of the duplication remained |
+| 2026-09-17 | `CredentialPool` dropped from the CA-5 row instead of being hoisted | It is constructed once at plugin registration, not per request, so it never matched the violation the row described. Correcting the ledger is cheaper than performing a move that buys nothing, and a wrong row costs the next reader more than an open one |
 | 2026-09-17 | CA-6's disclaimer rule was pinned at the HTTP boundary before it moved, not after | `REGULATED_DISCLAIMER_MAP` is a `const` inside the handler body: no unit seam reaches it that the move itself would not have to create first, so a unit pin would have encoded the new shape and proved nothing about what shipped. An injected `agentRunner` isolates the block exactly — the neighbouring `/schedule` nudge and grounding hedge are both `!hasCustomRunner` gated. Proven non-vacuous by shortening the hr-manager string and watching that case go red |
 | 2026-09-17 | CA-6 landed as two commits — a verbatim move, then an Extract Function — never one | The two need different proofs. The move is provable by set-differencing the destination's added lines against the source's removed lines (exactly one survives: the `GoalAncestry` type import). The extraction genuinely changes shape, so its proof is the seven pins written against the old code passing unchanged against the new. Mixing them would have left a reviewer unable to trust either |
 | 2026-09-17 | No component split proposed | The package graph is already acyclic and the framework is already confined to one package. The debt is *inside* `packages/server` and at the `agent → core` edge — splitting services would add a distributed monolith on top of an unsolved boundary problem |
