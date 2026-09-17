@@ -23,6 +23,8 @@ describe('ModelGateStep — the hard model gate', () => {
   it('embeds the shared ModelGate', () => {
     render(<ModelGateStep {...props()} />);
     expect(screen.getByTestId('model-gate')).toBeInTheDocument();
+    expect(screen.getByText(/use an on-device model, a lan gateway/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing leaves your machine without your key/i)).not.toBeInTheDocument();
   });
 
   it('disables Continue until a working model exists', () => {

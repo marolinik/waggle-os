@@ -344,10 +344,28 @@ export class MarketplaceInstaller {
     // ─── SECURITY GATE: Pre-install scan ───────────────────────
     // Fetch content early so we can scan it before writing to disk
     let contentToScan: string | undefined;
+    let contentResolutionError: string | undefined;
     try {
       contentToScan = await this.resolveContent(pkg);
-    } catch {
-      // Content resolution failure is handled in type-specific installers
+    } catch (err) {
+      contentResolutionError = err instanceof Error ? err.message : undefined;
+    }
+    if (installType === 'skill' && contentToScan === undefined) {
+      const notFound = contentResolutionError === 'HTTP 404';
+      const message = notFound
+        ? 'The catalog skill source returned HTTP 404. This may be a collection, not an individual skill. Choose an individual skill or use Install skill from URL with its direct SKILL.md link.'
+        : contentResolutionError
+          ? 'Could not retrieve the exact SKILL.md content from this catalog source. Check the source or connection and retry.'
+          : 'This catalog entry has no SKILL.md content or direct skill source. Choose an individual skill with a direct SKILL.md link.';
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message,
+        errors: [message],
+      };
     }
 
     const scanResult = await this.security.scan(pkg, contentToScan);
@@ -794,7 +812,7 @@ export class MarketplaceInstaller {
         const rawUrl = this.githubRawUrl(pkg.repository_url, 'SKILL.md');
         return this.fetchContent(rawUrl);
       }
-      return this.generateSkillStub(pkg);
+      return undefined;
     }
 
     if (pkg.waggle_install_type === 'mcp') {
@@ -883,7 +901,8 @@ export class MarketplaceInstaller {
     // fetcher so a malicious skill_url cannot pull an internal/link-local host.
     const response = await this.fetchImpl(url);
     if (!response.ok) {
-      throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+      // Do not echo a catalog-controlled URL (it may contain credentials).
+      throw new Error(`HTTP ${response.status}`);
     }
     return response.text();
   }
@@ -893,23 +912,6 @@ export class MarketplaceInstaller {
     const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
     if (!match) return repoUrl;
     return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/main/${filePath}`;
-  }
-
-  private generateSkillStub(pkg: MarketplacePackage): string {
-    return `# ${pkg.display_name}
-
-${pkg.description}
-
-> Installed from Waggle Marketplace (source: ${pkg.author || 'community'})
-> Category: ${pkg.category}
-> Version: ${pkg.version}
-
----
-
-## Instructions
-
-This skill was installed from the marketplace. Configure or extend it as needed for your workflow.
-`;
   }
 
   private updatePluginRegistry(name: string, manifest: PluginManifest): void {
