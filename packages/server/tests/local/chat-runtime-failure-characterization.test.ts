@@ -24,22 +24,7 @@ import { WaggleConfig } from '@waggle/core';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { buildLocalServer } from '../../src/local/index.js';
 import { loadSessionMessages } from '../../src/local/routes/chat-persistence.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
-
-/** Splits an SSE body into its `event:`/`data:` pairs. */
-function parseSSE(raw: string): Array<{ event: string; data: string }> {
-  const events: Array<{ event: string; data: string }> = [];
-  for (const block of raw.split(/\n\n/).filter(Boolean)) {
-    let event = '';
-    let data = '';
-    for (const line of block.split('\n')) {
-      if (line.startsWith('event: ')) event = line.slice(7);
-      else if (line.startsWith('data: ')) data = line.slice(6);
-    }
-    if (event || data) events.push({ event, data });
-  }
-  return events;
-}
+import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 
 describe('POST /api/chat workspace runtime construction (characterization)', () => {
   let server: FastifyInstance;

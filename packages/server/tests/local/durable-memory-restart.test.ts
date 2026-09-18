@@ -6,7 +6,7 @@ import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../../src/local/index.js';
 import { closeAuditDb } from '../../src/local/routes/events.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import { injectWithAuth, resetRateLimiter, parseSseJson as parseSse } from '../test-utils.js';
 
 const testState = vi.hoisted(() => {
   const previousPromptAssembler = process.env.WAGGLE_PROMPT_ASSEMBLER;
@@ -48,17 +48,6 @@ const SENTINEL = 'DURABLE-ORCHID-20260830';
 const DECISION_MESSAGE = `Let's go with ${SENTINEL} as the Windows Solo launch codename. We will use it for the internal pilot.`;
 const RECALL_MESSAGE = 'Search my saved memory for our Windows Solo launch codename decision. Do not write files or execute code.';
 const MODEL = 'openai-compatible/durable-memory-test';
-
-function parseSse(raw: string): Array<{ event: string; data: Record<string, unknown> }> {
-  return raw.split(/\n\n/)
-    .filter(Boolean)
-    .map((block) => {
-      const lines = block.split('\n');
-      const event = lines.find(line => line.startsWith('event: '))?.slice(7) ?? '';
-      const data = lines.find(line => line.startsWith('data: '))?.slice(6) ?? '{}';
-      return { event, data: JSON.parse(data) as Record<string, unknown> };
-    });
-}
 
 function markModelHealthy(server: FastifyInstance): void {
   server.agentState.llmProvider = {

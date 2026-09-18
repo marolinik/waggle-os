@@ -25,7 +25,7 @@ import {
   loadSessionMessages,
   persistMessage,
 } from '../../src/local/routes/chat-persistence.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import { injectWithAuth, resetRateLimiter, parseSseJson as parseSse } from '../test-utils.js';
 
 const testState = vi.hoisted(() => {
   const previousPromptAssembler = process.env.WAGGLE_PROMPT_ASSEMBLER;
@@ -89,17 +89,6 @@ vi.mock('../../src/local/routes/waggle-signals.js', async (importOriginal) => {
     },
   };
 });
-
-function parseSse(raw: string): Array<{ event: string; data: Record<string, unknown> }> {
-  return raw.split(/\n\n/)
-    .filter(Boolean)
-    .map((block) => {
-      const lines = block.split('\n');
-      const event = lines.find(line => line.startsWith('event: '))?.slice(7) ?? '';
-      const data = lines.find(line => line.startsWith('data: '))?.slice(6) ?? '{}';
-      return { event, data: JSON.parse(data) as Record<string, unknown> };
-    });
-}
 
 const SYNTHETIC_PROVIDER_PROTOCOL_OVERHEAD_CHARS = 2_048;
 const PERSISTED_IDENTITY_SENTINEL = 'Persisted Identity Sentinel';

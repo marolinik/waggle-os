@@ -31,30 +31,7 @@ import {
   resolveChatHistoryTarget,
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
-import { getAuthToken, injectWithAuth, resetRateLimiter } from './test-utils.js';
-
-/**
- * Parse raw SSE response body into an array of { event, data } objects.
- */
-function parseSSE(raw: string): Array<{ event: string; data: string }> {
-  const events: Array<{ event: string; data: string }> = [];
-  const blocks = raw.split(/\n\n/).filter(Boolean);
-  for (const block of blocks) {
-    let event = '';
-    let data = '';
-    for (const line of block.split('\n')) {
-      if (line.startsWith('event: ')) {
-        event = line.slice(7);
-      } else if (line.startsWith('data: ')) {
-        data = line.slice(6);
-      }
-    }
-    if (event || data) {
-      events.push({ event, data });
-    }
-  }
-  return events;
-}
+import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
