@@ -34,6 +34,14 @@ export {
   type ParsedOpenAiTextCompletion,
 } from './providers/openai-compat.js';
 export {
+  CircuitBreaker,
+  countsAsBreakerFailure,
+  breakerEndpointKey,
+  wrapFetchWithBreaker,
+  type BreakerState,
+  type CircuitBreakerOptions,
+} from './circuit-breaker.js';
+export {
   classifyRateLimitError,
   planRateLimitResume,
   type RateLimitAssessment,

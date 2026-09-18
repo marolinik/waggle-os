@@ -3994,6 +3994,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let requiredToolSequenceFailure: string | null = null;
 
         const agentConfig: AgentLoopConfig = {
+          // Breaker-wrapped, from the composition root (R-2). Read defensively so
+          // suites that mount no decorator keep the platform fetch.
+          fetch: server.llmFetch ?? globalThis.fetch,
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
           model: resolvedModel,
