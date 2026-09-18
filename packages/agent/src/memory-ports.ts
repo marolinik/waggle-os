@@ -70,6 +70,8 @@ export interface FrameStorePort {
   findDuplicate(content: string): MemoryFrame | null;
   update(id: number, content: string, importance?: Importance): MemoryFrame | undefined;
   setMetadata(id: number, metadata: string): MemoryFrame | undefined;
+  /** Replace-on-update for single-card lanes (the profile identity card). */
+  deleteByContentPrefix(prefix: string): number;
 }
 
 /** Session (GOP) lifecycle — frames are foreign-keyed to these. */
