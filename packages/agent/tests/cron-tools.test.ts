@@ -291,6 +291,7 @@ describe('Cron Tools', () => {
       expect(result).toContain('yes');
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/api/cron'),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
 

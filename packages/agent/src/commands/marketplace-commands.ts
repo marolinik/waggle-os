@@ -169,7 +169,7 @@ function marketplaceCommand(): CommandDefinition {
 
           try {
             const url = `${BASE_URL}/api/marketplace/search?query=${encodeURIComponent(subArgs)}&limit=10`;
-            const response = await fetch(url);
+            const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
               return `Marketplace search failed: ${(err as { error?: string }).error || response.statusText}`;
@@ -189,7 +189,7 @@ function marketplaceCommand(): CommandDefinition {
           try {
             // Step 1: Search for the package by name to get its ID
             const searchUrl = `${BASE_URL}/api/marketplace/search?query=${encodeURIComponent(subArgs)}&limit=5`;
-            const searchResp = await fetch(searchUrl);
+            const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(10_000) });
             if (!searchResp.ok) {
               return `Failed to search marketplace: ${searchResp.statusText}`;
             }
@@ -218,6 +218,7 @@ function marketplaceCommand(): CommandDefinition {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ packageId: target.id }),
+              signal: AbortSignal.timeout(10_000),
             });
 
             const installData = await installResp.json() as {
@@ -238,7 +239,7 @@ function marketplaceCommand(): CommandDefinition {
 
         case 'packs': {
           try {
-            const response = await fetch(`${BASE_URL}/api/marketplace/packs`);
+            const response = await fetch(`${BASE_URL}/api/marketplace/packs`, { signal: AbortSignal.timeout(10_000) });
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
               return `Failed to list packs: ${(err as { error?: string }).error || response.statusText}`;
@@ -252,7 +253,7 @@ function marketplaceCommand(): CommandDefinition {
 
         case 'installed': {
           try {
-            const response = await fetch(`${BASE_URL}/api/marketplace/installed`);
+            const response = await fetch(`${BASE_URL}/api/marketplace/installed`, { signal: AbortSignal.timeout(10_000) });
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
               return `Failed to list installed: ${(err as { error?: string }).error || response.statusText}`;
@@ -268,6 +269,7 @@ function marketplaceCommand(): CommandDefinition {
           try {
             const response = await fetch(`${BASE_URL}/api/marketplace/sync`, {
               method: 'POST',
+              signal: AbortSignal.timeout(10_000),
             });
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));

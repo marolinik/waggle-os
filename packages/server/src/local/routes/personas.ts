@@ -166,6 +166,7 @@ Respond with ONLY valid JSON, no markdown or explanation.`;
           max_tokens: 2000,
           messages: [{ role: 'user', content: metaPrompt }],
         }),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!res.ok) {

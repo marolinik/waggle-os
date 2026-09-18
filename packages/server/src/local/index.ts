@@ -59,6 +59,8 @@ import {
   buildActiveBehavioralSpec,
   loadBehavioralSpecOverrides,
   TraceRecorder,
+  CircuitBreaker,
+  wrapFetchWithBreaker,
   HarnessTraceBridge,
   safeFetch,
   detectInstalledTools,
@@ -418,6 +420,12 @@ declare module 'fastify' {
      * through the defensive `finalize` in its `finally`.
      */
     traceRecorder: TraceRecorder;
+    /**
+     * `fetch` for model-endpoint calls, wrapped in a circuit breaker (R-2).
+     * Owned here because breaker state has to outlive a single turn — that is
+     * the entire point of it.
+     */
+    llmFetch: typeof globalThis.fetch;
     evolutionStore: import('@waggle/core').EvolutionRunStore;
     /**
      * Active behavioral spec — baseline `BEHAVIORAL_SPEC` with any
@@ -583,6 +591,17 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // runs become training data for the self-evolution loop.
   const traceRecorder = new TraceRecorder(traceStore);
   server.decorate('traceRecorder', traceRecorder);
+
+  // Model-endpoint circuit breaker (Phase 7, R-2). retry-policy.ts decides
+  // whether ONE failure is worth retrying; it has no memory, so a provider that
+  // is simply down costs every turn its full retry ladder. This is the memory.
+  // Keyed by origin, so a wedged local Ollama cannot stop calls to Anthropic.
+  const llmCircuitBreaker = new CircuitBreaker({
+    onStateChange: (endpoint, from, to) => {
+      log.warn('[circuit-breaker] model endpoint state change', { endpoint, from, to });
+    },
+  });
+  server.decorate('llmFetch', wrapFetchWithBreaker(llmCircuitBreaker));
 
   const harnessTraceBridge = new HarnessTraceBridge({
     recorder: traceRecorder,
