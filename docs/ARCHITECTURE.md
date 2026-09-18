@@ -377,6 +377,125 @@ than absent; a shared one accumulates for the server's lifetime. The chat route 
 because the defensive `finalize` at `chat.ts:5376` sits inside the `finally` at `chat.ts:5348`,
 so every exit path clears. Any future consumer of `server.traceRecorder` owes the same guarantee.
 
+## Bounded Contexts & Context Map
+
+Phase 8 (`domain-driven-design`), 2026-09-18. Scored **5/10** — 3 of 7 diagnostic rows, plus 2
+of 3 depth points.
+
+### The finding
+
+The package graph is already acyclic and enforced (see the Layer Map above), so the *code*
+boundaries are in good shape. The model boundary that is **not** drawn is inside the memory
+substrate: one `MindDB` owns **18 tables** belonging to five different models.
+
+One SQLite file is the right *persistence* boundary for a desktop app — portable, atomically
+backed up, no server. The mistake is letting it also be the *model* boundary by default.
+
+The proof that the split is real and not theoretical was already in the repo: `CLAUDE.md` §7.5
+excludes `evolution_runs`, `execution_traces`, `improvement_signals` and the `install_audit` DDL
+from the public OSS mirror. **The mirror already ships a different subset of this schema** — a
+context boundary discovered by necessity and never drawn as one.
+
+### Current context map
+
+| Context | Tables | Type | OSS |
+|---|---|---|---|
+| **memory** | `memory_frames`, `memory_frame_chunks`, `sessions`, `raw_archive`, `procedures`, `meta` | **Core Domain** | shared |
+| knowledge | `knowledge_entities`, `knowledge_relations`, `kg_entity_frames` | supporting | shared |
+| presence | `identity`, `awareness` | supporting | shared |
+| harvest | `harvest_sources`, `erased_subjects` | supporting | shared |
+| evolution | `evolution_runs`, `execution_traces`, `improvement_signals` | supporting | **excluded** |
+| governance | `install_audit`, `ai_interactions` | supporting | **excluded** |
+
+Pinned by `tests/mind-context-boundaries.test.ts`, which fails when a table appears without a
+context and keeps the OSS exclusion list in step with the schema. It is a **manifest, not a
+refactor** — splitting the schema is a multi-session arc that would break the OSS forward-port,
+and Evans is explicit that premature extraction is the larger risk.
+
+Relationships between contexts, in the mapping vocabulary:
+
+- `knowledge` is **Customer/Supplier** to `memory` — it distils entities and relations *from*
+  frames, and `kg_entity_frames` is the join that keeps the two models in step.
+- `harvest` is **Conformist upstream, ACL downstream** (below).
+- `evolution` and `governance` are **Separate Ways** in the OSS mirror: they simply do not exist
+  there, which is why their absence has never broken it.
+
+### The Anti-Corruption Layer that already exists
+
+`packages/hive-mind-core/src/harvest/` is a textbook ACL and deserves to be named as one. Ten
+adapters — `chatgpt-adapter`, `claude-adapter`, `claude-code-adapter`, `gemini-adapter`,
+`perplexity-adapter`, `pdf-adapter`, `markdown-adapter`, `plaintext-adapter`, `url-adapter`,
+`universal-adapter` — each take a foreign export format with its own vendor model and translate
+it into `MemoryFrame`s. **No vendor schema reaches the Core Domain.** When ChatGPT changes its
+export format, exactly one adapter changes.
+
+That is why the substrate absorbed five separate vendor corpora without the frame model
+acquiring a single vendor-shaped field.
+
+The gap worth naming: `stableHarvestId` and the dedup rules in `pipeline.ts` / `dedup.ts` are
+shared by every adapter, so the ACL has a **Shared Kernel** at its centre. Keep it small and
+explicitly governed — it is the one place a vendor concept could leak in for all ten at once.
+
+### Target: the first context worth extracting
+
+**`governance` — `install_audit` + `ai_interactions`.** It is the best first candidate precisely
+because it is the least entangled:
+
+- It is already OSS-excluded, so extraction *removes* work from the curated forward-port instead
+  of adding it. `CLAUDE.md` §7.5 currently documents an interleaved strip of the `install_audit`
+  DDL out of `mind/{schema,db}.ts` that "a file filter cannot catch". Extracting the context makes
+  that strip a file boundary instead of a hand edit.
+- Its consumers are narrow: `packages/core/src/compliance/` and `install-audit.ts`.
+- Its retention rules are legal (EU AI Act), not behavioural — a different lifecycle, different
+  backup expectations, and an audit trail arguably should not live in a file that a
+  memory-erasure command can rewrite.
+
+Not proposed for execution now, and deliberately: the erasure surface (`erased_subjects`, sticky
+erasure) crosses `memory` and `harvest`, and a compliance trail that a GDPR erase must *not*
+delete needs that interaction thought through first.
+
+### Ubiquitous language: what is already good
+
+87% of exported classes (181 of 208) carry domain names, and the repository surface reads as the
+domain: `createIFrame`, `getPFramesSinceLastI`, `reconstructState`, `getGopFrames`. The I/P/B
+frame vocabulary is borrowed from video encoding and is genuinely the substrate model, not a
+technical convenience — that is the depth point this phase awards.
+
+The 27 technical-only names (`WorkspaceManager`, `PluginManager`, `OfflineManager`, `*Service`, …)
+are almost all infrastructure, where the technical name IS the domain term. Logged as a ledger
+row, not a rename arc.
+
+**Anemic entities, on purpose.** `MemoryFrame` is an `interface` — a data shape with no behavior;
+the rules live in `FrameStore`. For SQLite rows in a desktop app this is the right trade:
+rehydrating every read into behavior-bearing objects has a cost the Core Domain would pay on
+every recall. Recorded as a conscious position rather than scored as a failure.
+
+## Domain Glossary (Ubiquitous Language)
+
+Canonical. `CLAUDE.md` §11 carries a shorter operational copy; this is the definitive one.
+
+| Term | Meaning |
+|---|---|
+| **Mind** | One user or workspace whole memory substrate — the SQLite file and the six contexts inside it |
+| **Frame** | The atomic unit of memory. Never "record" or "row" |
+| **I-frame** | Independent frame — a complete state, readable without any other frame |
+| **P-frame** | Predicted frame — a delta against a base frame |
+| **B-frame** | Bidirectional frame — references several frames to express a relation between them |
+| **GOP** | Group of Pictures — the I-frame and the P/B-frames that depend on it. One conversational episode |
+| **Importance** | A frame decay resistance, not its priority. Drives `getImportanceMultiplier` |
+| **Harvest** | Ingesting a foreign corpus (a ChatGPT export, a PDF) and translating it into frames |
+| **Adapter** | One vendor translator inside the harvest ACL. Never "parser" — it translates a model, not a syntax |
+| **Sticky erasure** | An erasure that survives re-import: `erased_subjects` outlives the frames it erased |
+| **Cognify** | Extracting durable memory from a live exchange, as opposed to harvesting a finished corpus |
+| **Recall** | Retrieving frames for a turn. Never "query" or "search" at the domain level |
+| **Turn** | One user message and everything the system does because of it. The unit of tracing and of policy |
+| **Turn policy** | The rules deciding what a single turn may do — see `routes/chat-turn-policy.ts` |
+| **Persona** | A named operating mode with its own prompt, tool allowlist and guardrails |
+| **Workspace** | A bounded working context with its own Mind. Never "project" in code |
+| **Skill** | An installable capability with frontmatter, distinct from a tool |
+| **Signal** | A WaggleDance message between agents or tools |
+| **Trace** | The durable record of one turn execution, in `execution_traces` |
+
 ## Decision Log
 
 | Date | Decision | Rationale |

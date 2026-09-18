@@ -41,11 +41,39 @@ artifacts in the Phase Status table, and enter the first non-`done` phase.
 | 5 | clean-architecture | done (pass 1: 7 violations mapped, CA-1/CA-2/CA-5/CA-6 closed) | ARCHITECTURE.md | 2026-09-17 |
 | 6 | pragmatic-programmer | done (pass 1: scored 3/10, 3 fixes applied, policy ratified) | TECH-DEBT.md | 2026-09-18 |
 | 7 | release-it | done (pass 1: 3/8 -> 5/8, R-1 + R-2 applied, 2 rows judged non-transferable) | RELIABILITY.md | 2026-09-18 |
-| 8 | domain-driven-design | pending | ARCHITECTURE.md | |
+| 8 | domain-driven-design | done (pass 1: scored 5/10, context map + glossary + ACL named, boundary guard) | ARCHITECTURE.md | 2026-09-18 |
 
 Statuses: pending · in-progress · awaiting-evidence · done · deferred: <reason> · skipped: <reason>
 Optional phases (system-design, ddia-systems, team-topologies) are added as rows here when their
 Add-when condition becomes true.
+
+## Journey Exit Checklist
+
+All eight phases completed **pass 1** between 2026-09-15 and 2026-09-18. Pass 1 means: the
+diagnostic was run, the findings were recorded with IDs, and the work that was both safe and
+in-scope was done. It does **not** mean every row is closed — the ones that are not are listed
+below and in the Debt Ledger, with owners.
+
+| Exit criterion | State |
+|---|---|
+| Changed modules have characterization tests that run green | **met** — `TESTING.md` Safety Net Map covers every path touched; suite 13021+/13030 |
+| Every outbound call has a timeout; critical dependencies have breakers and bulkheads | **met, with one row judged non-transferable** — 183/183 bounded (R-1), breaker on the model endpoint (R-2). Bulkheads do not transfer to a single-user desktop sidecar; the property that matters is obtained by keying the breaker on origin (`RELIABILITY.md`) |
+| The Dependency Rule holds for reworked modules | **partly met** — CA-1, CA-2, CA-5, CA-6 closed and guarded by a test *and* a lint rule. **CA-3/CA-4 remain**: `@waggle/agent` names concrete `FrameStore`/`SessionStore` across 61 files. That is the largest single piece of debt left in the repo |
+| A current context map, and at least one clean context behind an ACL | **met** — map in `ARCHITECTURE.md`; the harvest ACL already existed and is now named and explained. No context extracted yet (D-1) |
+| No untracked hacks; debt budget and broken-windows policy written down | **met** — zero untracked TODO markers, measured; policy ratified in `TECH-DEBT.md` |
+
+### What the journey did not do, and why
+
+- **CA-3/CA-4** (invert the memory boundary) is a genuine multi-session arc crossing packages and
+  needs its own pin program first. It was correctly not attempted inside a phase pass.
+- **D-1** (extract `governance`) is designed but blocked on a real question: sticky erasure
+  crosses `memory` and `harvest`, and a compliance trail that a GDPR erase must *not* delete needs
+  that interaction resolved before the tables move.
+- **R-5** (updater and fast rollback) is release engineering, entangled with the Authenticode
+  gates, and is the founder's.
+- **R-3/R-6** touch the OSS-mirrored substrate and need §7.5 forward-port discipline plus pins.
+
+Nothing above is lost: every item is a Next Action below with an owner and a priority.
 
 ## Key Decisions
 
@@ -105,6 +133,10 @@ Add-when condition becomes true.
 | 2026-09-17 | 5 | Home is `routes/chat-turn-policy.ts`, beside the four existing framework-free chat modules — not a new folder, not `@waggle/agent` | The boundary is enforced by dependency direction plus a guard test, not by folder name. `@waggle/agent` is the correct long-term home, but the cluster depends on `TurnMutationPolicy` from `chat-helpers.ts`; moving it there would invert a dependency or drag the helper along. Deferred to Phase 8 |
 | 2026-09-17 | 5 | `@waggle/agent` gains additive `./permissions` and `./tool-filter` export subpaths (`86d0d19f`) rather than the policy module inlining the constants | CRP was violated at the `exports` map: the barrel was the only entry point, so one frozen array cost 937 ms against 4 ms for `permissions.ts` alone. Inlining would duplicate knowledge the domain package owns — the DRY violation Phase 6 exists to catch |
 | 2026-09-17 | 5 | Enforcement is a source-level import-graph walk (`3e380190`), verified non-vacuous; the ESLint `import/no-restricted-paths` rule is ledgered as CA-7 for Phase 6 | An outward import that only a rare branch reaches still costs every consumer the load, so a runtime probe would miss it. The guard was proven by adding `import { FrameStore } from '@waggle/core'` and watching the first case go red |
+| 2026-09-18 | 8 | Phase 8 run as a FULL pass at founder direction, after the agent recommended a light pass; scored **5/10** | The recommendation was that boundaries were already clean enough that a full carve risked ceremony. The full pass found the opposite in one place: one `MindDB` owns 18 tables across five models. The persistence boundary (one portable SQLite file, correct for a desktop app) had silently become the model boundary. The founder call surfaced a real finding the light pass would have missed |
+| 2026-09-18 | 8 | The context map is a manifest pinned by a guard test, NOT a schema split | Splitting 18 tables is a multi-session arc that would break the OSS curated forward-port, and Evans is explicit that premature extraction is the larger risk. The guard buys the durable half: a new table cannot appear without an owning context, and the CLAUDE.md §7.5 OSS exclusion list stops being prose that can drift from the schema |
+| 2026-09-18 | 8 | `governance` (`install_audit` + `ai_interactions`) named as the first context worth extracting — designed, not executed | It is the least entangled candidate and extraction would REMOVE work from the forward-port: §7.5 documents an interleaved hand-strip of the `install_audit` DDL that "a file filter cannot catch", which a context boundary turns into a file boundary. Held back because sticky erasure crosses `memory` and `harvest`, and a compliance trail a GDPR erase must not delete needs that interaction resolved first |
+| 2026-09-18 | 8 | Anemic `MemoryFrame` recorded as a deliberate position, not a failing row | Rehydrating every SQLite read into a behavior-bearing object is a cost the Core Domain would pay on every recall. The rules live in `FrameStore`; the diagnostic row is marked failed but the trade is stated so it is not "fixed" later by someone reading the score alone |
 | 2026-09-18 | 7 | Phase 7 scored **3/8** at entry, **5/8** after R-1 and R-2; two diagnostic rows judged **non-transferable** rather than failed | Release It! is written for multi-tenant services. Bulkheads exist to stop one tenant draining a pool shared with others, which a single-user desktop sidecar does not have; and "load test to 3x peak" assumes request volume, whereas Waggle's load variable is the user's own accumulated memory. The one bulkhead property worth having — a wedged local Ollama not affecting Anthropic — is obtained by keying the breaker on origin, at no structural cost |
 | 2026-09-18 | 7 | R-2 counts network errors, timeouts, 5xx and 429 as breaker failures, but **never a 4xx other than 429** | A 400 or 401 will not heal by waiting, and fast-failing it behind a generic "temporarily unavailable" would hide the one error the user can act on. An expired API key has to keep saying it expired |
 | 2026-09-18 | 7 | The breaker returns a synthetic 503 instead of throwing, and lives at the composition root as `server.llmFetch` | Returning a non-ok response means every existing error path, `retry-policy.ts` included, keeps working unchanged — the breaker adds memory without rewriting the failure handling. It is owned by the composition root for the same reason as CA-5: its state must outlive a single turn |
@@ -140,6 +172,9 @@ Add-when condition becomes true.
 - [ ] R-5: Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
 - [ ] R-6: soak test against a large aged `.mind` database — the desktop-shaped replacement for a throughput ramp (agent, P2)
 - [ ] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3)
+- [x] Phase 8 pass 1: context map, canonical Domain Glossary, harvest ACL named, `tests/mind-context-boundaries.test.ts` guard (agent, `7910b057`, 2026-09-18)
+- [ ] D-1: extract the `governance` context (`install_audit`, `ai_interactions`) out of the Mind schema — blocked on resolving sticky erasure vs a compliance trail a GDPR erase must not delete (agent, P2)
+- [ ] D-2: 27 technical-only class names (`*Manager`, `*Service`) — mostly infrastructure where the technical name IS the domain term; rename only where a domain term exists (agent, P3)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
 - [x] Review + merge `chore/tech-debt-phase3-chat-clean-code` into `main`; the nine Phase 3 Adopted Conventions ratified as amended by founder delegation (agent, session 0915 S3, 51-agent review; merged via PR #85)
