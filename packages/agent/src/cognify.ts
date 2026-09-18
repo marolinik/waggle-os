@@ -1,11 +1,13 @@
 import type {
-  FrameStore,
-  SessionStore,
-  KnowledgeGraph,
-  HybridSearch,
   Importance,
   FrameSource,
 } from '@waggle/core';
+import type {
+  FrameStorePort,
+  SessionStorePort,
+  KnowledgeGraphPort,
+  MemorySearchPort,
+} from './memory-ports.js';
 import { createCoreLogger } from '@waggle/core';
 import { extractEntities, extractRelations, type ExtractedEntity } from './entity-extractor.js';
 import { MemoryLinker, type MemoryLink } from './memory-linker.js';
@@ -14,10 +16,10 @@ import { logTurnEvent } from './turn-context.js';
 const log = createCoreLogger('cognify');
 
 export interface CognifyConfig {
-  frames: FrameStore;
-  sessions: SessionStore;
-  knowledge: KnowledgeGraph;
-  search: HybridSearch;
+  frames: FrameStorePort;
+  sessions: SessionStorePort;
+  knowledge: KnowledgeGraphPort;
+  search: MemorySearchPort;
   enableLinking?: boolean;
 }
 
@@ -29,10 +31,10 @@ export interface CognifyResult {
 }
 
 export class CognifyPipeline {
-  private frames: FrameStore;
-  private sessions: SessionStore;
-  private knowledge: KnowledgeGraph;
-  private search: HybridSearch;
+  private frames: FrameStorePort;
+  private sessions: SessionStorePort;
+  private knowledge: KnowledgeGraphPort;
+  private search: MemorySearchPort;
   private linker?: MemoryLinker;
 
   constructor(config: CognifyConfig) {

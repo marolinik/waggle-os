@@ -1,9 +1,11 @@
-import type { KnowledgeGraph } from '@waggle/core';
+import type {
+  KnowledgeGraphPort,
+} from './memory-ports.js';
 
 export class FeedbackHandler {
-  private kg: KnowledgeGraph;
+  private kg: KnowledgeGraphPort;
 
-  constructor(kg: KnowledgeGraph) {
+  constructor(kg: KnowledgeGraphPort) {
     this.kg = kg;
   }
 

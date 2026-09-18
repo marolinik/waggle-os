@@ -1,4 +1,6 @@
-import type { IdentityLayer } from '@waggle/core';
+import type {
+  IdentityPort,
+} from './memory-ports.js';
 
 export interface IdentityConfig {
   name?: string;
@@ -28,7 +30,7 @@ const DEFAULT_IDENTITY: Required<IdentityConfig> = {
  * If none exists, creates one with defaults or the provided config.
  */
 export function ensureIdentity(
-  identity: IdentityLayer,
+  identity: IdentityPort,
   config?: IdentityConfig,
 ): void {
   if (identity.exists()) return;

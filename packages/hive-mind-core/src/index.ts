@@ -24,7 +24,7 @@ export {
   type EmbeddingFingerprint, type FingerprintCheck,
 } from './mind/db.js';
 export { IdentityLayer, type Identity } from './mind/identity.js';
-export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
+export { AwarenessLayer, type AwarenessItem, type AwarenessCategory, type AwarenessMetadata } from './mind/awareness.js';
 export { FrameStore, stripHmPrefix, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
 export { RawArchive, hashRaw, readArchiveUids, withArchiveUid, type RawArchiveRow, type ArchiveInput } from './mind/raw-archive.js';
 export { MindErasure, type EraseResult } from './mind/erasure.js';

@@ -25,6 +25,16 @@ import {
   rawTurnBody,
   type RawTurnHit,
 } from '@waggle/core';
+import type {
+  AwarenessPort,
+  FrameStorePort,
+  ImprovementSignalPort,
+  IdentityPort,
+  KnowledgeGraphPort,
+  MemoryLayerPorts,
+  MemorySearchPort,
+  SessionStorePort,
+} from './memory-ports.js';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { renderGoalAncestry } from './goal-ancestry.js';
@@ -109,6 +119,12 @@ export interface OrchestratorConfig {
   rerankerCacheDir?: string;
   /** AI-OS #6 — durable "why" breadcrumb injected into buildSystemPrompt. */
   goalAncestry?: GoalAncestry;
+  /**
+   * CA-3: memory-layer overrides. Omitted in production, where the
+   * orchestrator builds the `@waggle/core` implementations over `db` itself;
+   * supplied by tests and by any caller that owns its own composition root.
+   */
+  layers?: Partial<OrchestratorLayers>;
 }
 
 /**
@@ -130,30 +146,36 @@ export interface RecallOptions {
  * Workspace-specific layers — created when a workspace mind is activated.
  * Separate from personal mind layers so both can be queried.
  */
-interface WorkspaceLayers {
+interface WorkspaceLayers extends MemoryLayerPorts {
   db: MindDB;
-  frames: FrameStore;
-  sessions: SessionStore;
-  search: HybridSearch;
-  knowledge: KnowledgeGraph;
   cognify: CognifyPipeline;
+}
+
+/**
+ * CA-3: the memory layers the orchestrator runs on. Every member is a port the
+ * use case owns; `@waggle/core` supplies the production implementations.
+ */
+export interface OrchestratorLayers extends MemoryLayerPorts {
+  identity: IdentityPort;
+  awareness: AwarenessPort;
+  improvementSignals: ImprovementSignalPort;
 }
 
 export class Orchestrator {
   private db: MindDB;
   private embedder: Embedder;
-  private identity: IdentityLayer;
-  private awareness: AwarenessLayer;
-  private frames: FrameStore;
-  private sessions: SessionStore;
-  private search: HybridSearch;
-  private knowledge: KnowledgeGraph;
+  private identity: IdentityPort;
+  private awareness: AwarenessPort;
+  private frames: FrameStorePort;
+  private sessions: SessionStorePort;
+  private search: MemorySearchPort;
+  private knowledge: KnowledgeGraphPort;
   private tools: ToolDefinition[];
   private model: string;
   private mode: 'local' | 'team';
   private version: string;
   private skills: string[];
-  private improvementSignals: ImprovementSignalStore;
+  private improvementSignals: ImprovementSignalPort;
   /** AI-OS #6 — durable "why" breadcrumb; null = no section rendered. */
   private goalAncestry: GoalAncestry | null = null;
 
@@ -186,14 +208,15 @@ export class Orchestrator {
     this.skills = config.skills ?? [];
     this.rerankerCacheDir = config.rerankerCacheDir;
     this.goalAncestry = config.goalAncestry ?? null;
-    this.identity = new IdentityLayer(config.db);
-    this.awareness = new AwarenessLayer(config.db);
-    this.frames = new FrameStore(config.db);
-    this.sessions = new SessionStore(config.db);
-    this.search = new HybridSearch(config.db, config.embedder);
+    this.identity = config.layers?.identity ?? new IdentityLayer(config.db);
+    this.awareness = config.layers?.awareness ?? new AwarenessLayer(config.db);
+    this.frames = config.layers?.frames ?? new FrameStore(config.db);
+    this.sessions = config.layers?.sessions ?? new SessionStore(config.db);
+    this.search = config.layers?.search ?? new HybridSearch(config.db, config.embedder);
     if (config.reranker) this.rerankerPromise = Promise.resolve(config.reranker);
-    this.knowledge = new KnowledgeGraph(config.db);
-    this.improvementSignals = new ImprovementSignalStore(config.db);
+    this.knowledge = config.layers?.knowledge ?? new KnowledgeGraph(config.db);
+    this.improvementSignals =
+      config.layers?.improvementSignals ?? new ImprovementSignalStore(config.db);
 
     const cognify = new CognifyPipeline({
       frames: this.frames,
@@ -226,14 +249,14 @@ export class Orchestrator {
    * Creates workspace-specific layers for frames, search, knowledge, cognify.
    * Identity always stays in personal mind.
    */
-  setWorkspaceMind(workspaceDb: MindDB): void {
+  setWorkspaceMind(workspaceDb: MindDB, layers?: Partial<MemoryLayerPorts>): void {
     if (this.workspaceLayers) {
       logger.info('switching workspace mind — replacing previous workspace layers');
     }
-    const frames = new FrameStore(workspaceDb);
-    const sessions = new SessionStore(workspaceDb);
-    const search = new HybridSearch(workspaceDb, this.embedder);
-    const knowledge = new KnowledgeGraph(workspaceDb);
+    const frames = layers?.frames ?? new FrameStore(workspaceDb);
+    const sessions = layers?.sessions ?? new SessionStore(workspaceDb);
+    const search = layers?.search ?? new HybridSearch(workspaceDb, this.embedder);
+    const knowledge = layers?.knowledge ?? new KnowledgeGraph(workspaceDb);
     const cognify = new CognifyPipeline({
       frames,
       sessions,
@@ -1048,11 +1071,11 @@ export class Orchestrator {
     return tool.execute(args);
   }
 
-  getIdentity(): IdentityLayer { return this.identity; }
-  getAwareness(): AwarenessLayer { return this.awareness; }
-  getFrames(): FrameStore { return this.frames; }
-  getSessions(): SessionStore { return this.sessions; }
-  getSearch(): HybridSearch { return this.search; }
-  getKnowledge(): KnowledgeGraph { return this.knowledge; }
-  getImprovementSignals(): ImprovementSignalStore { return this.improvementSignals; }
+  getIdentity(): IdentityPort { return this.identity; }
+  getAwareness(): AwarenessPort { return this.awareness; }
+  getFrames(): FrameStorePort { return this.frames; }
+  getSessions(): SessionStorePort { return this.sessions; }
+  getSearch(): MemorySearchPort { return this.search; }
+  getKnowledge(): KnowledgeGraphPort { return this.knowledge; }
+  getImprovementSignals(): ImprovementSignalPort { return this.improvementSignals; }
 }
