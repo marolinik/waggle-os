@@ -13,6 +13,7 @@
 
 import type { MindDB } from '@waggle/core';
 import { HybridSearch } from '@waggle/core';
+import type { MemorySearchPort } from './memory-ports.js';
 import type { ToolDefinition } from './tools.js';
 
 export interface CrossWorkspaceToolDeps {
@@ -38,10 +39,16 @@ export interface CrossWorkspaceToolDeps {
   readWorkspaceFile?: (workspaceId: string, relativePath: string) => Promise<string>;
   /** The embedder used for semantic search. */
   embedder: import('@waggle/core').Embedder;
+  /**
+   * CA-3: builds the search port for one workspace mind. Omitted in
+   * production, where the `@waggle/core` implementation is used.
+   */
+  createSearch?: (mind: MindDB, embedder: import('@waggle/core').Embedder) => MemorySearchPort;
 }
 
 export function createCrossWorkspaceTools(deps: CrossWorkspaceToolDeps): ToolDefinition[] {
   const { sourceWorkspaceId, getMindForWorkspace, listWorkspaces, listWorkspaceFiles, readWorkspaceFile, embedder } = deps;
+  const createSearch = deps.createSearch ?? ((mind, emb) => new HybridSearch(mind, emb));
 
   const readOtherWorkspace: ToolDefinition = {
     name: 'read_other_workspace',
@@ -104,7 +111,7 @@ export function createCrossWorkspaceTools(deps: CrossWorkspaceToolDeps): ToolDef
       }
 
       try {
-        const search = new HybridSearch(mind, embedder);
+        const search = createSearch(mind, embedder);
         const results = await search.search(query, { limit, profile: 'balanced' });
         const targetName = listWorkspaces().find(w => w.id === targetId)?.name ?? targetId;
 

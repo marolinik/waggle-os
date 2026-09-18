@@ -331,8 +331,8 @@ loads at import time in any of these paths — the cost is module graph, not SQL
 |---|---|---|---|---|---|
 | CA-1 | ~770 lines of pure turn policy defined inside the Fastify plugin module, so every consumer and every test loads the delivery mechanism | `routes/chat.ts` (was lines 608–1781) | move to `routes/chat-turn-policy.ts`, re-export from `chat.ts`, guard the graph | P1 | **closed** — `a2f24546` + `3e380190` |
 | CA-2 | `@waggle/agent` published only its barrel, so importing one frozen array cost 937 ms (CRP violated at the `exports` map) | `packages/agent/package.json` | additive `./permissions` and `./tool-filter` subpaths | P1 | **closed** — `86d0d19f` |
-| CA-3 | Use cases construct concrete persistence classes — **12 `new` sites**, not a spread: 7 in the `Orchestrator` constructor, 4 in `setWorkspaceMind()`, 1 in `cross-workspace-tools.ts` | `agent/src/orchestrator.ts:189-196,233-236`, `agent/src/cross-workspace-tools.ts:107` | the use case owns the store *interfaces*; `@waggle/core` implements them; Parameterize Constructor with production defaults | P1 | **pinned** — `orchestrator-memory-boundary-pins.test.ts`, fix open |
-| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in **60** files — but **48 are type-only**, so the runtime edge is **12 files**, and outside `orchestrator.ts` it is `createCoreLogger` (8), `evaluateExternalMemoryIngress` (5) and `isSensitiveFilePath` (1), none of them persistence | package edge `agent → core` | invert the memory boundary per CA-3; the logger and the ingress guard are separate, smaller edges | P1 | open — **row corrected 2026-09-18**, see the CA-3/CA-4 note below |
+| CA-3 | Use cases construct concrete persistence classes — **12 `new` sites**, not a spread: 7 in the `Orchestrator` constructor, 4 in `setWorkspaceMind()`, 1 in `cross-workspace-tools.ts` | `agent/src/orchestrator.ts:189-196,233-236`, `agent/src/cross-workspace-tools.ts:107` | the use case owns the store *interfaces*; `@waggle/core` implements them; Parameterize Constructor with production defaults | P1 | **closed** — `cbf65c12` (pins) + `f24d192b` (inversion) + `edc2f455` (seam) |
+| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in **60** files — but **48 are type-only**, so the runtime edge is **12 files**, and outside `orchestrator.ts` it is `createCoreLogger` (8), `evaluateExternalMemoryIngress` (5) and `isSensitiveFilePath` (1), none of them persistence | package edge `agent → core` | invert the memory boundary per CA-3; the logger and the ingress guard are separate, smaller edges | P1 | **halved** — 56 files, 12 value importers; 3 of the 5 remaining memory namers name only `MindDB` |
 | CA-5 | `TraceRecorder` built per request in the chat handler while the composition root already built its own for `HarnessTraceBridge` — two instances over one store | `routes/chat.ts`, `local/index.ts` | decorate `server.traceRecorder` at the root and share the instance | P2 | **closed** — see the CA-5 note below |
 | CA-5b | The same duplicate construction at two fleet sites | `local/fleet-run-executor.ts:660`, `local/routes/fleet.ts:380` | same remedy, but **no fleet test touches the trace path** — pin first | P3 | open |
 | CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
@@ -399,6 +399,20 @@ inverted today, and only the root that builds them is not. So CA-3 is Parameteri
 one class, not a 61-file migration, and CA-4's remaining edges (logger, ingress guard) are
 separate and smaller.
 
+**Closed 2026-09-19.** `packages/agent/src/memory-ports.ts` declares seven ports — the methods the
+use cases actually call, 8 of `FrameStore`'s 22 — and the orchestrator takes them, falling back to
+the `@waggle/core` implementations when a caller supplies none. The ports do not redeclare
+`MemoryFrame`, `Session`, `Entity` or `Identity`: those are enterprise data structures every layer
+may depend on, not gateways, so the system still has one definition of a frame. The core classes
+satisfy the ports structurally — no implementation changed, no `implements` clause was added.
+
+The edge after the change: **56** files import `@waggle/core`, 12 by value, down from 60/12, and
+the files naming a concrete memory class fell from 11 to **5** — of which `context-loader.ts`,
+`pattern-write-back.ts` and `tools.ts` name only `MindDB`, the database handle. What is left is
+`orchestrator.ts`, which holds the production defaults because it is the place that already owned
+composition, and `cross-workspace-tools.ts`, whose `createSearch` factory defaults the same way.
+Moving those defaults out to `local/index.ts` is the remaining CA-4 slice.
+
 The pins live in `packages/agent/tests/orchestrator-memory-boundary-pins.test.ts` and assert on
 the **databases**, never on the layer objects — a pin reaching through `getFrames()` would be
 pinning the object graph the inversion replaces. Non-vacuity was checked twice, and the second
@@ -406,6 +420,9 @@ check is the one that mattered: binding the workspace layers to the personal db 
 `setWorkspaceMind()` left all eleven original pins green, because `workspaceLayers` is private and
 nothing wrote through it. `save_memory`'s `target` routing is the reachable sensing point; with
 those two pins added, the same mutation fails.
+
+`orchestrator-memory-ports.test.ts` is the other half: four tests drive the orchestrator through
+in-memory fakes that touch no SQLite, which nothing could do before the inversion.
 
 ## Bounded Contexts & Context Map
 
