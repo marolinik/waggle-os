@@ -347,6 +347,7 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
             max_tokens: 600,
             messages: [{ role: 'user', content: `${systemPrompt}\n\nUSER REQUEST:\n"${userText}"` }],
           }),
+          signal: AbortSignal.timeout(120_000),
         });
         if (!res.ok) return null;
         const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };

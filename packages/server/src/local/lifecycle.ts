@@ -183,7 +183,7 @@ async function checkHealth(port: number): Promise<boolean> {
     // /health/liveliness: unauthenticated process-liveness probe. The bare
     // /health endpoint requires the master key and calls every configured
     // provider, so polling it reports 401/slow forever.
-    const res = await fetch(`http://localhost:${port}/health/liveliness`);
+    const res = await fetch(`http://localhost:${port}/health/liveliness`, { signal: AbortSignal.timeout(5000) });
     return res.ok;
   } catch {
     return false;

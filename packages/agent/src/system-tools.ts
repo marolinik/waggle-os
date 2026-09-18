@@ -999,6 +999,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           const response = await fetch(url, {
             headers: { 'User-Agent': 'Waggle/1.0 (AI Assistant)' },
+            signal: AbortSignal.timeout(10_000),
           });
 
           if (!response.ok) {

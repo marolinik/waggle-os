@@ -95,7 +95,7 @@ export const litellmRoutes: FastifyPluginAsync = async (server) => {
   // Pricing is router metadata, not a second static model catalog.
   server.get('/api/litellm/pricing', async () => {
     try {
-      const response = await fetch(`${server.localConfig.litellmUrl}/model/info`);
+      const response = await fetch(`${server.localConfig.litellmUrl}/model/info`, { signal: AbortSignal.timeout(10_000) });
       if (!response.ok) return [];
       const body = await response.json() as {
         data?: Array<{
