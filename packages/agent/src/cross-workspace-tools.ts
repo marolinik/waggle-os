@@ -12,7 +12,7 @@
  */
 
 import type { MindDB } from '@waggle/core';
-import { HybridSearch } from '@waggle/core';
+import { defaultMemorySearch } from './memory-layers-default.js';
 import type { MemorySearchPort } from './memory-ports.js';
 import type { ToolDefinition } from './tools.js';
 
@@ -48,7 +48,7 @@ export interface CrossWorkspaceToolDeps {
 
 export function createCrossWorkspaceTools(deps: CrossWorkspaceToolDeps): ToolDefinition[] {
   const { sourceWorkspaceId, getMindForWorkspace, listWorkspaces, listWorkspaceFiles, readWorkspaceFile, embedder } = deps;
-  const createSearch = deps.createSearch ?? ((mind, emb) => new HybridSearch(mind, emb));
+  const createSearch = deps.createSearch ?? defaultMemorySearch;
 
   const readOtherWorkspace: ToolDefinition = {
     name: 'read_other_workspace',

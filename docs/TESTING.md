@@ -115,6 +115,11 @@ behavior. Risk = blast radius if a refactor silently changes it.
 
 - `.github/workflows/ci.yml` runs the default Vitest gate; `installer-smoke.yml` and
   `tauri-build-pr.yml` cover packaging. Coverage is not enforced in CI.
+- **Cross-package type changes: `npm run build:packages` is the only authoritative local gate.**
+  `npx tsc --noEmit --project packages/<pkg>` resolves sibling workspace packages through their
+  already-built `dist/`, so it typechecks against the declarations a change just replaced and
+  exits 0 while CI fails. The chain rebuilds `shared -> ... -> agent -> server` in order and sees
+  the new types. Cost it once (~1-2 min) rather than through a red CI run. TD-TEST-12.
 - Local re-measure for `chat.ts` (Node 22.23.2). This is the exact 16-file set behind the
   headline above; list files explicitly — Vitest treats a quoted glob as a name filter, and the
   summary line shows how many files ran:

@@ -2,13 +2,6 @@ import {
   type MindDB,
   type MemoryFrame,
   type ScoringProfile,
-  IdentityLayer,
-  AwarenessLayer,
-  FrameStore,
-  SessionStore,
-  HybridSearch,
-  KnowledgeGraph,
-  ImprovementSignalStore,
   createCoreLogger,
   evaluateExternalMemoryIngress,
   type Embedder,
@@ -35,6 +28,7 @@ import type {
   MemorySearchPort,
   SessionStorePort,
 } from './memory-ports.js';
+import { defaultMemoryLayers, defaultWorkspaceLayers } from './memory-layers-default.js';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { renderGoalAncestry } from './goal-ancestry.js';
@@ -208,15 +202,15 @@ export class Orchestrator {
     this.skills = config.skills ?? [];
     this.rerankerCacheDir = config.rerankerCacheDir;
     this.goalAncestry = config.goalAncestry ?? null;
-    this.identity = config.layers?.identity ?? new IdentityLayer(config.db);
-    this.awareness = config.layers?.awareness ?? new AwarenessLayer(config.db);
-    this.frames = config.layers?.frames ?? new FrameStore(config.db);
-    this.sessions = config.layers?.sessions ?? new SessionStore(config.db);
-    this.search = config.layers?.search ?? new HybridSearch(config.db, config.embedder);
+    const layers = { ...defaultMemoryLayers(config.db, config.embedder), ...config.layers };
+    this.identity = layers.identity;
+    this.awareness = layers.awareness;
+    this.frames = layers.frames;
+    this.sessions = layers.sessions;
+    this.search = layers.search;
     if (config.reranker) this.rerankerPromise = Promise.resolve(config.reranker);
-    this.knowledge = config.layers?.knowledge ?? new KnowledgeGraph(config.db);
-    this.improvementSignals =
-      config.layers?.improvementSignals ?? new ImprovementSignalStore(config.db);
+    this.knowledge = layers.knowledge;
+    this.improvementSignals = layers.improvementSignals;
 
     const cognify = new CognifyPipeline({
       frames: this.frames,
@@ -253,10 +247,10 @@ export class Orchestrator {
     if (this.workspaceLayers) {
       logger.info('switching workspace mind — replacing previous workspace layers');
     }
-    const frames = layers?.frames ?? new FrameStore(workspaceDb);
-    const sessions = layers?.sessions ?? new SessionStore(workspaceDb);
-    const search = layers?.search ?? new HybridSearch(workspaceDb, this.embedder);
-    const knowledge = layers?.knowledge ?? new KnowledgeGraph(workspaceDb);
+    const { frames, sessions, search, knowledge } = {
+      ...defaultWorkspaceLayers(workspaceDb, this.embedder),
+      ...layers,
+    };
     const cognify = new CognifyPipeline({
       frames,
       sessions,
