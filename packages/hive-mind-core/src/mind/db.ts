@@ -339,6 +339,10 @@ export class MindDB {
     const hadRowCounts = this.db.prepare(
       "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='table' AND name='row_counts'"
     ).get() as { cnt: number };
+    // R-3: see schema.ts — the importance grouping in getStats had no index.
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_frames_importance ON memory_frames (importance)'
+    );
     this.db.exec(ROW_COUNTS_TABLE_SQL);
     this.db.exec(ROW_COUNT_TRIGGERS_SQL);
     if (hadRowCounts.cnt === 0) this.recountRows();

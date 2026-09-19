@@ -167,6 +167,21 @@ describe('mind row counts — the numbers getMemoryStats reports', () => {
       expect(db.memoryCounts().frameCount).toBe(1);
     });
 
+    it('FrameStore.getStats().total reads the counter and still equals COUNT(*)', () => {
+      const base = frames.createIFrame(gopId, 'one');
+      frames.createPFrame(gopId, 'two', base.id);
+      frames.createIFrame(gopId, 'three', 'important');
+      frames.delete(base.id);
+
+      const stats = frames.getStats();
+
+      expect(stats.total).toBe(countRows(db, 'memory_frames'));
+      // The groupings still scan, so they are the independent check that the
+      // counter-sourced total is not drifting from the rows themselves.
+      const grouped = Object.values(stats.byType).reduce((a, b) => a + b, 0);
+      expect(stats.total).toBe(grouped);
+    });
+
     it('recountRows repairs a counter that was corrupted out of band', () => {
       frames.createIFrame(gopId, 'real row');
       db.getDatabase().prepare("UPDATE row_counts SET n = 9999 WHERE table_name = 'memory_frames'").run();
