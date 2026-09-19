@@ -7,8 +7,9 @@ import { KnowledgeGraph } from '../../src/mind/knowledge.js';
 /**
  * Pins for the three counts `getMemoryStats()` reports on every user turn.
  *
- * R-6 measured what `orchestrator.ts` had already guessed: those six `COUNT(*)`
- * queries cost 68 ms at 100k frames and 245 ms at 500k, per turn. The fix the
+ * R-6 measured what `orchestrator.ts` had already guessed: those `COUNT(*)`
+ * queries cost 2.2 ms at 100k frames and 14.6 ms at 500k, per turn, against
+ * 0.1-0.2 ms to read a counter. The fix the
  * comment there prescribes is "a write-counter in MindDB, not a time-based
  * cache", because ancillary write paths — a direct `createIFrame`, a
  * `KnowledgeGraph.createEntity` — would silently skip a cache invalidation.

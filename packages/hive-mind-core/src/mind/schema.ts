@@ -11,8 +11,9 @@ export const SCHEMA_VERSION = '1';
 export const ROW_COUNTS_TABLE_SQL = `
 -- Row counts maintained by trigger, so the per-turn memory stats do not pay
 -- three full table scans. SQLite has no O(1) row count: SELECT COUNT(*) walks
--- the table, which measured 68 ms at 100k frames and 245 ms at 500k (R-6), on
--- every user turn. Triggers rather than an application-side cache because
+-- the table, which measured 2.2 ms at 100k frames and 14.6 ms at 500k (R-6),
+-- on every user turn, against 0.1-0.2 ms to read this table. Triggers rather
+-- than an application-side cache because
 -- ancillary write paths write these tables directly; a trigger cannot be
 -- bypassed by one. MindDB.recountRows() rebuilds them if a migration ever
 -- rewrites a counted table out from under the triggers.

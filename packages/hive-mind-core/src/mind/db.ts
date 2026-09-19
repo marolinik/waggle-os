@@ -143,7 +143,8 @@ export class MindDB {
    * the trigger-maintained `row_counts` table instead of scanning.
    *
    * SQLite has no O(1) `COUNT(*)`: each one walks the table, which R-6 measured
-   * at 68 ms per turn at 100k frames and 245 ms at 500k. A trigger cannot be
+   * at 2.2 ms per turn at 100k frames and 14.6 ms at 500k, against 0.1-0.2 ms
+   * for this read. A trigger cannot be
    * bypassed the way an application-side cache can — `orchestrator.ts` warned
    * about exactly that when it declined to cache these.
    */
@@ -330,7 +331,8 @@ export class MindDB {
     );
 
     // R-3/R-6: row_counts + its triggers. `getMemoryStats()` ran three COUNT(*)
-    // scans per user turn — 68 ms at 100k frames, 245 ms at 500k. Applied here
+    // scans per mind per user turn — 2.2 ms at 100k frames, 14.6 ms at 500k,
+    // against 0.1-0.2 ms for the counter read. Applied here
     // as well as in SCHEMA_SQL so a database created before the counter exists
     // gets it; both paths are idempotent. The backfill runs only when the table
     // was absent, because after that the triggers keep it true.

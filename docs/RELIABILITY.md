@@ -131,12 +131,24 @@ The soak (`npm run test:soak`) measured what actually degrades:
 | `frames.getGopFrames(gopId)` | 0.6 ms | 1.5 ms | 2.1 ms |
 | `knowledge.getEntities()` | 0.3 ms | 0.4 ms | 0.3 ms |
 
-**The finding is `getStats`, and the code predicted it.** `orchestrator.ts` already carries the
-comment "6× COUNT(\*) per user turn — negligible below ~100k frames. If scale ever bites, fix via
-a write-counter in MindDB, not a time-based cache." `getMemoryStats()` runs on every user turn, so
-that is **68 ms of turn latency at 100k frames and 245 ms at 500k**, spent counting rows the user
-did not ask about. SQLite has no O(1) row count, so each `COUNT(*)` walks the table; the soak
-asserts that structurally with `EXPLAIN QUERY PLAN` rather than relying on a wall-clock number.
+**Correction (2026-09-19).** The row above first attributed those `getStats` timings to
+`orchestrator.getMemoryStats()`. They are not the same method. `FrameStore.getStats()` runs three
+`GROUP BY` aggregates and is called by `hive-mind-mcp-server` resources and tools — **not** on the
+chat-turn path. `getMemoryStats()` ran three plain `COUNT(*)` queries per mind, which is what runs
+every turn. Measured separately, against the exact three queries:
+
+| per user turn | 100k frames | 500k |
+|---|---|---|
+| three `COUNT(*)` scans (before) | 2.2 ms | 14.6 ms |
+| `MindDB.memoryCounts()` (after) | 0.1 ms | 0.2 ms |
+
+So the per-turn cost was **2–15 ms, not 68–245 ms**. The direction was right and the fix is real —
+a scan that grows with the database replaced by an O(1) read — but an order of magnitude smaller
+than first written. `FrameStore.getStats()`'s own 68/245 ms remains true and is a separate, unfixed
+cost on the MCP read path.
+
+SQLite has no O(1) row count, so each `COUNT(*)` walks the table; the soak asserts that
+structurally with `EXPLAIN QUERY PLAN` rather than relying on a wall-clock number.
 
 `compact()` is linear and that is correct — it must see every row. `sessions.getActive()` is the
 one row count that grows without limit; 2500 rows is cheap today, but nothing stops it.
@@ -181,7 +193,7 @@ Authenticode/signing gates in `docs/production-readiness/09-LAUNCH_RECOMMENDATIO
 
 | # | Item | Priority | Owner | Note |
 |---|---|---|---|---|
-| R-3 | **Narrowed by R-6.** Not 65 blanket `LIMIT`s: a write-counter for the per-turn `getStats` counts (68 ms/turn at 100k, 245 ms at 500k), then bound the few genuinely growing list reads | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
+| R-3 | **Narrowed by R-6, per-turn half done.** Not 65 blanket `LIMIT`s: the per-turn counts now read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k). Left: `FrameStore.getStats()`'s three `GROUP BY` aggregates on the MCP read path (245 ms at 500k), and the few genuinely growing list reads | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
 | R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | Not on the Windows Solo path |
 | R-5 | Updater + fast rollback for the desktop artifact | P2 | founder | Entangled with signing gates; release-engineering arc |
 | R-6 | **done 2026-09-19** — `packages/hive-mind-core/tests/soak/`, `npm run test:soak`, sized by `WAGGLE_SOAK_FRAMES` | — | agent | Own lane (`vitest.soak.config.ts`); excluded from the default gate. Setup bulk-inserts because the subject is the read path, and one test proves a bulk row is indistinguishable from an API row |

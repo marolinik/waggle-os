@@ -288,8 +288,9 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
-    // R-3/R-6: these were six COUNT(*) scans per user turn — 68 ms at 100k
-    // frames, 245 ms at 500k, measured by the soak. `MindDB.memoryCounts()`
+    // R-3/R-6: these were three COUNT(*) scans per mind per user turn — 2.2 ms
+    // at 100k frames, 14.6 ms at 500k, measured by the soak against the exact
+    // three queries this used to run. `MindDB.memoryCounts()`
     // reads a trigger-maintained counter table instead, which is O(1) and
     // cannot be bypassed the way the application-side cache this comment used
     // to warn against could have been.
