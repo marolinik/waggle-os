@@ -7,6 +7,16 @@
 // these 56 files. The point of the config is that every OTHER test file — and
 // every new one — is checked from now on, and the list only ever shrinks.
 // Removing an entry and making it pass is a complete, self-contained change.
+//
+// `paths` mirrors `vitest.aliases.ts`: several workspace packages declare a
+// `dist/` entry in package.json `exports`, which is correct for publishing but
+// absent on a fresh checkout — `npm run build:packages` builds only the
+// shared -> ... -> server chain, so a test importing e.g.
+// `@waggle/hive-mind-shim-core` typechecked locally (stale dist) and failed in
+// CI with TS2307. Exact keys, not a `@waggle/*` wildcard: a wildcard would
+// rewrite a subpath import like `@waggle/agent/permissions` to
+// `packages/agent/permissions/src` and break it.
+
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -18,7 +28,88 @@
     "types": [
       "node",
       "vitest/globals"
-    ]
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "@waggle/agent": [
+        "packages/agent/src/index.ts"
+      ],
+      "@waggle/cli": [
+        "packages/cli/src/index.ts"
+      ],
+      "@waggle/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@waggle/hive-mind-cli": [
+        "packages/hive-mind-cli/src/index.ts"
+      ],
+      "@waggle/hive-mind-core": [
+        "packages/hive-mind-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-claude-code": [
+        "packages/hive-mind-hooks-claude-code/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-claude-desktop": [
+        "packages/hive-mind-hooks-claude-desktop/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-codex": [
+        "packages/hive-mind-hooks-codex/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-codex-desktop": [
+        "packages/hive-mind-hooks-codex-desktop/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-core": [
+        "packages/hive-mind-hooks-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-cursor": [
+        "packages/hive-mind-hooks-cursor/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-hermes": [
+        "packages/hive-mind-hooks-hermes/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-openclaw": [
+        "packages/hive-mind-hooks-openclaw/src/index.ts"
+      ],
+      "@waggle/hive-mind-mcp-server": [
+        "packages/hive-mind-mcp-server/src/index.ts"
+      ],
+      "@waggle/hive-mind-shim-core": [
+        "packages/hive-mind-shim-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-wiki-compiler": [
+        "packages/hive-mind-wiki-compiler/src/index.ts"
+      ],
+      "@waggle/marketplace": [
+        "packages/marketplace/src/index.ts"
+      ],
+      "@waggle/memory-mcp": [
+        "packages/memory-mcp/src/index.ts"
+      ],
+      "@waggle/optimizer": [
+        "packages/optimizer/src/index.ts"
+      ],
+      "@waggle/sdk": [
+        "packages/sdk/src/index.ts"
+      ],
+      "@waggle/server": [
+        "packages/server/src/index.ts"
+      ],
+      "@waggle/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@waggle/waggle-dance": [
+        "packages/waggle-dance/src/index.ts"
+      ],
+      "@waggle/weaver": [
+        "packages/weaver/src/index.ts"
+      ],
+      "@waggle/wiki-compiler": [
+        "packages/wiki-compiler/src/index.ts"
+      ],
+      "@waggle/worker": [
+        "packages/worker/src/index.ts"
+      ]
+    }
   },
   "include": [
     "src/**/*.ts",
