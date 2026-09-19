@@ -85,18 +85,24 @@
     "llm",
     "waggle"
   ],
+  "//devDependencies": "The five eslint entries are what `eslint.config.js` imports directly. They are declared here because the root lint gate (`npm run lint`, ci.yml) must own its own dependencies: until 2026-09-19 they were only resolved by npm hoisting them out of apps/web, so bumping apps/web's eslint to 10 nested that whole subtree and the gate died with ERR_MODULE_NOT_FOUND on 'globals'. Root stays on eslint 9 — eslint-plugin-react-hooks@5 peers <=9; apps/web runs eslint 10 against its own config.",
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@swc/core": "^1.15.21",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "axe-core": "^4.12.1",
     "esbuild": "^0.27.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.11.0",
     "js-yaml": "4.3.1",
     "jsdom": "^20.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tsx": "4.21.0",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.60.0",
     "@vitest/coverage-v8": "^3.2.7"
   },
   "dependencies": {
