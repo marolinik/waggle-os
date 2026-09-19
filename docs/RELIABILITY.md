@@ -144,8 +144,20 @@ every turn. Measured separately, against the exact three queries:
 
 So the per-turn cost was **2–15 ms, not 68–245 ms**. The direction was right and the fix is real —
 a scan that grows with the database replaced by an O(1) read — but an order of magnitude smaller
-than first written. `FrameStore.getStats()`'s own 68/245 ms remains true and is a separate, unfixed
-cost on the MCP read path.
+than first written. `FrameStore.getStats()`'s own cost was real and is now also addressed — splitting it into its
+three queries said exactly where it lived:
+
+| `FrameStore.getStats()` at 500k frames | before | after |
+|---|---|---|
+| `COUNT(*)` for `total` | 18 ms | reads `row_counts` |
+| `GROUP BY frame_type` | 61 ms | 74 ms (unchanged; variance) |
+| `GROUP BY importance` | **219 ms** | **34 ms** |
+| whole call | **375 ms** | **107 ms** |
+
+`importance` had no index, so grouping on it read every row — 58% of the call. It has five distinct
+values, so the index is small. The remaining 74 ms is the `frame_type` grouping, which already rides
+`idx_frames_type (frame_type, gop_id)`; a dedicated single-column index would shave it further at the
+cost of a second overlapping index on every write, and was judged not worth it.
 
 SQLite has no O(1) row count, so each `COUNT(*)` walks the table; the soak asserts that
 structurally with `EXPLAIN QUERY PLAN` rather than relying on a wall-clock number.
@@ -193,7 +205,7 @@ Authenticode/signing gates in `docs/production-readiness/09-LAUNCH_RECOMMENDATIO
 
 | # | Item | Priority | Owner | Note |
 |---|---|---|---|---|
-| R-3 | **Narrowed by R-6, per-turn half done.** Not 65 blanket `LIMIT`s: the per-turn counts now read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k). Left: `FrameStore.getStats()`'s three `GROUP BY` aggregates on the MCP read path (245 ms at 500k), and the few genuinely growing list reads | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
+| R-3 | **Narrowed by R-6; both count paths done.** Not 65 blanket `LIMIT`s: per-turn counts read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k), and `FrameStore.getStats()` went 375 ms → 107 ms by indexing `importance` and sourcing `total` from the counter. Left: the few genuinely growing list reads (`sessions.getActive`, `install-audit`, `cron-store`, `file-indexer`) | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
 | R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | Not on the Windows Solo path |
 | R-5 | Updater + fast rollback for the desktop artifact | P2 | founder | Entangled with signing gates; release-engineering arc |
 | R-6 | **done 2026-09-19** — `packages/hive-mind-core/tests/soak/`, `npm run test:soak`, sized by `WAGGLE_SOAK_FRAMES` | — | agent | Own lane (`vitest.soak.config.ts`); excluded from the default gate. Setup bulk-inserts because the subject is the read path, and one test proves a bulk row is indistinguishable from an API row |

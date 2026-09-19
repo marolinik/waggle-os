@@ -184,6 +184,29 @@ describe('R-6 soak — a large aged mind', () => {
     expect(hits.n).toBeGreaterThan(FRAMES / 2);
   });
 
+  it('splits frames.getStats into its three queries, so the cost is attributable', () => {
+    // getStats() is NOT the per-turn path — hive-mind-mcp-server resources and
+    // tools call it. Splitting it says which of the three queries to fix.
+    const raw = db.getDatabase();
+    measure(
+      'getStats: COUNT(*)',
+      () => raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number },
+      () => 1,
+    );
+    measure(
+      'getStats: GROUP BY frame_type',
+      () => raw.prepare('SELECT frame_type, COUNT(*) as cnt FROM memory_frames GROUP BY frame_type').all(),
+      (r) => (r as unknown[]).length,
+    );
+    measure(
+      'getStats: GROUP BY importance',
+      () => raw.prepare('SELECT importance, COUNT(*) as cnt FROM memory_frames GROUP BY importance').all(),
+      (r) => (r as unknown[]).length,
+    );
+
+    expect(frames.getStats().total).toBeGreaterThan(0);
+  });
+
   it('the trigger-maintained counters replace three table scans per turn', () => {
     // This is the pair that matters for R-3. `getMemoryStats()` used to run
     // exactly these three COUNT(*) queries per mind on every user turn;

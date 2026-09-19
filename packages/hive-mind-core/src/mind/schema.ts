@@ -143,6 +143,11 @@ CREATE TABLE IF NOT EXISTS memory_frames (
 CREATE INDEX IF NOT EXISTS idx_frames_gop_t ON memory_frames (gop_id, t);
 CREATE INDEX IF NOT EXISTS idx_frames_type ON memory_frames (frame_type, gop_id);
 CREATE INDEX IF NOT EXISTS idx_frames_base ON memory_frames (base_frame_id);
+-- R-3: FrameStore.getStats() groups by importance, which had no index and so
+-- read every row — 219 ms of a 375 ms call at 500k frames, the single largest
+-- share. Low cardinality (five values), so this is a small index that turns the
+-- grouping into an index scan.
+CREATE INDEX IF NOT EXISTS idx_frames_importance ON memory_frames (importance);
 -- idx_frames_content_hash is created ONLY in db.ts runMigrations(), AFTER the
 -- guarded ADD COLUMN. It must NOT live here: on a pre-D3 database the CREATE
 -- TABLE above no-ops (table exists without content_hash), so an index here
