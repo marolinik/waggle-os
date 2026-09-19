@@ -1,0 +1,177 @@
+// Typechecks the server tests, which `tsconfig.json` excludes (TD-TEST-11).
+// `rootDir` and `composite` are dropped deliberately: this config emits nothing,
+// and tests legitimately import fixtures from outside `src/`.
+//
+// The `exclude` list below is a BASELINE, not a design. Each entry is a test
+// file that does not typecheck today; the first run surfaced 173 errors across
+// these 56 files. The point of the config is that every OTHER test file — and
+// every new one — is checked from now on, and the list only ever shrinks.
+// Removing an entry and making it pass is a complete, self-contained change.
+//
+// `paths` mirrors `vitest.aliases.ts`: several workspace packages declare a
+// `dist/` entry in package.json `exports`, which is correct for publishing but
+// absent on a fresh checkout — `npm run build:packages` builds only the
+// shared -> ... -> server chain, so a test importing e.g.
+// `@waggle/hive-mind-shim-core` typechecked locally (stale dist) and failed in
+// CI with TS2307. Exact keys, not a `@waggle/*` wildcard: a wildcard would
+// rewrite a subpath import like `@waggle/agent/permissions` to
+// `packages/agent/permissions/src` and break it.
+
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../..",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": [
+      "node",
+      "vitest/globals"
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "@waggle/agent": [
+        "packages/agent/src/index.ts"
+      ],
+      "@waggle/cli": [
+        "packages/cli/src/index.ts"
+      ],
+      "@waggle/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@waggle/hive-mind-cli": [
+        "packages/hive-mind-cli/src/index.ts"
+      ],
+      "@waggle/hive-mind-core": [
+        "packages/hive-mind-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-claude-code": [
+        "packages/hive-mind-hooks-claude-code/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-claude-desktop": [
+        "packages/hive-mind-hooks-claude-desktop/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-codex": [
+        "packages/hive-mind-hooks-codex/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-codex-desktop": [
+        "packages/hive-mind-hooks-codex-desktop/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-core": [
+        "packages/hive-mind-hooks-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-cursor": [
+        "packages/hive-mind-hooks-cursor/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-hermes": [
+        "packages/hive-mind-hooks-hermes/src/index.ts"
+      ],
+      "@waggle/hive-mind-hooks-openclaw": [
+        "packages/hive-mind-hooks-openclaw/src/index.ts"
+      ],
+      "@waggle/hive-mind-mcp-server": [
+        "packages/hive-mind-mcp-server/src/index.ts"
+      ],
+      "@waggle/hive-mind-shim-core": [
+        "packages/hive-mind-shim-core/src/index.ts"
+      ],
+      "@waggle/hive-mind-wiki-compiler": [
+        "packages/hive-mind-wiki-compiler/src/index.ts"
+      ],
+      "@waggle/marketplace": [
+        "packages/marketplace/src/index.ts"
+      ],
+      "@waggle/memory-mcp": [
+        "packages/memory-mcp/src/index.ts"
+      ],
+      "@waggle/optimizer": [
+        "packages/optimizer/src/index.ts"
+      ],
+      "@waggle/sdk": [
+        "packages/sdk/src/index.ts"
+      ],
+      "@waggle/server": [
+        "packages/server/src/index.ts"
+      ],
+      "@waggle/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@waggle/waggle-dance": [
+        "packages/waggle-dance/src/index.ts"
+      ],
+      "@waggle/weaver": [
+        "packages/weaver/src/index.ts"
+      ],
+      "@waggle/wiki-compiler": [
+        "packages/wiki-compiler/src/index.ts"
+      ],
+      "@waggle/worker": [
+        "packages/worker/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests/backup-streaming.test.ts",
+    "tests/benchmarks/aggregate.test.ts",
+    "tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+    "tests/chat-api.test.ts",
+    "tests/db/schema.test.ts",
+    "tests/local/agent-groups.test.ts",
+    "tests/local/agents.test.ts",
+    "tests/local/anthropic-proxy.test.ts",
+    "tests/local/artifacts.test.ts",
+    "tests/local/browser-ext-auth.test.ts",
+    "tests/local/chat-collaboration.test.ts",
+    "tests/local/chat-helpers.test.ts",
+    "tests/local/chat-prompt-packaging.test.ts",
+    "tests/local/dynamic-provider-completion.test.ts",
+    "tests/local/external-tool-runs.test.ts",
+    "tests/local/feedback-routes.test.ts",
+    "tests/local/files-upload-multipart.test.ts",
+    "tests/local/fleet-isolation.test.ts",
+    "tests/local/home.test.ts",
+    "tests/local/identity.test.ts",
+    "tests/local/knowledge-graph-projection.test.ts",
+    "tests/local/managed-ollama-runtime.test.ts",
+    "tests/local/marketplace-dev.test.ts",
+    "tests/local/memory-center.test.ts",
+    "tests/local/memory-erase-endpoint.test.ts",
+    "tests/local/memory-lane-cron.test.ts",
+    "tests/local/memory-source-endpoint.test.ts",
+    "tests/local/memory-write-lint-hook.test.ts",
+    "tests/local/onboarding-status.test.ts",
+    "tests/local/persona-acceptance-prompt-budget.test.ts",
+    "tests/local/phase2-traversal-ingest.test.ts",
+    "tests/local/phase5-connector-health.test.ts",
+    "tests/local/providers.test.ts",
+    "tests/local/security-middleware.test.ts",
+    "tests/local/skills-phase3.test.ts",
+    "tests/local/team-integration.test.ts",
+    "tests/local/vector-backfill.test.ts",
+    "tests/local/vector-enrichment-service.test.ts",
+    "tests/local/workspaces-lifecycle.test.ts",
+    "tests/offline-mode.test.ts",
+    "tests/offline-tools.test.ts",
+    "tests/routes/agent-search.test.ts",
+    "tests/routes/capabilities.test.ts",
+    "tests/routes/commands.test.ts",
+    "tests/routes/workspace-context.test.ts",
+    "tests/service.test.ts",
+    "tests/services/evolution-service.test.ts",
+    "tests/start-trial.test.ts",
+    "tests/stripe/smoke-e2e.test.ts",
+    "tests/stripe/sync.test.ts",
+    "tests/stripe/webhook.test.ts",
+    "tests/tauri-config.test.ts",
+    "tests/tier-enforcement-matrix.test.ts",
+    "tests/workspace-api.test.ts",
+    "tests/workspace-sessions-concurrency.test.ts"
+  ]
+}

@@ -63,7 +63,7 @@ describe('runChannelChatTurn', () => {
       'event: done\ndata: {"content":"reviewed","toolsUsed":[]}\n\n',
     ])));
     await runChannelChatTurn({
-      port: 3333, message: 'review', workspace: 'default', session: 'evolve-x',
+      port: 3333, sessionToken: 'test-session-token', message: 'review', workspace: 'default', session: 'evolve-x',
       origin: 'automation',
     });
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
@@ -75,7 +75,7 @@ describe('runChannelChatTurn', () => {
       'event: done\ndata: {"content":"hi","toolsUsed":[]}\n\n',
     ])));
     await runChannelChatTurn({
-      port: 3333, message: 'hi', workspace: 'default', session: 'channel-telegram--10042',
+      port: 3333, sessionToken: 'test-session-token', message: 'hi', workspace: 'default', session: 'channel-telegram--10042',
       channel: { platform: 'telegram', chatId: '-10042' },
     });
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
@@ -87,7 +87,7 @@ describe('runChannelChatTurn', () => {
       'event: done\ndata: {"content":"hi","toolsUsed":[]}\n\n',
     ])));
     await runChannelChatTurn({
-      port: 3333, message: 'hi', workspace: 'default', session: 'channel-telegram-1',
+      port: 3333, sessionToken: 'test-session-token', message: 'hi', workspace: 'default', session: 'channel-telegram-1',
     });
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
     expect('origin' in body).toBe(false);
