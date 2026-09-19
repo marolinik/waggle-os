@@ -7,12 +7,73 @@
 // meta row is asserted by schema.test.ts.
 export const SCHEMA_VERSION = '1';
 
+/** Counter table for the per-turn memory stats. See ROW_COUNT_TRIGGERS_SQL. */
+export const ROW_COUNTS_TABLE_SQL = `
+-- Row counts maintained by trigger, so the per-turn memory stats do not pay
+-- three full table scans. SQLite has no O(1) row count: SELECT COUNT(*) walks
+-- the table, which measured 68 ms at 100k frames and 245 ms at 500k (R-6), on
+-- every user turn. Triggers rather than an application-side cache because
+-- ancillary write paths write these tables directly; a trigger cannot be
+-- bypassed by one. MindDB.recountRows() rebuilds them if a migration ever
+-- rewrites a counted table out from under the triggers.
+CREATE TABLE IF NOT EXISTS row_counts (
+  table_name TEXT PRIMARY KEY,
+  n INTEGER NOT NULL DEFAULT 0
+);
+`;
+
+/**
+ * Triggers that keep `row_counts` true. Exported separately from SCHEMA_SQL so
+ * `MindDB.runMigrations()` can apply them to a database created before they
+ * existed; both paths are idempotent.
+ */
+export const ROW_COUNT_TRIGGERS_SQL = `
+-- Row-count triggers. Declared last so every counted table already exists.
+-- A seed row per counted table keeps the UPDATE statements branch-free.
+-- REPLACE fires DELETE then INSERT, so a replace nets zero — correct.
+INSERT OR IGNORE INTO row_counts (table_name, n) VALUES ('memory_frames', 0);
+INSERT OR IGNORE INTO row_counts (table_name, n) VALUES ('sessions', 0);
+INSERT OR IGNORE INTO row_counts (table_name, n) VALUES ('knowledge_entities', 0);
+CREATE TRIGGER IF NOT EXISTS memory_frames_count_insert
+AFTER INSERT ON memory_frames
+BEGIN
+  UPDATE row_counts SET n = n + 1 WHERE table_name = 'memory_frames';
+END;
+CREATE TRIGGER IF NOT EXISTS memory_frames_count_delete
+AFTER DELETE ON memory_frames
+BEGIN
+  UPDATE row_counts SET n = n - 1 WHERE table_name = 'memory_frames';
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_count_insert
+AFTER INSERT ON sessions
+BEGIN
+  UPDATE row_counts SET n = n + 1 WHERE table_name = 'sessions';
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_count_delete
+AFTER DELETE ON sessions
+BEGIN
+  UPDATE row_counts SET n = n - 1 WHERE table_name = 'sessions';
+END;
+CREATE TRIGGER IF NOT EXISTS knowledge_entities_count_insert
+AFTER INSERT ON knowledge_entities
+BEGIN
+  UPDATE row_counts SET n = n + 1 WHERE table_name = 'knowledge_entities';
+END;
+CREATE TRIGGER IF NOT EXISTS knowledge_entities_count_delete
+AFTER DELETE ON knowledge_entities
+BEGIN
+  UPDATE row_counts SET n = n - 1 WHERE table_name = 'knowledge_entities';
+END;
+`;
+
 export const SCHEMA_SQL = `
 -- Meta table for schema versioning
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+${ROW_COUNTS_TABLE_SQL}
 
 -- Layer 0: Identity (single row, <500 tokens)
 CREATE TABLE IF NOT EXISTS identity (
@@ -396,6 +457,8 @@ CREATE TABLE IF NOT EXISTS erased_subjects (
   UNIQUE(source, source_ref)
 );
 CREATE INDEX IF NOT EXISTS idx_erased_subjects_lookup ON erased_subjects (source, source_ref);
+
+${ROW_COUNT_TRIGGERS_SQL}
 `;
 
 // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
