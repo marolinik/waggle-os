@@ -36,6 +36,7 @@
     "test:critical": "vitest run --config vitest.critical.config.ts --coverage",
     "test:perf": "vitest run --config vitest.perf.config.ts",
     "test:infra": "vitest run --config vitest.infra.config.ts",
+    "test:soak": "vitest run --config vitest.soak.config.ts",
     "test:watch": "vitest",
     "test:e2e": "node node_modules/playwright/cli.js test tests/e2e -c playwright.config.ts --project=chromium --reporter=list --retries=0 --timeout=60000",
     "test:e2e:smoke": "node node_modules/playwright/cli.js test tests/e2e/user-journeys.spec.ts --grep=\"J1:|J2:|J6:|J8:|J-mobile: Settings\" --project=chromium --reporter=list",
