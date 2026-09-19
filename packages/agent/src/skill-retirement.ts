@@ -22,8 +22,10 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ImprovementSignalStore } from '@waggle/core';
 import { loadSkillUsage, forgetSkillUsage } from './skill-usage.js';
+import type {
+  ImprovementSignalPort,
+} from './memory-ports.js';
 
 const DEFAULT_MAX_IDLE_DAYS = 90;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -36,7 +38,7 @@ export interface RetireOptions {
   /** Injectable clock for deterministic tests. */
   now?: () => Date;
   /** Emit skill_promotion signals for observability. */
-  improvementSignals?: ImprovementSignalStore;
+  improvementSignals?: ImprovementSignalPort;
 }
 
 export interface RetireReport {

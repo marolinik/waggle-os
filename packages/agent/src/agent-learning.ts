@@ -12,7 +12,9 @@
  * Uses the improvement_signals table for persistence.
  */
 
-import type { ImprovementSignalStore } from '@waggle/core';
+import type {
+  ImprovementSignalPort,
+} from './memory-ports.js';
 
 export interface LearnedBehavior {
   rule: string;
@@ -39,9 +41,9 @@ export interface LearningSnapshot {
 }
 
 export class AgentLearning {
-  private store: ImprovementSignalStore;
+  private store: ImprovementSignalPort;
 
-  constructor(store: ImprovementSignalStore) {
+  constructor(store: ImprovementSignalPort) {
     this.store = store;
   }
 

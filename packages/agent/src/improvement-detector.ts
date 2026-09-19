@@ -11,8 +11,11 @@
  * not just raw shape count.
  */
 
-import type { ImprovementSignalStore, ActionableSignal, SignalCategory } from '@waggle/core';
+import type { ActionableSignal, SignalCategory } from '@waggle/core';
 import { detectCorrection, type DetectedCorrection } from './correction-detector.js';
+import type {
+  ImprovementSignalPort,
+} from './memory-ports.js';
 
 // ── Structured output types ──────────────────────────────────
 
@@ -56,7 +59,7 @@ export interface WorkflowPatternSignal {
  * Called from agent-loop when tool lookup fails.
  */
 export function recordCapabilityGap(
-  store: ImprovementSignalStore,
+  store: ImprovementSignalPort,
   toolName: string,
   context?: string,
 ): void {
@@ -76,7 +79,7 @@ export function recordCapabilityGap(
  * Returns the detected correction (if any) for caller use.
  */
 export function analyzeAndRecordCorrection(
-  store: ImprovementSignalStore,
+  store: ImprovementSignalPort,
   userMessage: string,
   previousAssistantMessage?: string,
 ): DetectedCorrection | null {
@@ -103,7 +106,7 @@ const RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Per correction #3: requires recency context, not just raw shape count.
  */
 export function recordWorkflowPattern(
-  store: ImprovementSignalStore,
+  store: ImprovementSignalPort,
   taskShape: string,
   taskDescription: string,
 ): void {
@@ -124,7 +127,7 @@ export function recordWorkflowPattern(
  *
  * Per correction #6: capped at 3 actionable signals total, non-repeating.
  */
-export function buildAwarenessSummary(store: ImprovementSignalStore): AwarenessSummary {
+export function buildAwarenessSummary(store: ImprovementSignalPort): AwarenessSummary {
   const actionable = store.getActionable();
 
   const capabilityGaps: CapabilityGapSignal[] = [];
@@ -197,7 +200,7 @@ export function formatAwarenessPrompt(summary: AwarenessSummary): string | null 
  * Call this after the signals have been injected into a prompt or shown to the user.
  */
 export function markSummarySurfaced(
-  store: ImprovementSignalStore,
+  store: ImprovementSignalPort,
   summary: AwarenessSummary,
 ): void {
   for (const gap of summary.capabilityGaps) store.markSurfaced(gap.id);

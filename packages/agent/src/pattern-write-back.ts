@@ -19,8 +19,6 @@
  */
 
 import {
-  type FrameStore,
-  type SessionStore,
   type Importance,
   type FrameSource,
   type MemoryFrame,
@@ -39,6 +37,10 @@ import {
   STRUCTURED_EXTRACT_THRESHOLD,
   CONTEXT_PREVIEW_LENGTH,
 } from './content-constants.js';
+import type {
+  FrameStorePort,
+  SessionStorePort,
+} from './memory-ports.js';
 
 const logger = createCoreLogger('pattern-write-back');
 
@@ -52,13 +54,13 @@ export interface PatternWriteBackDeps {
   /** Personal mind layers (preferences, corrections, style notes route here) */
   personal: {
     db: MindDB;
-    frames: FrameStore;
-    sessions: SessionStore;
+    frames: FrameStorePort;
+    sessions: SessionStorePort;
   };
   /** Workspace mind layers (decisions, work output route here). Null = personal-only mode. */
   workspace: {
-    frames: FrameStore;
-    sessions: SessionStore;
+    frames: FrameStorePort;
+    sessions: SessionStorePort;
     cognify: CognifyPipeline;
   } | null;
   /** Optional team-sync client; receives pushFrame for workspace writes only */
