@@ -427,29 +427,28 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     }
   });
 
-  it('runs the turn ungoverned when the team server cannot be reached and nothing is cached', async () => {
-    // The remaining open half of TD-CHAT-23, pinned here for the first time.
+  it('refuses the turn when the team server cannot be reached and nothing is cached', async () => {
+    // TD-CHAT-23's last open half, now closed. This pin was written against the
+    // OLD behavior first (the turn completed with `governancePolicies`
+    // undefined) and then inverted, so the diff between the two commits is the
+    // behavior change itself.
     //
-    // `unavailable` is narrower than it sounds: `chat-governance.ts:119` falls
-    // back to a stale cache first, so the branch is only reached when the lookup
-    // has NEVER succeeded for this workspace in this process. The workspace id
-    // is unique per test, so the cache is genuinely cold.
+    // `unavailable` is narrower than it sounds: `chat-governance.ts:119` serves
+    // a stale cached policy when the call fails, so this branch is reached only
+    // when no policy has ever been fetched for this workspace in this process.
+    // The workspace id is unique per test, so the cache is genuinely cold.
     //
     // WHAT THIS CAN AND CANNOT SEE. The branch decides one value -
-    // `governancePolicies` - and that value has three downstream readers:
-    // the parent tool filter (`chat.ts:3492-3496`), the spawn tool list
-    // (`:3495`), and `securityContext.blockedTools` for children (`:3639`).
-    // None of the three is reachable here. The first two sit inside an
-    // `if (!hasCustomRunner)` block that the injected `agentRunner` seam skips
-    // wholesale (docs/TESTING.md "Seam caveat", TD-CHAT-16), and the third is
-    // captured by the spawn closure rather than exposed on `AgentLoopConfig`.
-    // `captured.tools` is empty in this harness for exactly that reason - an
-    // assertion about a tool being present or absent here would be vacuous.
-    //
-    // So this pins the DECISION, not its effects: a failed lookup yields the
-    // same `undefined` that an unrestricted team yields, and the turn completes
-    // normally. All three readers take that one value, so changing this branch
-    // changes all three together.
+    // `governancePolicies` - with three downstream readers: the parent tool
+    // filter (`chat.ts:3492-3496`), the spawn list beside it, and
+    // `securityContext.blockedTools` for children (`:3639`). None is reachable
+    // from here: the first two sit inside `if (!hasCustomRunner)`, which the
+    // injected `agentRunner` seam skips wholesale (docs/TESTING.md "Seam
+    // caveat", TD-CHAT-16), and the third is captured by the spawn closure
+    // rather than exposed on `AgentLoopConfig`. `captured.tools` is empty here
+    // for that reason, so an assertion about a tool being present or absent
+    // would be vacuous. Refusing the turn is observable, which is precisely why
+    // the fixed behavior pins more tightly than the bug did.
     const workspaceId = createTeamWorkspace('unreachable');
     const downSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
       String(input).endsWith(POLICY_PATH)
@@ -460,19 +459,21 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
       const res = await postTurn(workspaceId, 'unreachable governance turn', 'gov-unreachable');
       expect(res.statusCode).toBe(200);
 
-      // The turn runs to completion - no refusal, unlike the unreadable payload
-      // directly above, which is the whole asymmetry this row is about.
       const events = parseSSE(res.body);
-      expect(events.some(e => e.event === 'done')).toBe(true);
-      expect(events.some(e => e.event === 'error')).toBe(false);
+      expect(events.some(e => e.event === 'done')).toBe(false);
+      const error = events.find(e => e.event === 'error');
+      expect(error).toBeDefined();
+      // Distinct from the unreadable-payload message above: that one is a fault
+      // to report to an admin, this one is worth retrying.
+      expect(JSON.parse(error!.data).message).toBe(
+        'Team governance policies could not be reached for this workspace. Check your connection and try again.',
+      );
 
-      // And it runs with no policy: indistinguishable, downstream, from a team
-      // that blocks nothing.
-      expect(captured).toHaveLength(1);
-      expect(captured[0].governancePolicies).toBeUndefined();
+      // The runner is never reached, so no ungoverned turn can have run.
+      expect(captured).toHaveLength(0);
 
-      // The lookup really was attempted and really did fail - without this the
-      // assertion above would also pass for a workspace with no team at all.
+      // The lookup really was attempted - without this the assertions above
+      // would also pass for a workspace with no team server at all.
       expect(policyCallCount(downSpy)).toBe(1);
     } finally {
       downSpy.mockRestore();
