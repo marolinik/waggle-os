@@ -332,7 +332,7 @@ loads at import time in any of these paths — the cost is module graph, not SQL
 | CA-1 | ~770 lines of pure turn policy defined inside the Fastify plugin module, so every consumer and every test loads the delivery mechanism | `routes/chat.ts` (was lines 608–1781) | move to `routes/chat-turn-policy.ts`, re-export from `chat.ts`, guard the graph | P1 | **closed** — `a2f24546` + `3e380190` |
 | CA-2 | `@waggle/agent` published only its barrel, so importing one frozen array cost 937 ms (CRP violated at the `exports` map) | `packages/agent/package.json` | additive `./permissions` and `./tool-filter` subpaths | P1 | **closed** — `86d0d19f` |
 | CA-3 | Use cases construct concrete persistence classes — **12 `new` sites**, not a spread: 7 in the `Orchestrator` constructor, 4 in `setWorkspaceMind()`, 1 in `cross-workspace-tools.ts` | `agent/src/orchestrator.ts:189-196,233-236`, `agent/src/cross-workspace-tools.ts:107` | the use case owns the store *interfaces*; `@waggle/core` implements them; Parameterize Constructor with production defaults | P1 | **closed** — `cbf65c12` (pins) + `f24d192b` (inversion) + `edc2f455` (seam) |
-| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in **60** files — but **48 are type-only**, so the runtime edge is **12 files**, and outside `orchestrator.ts` it is `createCoreLogger` (8), `evaluateExternalMemoryIngress` (5) and `isSensitiveFilePath` (1), none of them persistence | package edge `agent → core` | invert the memory boundary per CA-3; the logger and the ingress guard are separate, smaller edges | P1 | **halved** — 56 files, 12 value importers; 3 of the 5 remaining memory namers name only `MindDB` |
+| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in **60** files — but **48 are type-only**, so the runtime edge is **12 files**, and outside `orchestrator.ts` it is `createCoreLogger` (8), `evaluateExternalMemoryIngress` (5) and `isSensitiveFilePath` (1), none of them persistence | package edge `agent → core` | invert the memory boundary per CA-3; the logger and the ingress guard are separate, smaller edges | P1 | **closed** — `memory-layers-default.ts` owns all 12 gateway constructions; guarded by `memory-gateway-confinement.test.ts` |
 | CA-5 | `TraceRecorder` built per request in the chat handler while the composition root already built its own for `HarnessTraceBridge` — two instances over one store | `routes/chat.ts`, `local/index.ts` | decorate `server.traceRecorder` at the root and share the instance | P2 | **closed** — see the CA-5 note below |
 | CA-5b | The same duplicate construction at two fleet sites | `local/fleet-run-executor.ts:660`, `local/routes/fleet.ts:380` | same remedy, but **no fleet test touches the trace path** — pin first | P3 | open |
 | CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
@@ -411,7 +411,22 @@ the files naming a concrete memory class fell from 11 to **5** — of which `con
 `pattern-write-back.ts` and `tools.ts` name only `MindDB`, the database handle. What is left is
 `orchestrator.ts`, which holds the production defaults because it is the place that already owned
 composition, and `cross-workspace-tools.ts`, whose `createSearch` factory defaults the same way.
-Moving those defaults out to `local/index.ts` is the remaining CA-4 slice.
+**CA-4 closed 2026-09-19**, and not the way the row imagined.
+
+Three shapes were on the table. Requiring `layers` and exporting a factory from `@waggle/core` is
+the truest inversion, and it was rejected on cost: all **54** `new Orchestrator(...)` sites — 4 in
+production, 50 in tests — would have to compose their own layers, which buys a cleaner graph by
+making every caller do the work. Declaring the orchestrator the composition root and stopping was
+the other option.
+
+What shipped is the middle one: `memory-layers-default.ts` holds every concrete construction, and
+no other module in `@waggle/agent` names a gateway in code — verified across the whole `src` tree,
+where the only remaining mentions are in comments. The honest caveat is in the file's own header:
+the package edge is **relocated, not removed**. `@waggle/agent` still imports `@waggle/core` there.
+What changed is that persistence choice now lives in one file named for that job, a caller that
+wants none of it passes `layers`, and `memory-gateway-confinement.test.ts` fails the moment a
+gateway name reappears anywhere else — including in a type position reached through
+`import('@waggle/core').FrameStore`, which a module-graph guard would miss.
 
 The pins live in `packages/agent/tests/orchestrator-memory-boundary-pins.test.ts` and assert on
 the **databases**, never on the layer objects — a pin reaching through `getFrames()` would be
