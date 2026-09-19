@@ -5264,6 +5264,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!raw.destroyed && !raw.writableEnded) raw.end();
         return;
       }
+      // Everything past the abort check is a real failure, and it is about to
+      // be turned into a user-facing sentence and forgotten. The post-commit
+      // branch at the top of this catch logs its error; this path never did, so
+      // a failure that matched none of the classifications below left the user
+      // holding a raw message and the server holding no record of it at all
+      // (TD-CHAT-15). The stack goes to the log and only to the log.
+      log.error('[chat] turn failed before the response was committed', {
+        workspaceId: activeWorkspaceId,
+        sessionId: activeSessionId,
+        turnId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       if (err instanceof Error) {
