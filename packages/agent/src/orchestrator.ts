@@ -288,28 +288,21 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
-    // Intentionally not cached: ancillary write paths (direct
-    // KnowledgeGraph.createEntity / FrameStore.createIFrame) would skip
-    // cache invalidation. Cost is 6× COUNT(*) per user turn — negligible
-    // below ~100k frames. If scale ever bites, fix via a write-counter
-    // in MindDB, not a time-based cache.
-    const raw = this.db.getDatabase();
-    const frameCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
-    const sessionCount = (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
-    const entityCount = (raw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
+    // R-3/R-6: these were three COUNT(*) scans per mind per user turn — 2.2 ms
+    // at 100k frames, 14.6 ms at 500k, measured by the soak against the exact
+    // three queries this used to run. `MindDB.memoryCounts()`
+    // reads a trigger-maintained counter table instead, which is O(1) and
+    // cannot be bypassed the way the application-side cache this comment used
+    // to warn against could have been.
+    const personal = this.db.memoryCounts();
+    if (!this.workspaceLayers) return personal;
 
-    if (this.workspaceLayers) {
-      const wsRaw = this.workspaceLayers.db.getDatabase();
-      const wsFrames = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
-      const wsSessions = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
-      const wsEntities = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
-      return {
-        frameCount: frameCount + wsFrames,
-        sessionCount: sessionCount + wsSessions,
-        entityCount: entityCount + wsEntities,
-      };
-    }
-    return { frameCount, sessionCount, entityCount };
+    const workspace = this.workspaceLayers.db.memoryCounts();
+    return {
+      frameCount: personal.frameCount + workspace.frameCount,
+      sessionCount: personal.sessionCount + workspace.sessionCount,
+      entityCount: personal.entityCount + workspace.entityCount,
+    };
   }
 
   /**

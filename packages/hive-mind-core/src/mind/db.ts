@@ -4,6 +4,7 @@ import * as sqliteVec from 'sqlite-vec';
 import {
   SCHEMA_SQL, VEC_TABLE_SQL, CHUNKS_VEC_TABLE_SQL, SCHEMA_VERSION,
   vecTableSqlForDim, chunksVecTableSqlForDim,
+  ROW_COUNTS_TABLE_SQL, ROW_COUNT_TRIGGERS_SQL,
 } from './schema.js';
 import { hashFrameContent } from './content-hash.js';
 
@@ -137,6 +138,45 @@ export class MindDB {
   }
 
   /** Run incremental schema migrations for existing .mind databases */
+  /**
+   * Row counts for the three tables the per-turn memory stats report, read from
+   * the trigger-maintained `row_counts` table instead of scanning.
+   *
+   * SQLite has no O(1) `COUNT(*)`: each one walks the table, which R-6 measured
+   * at 2.2 ms per turn at 100k frames and 14.6 ms at 500k, against 0.1-0.2 ms
+   * for this read. A trigger cannot be
+   * bypassed the way an application-side cache can — `orchestrator.ts` warned
+   * about exactly that when it declined to cache these.
+   */
+  memoryCounts(): { frameCount: number; sessionCount: number; entityCount: number } {
+    const rows = this.db
+      .prepare('SELECT table_name, n FROM row_counts')
+      .all() as Array<{ table_name: string; n: number }>;
+    const by = new Map(rows.map((r) => [r.table_name, r.n]));
+    return {
+      frameCount: by.get('memory_frames') ?? 0,
+      sessionCount: by.get('sessions') ?? 0,
+      entityCount: by.get('knowledge_entities') ?? 0,
+    };
+  }
+
+  /**
+   * Rebuild the counters from the tables themselves. The triggers keep
+   * `row_counts` true for ordinary writes; call this after anything that
+   * rewrites a counted table wholesale (a migration that recreates it, a
+   * restore from backup), where the triggers were not in play.
+   */
+  recountRows(): void {
+    const set = this.db.prepare(
+      'INSERT INTO row_counts (table_name, n) VALUES (?, ?) ' +
+      'ON CONFLICT(table_name) DO UPDATE SET n = excluded.n'
+    );
+    for (const table of ['memory_frames', 'sessions', 'knowledge_entities']) {
+      const row = this.db.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get() as { cnt: number };
+      set.run(table, row.cnt);
+    }
+  }
+
   private runMigrations(): void {
     // 2026-04-16: Ensure all tables from SCHEMA_SQL exist. Old .mind databases
     // may predate tables added during sprint work (ai_interactions, execution_traces,
@@ -289,6 +329,19 @@ export class MindDB {
     this.db.exec(
       'CREATE INDEX IF NOT EXISTS idx_frames_content_hash ON memory_frames (content_hash)'
     );
+
+    // R-3/R-6: row_counts + its triggers. `getMemoryStats()` ran three COUNT(*)
+    // scans per mind per user turn — 2.2 ms at 100k frames, 14.6 ms at 500k,
+    // against 0.1-0.2 ms for the counter read. Applied here
+    // as well as in SCHEMA_SQL so a database created before the counter exists
+    // gets it; both paths are idempotent. The backfill runs only when the table
+    // was absent, because after that the triggers keep it true.
+    const hadRowCounts = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='table' AND name='row_counts'"
+    ).get() as { cnt: number };
+    this.db.exec(ROW_COUNTS_TABLE_SQL);
+    this.db.exec(ROW_COUNT_TRIGGERS_SQL);
+    if (hadRowCounts.cnt === 0) this.recountRows();
 
     // W4.1: KG entity↔frame bridge — powers the 'contextual' scoring signal by
     // mapping query-seeded graph distances back onto frames. Idempotent; SCHEMA_SQL

@@ -184,6 +184,27 @@ describe('R-6 soak — a large aged mind', () => {
     expect(hits.n).toBeGreaterThan(FRAMES / 2);
   });
 
+  it('the trigger-maintained counters replace three table scans per turn', () => {
+    // This is the pair that matters for R-3. `getMemoryStats()` used to run
+    // exactly these three COUNT(*) queries per mind on every user turn;
+    // `memoryCounts()` reads the trigger-maintained table instead. Both are
+    // measured here so the comparison is like-for-like on one machine.
+    const raw = db.getDatabase();
+    const scanned = measure(
+      'three COUNT(*) scans',
+      () => ({
+        frameCount: (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt,
+        sessionCount: (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt,
+        entityCount: (raw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt,
+      }),
+      () => 3,
+    );
+    const counted = measure('db.memoryCounts()', () => db.memoryCounts(), () => 3);
+
+    // Agreement is the safety property; the timings above are the payoff.
+    expect(counted).toEqual(scanned);
+  });
+
   it('shows WHY getStats scales: every count is a full table scan', () => {
     // The timing above is real but environment-sensitive. This is the same
     // finding stated deterministically: `getMemoryStats` runs six COUNT(*)
