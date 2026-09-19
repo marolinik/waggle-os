@@ -50,6 +50,9 @@ export default defineConfig({
       // Wall-clock budgets run in a dedicated lane so filesystem/process
       // contention cannot make the deterministic correctness gate flaky.
       'packages/server/tests/performance/**',
+      // R-6: writes a multi-tens-of-thousands-frame .mind to disk and takes
+      // minutes. `npm run test:soak` runs it.
+      'packages/hive-mind-core/tests/soak/**',
     ],
     coverage: {
       provider: 'v8',
