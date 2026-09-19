@@ -120,6 +120,11 @@ behavior. Risk = blast radius if a refactor silently changes it.
   already-built `dist/`, so it typechecks against the declarations a change just replaced and
   exits 0 while CI fails. The chain rebuilds `shared -> ... -> agent -> server` in order and sees
   the new types. Cost it once (~1-2 min) rather than through a red CI run. TD-TEST-12.
+- **Server tests are typechecked by `npm run typecheck:server-tests`**, not by `build:packages` —
+  `packages/server/tsconfig.json` excludes `tests/`. The baseline `exclude` list in
+  `packages/server/tsconfig.tests.json` names the 55 files that do not pass yet and is a ratchet:
+  clearing a file means deleting its line and making it compile, which is a complete change on its
+  own. Do not add a file to that list to make a red run green. TD-TEST-11.
 - Local re-measure for `chat.ts` (Node 22.23.2). This is the exact 16-file set behind the
   headline above; list files explicitly — Vitest treats a quoted glob as a name filter, and the
   summary line shows how many files ran:
