@@ -284,9 +284,15 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
  *
  * The lookup is not gated by the injected-runner flag, so the object seam still
  * runs it and the resolved policies arrive on the config the runner receives —
- * which is the sensing point these pins use. A lookup that throws is swallowed
- * and the turn runs with no policy at all (QUIRK TD-CHAT-23); a payload that
- * cannot be read is cached before it is validated (QUIRK TD-CHAT-30).
+ * which is the sensing point these pins use.
+ *
+ * This comment used to say a lookup that throws is swallowed (QUIRK TD-CHAT-23)
+ * and that an unreadable payload is cached before validation (QUIRK TD-CHAT-30).
+ * Both were closed in Phase 4 and the two tests directly below now assert the
+ * opposite: the lookup returns a discriminated outcome rather than throwing, an
+ * unreadable payload refuses the turn, and it is validated before it is cached.
+ * What remains of TD-CHAT-23 is only the soft-failure branch ('unavailable'),
+ * which warns and then runs the turn ungoverned — not pinned here.
  */
 describe('POST /api/chat team governance lookup (characterization)', () => {
   let server: FastifyInstance;
