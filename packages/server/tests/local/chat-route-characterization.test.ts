@@ -427,6 +427,58 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     }
   });
 
+  it('runs the turn ungoverned when the team server cannot be reached and nothing is cached', async () => {
+    // The remaining open half of TD-CHAT-23, pinned here for the first time.
+    //
+    // `unavailable` is narrower than it sounds: `chat-governance.ts:119` falls
+    // back to a stale cache first, so the branch is only reached when the lookup
+    // has NEVER succeeded for this workspace in this process. The workspace id
+    // is unique per test, so the cache is genuinely cold.
+    //
+    // WHAT THIS CAN AND CANNOT SEE. The branch decides one value -
+    // `governancePolicies` - and that value has three downstream readers:
+    // the parent tool filter (`chat.ts:3492-3496`), the spawn tool list
+    // (`:3495`), and `securityContext.blockedTools` for children (`:3639`).
+    // None of the three is reachable here. The first two sit inside an
+    // `if (!hasCustomRunner)` block that the injected `agentRunner` seam skips
+    // wholesale (docs/TESTING.md "Seam caveat", TD-CHAT-16), and the third is
+    // captured by the spawn closure rather than exposed on `AgentLoopConfig`.
+    // `captured.tools` is empty in this harness for exactly that reason - an
+    // assertion about a tool being present or absent here would be vacuous.
+    //
+    // So this pins the DECISION, not its effects: a failed lookup yields the
+    // same `undefined` that an unrestricted team yields, and the turn completes
+    // normally. All three readers take that one value, so changing this branch
+    // changes all three together.
+    const workspaceId = createTeamWorkspace('unreachable');
+    const downSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
+      String(input).endsWith(POLICY_PATH)
+        ? new Response('gateway down', { status: 502 })
+        : new Response('', { status: 503 })
+    ));
+    try {
+      const res = await postTurn(workspaceId, 'unreachable governance turn', 'gov-unreachable');
+      expect(res.statusCode).toBe(200);
+
+      // The turn runs to completion - no refusal, unlike the unreadable payload
+      // directly above, which is the whole asymmetry this row is about.
+      const events = parseSSE(res.body);
+      expect(events.some(e => e.event === 'done')).toBe(true);
+      expect(events.some(e => e.event === 'error')).toBe(false);
+
+      // And it runs with no policy: indistinguishable, downstream, from a team
+      // that blocks nothing.
+      expect(captured).toHaveLength(1);
+      expect(captured[0].governancePolicies).toBeUndefined();
+
+      // The lookup really was attempted and really did fail - without this the
+      // assertion above would also pass for a workspace with no team at all.
+      expect(policyCallCount(downSpy)).toBe(1);
+    } finally {
+      downSpy.mockRestore();
+    }
+  });
+
   it('persists a failed assistant turn when a team turn errors before commit', async () => {
     // The territory a failing governance lookup reaches once it stops being
     // swallowed: the pre-commit error path. Triggered here through the runner so
