@@ -1,0 +1,86 @@
+// Typechecks the server tests, which `tsconfig.json` excludes (TD-TEST-11).
+// `rootDir` and `composite` are dropped deliberately: this config emits nothing,
+// and tests legitimately import fixtures from outside `src/`.
+//
+// The `exclude` list below is a BASELINE, not a design. Each entry is a test
+// file that does not typecheck today; the first run surfaced 173 errors across
+// these 56 files. The point of the config is that every OTHER test file — and
+// every new one — is checked from now on, and the list only ever shrinks.
+// Removing an entry and making it pass is a complete, self-contained change.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../..",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests/backup-streaming.test.ts",
+    "tests/benchmarks/aggregate.test.ts",
+    "tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+    "tests/chat-api.test.ts",
+    "tests/db/schema.test.ts",
+    "tests/local/agent-groups.test.ts",
+    "tests/local/agents.test.ts",
+    "tests/local/anthropic-proxy.test.ts",
+    "tests/local/artifacts.test.ts",
+    "tests/local/browser-ext-auth.test.ts",
+    "tests/local/chat-collaboration.test.ts",
+    "tests/local/chat-helpers.test.ts",
+    "tests/local/chat-prompt-packaging.test.ts",
+    "tests/local/dynamic-provider-completion.test.ts",
+    "tests/local/external-tool-runs.test.ts",
+    "tests/local/feedback-routes.test.ts",
+    "tests/local/files-upload-multipart.test.ts",
+    "tests/local/fleet-isolation.test.ts",
+    "tests/local/home.test.ts",
+    "tests/local/identity.test.ts",
+    "tests/local/knowledge-graph-projection.test.ts",
+    "tests/local/managed-ollama-runtime.test.ts",
+    "tests/local/marketplace-dev.test.ts",
+    "tests/local/memory-center.test.ts",
+    "tests/local/memory-erase-endpoint.test.ts",
+    "tests/local/memory-lane-cron.test.ts",
+    "tests/local/memory-source-endpoint.test.ts",
+    "tests/local/memory-write-lint-hook.test.ts",
+    "tests/local/onboarding-status.test.ts",
+    "tests/local/persona-acceptance-prompt-budget.test.ts",
+    "tests/local/phase2-traversal-ingest.test.ts",
+    "tests/local/phase5-connector-health.test.ts",
+    "tests/local/providers.test.ts",
+    "tests/local/security-middleware.test.ts",
+    "tests/local/skills-phase3.test.ts",
+    "tests/local/team-integration.test.ts",
+    "tests/local/vector-backfill.test.ts",
+    "tests/local/vector-enrichment-service.test.ts",
+    "tests/local/workspaces-lifecycle.test.ts",
+    "tests/offline-mode.test.ts",
+    "tests/offline-tools.test.ts",
+    "tests/routes/agent-search.test.ts",
+    "tests/routes/capabilities.test.ts",
+    "tests/routes/commands.test.ts",
+    "tests/routes/workspace-context.test.ts",
+    "tests/service.test.ts",
+    "tests/services/evolution-service.test.ts",
+    "tests/start-trial.test.ts",
+    "tests/stripe/smoke-e2e.test.ts",
+    "tests/stripe/sync.test.ts",
+    "tests/stripe/webhook.test.ts",
+    "tests/tauri-config.test.ts",
+    "tests/tier-enforcement-matrix.test.ts",
+    "tests/workspace-api.test.ts",
+    "tests/workspace-sessions-concurrency.test.ts"
+  ]
+}
