@@ -3464,24 +3464,33 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             wsConfig.teamRole,
           );
           throwIfTurnAborted();
-          if (lookup.status === 'invalid') {
-            // A payload we cannot read is a fault, not an absent policy.
-            // Running the turn anyway would drop the team's tool restrictions.
-            log.warn('[chat] governance policies unreadable; refusing the turn', {
-              workspaceId: effectiveWorkspace,
-              sessionId,
-              error: lookup.reason,
-            });
-            throw new Error('Team governance policies could not be verified for this workspace. Try again or contact your team admin.');
-          }
-          if (lookup.status === 'unavailable') {
-            // Transient: the turn proceeds without restrictions, but never
-            // silently — this is the remaining open half of TD-CHAT-23.
-            log.warn('[chat] governance policies unavailable; the turn runs ungoverned', {
-              workspaceId: effectiveWorkspace,
-              sessionId,
-              error: lookup.reason,
-            });
+          if (lookup.status === 'invalid' || lookup.status === 'unavailable') {
+            // Neither outcome tells us what this team allows, so the turn is
+            // refused rather than run with the team's restrictions dropped.
+            //
+            // `unavailable` reads as transient, and it used to proceed on that
+            // reasoning. It is narrower than it sounds: `chat-governance.ts`
+            // serves a cached policy first and falls back to a STALE one when
+            // the call fails, so reaching here means no policy has ever been
+            // fetched for this workspace in this process. There is nothing to
+            // be transient about — proceeding hands back precisely the tools
+            // the admin blocked, on the one path where we know the least.
+            //
+            // One value, three readers: the parent tool filter below, the
+            // spawn list beside it, and `securityContext.blockedTools` for
+            // child agents. Refusing here is what keeps all three honest.
+            const unreadable = lookup.status === 'invalid';
+            log.warn(
+              unreadable
+                ? '[chat] governance policies unreadable; refusing the turn'
+                : '[chat] governance policies unavailable; refusing the turn',
+              { workspaceId: effectiveWorkspace, sessionId, error: lookup.reason },
+            );
+            throw new Error(
+              unreadable
+                ? 'Team governance policies could not be verified for this workspace. Try again or contact your team admin.'
+                : 'Team governance policies could not be reached for this workspace. Check your connection and try again.',
+            );
           }
           governancePolicies = lookup.status === 'policy' ? lookup.policies : undefined;
         }
@@ -5255,6 +5264,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!raw.destroyed && !raw.writableEnded) raw.end();
         return;
       }
+      // Everything past the abort check is a real failure, and it is about to
+      // be turned into a user-facing sentence and forgotten. The post-commit
+      // branch at the top of this catch logs its error; this path never did, so
+      // a failure that matched none of the classifications below left the user
+      // holding a raw message and the server holding no record of it at all
+      // (TD-CHAT-15). The stack goes to the log and only to the log.
+      log.error('[chat] turn failed before the response was committed', {
+        workspaceId: activeWorkspaceId,
+        sessionId: activeSessionId,
+        turnId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       if (err instanceof Error) {
