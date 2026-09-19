@@ -10,7 +10,7 @@
  * buffer it returns is module-global, so `stopTurnCapture()` runs in an
  * `afterEach` and not only on the happy path.
  *
- * These pin CURRENT behavior, not a specification. QUIRK: TD-CHAT-31.
+ * These pin CURRENT behavior, not a specification. QUIRK: TD-CHAT-43.
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import fs from 'node:fs';
@@ -76,7 +76,7 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
   });
 
   it('mints an orphan turn id when a later gate rejects', async () => {
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-31): the id is minted between the two
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-43): the id is minted between the two
     // gates, so this rejection DOES get one - and it is the only event that
     // will ever carry it. A turn id with exactly one stage and no successor is
     // indistinguishable from a turn that died silently mid-flight.
@@ -106,7 +106,7 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
     // come from the agent loop downstream, and an injected runner contributes
     // none - which is why this pin asserts one event and not several.
     //
-    // That is the real shape of TD-CHAT-31: the orphan id at the rejected gate
+    // That is the real shape of TD-CHAT-43: the orphan id at the rejected gate
     // is not distinguishable by counting stages, only by the absence of the
     // downstream stages a real agent path would add.
     const res = await runTurn({
