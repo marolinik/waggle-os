@@ -197,10 +197,20 @@ describe('held-action-executor', () => {
 
     it('refuses a critical action at execute-time re-validation (never runs the tool)', async () => {
       const execSpy = vi.fn(async () => 'ran');
-      const server = makeServer(store, { name: 'bash', execute: execSpy });
-      // A row whose args are critical (e.g. allowlist later changed, or a tampered
-      // row) must still be re-validated at execute — rm -rf / is never-autopass.
-      hold({ toolName: 'bash', argsJson: JSON.stringify({ command: 'rm -rf /' }) });
+      const server = makeServer(store, { name: 'connector_github_delete_repository', execute: execSpy });
+      // A row whose action is critical must still be re-validated at execute.
+      //
+      // This used to hold a `bash` row, which no longer reaches the critical
+      // gate: `bash` is not proposable, so the allowlist re-check added for
+      // TD-CHAT-47 refuses it one gate earlier. The tool still never runs and
+      // the row still ends 'failed' — but the assertion below would have been
+      // testing the wrong guard. A connector delete is both proposable and
+      // never-autopass, so it exercises the critical gate the way the `bash`
+      // row was meant to.
+      hold({
+        toolName: 'connector_github_delete_repository',
+        argsJson: JSON.stringify({ repo: 'marolinik/waggle-os' }),
+      });
       const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
       expect(r.ok).toBe(false);
       expect(r.error).toMatch(/re-validation/);
@@ -260,4 +270,53 @@ describe('held-action-executor', () => {
       expect(decision.step).toContain('refused');
     });
   });
+  describe('the allowlist invariant TD-CHAT-47 rests on', () => {
+    // `executeHeldAction` calls `isCriticalNeverAutopass(row.tool_name, args)`
+    // on arguments parsed straight out of the database. That function coerces
+    // model-supplied values - `String(args?.command)` - for exactly two tools,
+    // and a coercion-hostile argument such as `{"command": {"toString": 0}}` is
+    // ordinary JSON, so the coercion would throw.
+    //
+    // It never gets the chance, because `isProposableTool` admits neither tool.
+    // That safety lived in two functions in two files with nothing stating the
+    // link, which is the whole of TD-CHAT-47. These two tests are the link: add
+    // `bash` or `git_push` to the allowlist and they fail here, next to the
+    // reason, instead of surfacing as a throw in production.
+    it.each(['bash', 'git_push'])(
+      'excludes %s, whose arguments isCriticalNeverAutopass coerces',
+      (tool) => {
+        expect(isProposableTool(tool)).toBe(false);
+      },
+    );
+
+    it('refuses a stored row whose tool is no longer proposable', async () => {
+      // Rows outlive the code that wrote them and the allowlist gets tightened,
+      // so enqueue-time enforcement does not cover execute time. Written here
+      // directly to the store, which is what a row from an older version looks
+      // like: `enqueueHeldAction` would refuse this tool today.
+      const server = makeServer(store, {
+        name: 'bash',
+        execute: async () => { throw new Error('a no-longer-proposable tool must never execute'); },
+      });
+      const row: SavePendingActionInput = {
+        id: 'stale-1',
+        workspaceId: 'w1',
+        source: 'session-reviewer:s1',
+        toolName: 'bash',
+        argsJson: JSON.stringify({ command: 'echo hi' }),
+        summary: 'a tool that used to be proposable',
+        riskLevel: 'medium',
+        approvalClass: 'standard',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+      store.savePendingAction(row);
+
+      const settled = await executeHeldAction(server, store.getPendingAction('stale-1')!);
+      expect(settled.ok).toBe(false);
+      expect(settled.status).toBe('failed');
+      expect(settled.error).toBe('tool is no longer proposable');
+      expect(store.getPendingAction('stale-1')!.status).toBe('failed');
+    });
+  });
+
 });
