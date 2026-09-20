@@ -54,11 +54,31 @@ let browserInstance: BrowserInstance | null = null;
 let pageInstance: BrowserPage | null = null;
 let playwrightModule: PlaywrightModule | null = null;
 
+/**
+ * Held in a variable, not written inline, and that is the whole point.
+ *
+ * `await import('playwright-core')` with a LITERAL specifier makes TypeScript
+ * resolve the module at compile time and fail with TS2307 when it is absent —
+ * and absent is the intended state. `scripts/build-sidecar.mjs` marks it
+ * external and `scripts/stage-sidecar-deps.mjs` deliberately does not stage it
+ * ("100s of MB of dead weight"); the user installs it only if they want browser
+ * tools. The structural interfaces above already avoid importing its types for
+ * the same reason, but they could not stop the specifier itself from being
+ * resolved.
+ *
+ * So the package compiled only while npm happened to hoist playwright-core out
+ * of apps/web's `@playwright/test`, two levels up a transitive chain. The day a
+ * bump changed that hoist, this file stopped compiling — which is exactly what
+ * dependabot #99 hit. A variable specifier is not resolved by TypeScript, so
+ * the optional dependency is now optional at compile time too. See TD-DEP-1.
+ */
+const PLAYWRIGHT_SPECIFIER = 'playwright-core';
+
 /** Try to import playwright-core. Returns the module or null. */
 async function getPlaywright(): Promise<PlaywrightModule | null> {
   if (playwrightModule) return playwrightModule;
   try {
-    playwrightModule = (await import('playwright-core')) as PlaywrightModule;
+    playwrightModule = (await import(PLAYWRIGHT_SPECIFIER)) as PlaywrightModule;
     return playwrightModule;
   } catch {
     return null;
