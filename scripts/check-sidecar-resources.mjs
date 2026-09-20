@@ -36,7 +36,9 @@ const FIRST_PARTY_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\
 const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
   ['@waggle/hive-mind-hooks-openclaw', ['dist/handler.bundle.cjs']],
 ]);
-const REQUIRED_SHARP_VERSION = '0.35.3';
+// Kept equal to the lockfile pin `tauri-config.test.ts` asserts — that test
+// reads this literal back, so the two cannot drift apart again.
+const REQUIRED_SHARP_VERSION = '0.35.4';
 const REQUIRED_BETTER_SQLITE_RANGE = '>=12.6.2 <13';
 const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
   ['brace-expansion', new Set(['1.1.18', '2.1.4', '5.0.9'])],

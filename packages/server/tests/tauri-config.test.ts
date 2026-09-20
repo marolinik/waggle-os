@@ -901,6 +901,19 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.4']));
+    // The staged-resource release checker keeps its OWN literal copy of this
+    // version, and nothing tied the two together: this group bump moved the
+    // lockfile pin above, the `test` job went green, and the Tauri verify jobs
+    // failed twenty minutes later on `resources/node_modules/sharp contains
+    // sharp@0.35.4; required version: 0.35.3`. Read the literal back so the
+    // divergence fails here, in the fast job, next to the pin it must match.
+    const sidecarResourceChecker = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
+      'utf-8',
+    );
+    expect(
+      /^const REQUIRED_SHARP_VERSION = '([^']+)';$/m.exec(sidecarResourceChecker)?.[1],
+    ).toBe('0.35.4');
     expect(versionsFor('better-sqlite3')).toEqual(new Set(['12.6.2']));
     expect(new Set(
       Object.entries(appLockfile.packages)
