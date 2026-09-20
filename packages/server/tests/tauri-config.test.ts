@@ -836,16 +836,26 @@ describe('Tauri Production Configuration', () => {
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.1',
       'better-sqlite3': '12.6.2',
-      '@huggingface/transformers': { sharp: '0.35.3' },
-      next: '16.3.0',
+      '@huggingface/transformers': { sharp: '0.35.4' },
+      // Moved with apps/www in the 79-package group bump. `apps/www` declares an
+      // EXACT `next: 16.3.5`, and an override does not relax a workspace's own
+      // exact declaration — holding this at 16.3.0 made the lockfile satisfy
+      // neither and `npm ci` fail. 16.3.5 is a newer patch in the same minor, so
+      // it advances the intent this override was added for (ec24a8a3, "upgrade
+      // secure Next runtime") rather than weakening it.
+      next: '16.3.5',
     };
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
+    // sharp moved with the group bump. The nested override above moves with it
+    // on purpose: pinning transformers to 0.35.3 while the root uses 0.35.4
+    // installs a SECOND copy of a large native module, which is the duplication
+    // this override exists to prevent.
     expect(manifest.dependencies).toMatchObject({
       '@huggingface/transformers': '3.8.1',
-      sharp: '0.35.3',
+      sharp: '0.35.4',
     });
     expect(appManifest.overrides).toMatchObject({ browserslist: '4.28.9' });
 
@@ -856,7 +866,7 @@ describe('Tauri Production Configuration', () => {
       )) as { dependencies?: Record<string, string> };
       return workspaceManifest.dependencies?.['@fastify/static'];
     });
-    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.2']));
+    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.3']));
 
     const betterSqliteRanges = [
       'core',
@@ -883,14 +893,14 @@ describe('Tauri Production Configuration', () => {
       return new Set(matching.map(([, metadata]) => metadata.version!));
     };
 
-    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
+    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.3']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.7']));
     expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
-    expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
+    expect(versionsFor('sharp')).toEqual(new Set(['0.35.4']));
     expect(versionsFor('better-sqlite3')).toEqual(new Set(['12.6.2']));
     expect(new Set(
       Object.entries(appLockfile.packages)
@@ -903,7 +913,7 @@ describe('Tauri Production Configuration', () => {
       ));
     expect(sharpBindings.length).toBeGreaterThan(0);
     expect(new Set(sharpBindings.map(([, metadata]) => metadata.version))).toEqual(
-      new Set(['0.35.3']),
+      new Set(['0.35.4']),
     );
   });
 
