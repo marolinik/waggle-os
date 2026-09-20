@@ -539,6 +539,7 @@ export {
   shouldRequireCapabilityAcquisitionTools,
 } from './chat-turn-policy.js';
 export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
+import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -598,29 +599,6 @@ function emptyModelResponseError(response: AgentResponse): EmptyModelResponseErr
 
 function isTerminalEmptyModelResponse(error: unknown): boolean {
   return isEmptyModelResponseError(error) && error.toolsUsed.length > 0;
-}
-
-function getBillableUsage(
-  usage: unknown,
-): { inputTokens: number; outputTokens: number } | null {
-  const candidate = usage as {
-    inputTokens?: unknown;
-    outputTokens?: unknown;
-  } | null | undefined;
-  if (!candidate
-    || typeof candidate.inputTokens !== 'number'
-    || !Number.isFinite(candidate.inputTokens)
-    || candidate.inputTokens < 0
-    || typeof candidate.outputTokens !== 'number'
-    || !Number.isFinite(candidate.outputTokens)
-    || candidate.outputTokens < 0
-    || candidate.inputTokens + candidate.outputTokens <= 0) {
-    return null;
-  }
-  return {
-    inputTokens: candidate.inputTokens,
-    outputTokens: candidate.outputTokens,
-  };
 }
 
 function getFailedCompletionUsage(
@@ -2219,27 +2197,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     };
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
-    let activeAttemptModel: string | null = null;
-    let activeAttemptBillingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']> = 'priced';
-    const attemptedBillingClasses = new Set<NonNullable<AgentLoopConfig['modelSpendBillingClass']>>();
-    let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
-    const failedAttemptUsageReceipts: Array<{
-      model: string;
-      billingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']>;
-      usage: { inputTokens: number; outputTokens: number };
-      estimated?: boolean;
-    }> = [];
+    const usageLedger = new TurnUsageLedger();
     const failedAttemptToolsUsed = new Set<string>();
-    let completedAttemptUsageReceipt: {
-      model: string;
-      billingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']>;
-      usage: { inputTokens: number; outputTokens: number };
-    } | null = null;
-    let totalTurnUsage: { inputTokens: number; outputTokens: number } = {
-      inputTokens: 0,
-      outputTokens: 0,
-    };
-    let usageAccounted = false;
     let responseCommitted = false;
 
     // Mutable conversation-local state cannot accept two overlapping turns.
@@ -4409,11 +4368,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           bufferedAgentTokens = [];
           capabilityReceipt = null;
           pendingCapabilityToolResults = [];
-          activeAttemptModel = config.billingModel ?? resolvedModel;
-          activeAttemptBillingClass = config.modelSpendBillingClass ?? 'priced';
-          announceModelSwitch(activeAttemptModel);
-          attemptedBillingClasses.add(activeAttemptBillingClass);
-          abortedAttemptUsage = null;
+          const attemptModel = config.billingModel ?? resolvedModel;
+          usageLedger.beginAttempt(attemptModel, config.modelSpendBillingClass ?? 'priced');
+          announceModelSwitch(attemptModel);
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
           const initialModelActivityTimeoutMs = initialActivityDeadlineAvailable
             ? attemptBaseConfig.initialModelActivityTimeoutMs
@@ -4468,35 +4425,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 if (typeof tool === 'string' && tool.trim()) failedAttemptToolsUsed.add(tool.trim());
               }
             }
-            if (failedUsage && activeAttemptModel) {
-              failedAttemptUsageReceipts.push({
-                model: activeAttemptModel,
-                billingClass: activeAttemptBillingClass,
-                usage: failedUsage,
-                ...((error as { usageEstimated?: unknown }).usageEstimated === true
-                  ? { estimated: true }
-                  : {}),
-              });
-            }
+            usageLedger.recordFailedAttempt(failedUsage, {
+              estimated: (error as { usageEstimated?: unknown }).usageEstimated === true,
+            });
             throw error;
           }
           if (turnSignal.aborted) {
-            completedAttemptUsageReceipt = {
-              model: activeAttemptModel ?? resolvedModel,
-              billingClass: activeAttemptBillingClass,
-              usage: {
-                inputTokens: attemptedResult.usage.inputTokens ?? 0,
-                outputTokens: attemptedResult.usage.outputTokens ?? 0,
-              },
-            };
-            totalTurnUsage = failedAttemptUsageReceipts.reduce(
-              (total, receipt) => ({
-                inputTokens: total.inputTokens + receipt.usage.inputTokens,
-                outputTokens: total.outputTokens + receipt.usage.outputTokens,
-              }),
-              { ...completedAttemptUsageReceipt.usage },
-            );
-            abortedAttemptUsage = getBillableUsage(totalTurnUsage);
+            usageLedger.completeAttempt(attemptedResult.usage, resolvedModel);
             throwIfTurnAborted();
           }
           if (requiredToolSequence) {
@@ -4544,14 +4479,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (!completedResult.content.trim()) {
             const emptyError = emptyModelResponseError(completedResult);
             for (const tool of completedResult.toolsUsed) failedAttemptToolsUsed.add(tool);
-            const failedUsage = getFailedCompletionUsage(emptyError);
-            if (failedUsage && activeAttemptModel) {
-              failedAttemptUsageReceipts.push({
-                model: activeAttemptModel,
-                billingClass: activeAttemptBillingClass,
-                usage: failedUsage,
-              });
-            }
+            // `emptyModelResponseError` builds the error here and never marks it
+            // estimated, so this attempt is always a counted one.
+            usageLedger.recordFailedAttempt(getFailedCompletionUsage(emptyError));
             throw emptyError;
           }
           return strictToolRetryContext
@@ -4747,22 +4677,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...result,
           toolsUsed: [...new Set([...failedAttemptToolsUsed, ...(result.toolsUsed ?? [])])],
         };
-        completedAttemptUsageReceipt = {
-          model: activeAttemptModel ?? resolvedModel,
-          billingClass: activeAttemptBillingClass,
-          usage: {
-            inputTokens: result.usage.inputTokens ?? 0,
-            outputTokens: result.usage.outputTokens ?? 0,
-          },
-        };
-        totalTurnUsage = failedAttemptUsageReceipts.reduce(
-          (total, receipt) => ({
-            inputTokens: total.inputTokens + receipt.usage.inputTokens,
-            outputTokens: total.outputTokens + receipt.usage.outputTokens,
-          }),
-          { ...completedAttemptUsageReceipt.usage },
-        );
-        abortedAttemptUsage = getBillableUsage(totalTurnUsage);
+        usageLedger.completeAttempt(result.usage, resolvedModel);
 
         const capabilityToolResults = pendingCapabilityToolResults as Array<{
           input: Record<string, unknown>;
@@ -4808,16 +4723,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Track every dispatched attempt against the model that actually ran it.
-        const successfulAttemptReceipts = [
-          ...failedAttemptUsageReceipts,
-          ...(completedAttemptUsageReceipt ? [completedAttemptUsageReceipt] : []),
-        ];
-        // Whole-turn provenance must remain priced if any attempted model was
-        // priced. A later free fallback cannot erase spend already incurred.
-        const messageBillingClass = attemptedBillingClasses.size > 0
-          && [...attemptedBillingClasses].every(billingClass => billingClass === 'free')
-          ? 'free'
-          : 'priced';
+        const successfulAttemptReceipts = usageLedger.receipts;
+        const messageBillingClass = usageLedger.messageBillingClass;
+        const turnUsage = usageLedger.total;
         let resultCost = successfulAttemptReceipts.reduce((total, receipt) => (
           total + costTracker.calculateUsageCost({
             model: receipt.model,
@@ -4842,9 +4750,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
         accountWorkspaceSessionTokens(
-          totalTurnUsage.inputTokens + totalTurnUsage.outputTokens,
+          usageLedger.total.inputTokens + usageLedger.total.outputTokens,
         );
-        usageAccounted = true;
+        usageLedger.markAccounted();
 
         // M8: commit deferred signal markings now that model call succeeded
         if (!hasCustomRunner && allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
@@ -5040,10 +4948,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const finalizedTrace = traceRecorder.finalize(traceHandle, {
               outcome: 'success',
               output: retainedTurnText(finalContent ?? ''),
-              model: activeAttemptModel ?? resolvedModel,
+              model: usageLedger.attemptModel ?? resolvedModel,
               tokens: {
-                input: totalTurnUsage.inputTokens,
-                output: totalTurnUsage.outputTokens,
+                input: turnUsage.inputTokens,
+                output: turnUsage.outputTokens,
               },
               costUsd: resultCost,
             });
@@ -5070,8 +4978,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
-          usage: totalTurnUsage,
-          usageEstimated: failedAttemptUsageReceipts.some(receipt => receipt.estimated === true),
+          usage: turnUsage,
+          usageEstimated: usageLedger.isEstimated,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
           billingClass: messageBillingClass,
@@ -5092,12 +5000,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
             agentLatencyMs,
             totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
-            providerInputTokens: totalTurnUsage.inputTokens,
-            providerOutputTokens: totalTurnUsage.outputTokens,
+            providerInputTokens: turnUsage.inputTokens,
+            providerOutputTokens: turnUsage.outputTokens,
           },
           ...(messageCost !== undefined && {
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
-            tokens: { input: totalTurnUsage.inputTokens, output: totalTurnUsage.outputTokens },
+            tokens: { input: turnUsage.inputTokens, output: turnUsage.outputTokens },
           }),
         });
         responseCommitted = true;
@@ -5107,7 +5015,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         emitWaggleSignal({
           type: 'agent:completed',
           workspaceId: executionScopeId,
-            content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${totalTurnUsage.outputTokens} tokens`,
+            content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${turnUsage.outputTokens} tokens`,
             metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
           });
       } catch { /* best-effort activity projection */ }
@@ -5180,8 +5088,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         ? getBillableUsage((err as { usage?: unknown } | null | undefined)?.usage)
         : null;
       const billableAttemptReceipts = [
-        ...failedAttemptUsageReceipts,
-        ...(completedAttemptUsageReceipt ? [completedAttemptUsageReceipt] : []),
+        ...usageLedger.receipts,
       ];
       const recordedAttemptUsage = billableAttemptReceipts.length > 0
         ? billableAttemptReceipts.reduce((total, receipt) => ({
@@ -5192,15 +5099,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const billableFailureUsage = recordedAttemptUsage
         ?? failedCompletionUsage
         ?? abortedErrorUsage
-        ?? (turnSignal.aborted ? abortedAttemptUsage : null);
+        ?? (turnSignal.aborted ? usageLedger.abortedAttemptUsage : null);
       let failureCostUsd: number | undefined;
-      if (billableFailureUsage && activeAttemptModel) {
+      if (billableFailureUsage && usageLedger.attemptModel) {
         try {
           const accountingReceipts = billableAttemptReceipts.length > 0
             ? billableAttemptReceipts
             : [{
-                model: activeAttemptModel,
-                billingClass: activeAttemptBillingClass,
+                model: usageLedger.attemptModel,
+                billingClass: usageLedger.attemptBillingClass,
                 usage: billableFailureUsage,
               }];
           failureCostUsd = accountingReceipts.reduce((total, receipt) => (
@@ -5211,7 +5118,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               billingClass: receipt.billingClass,
             })
           ), 0);
-          if (!usageAccounted && hasCustomRunner) {
+          if (!usageLedger.isAccounted && hasCustomRunner) {
             for (const receipt of accountingReceipts) {
               costTracker.addUsage(
                 receipt.model,
@@ -5222,7 +5129,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               );
             }
           }
-          if (!usageAccounted) {
+          if (!usageLedger.isAccounted) {
             accountWorkspaceSessionTokens(
               billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
             );
@@ -5243,7 +5150,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
             output: '',
-            model: activeAttemptModel ?? undefined,
+            model: usageLedger.attemptModel ?? undefined,
             tokens: billableFailureUsage ? {
               input: billableFailureUsage.inputTokens,
               output: billableFailureUsage.outputTokens,
@@ -5395,7 +5302,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
             output: retainedTurnText(''),
-            model: activeAttemptModel ?? undefined,
+            model: usageLedger.attemptModel ?? undefined,
           });
           traceFinalized = true;
         } catch { /* best-effort */ }
