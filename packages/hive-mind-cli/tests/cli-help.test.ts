@@ -139,7 +139,7 @@ describe('hive-mind CLI subcommand help', () => {
 
       const install = await runInCwd(
         bin('npm'),
-        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        ['install', '--no-audit', '--no-fund', '--prefer-online'],
         projectDir,
         dataDir,
       );
