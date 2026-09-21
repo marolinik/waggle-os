@@ -7163,8 +7163,7 @@ try {
 });
 
 describe('Windows installer certifier timeout contract', () => {
-  it('honors one bounded JSON GET timeout override and still fails closed', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('honors one bounded JSON GET timeout override and still fails closed', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(
@@ -7218,8 +7217,7 @@ describe('Windows installer certifier timeout contract', () => {
     }
   });
 
-  it('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(
@@ -7285,8 +7283,7 @@ if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $sc
     await expect(runProbe('fail')).resolves.toBeUndefined();
   });
 
-  it('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(

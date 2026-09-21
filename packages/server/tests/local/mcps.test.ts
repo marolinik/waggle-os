@@ -246,8 +246,7 @@ describe('MCP Hub routes (Phase 4)', () => {
     server = await buildServer({ tier: 'TEAMS' });
   });
 
-  it('bounds the Windows taskkill dispatch used for MCP revocation', () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('bounds the Windows taskkill dispatch used for MCP revocation', () => {
     const child = {
       pid: 4242,
       exitCode: null,
