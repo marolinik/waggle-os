@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from './sheet';
 
 /**
@@ -20,8 +20,19 @@ interface DetailDrawerProps {
 }
 
 export function DetailDrawer({ open, onOpenChange, title, subtitle, headerExtra, footer, children, className }: DetailDrawerProps) {
+  // Every open gets a fresh Sheet. Reopening one that is still animating out
+  // (a list row clicked during the exit) otherwise reuses a half-unmounted
+  // Radix dialog: its overlay remounts AFTER the content and paints over it at
+  // the same z-index, and focus is never moved back inside.
+  const [openCount, setOpenCount] = useState(0);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setOpenCount((count) => count + 1);
+  }
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet key={openCount} open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className={`flex flex-col w-full sm:max-w-md gap-0 ${className ?? ''}`}>
         <SheetHeader className="pr-8">
           <div className="flex items-start justify-between gap-2">

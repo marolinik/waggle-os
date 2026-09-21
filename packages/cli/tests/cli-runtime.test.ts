@@ -327,7 +327,15 @@ describe('@waggle/cli runtime UX', () => {
 
       const install = await runInCwd(
         bin('npm'),
-        ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--prefer-offline'],
+        // `--prefer-online`, not `--prefer-offline`. CI restores `~/.npm` through
+        // a `restore-keys` fallback, so a lockfile change — every dependabot PR —
+        // misses the exact key and gets an OLDER cache. `--prefer-offline` then
+        // trusts that cache's stale packument and reports a version that plainly
+        // exists as missing:
+        //   npm error notarget No matching version found for @anthropic-ai/sdk@^0.126.0
+        // Revalidating metadata costs one request per package; cached tarballs are
+        // still reused, so the speed this flag was added for is largely kept.
+        ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--prefer-online'],
         projectDir,
         home,
       );
@@ -440,7 +448,7 @@ describe('@waggle/cli runtime UX', () => {
         bin('npm'),
         // The REPL opens MindDB on startup, so this install must allow better-sqlite3's
         // native binding lifecycle rather than using the help-only --ignore-scripts path.
-        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        ['install', '--no-audit', '--no-fund', '--prefer-online'],
         projectDir,
         home,
       );
@@ -544,7 +552,7 @@ describe('@waggle/cli runtime UX', () => {
 
       const install = await runInCwdAsync(
         bin('npm'),
-        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        ['install', '--no-audit', '--no-fund', '--prefer-online'],
         projectDir,
         home,
       );

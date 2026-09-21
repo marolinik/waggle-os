@@ -195,7 +195,7 @@ describe('@waggle/hive-mind-mcp-server built runtime', () => {
       );
 
       const install = await runNpm(
-        ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+        ['install', '--no-audit', '--no-fund', '--prefer-online'],
         projectDir,
       );
       expect(install.status).toBe(0);

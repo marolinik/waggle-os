@@ -152,7 +152,7 @@ describe('marketplace CLI runtime UX', () => {
           path.join(home, packResult.filename),
           '--no-audit',
           '--no-fund',
-          '--prefer-offline',
+          '--prefer-online',
         ],
         home,
         projectDir,

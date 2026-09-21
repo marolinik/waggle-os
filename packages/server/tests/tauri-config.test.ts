@@ -34,6 +34,20 @@ const FIRST_PARTY_RUNTIME_ENTRIES = new Set([
   'package.json',
 ]);
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
+// The staged-resource checker keeps its own copy of the sharp pin. Fixtures
+// that must PASS that checker stage this version rather than a literal of their
+// own, and the lockfile pin test asserts it — so a bump moves one fact, not four.
+const CHECKER_SHARP_VERSION = (() => {
+  const checker = fs.readFileSync(
+    path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
+    'utf-8',
+  );
+  const version = /^const REQUIRED_SHARP_VERSION = '([^']+)';$/m.exec(checker)?.[1];
+  if (!version) {
+    throw new Error('scripts/check-sidecar-resources.mjs no longer declares REQUIRED_SHARP_VERSION');
+  }
+  return version;
+})();
 
 beforeEach(async () => {
   // Let Vitest acknowledge the previous task update before the next test enters
@@ -836,16 +850,26 @@ describe('Tauri Production Configuration', () => {
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.1',
       'better-sqlite3': '12.6.2',
-      '@huggingface/transformers': { sharp: '0.35.3' },
-      next: '16.3.0',
+      '@huggingface/transformers': { sharp: '0.35.4' },
+      // Moved with apps/www in the 79-package group bump. `apps/www` declares an
+      // EXACT `next: 16.3.5`, and an override does not relax a workspace's own
+      // exact declaration — holding this at 16.3.0 made the lockfile satisfy
+      // neither and `npm ci` fail. 16.3.5 is a newer patch in the same minor, so
+      // it advances the intent this override was added for (ec24a8a3, "upgrade
+      // secure Next runtime") rather than weakening it.
+      next: '16.3.5',
     };
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
+    // sharp moved with the group bump. The nested override above moves with it
+    // on purpose: pinning transformers to 0.35.3 while the root uses 0.35.4
+    // installs a SECOND copy of a large native module, which is the duplication
+    // this override exists to prevent.
     expect(manifest.dependencies).toMatchObject({
       '@huggingface/transformers': '3.8.1',
-      sharp: '0.35.3',
+      sharp: '0.35.4',
     });
     expect(appManifest.overrides).toMatchObject({ browserslist: '4.28.9' });
 
@@ -856,7 +880,7 @@ describe('Tauri Production Configuration', () => {
       )) as { dependencies?: Record<string, string> };
       return workspaceManifest.dependencies?.['@fastify/static'];
     });
-    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.2']));
+    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.3']));
 
     const betterSqliteRanges = [
       'core',
@@ -883,14 +907,21 @@ describe('Tauri Production Configuration', () => {
       return new Set(matching.map(([, metadata]) => metadata.version!));
     };
 
-    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
+    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.3']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.7']));
     expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
-    expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
+    expect(versionsFor('sharp')).toEqual(new Set(['0.35.4']));
+    // The staged-resource release checker keeps its OWN literal copy of this
+    // version, and nothing tied the two together: this group bump moved the
+    // lockfile pin above, the `test` job went green, and the Tauri verify jobs
+    // failed twenty minutes later on `resources/node_modules/sharp contains
+    // sharp@0.35.4; required version: 0.35.3`. Read the literal back so the
+    // divergence fails here, in the fast job, next to the pin it must match.
+    expect(CHECKER_SHARP_VERSION).toBe('0.35.4');
     expect(versionsFor('better-sqlite3')).toEqual(new Set(['12.6.2']));
     expect(new Set(
       Object.entries(appLockfile.packages)
@@ -903,7 +934,7 @@ describe('Tauri Production Configuration', () => {
       ));
     expect(sharpBindings.length).toBeGreaterThan(0);
     expect(new Set(sharpBindings.map(([, metadata]) => metadata.version))).toEqual(
-      new Set(['0.35.3']),
+      new Set(['0.35.4']),
     );
   });
 
@@ -938,7 +969,7 @@ describe('Tauri Production Configuration', () => {
       writeManifest('fast-uri', 'fast-uri', '3.1.7');
       writeManifest('ip-address', 'ip-address', '10.4.0');
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
-      writeManifest('sharp', 'sharp', '0.35.3');
+      writeManifest('sharp', 'sharp', CHECKER_SHARP_VERSION);
       writeManifest(bundledBrace, 'brace-expansion', '2.1.4');
       expect(run().status).toBe(0);
       writeManifest('better-sqlite3', 'better-sqlite3', '12.6.2');
@@ -1020,7 +1051,7 @@ describe('Tauri Production Configuration', () => {
       const vulnerableSharp = run();
       expect(vulnerableSharp.status).toBe(1);
       expect(vulnerableSharp.stderr).toContain('sharp@0.34.5');
-      writeManifest('sharp', 'sharp', '0.35.3');
+      writeManifest('sharp', 'sharp', CHECKER_SHARP_VERSION);
 
       writeManifest('vendor/node_modules/js-yaml', 'js-yaml', '4.3.0');
       const stagedDevDependency = run();
@@ -1061,7 +1092,7 @@ describe('Tauri Production Configuration', () => {
   });
 
   it.runIf(process.platform === 'win32')(
-    'Sharp 0.35.3 works through the Transformers RawImage consumer',
+    'Sharp works through the Transformers RawImage consumer',
     () => {
       const probe = [
         'const { RawImage } = require("@huggingface/transformers");',
@@ -1331,17 +1362,17 @@ describe('Tauri Production Configuration', () => {
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           'sharp/package.json',
-          JSON.stringify({ name: 'sharp', version: '0.35.3', main: 'index.cjs' }),
+          JSON.stringify({ name: 'sharp', version: CHECKER_SHARP_VERSION, main: 'index.cjs' }),
         );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           'sharp/index.cjs',
-          'module.exports = { versions: { sharp: "0.35.3", vips: "8.18.3" } };',
+          `module.exports = { versions: { sharp: "${CHECKER_SHARP_VERSION}", vips: "8.18.3" } };`,
         );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           '@img/sharp-win32-x64/package.json',
-          JSON.stringify({ name: '@img/sharp-win32-x64', version: '0.35.3' }),
+          JSON.stringify({ name: '@img/sharp-win32-x64', version: CHECKER_SHARP_VERSION }),
         );
         fs.cpSync(
           path.join(ROOT, 'node_modules', '@img', 'sharp-win32-x64', 'lib'),
@@ -1360,7 +1391,7 @@ describe('Tauri Production Configuration', () => {
           '@img',
           'sharp-win32-x64',
           'lib',
-          'sharp-win32-x64-0.35.3.node',
+          `sharp-win32-x64-${CHECKER_SHARP_VERSION}.node`,
         );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
