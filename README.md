@@ -129,7 +129,7 @@ Manage the running server with the installed wrapper: `scripts/waggle-server.sh 
 ### Run from source (development)
 
 ```bash
-# Prerequisites: Node.js ^20.19.0 or >=22.12.0, npm
+# Prerequisites: Node.js >=22.19.0, npm
 npm install
 
 # (Optional) copy the env template. Provider API keys are normally set in-app

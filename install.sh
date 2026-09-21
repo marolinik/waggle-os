@@ -33,7 +33,8 @@ set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/marolinik/waggle-os.git"
-MIN_NODE_MAJOR=20
+MIN_NODE_MAJOR=22
+MIN_NODE_MINOR=19
 DEFAULT_PORT=3333
 MARKER_NAME=".waggle-installed"
 
@@ -136,14 +137,16 @@ preflight() {
     $(install_hint git)"
 
   if ! command -v node >/dev/null 2>&1; then
-    die "Node.js >= ${MIN_NODE_MAJOR} is required. Install it:
+    die "Node.js >= ${MIN_NODE_MAJOR}.${MIN_NODE_MINOR} is required. Install it:
     $(install_hint nodejs)
     or use nvm: https://github.com/nvm-sh/nvm"
   fi
-  local node_major
+  local node_major node_minor
   node_major="$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')"
-  if [ -z "$node_major" ] || [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
-    die "Node.js >= ${MIN_NODE_MAJOR} required, found $(node -v 2>/dev/null || echo none).
+  node_minor="$(node -v 2>/dev/null | sed -E 's/^v[0-9]+\.([0-9]+).*/\1/')"
+  if [ -z "$node_major" ] || [ "$node_major" -lt "$MIN_NODE_MAJOR" ] \
+    || { [ "$node_major" -eq "$MIN_NODE_MAJOR" ] && [ "$node_minor" -lt "$MIN_NODE_MINOR" ]; }; then
+    die "Node.js >= ${MIN_NODE_MAJOR}.${MIN_NODE_MINOR} required, found $(node -v 2>/dev/null || echo none).
     Upgrade Node (nvm install ${MIN_NODE_MAJOR}) and re-run."
   fi
 

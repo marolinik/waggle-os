@@ -860,7 +860,7 @@ describe('Tauri Production Configuration', () => {
       next: '16.3.5',
     };
 
-    expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
+    expect(manifest.engines?.node).toBe('>=22.19.0');
     expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
     // sharp moved with the group bump. The nested override above moves with it
