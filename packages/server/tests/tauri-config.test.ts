@@ -2986,7 +2986,7 @@ Expect-Rejection {
       ({ name }) => name === 'Download immutable prepared Windows signing handoff',
     );
     expect(preparedDownload).toMatchObject({
-      uses: 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+      uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
       with: {
         'artifact-ids': '${{ needs.prepare-windows-signing.outputs.artifact_id }}',
         path: '${{ runner.temp }}\\waggle-windows-signing-prepared',
