@@ -20,10 +20,11 @@ const PHASE_DURATION = 400;
 // ~2.3s choreography floor that made returning users sit through dead air.
 const MIN_BRAND_MS = 850;
 // Lane H item 5: with cache-first paint there is real content waiting behind the
-// boot screen for a WARM session, so the brand moment drops to a ≤500ms flash —
-// no reason to dwell over content that's already there. COLD / day-0 keeps the
-// full 850ms floor (nothing to paint, so the brand moment earns its beat).
-const WARM_BRAND_MS = 500;
+// boot screen for a WARM session, so the brand moment drops below the 500ms
+// end-to-end budget. Leave headroom for React mount and timer scheduling rather
+// than making the timer itself equal to the user-visible budget. COLD / day-0
+// keeps the full 850ms floor (nothing to paint, so the brand moment earns its beat).
+const WARM_BRAND_MS = 350;
 const SKIP_HINT_DELAY = 1000;
 
 const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: () => void; ready?: boolean; warm?: boolean }) => {
@@ -93,12 +94,13 @@ const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: ()
       initial={{ opacity: 1 }}
       // Item 2: the exit stays choreographed (fade) at the shorter floor; under
       // reduced motion it becomes an instant swap (no fade, no scale). The 0.5s
-      // easeInOut is a deliberate bespoke boot exit — a cinematic hand-off that
-      // sits OFF the standard DUR grid on purpose (no symmetric in-out easing
-      // token exists, and the 0.4 settle grade would clip the fade). Pinned by
-      // wave-u-boot-warm-start.test.tsx.
+      // Cold boot keeps the cinematic hand-off. A warm return uses the fast
+      // motion tier so the timer plus exit animation stays inside the complete
+      // 500ms user-visible budget. Pinned by wave-u-boot-warm-start.test.tsx.
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.05 }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeInOut" }}
+      transition={reduceMotion
+        ? { duration: 0 }
+        : { duration: warm ? DUR.fast : 0.5, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
       data-testid="boot-screen"
       role="status"

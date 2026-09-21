@@ -2,13 +2,6 @@ import {
   type MindDB,
   type MemoryFrame,
   type ScoringProfile,
-  IdentityLayer,
-  AwarenessLayer,
-  FrameStore,
-  SessionStore,
-  HybridSearch,
-  KnowledgeGraph,
-  ImprovementSignalStore,
   createCoreLogger,
   evaluateExternalMemoryIngress,
   type Embedder,
@@ -25,6 +18,17 @@ import {
   rawTurnBody,
   type RawTurnHit,
 } from '@waggle/core';
+import type {
+  AwarenessPort,
+  FrameStorePort,
+  ImprovementSignalPort,
+  IdentityPort,
+  KnowledgeGraphPort,
+  MemoryLayerPorts,
+  MemorySearchPort,
+  SessionStorePort,
+} from './memory-ports.js';
+import { defaultMemoryLayers, defaultWorkspaceLayers } from './memory-layers-default.js';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { renderGoalAncestry } from './goal-ancestry.js';
@@ -62,6 +66,25 @@ import {
 
 const logger = createCoreLogger('orchestrator');
 
+const sharedRerankerLoads = new Map<string, Promise<Reranker | undefined>>();
+const RERANKER_STARTUP_GRACE_MS = 1_000;
+
+function getSharedInProcessReranker(cacheDir?: string): Promise<Reranker | undefined> {
+  const key = cacheDir ?? '<default>';
+  const existing = sharedRerankerLoads.get(key);
+  if (existing) return existing;
+
+  const config = cacheDir ? { cacheDir } : undefined;
+  const pending = createInProcessReranker(config).catch((e: unknown) => {
+    logger.warn('reranker unavailable — falling back to RRF ordering', {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return undefined;
+  });
+  sharedRerankerLoads.set(key, pending);
+  return pending;
+}
+
 // Content-length constants now live in `./content-constants.ts` (single
 // source of truth shared with the pattern-write-back extractor). Imports
 // below pull only the ones this file still references.
@@ -90,6 +113,12 @@ export interface OrchestratorConfig {
   rerankerCacheDir?: string;
   /** AI-OS #6 — durable "why" breadcrumb injected into buildSystemPrompt. */
   goalAncestry?: GoalAncestry;
+  /**
+   * CA-3: memory-layer overrides. Omitted in production, where the
+   * orchestrator builds the `@waggle/core` implementations over `db` itself;
+   * supplied by tests and by any caller that owns its own composition root.
+   */
+  layers?: Partial<OrchestratorLayers>;
 }
 
 /**
@@ -111,30 +140,36 @@ export interface RecallOptions {
  * Workspace-specific layers — created when a workspace mind is activated.
  * Separate from personal mind layers so both can be queried.
  */
-interface WorkspaceLayers {
+interface WorkspaceLayers extends MemoryLayerPorts {
   db: MindDB;
-  frames: FrameStore;
-  sessions: SessionStore;
-  search: HybridSearch;
-  knowledge: KnowledgeGraph;
   cognify: CognifyPipeline;
+}
+
+/**
+ * CA-3: the memory layers the orchestrator runs on. Every member is a port the
+ * use case owns; `@waggle/core` supplies the production implementations.
+ */
+export interface OrchestratorLayers extends MemoryLayerPorts {
+  identity: IdentityPort;
+  awareness: AwarenessPort;
+  improvementSignals: ImprovementSignalPort;
 }
 
 export class Orchestrator {
   private db: MindDB;
   private embedder: Embedder;
-  private identity: IdentityLayer;
-  private awareness: AwarenessLayer;
-  private frames: FrameStore;
-  private sessions: SessionStore;
-  private search: HybridSearch;
-  private knowledge: KnowledgeGraph;
+  private identity: IdentityPort;
+  private awareness: AwarenessPort;
+  private frames: FrameStorePort;
+  private sessions: SessionStorePort;
+  private search: MemorySearchPort;
+  private knowledge: KnowledgeGraphPort;
   private tools: ToolDefinition[];
   private model: string;
   private mode: 'local' | 'team';
   private version: string;
   private skills: string[];
-  private improvementSignals: ImprovementSignalStore;
+  private improvementSignals: ImprovementSignalPort;
   /** AI-OS #6 — durable "why" breadcrumb; null = no section rendered. */
   private goalAncestry: GoalAncestry | null = null;
 
@@ -167,14 +202,15 @@ export class Orchestrator {
     this.skills = config.skills ?? [];
     this.rerankerCacheDir = config.rerankerCacheDir;
     this.goalAncestry = config.goalAncestry ?? null;
-    this.identity = new IdentityLayer(config.db);
-    this.awareness = new AwarenessLayer(config.db);
-    this.frames = new FrameStore(config.db);
-    this.sessions = new SessionStore(config.db);
-    this.search = new HybridSearch(config.db, config.embedder);
+    const layers = { ...defaultMemoryLayers(config.db, config.embedder), ...config.layers };
+    this.identity = layers.identity;
+    this.awareness = layers.awareness;
+    this.frames = layers.frames;
+    this.sessions = layers.sessions;
+    this.search = layers.search;
     if (config.reranker) this.rerankerPromise = Promise.resolve(config.reranker);
-    this.knowledge = new KnowledgeGraph(config.db);
-    this.improvementSignals = new ImprovementSignalStore(config.db);
+    this.knowledge = layers.knowledge;
+    this.improvementSignals = layers.improvementSignals;
 
     const cognify = new CognifyPipeline({
       frames: this.frames,
@@ -207,14 +243,14 @@ export class Orchestrator {
    * Creates workspace-specific layers for frames, search, knowledge, cognify.
    * Identity always stays in personal mind.
    */
-  setWorkspaceMind(workspaceDb: MindDB): void {
+  setWorkspaceMind(workspaceDb: MindDB, layers?: Partial<MemoryLayerPorts>): void {
     if (this.workspaceLayers) {
       logger.info('switching workspace mind — replacing previous workspace layers');
     }
-    const frames = new FrameStore(workspaceDb);
-    const sessions = new SessionStore(workspaceDb);
-    const search = new HybridSearch(workspaceDb, this.embedder);
-    const knowledge = new KnowledgeGraph(workspaceDb);
+    const { frames, sessions, search, knowledge } = {
+      ...defaultWorkspaceLayers(workspaceDb, this.embedder),
+      ...layers,
+    };
     const cognify = new CognifyPipeline({
       frames,
       sessions,
@@ -252,28 +288,21 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
-    // Intentionally not cached: ancillary write paths (direct
-    // KnowledgeGraph.createEntity / FrameStore.createIFrame) would skip
-    // cache invalidation. Cost is 6× COUNT(*) per user turn — negligible
-    // below ~100k frames. If scale ever bites, fix via a write-counter
-    // in MindDB, not a time-based cache.
-    const raw = this.db.getDatabase();
-    const frameCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
-    const sessionCount = (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
-    const entityCount = (raw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
+    // R-3/R-6: these were three COUNT(*) scans per mind per user turn — 2.2 ms
+    // at 100k frames, 14.6 ms at 500k, measured by the soak against the exact
+    // three queries this used to run. `MindDB.memoryCounts()`
+    // reads a trigger-maintained counter table instead, which is O(1) and
+    // cannot be bypassed the way the application-side cache this comment used
+    // to warn against could have been.
+    const personal = this.db.memoryCounts();
+    if (!this.workspaceLayers) return personal;
 
-    if (this.workspaceLayers) {
-      const wsRaw = this.workspaceLayers.db.getDatabase();
-      const wsFrames = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
-      const wsSessions = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
-      const wsEntities = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
-      return {
-        frameCount: frameCount + wsFrames,
-        sessionCount: sessionCount + wsSessions,
-        entityCount: entityCount + wsEntities,
-      };
-    }
-    return { frameCount, sessionCount, entityCount };
+    const workspace = this.workspaceLayers.db.memoryCounts();
+    return {
+      frameCount: personal.frameCount + workspace.frameCount,
+      sessionCount: personal.sessionCount + workspace.sessionCount,
+      entityCount: personal.entityCount + workspace.entityCount,
+    };
   }
 
   /**
@@ -323,7 +352,11 @@ export class Orchestrator {
     return compute();
   }
 
-  buildSystemPrompt(modelOverride = this.model): string {
+  buildSystemPrompt(
+    modelOverride = this.model,
+    availableTools: readonly Pick<ToolDefinition, 'name' | 'description'>[] = this.tools,
+    includeRecentContext = true,
+  ): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
     // has only second precision in SQLite, so rapid successive edits
@@ -349,7 +382,7 @@ export class Orchestrator {
         this._pendingSurfacedAwareness = awareness;
       }
       const caps: AgentCapabilities = {
-        tools: this.tools.map(t => ({ name: t.name, description: t.description })),
+        tools: availableTools.map(t => ({ name: t.name, description: t.description })),
         skills: this.skills,
         model: modelOverride,
         memoryStats: this.getMemoryStats(),
@@ -361,12 +394,12 @@ export class Orchestrator {
     });
 
     // ── PRELOADED CONTEXT (per-session memory, changes every call) ──
-    const contextSection = this.uncachedSection('recent_context', () => {
+    const contextSection = includeRecentContext ? this.uncachedSection('recent_context', () => {
       const recentContext = this.loadRecentContext();
       return recentContext
         ? '# Context From Your Memory\nThis was automatically loaded — you already know this:\n' + recentContext
         : '';
-    });
+    }) : '';
 
     const parts = [identitySection, goalAncestrySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
@@ -383,13 +416,18 @@ export class Orchestrator {
   async buildAssembledPrompt(
     query: string,
     persona: AgentPersona | null = null,
-    opts: AssembleOptions & { model?: string } = {},
+    opts: AssembleOptions & {
+      model?: string;
+      availableTools?: readonly Pick<ToolDefinition, 'name' | 'description'>[];
+    } = {},
   ): Promise<AssembledPrompt> {
     const effectiveModel = opts.model ?? this.model;
     const tier = tierForModel(effectiveModel);
     const closedWorldRewrite = isClosedWorldRewriteRequest(query);
-    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt(effectiveModel);
-    const context: ContextFramesImpl = closedWorldRewrite
+    const corePrompt = closedWorldRewrite
+      ? ''
+      : this.buildSystemPrompt(effectiveModel, opts.availableTools ?? this.tools, false);
+    let context: ContextFramesImpl = closedWorldRewrite
       ? {
           stateFrames: [],
           recentChanges: [],
@@ -444,6 +482,38 @@ export class Orchestrator {
       };
     }
 
+    if (!closedWorldRewrite && recalled.scanSafe) {
+      const recalledFrameIds = new Set(
+        [...recalled.workspace, ...recalled.personal].map(frame => frame.id),
+      );
+      const renderedRecall = recalled.renderedText ?? '';
+      const isAlreadyRecalled = (frame: MemoryFrame): boolean => {
+        if (recalledFrameIds.has(frame.id)) return true;
+        if (!renderedRecall) return false;
+
+        const content = frame.content.trim();
+        const date = frame.created_at?.slice(0, 10) ?? 'unknown';
+        const semanticNeedle = `[${date}, ${frame.importance}] ${content.slice(0, RECALL_LINE_LENGTH)}`;
+        if (renderedRecall.includes(semanticNeedle)) return true;
+
+        const isLaneFrame = content.startsWith(MIND_PROFILE_PREFIX)
+          || content.startsWith(MIND_FACT_PREFIX)
+          || content.startsWith(MIND_EVENT_PREFIX)
+          || content.startsWith(MIND_RAWTURN_PREFIX);
+        if (!isLaneFrame) return false;
+        const newline = content.indexOf('\n');
+        const body = (newline >= 0 ? content.slice(newline + 1) : content).trim();
+        return body.length > 0
+          && renderedRecall.includes(body.slice(0, RECALL_LINE_LENGTH));
+      };
+
+      context = {
+        ...context,
+        stateFrames: context.stateFrames.filter(frame => !isAlreadyRecalled(frame)),
+        recentChanges: context.recentChanges.filter(frame => !isAlreadyRecalled(frame)),
+      };
+    }
+
     return new PromptAssembler().assemble(
       {
         corePrompt,
@@ -478,29 +548,32 @@ export class Orchestrator {
    * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
   /**
-   * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
+   * W4.2/W4.5: lazy process-shared cross-encoder reranker — DEFAULT ON since the W4.5 live
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
    * model (cached at the configured managed path, or ~/.hive-mind/models for
-   * standalone callers); creation failure (offline, OOM)
-   * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
+   * standalone callers). A cold download continues in the background after a
+   * short grace period so first recall can fall back to RRF instead of blocking;
+   * creation failure (offline, OOM) memoizes undefined and never throws.
    */
-  private getReranker(): Promise<Reranker | undefined> {
-    if (this.rerankerPromise) return this.rerankerPromise;
-    if (process.env['WAGGLE_RERANKER'] === '0') {
-      this.rerankerPromise = Promise.resolve(undefined);
-      return this.rerankerPromise;
+  private async getReranker(): Promise<Reranker | undefined> {
+    if (!this.rerankerPromise) {
+      this.rerankerPromise = process.env['WAGGLE_RERANKER'] === '0'
+        ? Promise.resolve(undefined)
+        : getSharedInProcessReranker(this.rerankerCacheDir);
     }
-    const rerankerConfig = this.rerankerCacheDir
-      ? { cacheDir: this.rerankerCacheDir }
-      : undefined;
-    this.rerankerPromise = createInProcessReranker(rerankerConfig).catch((e: unknown) => {
-      logger.warn('reranker unavailable — falling back to RRF ordering', {
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return undefined;
-    });
-    return this.rerankerPromise;
+
+    let timer: ReturnType<typeof setTimeout> | number | undefined;
+    try {
+      return await Promise.race([
+        this.rerankerPromise,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(resolve, RERANKER_STARTUP_GRACE_MS);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async recallMemory(
@@ -985,11 +1058,11 @@ export class Orchestrator {
     return tool.execute(args);
   }
 
-  getIdentity(): IdentityLayer { return this.identity; }
-  getAwareness(): AwarenessLayer { return this.awareness; }
-  getFrames(): FrameStore { return this.frames; }
-  getSessions(): SessionStore { return this.sessions; }
-  getSearch(): HybridSearch { return this.search; }
-  getKnowledge(): KnowledgeGraph { return this.knowledge; }
-  getImprovementSignals(): ImprovementSignalStore { return this.improvementSignals; }
+  getIdentity(): IdentityPort { return this.identity; }
+  getAwareness(): AwarenessPort { return this.awareness; }
+  getFrames(): FrameStorePort { return this.frames; }
+  getSessions(): SessionStorePort { return this.sessions; }
+  getSearch(): MemorySearchPort { return this.search; }
+  getKnowledge(): KnowledgeGraphPort { return this.knowledge; }
+  getImprovementSignals(): ImprovementSignalPort { return this.improvementSignals; }
 }

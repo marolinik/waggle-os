@@ -14,45 +14,39 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Current Windows Solo internal RC evidence — 2026-08-27
+### Current Windows Solo internal-pilot evidence — 2026-09-09
 
-The current runtime candidate is private `main` commit
-`23ad3fa5f99bddce648b84750a41365299aeb0da`. Its internal-pilot NSIS installer
-(102,923,936 bytes; SHA-256
-`7BFA9F9B13633A51CD3336B42E3EF904B7F7A568C6DEE4F6CED967CBD4F40A59`)
-passed **64/64** clean-profile checks. The receipt proves bundled sidecar and offline
-npm, FREE/Solo first boot, in-process embeddings, the Waggle-managed local runtime and
-`qwen2.5:0.5b`, local-model chat, proxy restart, repair, relaunch, data preservation,
-Exit/cleanup, and uninstall. Docker, Python, developer Node.js, external LiteLLM, and a
-separately installed Ollama were not prerequisites.
+The current PM-qualified runtime is private draft-PR head
+`e4bf403ecfde8987089176ba1de216b224e1fc1c`; it has not been merged to private
+`main`. The same-tree merge candidate `b07a6173f9909e2decddb30077ef890cf16c602d`
+produced an unsigned internal-pilot NSIS installer (98,698,013 bytes; SHA-256
+`9C4A22D5540B1D26DE6A928F3268128A70994663FF2E9F1B99D12C8D63B96747`) that
+passed **64/64** isolated-profile checks. The receipt proves the bundled sidecar and npm,
+FREE/Solo first boot, in-process embeddings, the Waggle-managed runtime and
+`qwen2.5:0.5b`, local-model chat before and after proxy restart, same-version repair,
+relaunch, data preservation, Exit/owned-process cleanup, and uninstall. Docker, Python,
+developer Node.js, external LiteLLM, and a separately installed Ollama were not
+prerequisites.
 
-- Private PR #66 merged as `23ad3fa5` after every blocking check passed: primary CI,
-  Playwright smoke and full E2E, Windows and both macOS Tauri verification targets, and
-  Hive Mind install/smoke on Windows, Ubuntu, and macOS. The tested PR head and merged
-  source have the same tree.
-- Exact-current full and production dependency audits contain **0 Critical and 0 High**
-  findings. Lower-severity maintenance remains documented.
-- The historical persona collection at `4c712ff6` still records all ten personas x3 at
-  or above 95/100 after documented independent adjudication, but it is not relabeled as
-  an exact-current seal. PR #66 changed memory behavior, so public release qualification
-  requires a fresh receipt or an explicit bounded semantic-impact attestation.
-- Smart-router primary, compact-tool-context, durable-budget and fallback evidence, plus
-  the Claude Code, Codex, and Hermes official-user-auth canaries, remain historical
-  scoped evidence. No later change touched provider credential handling; the auth
-  harness read or copied no credential files.
-- The curated Hive Mind mirror is hardened through private-to-maintainer PR #53, merged
-  on public `master` as `3410327800db3ea23f875d547a0c7f4d08826b7e`; Windows, macOS,
-  Ubuntu, and Ubuntu first-run smoke were green. The immutable drift baseline still
-  reports reviewed release blockers, so the next OSS package release remains a separate
-  maintainer-curated operation and is not implied by this Windows Solo RC.
+- Draft PR #83 is mergeable and all current full CI, E2E, Tauri Windows/macOS, Hive Mind
+  cross-platform smoke, and Wave 1 acceptance jobs are green.
+- Production dependencies have **0 Critical and 0 High** findings. The separate Tauri
+  build-tool lock audit has **0 vulnerabilities** after the exact-candidate patch.
+- Visible-browser PM journeys passed provider persistence and Qwen recovery, workspace and
+  session isolation, artifact creation/download for PDF/PPTX/DOCX/XLSX, automation dry-run,
+  memory continuity, compact tool disclosure, and deterministic skill verification.
+- A fresh live-Qwen ten-persona x3 collection completed 30/30 at or above 95/100 after
+  documented independent semantic adjudication. Router and Claude Code/Codex/Hermes
+  official-auth receipts have a reviewed no-impact boundary through the runtime candidate.
+- The curated Hive Mind mirror remains a separate maintainer-curated release stream; raw
+  subtree publication remains forbidden.
 
-Detailed local receipt paths, hashes, limitations, and integration gates are recorded in
-the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md).
-The internal signer (`CN=Egzakta Internal Pilot`) and DigiCert timestamp prove the pilot
-pipeline but are not publicly trusted Authenticode. Public release is **not yet approved**:
-a protected hosted build with a publicly trusted signer, an exact-candidate sealed
-managed Deep Security report, current persona qualification, and either fresh or
-explicitly attested smart-router and official-auth qualification remain mandatory.
+The exact receipt, hashes, limitations, and open gates are recorded in the current
+[launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). The
+installer is unsigned and is intended only for controlled internal testing. Public release is **not yet
+approved**: a protected hosted build with a publicly trusted signer, an exact-release-tag
+sealed managed Deep Security report, and preservation or rerun of revision-bound evidence
+remain mandatory.
 
 ## Architecture
 

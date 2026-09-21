@@ -224,13 +224,32 @@ describe('P1b-SSE client', () => {
     expect(events).toHaveLength(2); // listener survived the reopen
   });
 
-  it('subagent stream does NOT clobber the notifications stream (no shared-path dedup)', async () => {
+  it('shares one notification socket across default and subagent events without clobbering either', async () => {
     const a = await connectedAdapter('tok-A');
-    a.subscribeNotifications(() => {});
-    a.subscribeSubagentStatus(() => {});
+    const notifications: unknown[] = [];
+    const subagents: unknown[] = [];
+    const unsubscribeNotifications = a.subscribeNotifications((event) => notifications.push(event));
+    const unsubscribeSubagents = a.subscribeSubagentStatus((event) => subagents.push(event));
     await flush();
-    expect(FakeEventSource.instances).toHaveLength(2);
-    expect(FakeEventSource.instances.every(i => !i.closed)).toBe(true);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    const stream = FakeEventSource.instances[0];
+    const firstSubagentEvent = { type: 'subagent_status', workspaceId: 'w1', agents: [] };
+    stream.onmessage?.({ data: JSON.stringify({ id: 'n1', title: 'notice' }) } as MessageEvent);
+    stream.fireNamed('subagent_status', firstSubagentEvent);
+    expect(notifications).toEqual([{
+      id: 'n1', type: 'agent', title: 'notice', body: '', read: false, timestamp: '', actionUrl: undefined,
+    }]);
+    expect(subagents).toEqual([firstSubagentEvent]);
+
+    unsubscribeNotifications();
+    expect(stream.closed).toBe(false);
+    const secondSubagentEvent = { type: 'subagent_status', workspaceId: 'w2', agents: [] };
+    stream.onmessage?.({ data: JSON.stringify({ id: 'n2', title: 'ignored' }) } as MessageEvent);
+    stream.fireNamed('subagent_status', secondSubagentEvent);
+    expect(notifications).toHaveLength(1);
+    expect(subagents).toEqual([firstSubagentEvent, secondSubagentEvent]);
+    unsubscribeSubagents();
+    expect(stream.closed).toBe(true);
   });
 
   it('tool output stream closes permanently after exit instead of reconnecting and replaying old output', async () => {

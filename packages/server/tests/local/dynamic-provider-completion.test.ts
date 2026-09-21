@@ -120,6 +120,11 @@ describe('dynamic provider model completion path', () => {
           ],
         }), { status: 200 });
       }
+      if (url.endsWith('/v1/chat/completions')) {
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: 'WAGGLE_OK' } }],
+        }), { status: 200 });
+      }
       throw new Error(`Unexpected discovery request: ${url}`);
     });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adapter } from '@/lib/adapter';
-import { useProviders } from './useProviders';
+import { isRoutableCloudProvider, useProviders, type Provider } from './useProviders';
 
 /**
  * Shared model-readiness signal for the onboarding hard gate and Models banner.
@@ -11,21 +11,41 @@ export interface WorkingModelState {
   cloudReady: boolean;
   localReady: boolean;
   loading: boolean;
-  refresh: () => void;
+  availability: 'checking' | 'ready' | 'unconfigured' | 'unavailable' | 'unknown';
+  selectedModelId: string | null;
+  refresh: (receipt?: ModelReadinessReceipt) => void;
+}
+
+export interface ModelReadinessReceipt {
+  modelId?: string;
+  verified: boolean;
 }
 
 export function useHasWorkingModel(): WorkingModelState {
-  const { providers, activeProviders, loading: providersLoading, refresh: refreshProviders } = useProviders();
+  const {
+    providers,
+    activeProviders,
+    loading: providersLoading,
+    error: providersError,
+    refresh: refreshProviders,
+  } = useProviders();
   const [localModelCount, setLocalModelCount] = useState(0);
   const [localLoading, setLocalLoading] = useState(true);
-  const [cloud, setCloud] = useState({ ready: false, loading: true });
+  const [localFailed, setLocalFailed] = useState(false);
+  const [cloud, setCloud] = useState<{
+    ready: boolean;
+    loading: boolean;
+    checked: boolean;
+    selectedModelId: string | null;
+    probeFailed: boolean;
+  }>({ ready: false, loading: true, checked: false, selectedModelId: null, probeFailed: false });
   const mounted = useRef(true);
   const localGeneration = useRef(0);
   const cloudGeneration = useRef(0);
   const explicitCloudRefresh = useRef<number | null>(null);
   const explicitProviders = useRef<unknown>(null);
-  const activeProviderIds = useRef<string[]>([]);
-  activeProviderIds.current = activeProviders.map((provider) => provider.id);
+  const activeProviderRows = useRef<Provider[]>([]);
+  activeProviderRows.current = activeProviders;
 
   const refreshLocal = useCallback(async () => {
     const generation = ++localGeneration.current;
@@ -35,55 +55,128 @@ export function useHasWorkingModel(): WorkingModelState {
     }
     try {
       const status = await adapter.getLocalInferenceStatus();
-      if (mounted.current && generation === localGeneration.current) setLocalModelCount(status?.totalLocalModels ?? 0);
+      if (mounted.current && generation === localGeneration.current) {
+        setLocalModelCount(status?.totalLocalModels ?? 0);
+        setLocalFailed(false);
+      }
     } catch {
-      if (mounted.current && generation === localGeneration.current) setLocalModelCount(0);
+      if (mounted.current && generation === localGeneration.current) {
+        setLocalModelCount(0);
+        setLocalFailed(true);
+      }
     } finally {
       if (mounted.current && generation === localGeneration.current) setLocalLoading(false);
     }
   }, []);
 
-  const probeCloud = useCallback(async (providerIds: string[], generation: number) => {
-    const setCloudForGeneration = (next: { ready: boolean; loading: boolean }) => {
+  const probeCloud = useCallback(async (providerRows: Provider[], generation: number) => {
+    const setCloudForGeneration = (next: {
+      ready: boolean;
+      loading: boolean;
+      checked: boolean;
+      selectedModelId: string | null;
+      probeFailed: boolean;
+    }) => {
       if (mounted.current && generation === cloudGeneration.current) setCloud(next);
     };
     if (!mounted.current || generation !== cloudGeneration.current) return;
-    setCloudForGeneration({ ready: false, loading: true });
-
-    if (providerIds.length === 0) {
-      setCloudForGeneration({ ready: false, loading: false });
-      return;
-    }
+    setCloud(current => ({ ...current, ready: false, loading: true }));
 
     let defaultProbe: Awaited<ReturnType<typeof adapter.probeModel>> | null = null;
+    let defaultProbeFailed = false;
     try {
       defaultProbe = await adapter.probeModel();
     } catch {
       // An unavailable default-model probe falls back to the keyed providers.
+      defaultProbeFailed = true;
     }
     if (!mounted.current || generation !== cloudGeneration.current) return;
 
     if (defaultProbe?.configured) {
       if (defaultProbe.verified) {
-        setCloudForGeneration({ ready: true, loading: false });
+        setCloudForGeneration({
+          ready: true,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
         return;
       }
       if (defaultProbe.rejected) {
-        setCloudForGeneration({ ready: false, loading: false });
+        setCloudForGeneration({
+          ready: false,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
         return;
       }
-      setCloudForGeneration({ ready: true, loading: false });
+      // A custom endpoint is user-supplied and may point at a transient or
+      // stale service. Unlike a previously accepted keyed cloud provider, it
+      // must answer the exact-model probe before onboarding can continue.
+      if (defaultProbe.model?.startsWith('openai-compatible/')) {
+        setCloudForGeneration({
+          ready: false,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
+        return;
+      }
+      setCloudForGeneration({
+        ready: true,
+        loading: false,
+        checked: true,
+        selectedModelId: defaultProbe.model,
+        probeFailed: false,
+      });
       return;
     }
 
-    const outcomes = await Promise.allSettled(providerIds.map((id) => adapter.probeProvider(id)));
+    if (providerRows.length === 0) {
+      setCloudForGeneration({
+        ready: false,
+        loading: false,
+        checked: true,
+        selectedModelId: defaultProbe?.model ?? null,
+        probeFailed: defaultProbeFailed,
+      });
+      return;
+    }
+
+    const compatibleProvider = providerRows.find((provider) => (
+      provider.id === 'openai-compatible' && Boolean(provider.models[0]?.id)
+    ));
+    const compatibleModel = compatibleProvider?.models[0]?.id;
+    const providerProbeCandidates = providerRows.filter((provider) => (
+      provider.id !== 'openai-compatible' || !compatibleModel
+    ));
+    const [compatibleOutcome, outcomes] = await Promise.all([
+      compatibleModel
+        ? adapter.probeModel(compatibleModel).catch(() => null)
+        : Promise.resolve(null),
+      Promise.allSettled(providerProbeCandidates.map((provider) => adapter.probeProvider(provider.id))),
+    ]);
     if (!mounted.current || generation !== cloudGeneration.current) return;
     const probes = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
-    const verified = probes.some((probe) => probe.configured && probe.valid !== false && probe.verified);
-    const rejected = probes.some((probe) => probe.configured && probe.valid === false);
+    const compatibleVerified = Boolean(compatibleOutcome?.configured && compatibleOutcome.verified);
+    const compatibleBlocked = Boolean(compatibleModel) && !compatibleVerified;
+    const verified = compatibleVerified
+      || probes.some((probe) => probe.configured && probe.valid !== false && probe.verified);
+    const rejected = compatibleBlocked
+      || probes.some((probe) => probe.configured && probe.valid === false);
     const transient = outcomes.some((outcome) => outcome.status === 'rejected')
       || probes.some((probe) => probe.configured && probe.valid !== false);
-    setCloudForGeneration({ ready: verified || (!rejected && transient), loading: false });
+    setCloudForGeneration({
+      ready: verified || (!rejected && transient),
+      loading: false,
+      checked: true,
+      selectedModelId: compatibleOutcome?.model ?? defaultProbe?.model ?? null,
+      probeFailed: false,
+    });
   }, []);
 
   useEffect(() => {
@@ -107,38 +200,73 @@ export function useHasWorkingModel(): WorkingModelState {
       explicitProviders.current = null;
     }
     const generation = ++cloudGeneration.current;
-    void probeCloud(activeProviderIds.current, generation);
+    void probeCloud(activeProviderRows.current, generation);
   }, [probeCloud, providers, providersLoading]);
 
   useEffect(() => {
     void refreshLocal();
   }, [refreshLocal]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((receipt?: ModelReadinessReceipt) => {
     const generation = ++cloudGeneration.current;
+    if (receipt?.verified && receipt.modelId) {
+      explicitCloudRefresh.current = null;
+      explicitProviders.current = null;
+      if (mounted.current) {
+        setCloud({
+          ready: true,
+          loading: false,
+          checked: true,
+          selectedModelId: receipt.modelId,
+          probeFailed: false,
+        });
+      }
+      return;
+    }
     explicitCloudRefresh.current = generation;
-    if (mounted.current) setCloud({ ready: false, loading: true });
+    if (mounted.current) {
+      setCloud(current => ({ ...current, ready: false, loading: true }));
+    }
     void refreshLocal();
     void (async () => {
       const data = await refreshProviders();
       if (!mounted.current || generation !== cloudGeneration.current) return;
-      const ids = data
-        ? data.providers.filter((provider) => provider.hasKey && provider.requiresKey).map((provider) => provider.id)
-        : activeProviderIds.current;
+      const rows = data
+        ? data.providers.filter(isRoutableCloudProvider)
+        : activeProviderRows.current;
       explicitProviders.current = data?.providers ?? null;
-      await probeCloud(ids, generation);
+      await probeCloud(rows, generation);
       if (mounted.current && generation === cloudGeneration.current && !data) explicitCloudRefresh.current = null;
     })();
   }, [probeCloud, refreshLocal, refreshProviders]);
 
   const cloudReady = cloud.ready;
   const localReady = localModelCount > 0;
+  const hasWorkingModel = cloudReady || localReady;
+  const loading = providersLoading || cloud.loading || localLoading;
+  const hasConfiguredProvider = providers.some((provider) => (
+    (provider.requiresKey && provider.hasKey)
+    || (provider.id === 'openai-compatible' && Boolean(provider.baseUrl?.trim()))
+  ));
+  const availability: WorkingModelState['availability'] = hasWorkingModel
+    ? 'ready'
+    : loading && !cloud.checked
+      ? 'checking'
+      : cloud.selectedModelId || hasConfiguredProvider
+        ? 'unavailable'
+        : providersError || localFailed || cloud.probeFailed
+          ? 'unknown'
+          : loading
+            ? 'checking'
+            : 'unconfigured';
 
   return {
-    hasWorkingModel: cloudReady || localReady,
+    hasWorkingModel,
     cloudReady,
     localReady,
-    loading: providersLoading || cloud.loading || localLoading,
+    loading,
+    availability,
+    selectedModelId: cloud.selectedModelId,
     refresh,
   };
 }

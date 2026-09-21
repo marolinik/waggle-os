@@ -100,6 +100,13 @@ describe('BootScreen — perceptual warm-start floor (Wave U Lane D)', () => {
     expect(JSON.parse(root.getAttribute('data-motion-transition') ?? '{}').duration).toBe(0.5);
   });
 
+  it('warm exit uses the fast motion tier so the complete flash stays within 500ms', () => {
+    render(<BootScreen onComplete={vi.fn()} ready warm />);
+    expect(JSON.parse(
+      screen.getByTestId(BOOT).getAttribute('data-motion-transition') ?? '{}',
+    ).duration).toBe(0.15);
+  });
+
   it('reduced motion → instant swap on exit (no fade, no scale)', () => {
     h.reduce = true;
     render(<BootScreen onComplete={vi.fn()} ready />);
@@ -109,15 +116,16 @@ describe('BootScreen — perceptual warm-start floor (Wave U Lane D)', () => {
     expect(JSON.parse(root.getAttribute('data-motion-transition') ?? '{}').duration).toBe(0);
   });
 
-  // Lane H item 5 — a warm (cache-first) session exits at the shorter ≤500ms
+  // Lane H item 5 — a warm (cache-first) session exits with enough scheduling
+  // headroom to keep the complete user-visible brand flash at ≤500ms
   // brand flash, well before the cold 850ms floor a returning-user boot used to
   // sit through with content already waiting behind it.
   it('warm session exits at the shorter ≤500ms floor when ready', () => {
     const onComplete = vi.fn();
     render(<BootScreen onComplete={onComplete} ready warm />);
-    act(() => { vi.advanceTimersByTime(450); }); // < WARM_BRAND_MS (500)
+    act(() => { vi.advanceTimersByTime(300); }); // < WARM_BRAND_MS (350)
     expect(onComplete).not.toHaveBeenCalled();
-    act(() => { vi.advanceTimersByTime(100); }); // now past 500 — a cold boot (850) would still be waiting
+    act(() => { vi.advanceTimersByTime(100); }); // now past 350 — a cold boot (850) would still be waiting
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });

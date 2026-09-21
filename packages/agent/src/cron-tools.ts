@@ -198,6 +198,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
               jobConfig,
               workspaceId,
             }),
+            signal: AbortSignal.timeout(10_000),
           });
 
           if (!response.ok) {
@@ -244,7 +245,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
       },
       execute: async () => {
         try {
-          const response = await fetch(`${BASE_URL}/api/cron`);
+          const response = await fetch(`${BASE_URL}/api/cron`, { signal: AbortSignal.timeout(10_000) });
           if (!response.ok) {
             const err = await response.json().catch(() => ({ error: response.statusText }));
             return `Failed to list schedules: ${(err as { error?: string }).error || response.statusText}`;
@@ -310,7 +311,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
 
         try {
           // Step 1: List all schedules and find by name
-          const listResp = await fetch(`${BASE_URL}/api/cron`);
+          const listResp = await fetch(`${BASE_URL}/api/cron`, { signal: AbortSignal.timeout(10_000) });
           if (!listResp.ok) {
             return `Failed to list schedules: ${listResp.statusText}`;
           }
@@ -329,6 +330,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
           // Step 2: Delete by ID
           const delResp = await fetch(`${BASE_URL}/api/cron/${match.id}`, {
             method: 'DELETE',
+            signal: AbortSignal.timeout(10_000),
           });
 
           if (!delResp.ok) {
@@ -362,7 +364,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
 
         try {
           // Step 1: List all schedules and find by name
-          const listResp = await fetch(`${BASE_URL}/api/cron`);
+          const listResp = await fetch(`${BASE_URL}/api/cron`, { signal: AbortSignal.timeout(10_000) });
           if (!listResp.ok) {
             return `Failed to list schedules: ${listResp.statusText}`;
           }
@@ -381,7 +383,7 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
           // Step 2: Trigger by ID
           const triggerResp = await fetch(
             `${BASE_URL}/api/cron/${match.id}/trigger`,
-            { method: 'POST' },
+            { method: 'POST', signal: AbortSignal.timeout(10_000) },
           );
 
           if (!triggerResp.ok) {

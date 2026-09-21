@@ -14,8 +14,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { classifyGatedToolRisk, isCriticalNeverAutopass } from '@waggle/agent';
-import type { RiskLevel } from '@waggle/shared';
+import { classifyGatedToolRisk, isCriticalNeverAutopass, needsConfirmation } from '@waggle/agent';
+import type { ApprovalClass, RiskLevel } from '@waggle/shared';
 
 const NON_GRANTABLE_TOOLS = new Set([
   'bash',
@@ -34,16 +34,67 @@ export function isGrantableTool(
   return !isCriticalNeverAutopass(toolName, args, effectiveRiskLevel);
 }
 
+/**
+ * The outcome of classifying one gated tool call.
+ *
+ * `classified: false` means the arguments could not be read — the deciders
+ * coerce some of them to strings, and a model can supply a value that throws
+ * when coerced. That is not a low-risk call, it is an unknown one, so it
+ * carries `critical` and callers must not offer it for approval.
+ *
+ * "The arguments could not be read" covers every decider, not just the risk
+ * classifier: see the readability probe in `classifyGatedTool`.
+ */
+export type GatedToolRisk =
+  | { classified: true; riskLevel: RiskLevel; approvalClass: ApprovalClass }
+  | { classified: false; riskLevel: 'critical'; reason: string };
+
+/**
+ * Classify a gated tool once, and prove its arguments can be read at all.
+ * Never throws.
+ *
+ * Callers that need both the risk level and the approval class, or that need to
+ * know whether classification succeeded at all, use this. `resolveGrantRiskLevel`
+ * is the narrow view for callers that only want the level.
+ */
+export function classifyGatedTool(
+  toolName: string,
+  args: Record<string, unknown> = {},
+  trustedRiskLevel?: RiskLevel,
+): GatedToolRisk {
+  try {
+    const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, args, trustedRiskLevel);
+    // Readability probe, not a second decision — both results are discarded.
+    //
+    // Risk classification reads a different set of keys from the other two
+    // readers of these arguments: the confirmation predicate coerces `command`
+    // and `action`, the grant fingerprint coerces `path` / `file_path` /
+    // `target_workspace_id`, and the classifier touches none of them. A
+    // classification that succeeded on its own is therefore no evidence that
+    // the call can be decided at all, which is what every caller of this
+    // function goes on to do.
+    //
+    // Calling the real deciders keeps the probe in sync with them by
+    // construction. A duplicated list of coerced keys here would drift the
+    // first time one of them reads a new argument.
+    needsConfirmation(toolName, args, trustedRiskLevel);
+    keyForTool(toolName, args);
+    return { classified: true, riskLevel, approvalClass };
+  } catch (error) {
+    return {
+      classified: false,
+      riskLevel: 'critical',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function resolveGrantRiskLevel(
   toolName: string,
   args: Record<string, unknown> = {},
   trustedRiskLevel?: RiskLevel,
 ): RiskLevel {
-  try {
-    return classifyGatedToolRisk(toolName, args, trustedRiskLevel).riskLevel;
-  } catch {
-    return 'critical';
-  }
+  return classifyGatedTool(toolName, args, trustedRiskLevel).riskLevel;
 }
 
 export interface ApprovalGrant {

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { FastifyInstance } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 
 // Mock the lifecycle module before importing anything that uses it
 vi.mock('../src/local/lifecycle.js', () => ({
@@ -51,7 +52,7 @@ describe('LiteLLM Management API', () => {
       manageLiteLLM: true,
       managedLiteLLMPort: 4000,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();
@@ -259,6 +260,82 @@ describe('LiteLLM Management API', () => {
     }
   });
 
+  it('GET /api/litellm/models merges a persisted OpenAI-compatible model with router results', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const config = new WaggleConfig(dataDir);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['qwen3.8-flash-next', 'openai-compatible/qwen3.8-flash-next'],
+      baseUrl: 'http://127.0.0.1:4000/v1',
+    });
+    config.save();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'openrouter/unrelated-model' }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/litellm/models',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).models).toEqual([
+        'openrouter/unrelated-model',
+        'openai-compatible/qwen3.8-flash-next',
+      ]);
+    } finally {
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
+    }
+  });
+
+  it('GET /api/litellm/models prefers current Vault metadata over stale compatible config', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const config = new WaggleConfig(dataDir);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['stale-qwen'],
+      baseUrl: 'http://127.0.0.1:4777/v1',
+    });
+    config.save();
+    server.vault!.set('openai-compatible', 'compatible-catalog-key', {
+      models: ['vault-qwen', 'openai-compatible/vault-qwen'],
+      baseUrl: 'http://127.0.0.1:4778/v1',
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (url.endsWith('/models')) return new Response('', { status: 503 });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/litellm/models',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).models).toEqual(['openai-compatible/vault-qwen']);
+    } finally {
+      server.vault!.delete('openai-compatible');
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
+    }
+  });
+
   it('GET /api/litellm/models returns empty array on fetch failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Connection refused'));
 
@@ -313,6 +390,58 @@ describe('LiteLLM Management API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.models).toEqual(['ollama/llama3.2:latest']);
+  });
+
+  it('GET /api/litellm/models bounds a stalled LiteLLM body and returns local fallbacks', async () => {
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutController.signal);
+    let modelsSignal: AbortSignal | null | undefined;
+    let markBodyStarted: (() => void) | undefined;
+    let releaseSlowBody: (() => void) | undefined;
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith('/models')) {
+        modelsSignal = init?.signal;
+        return {
+          ok: true,
+          json: () => new Promise((resolve, reject) => {
+            markBodyStarted?.();
+            modelsSignal?.addEventListener('abort', () => {
+              reject(modelsSignal?.reason ?? new Error('request aborted'));
+            }, { once: true });
+            releaseSlowBody = () => {
+              if (!modelsSignal) {
+                resolve({ data: [{ id: 'router/responded-too-late' }] });
+              }
+            };
+          }),
+        } as Response;
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    const response = injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/litellm/models',
+    });
+    await bodyStarted;
+    timeoutController.abort();
+    releaseSlowBody?.();
+    const res = await response;
+
+    expect(timeoutSpy).toHaveBeenCalledWith(3_000);
+    expect(modelsSignal).toBe(timeoutController.signal);
+    expect(modelsSignal?.aborted).toBe(true);
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).models).toEqual(['ollama/llama3.2:latest']);
   });
 
   it('local inference status separates remote aliases from installed models', async () => {
@@ -582,7 +711,13 @@ describe('LiteLLM Management API', () => {
       if (url.includes('/v1/chat/completions')) {
         const body = JSON.parse(String(init?.body)) as { model: string };
         probedModels.push(body.model);
-        return new Response('{}', { status: 200 });
+        return new Response(JSON.stringify({
+          choices: [{
+            message: { role: 'assistant', content: 'probe ok' },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }), { status: 200 });
       }
       if (url.startsWith('https://generativelanguage.googleapis.com/')) {
         return new Response(JSON.stringify({
@@ -619,6 +754,42 @@ describe('LiteLLM Management API', () => {
       server.agentState.llmProvider = priorProvider;
       if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
       else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
+    }
+  });
+
+  it('keeps an explicit keyless OpenAI-compatible model exact when another provider is available', async () => {
+    const requestedModel = 'openai-compatible/acme/local-qwen:Q4_K_M';
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'google/gemini-2.5-flash';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'Built-in provider proxy',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('google', 'google-fallback-key');
+    fs.writeFileSync(configPath, JSON.stringify({
+      defaultModel: requestedModel,
+      providers: {
+        'openai-compatible': {
+          apiKey: '',
+          models: ['acme/local-qwen:Q4_K_M'],
+          baseUrl: 'http://127.0.0.1:4000/v1',
+        },
+      },
+    }), 'utf8');
+
+    try {
+      await expect(resolveUsableModel(server, requestedModel)).resolves.toBe(requestedModel);
+      await expect(resolveExplicitRoutableModel(server, requestedModel)).resolves.toBe(requestedModel);
+    } finally {
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
+      server.vault.delete('google');
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
     }
   });
 

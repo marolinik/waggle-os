@@ -262,6 +262,34 @@ describe('hard daily spend reservations', () => {
     expect(tracker.getDailyTotal()).toBe(0);
   });
 
+  it('preserves explicit direct-usage billing and rejects malformed accounting', () => {
+    const tracker = new CostTracker();
+
+    tracker.addUsage(
+      'openai-compatible/qwen3.8-flash-next',
+      1_000,
+      1_000,
+      'free-workspace',
+      { billingClass: 'free' },
+    );
+    tracker.addUsage(
+      'ollama/remote-paid',
+      1_000,
+      1_000,
+      'paid-workspace',
+      { billingClass: 'priced', fixedCostUsd: 0.018 },
+    );
+
+    expect(tracker.getWorkspaceCost('free-workspace')).toBe(0);
+    expect(tracker.getWorkspaceCost('paid-workspace')).toBeCloseTo(0.018, 6);
+    expect(() => tracker.addUsage('paid', 1, 1, undefined, {
+      fixedCostUsd: Number.NaN,
+    })).toThrow(/non-negative finite/i);
+    expect(() => tracker.addUsage('paid', 1, 1, undefined, {
+      billingClass: 'invalid',
+    } as never)).toThrow(/priced or free/i);
+  });
+
   it('fails closed when hard mode lacks trusted pricing for a paid route', () => {
     const tracker = new CostTracker();
     tracker.setBudget(1, 'hard');

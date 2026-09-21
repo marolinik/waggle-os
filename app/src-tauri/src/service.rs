@@ -15,9 +15,14 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+use crate::commands::agent::{
+    bootstrap_session_token, build_loopback_client, with_desktop_bootstrap, with_session_bearer,
+};
+
 const WATCHDOG_FAILURE_THRESHOLD: u32 = 3;
 const WATCHDOG_INITIAL_STARTUP_GRACE: Duration = Duration::from_secs(600);
 const READY_RECORD_MAX_BYTES: u64 = 16 * 1024;
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(12);
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 #[cfg(windows)]
@@ -258,6 +263,7 @@ struct ServiceRuntime {
     next_generation: u64,
     active: Option<ManagedLaunch>,
     desired_running: bool,
+    shutdown_started: bool,
 }
 
 pub struct ServiceState {
@@ -273,6 +279,7 @@ impl ServiceState {
                 next_generation: 1,
                 active: None,
                 desired_running: true,
+                shutdown_started: false,
             }),
         }
     }
@@ -708,7 +715,9 @@ fn build_service_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
     use std::process::Stdio;
+    use std::sync::mpsc;
     use std::thread;
 
     fn long_lived_command() -> Command {
@@ -726,6 +735,100 @@ mod tests {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         command
+    }
+
+    fn cooperative_command(marker: &Path) -> Command {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("powershell.exe");
+            command.args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!(
+                    "while (-not (Test-Path -LiteralPath '{}')) {{ Start-Sleep -Milliseconds 20 }}",
+                    marker.to_string_lossy().replace('\'', "''")
+                ),
+            ]);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args([
+                "-c",
+                &format!("while [ ! -f '{}' ]; do sleep 0.02; done", marker.display()),
+            ]);
+            command
+        };
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command
+    }
+
+    fn spawn_shutdown_endpoint(
+        instance_id: String,
+        marker: Option<PathBuf>,
+    ) -> (u16, mpsc::Receiver<Vec<String>>, thread::JoinHandle<()>) {
+        let listener =
+            std::net::TcpListener::bind(("127.0.0.1", 0)).expect("binds shutdown endpoint");
+        let port = listener
+            .local_addr()
+            .expect("reads shutdown address")
+            .port();
+        let (sender, receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().expect("accepts shutdown request");
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .expect("sets request timeout");
+                let mut bytes = Vec::new();
+                let mut buffer = [0_u8; 4096];
+                loop {
+                    let read = stream.read(&mut buffer).expect("reads shutdown request");
+                    if read == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&buffer[..read]);
+                    if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&bytes).to_string();
+                let first_line = request.lines().next().unwrap_or_default();
+                let (status, body) = if first_line.starts_with("GET /health ") {
+                    (
+                        "200 OK",
+                        format!(
+                            "{{\"status\":\"ok\",\"instanceId\":\"{instance_id}\",\"port\":{port}}}"
+                        ),
+                    )
+                } else if first_line.starts_with("GET /api/auth/session-token ") {
+                    (
+                        "200 OK",
+                        "{\"token\":\"desktop-session-token\"}".to_string(),
+                    )
+                } else if first_line.starts_with("POST /api/auth/desktop-shutdown ") {
+                    if let Some(marker) = marker.as_ref() {
+                        std::fs::write(marker, b"stop").expect("signals cooperative child");
+                    }
+                    ("202 Accepted", "{\"accepted\":true}".to_string())
+                } else {
+                    ("404 Not Found", "{}".to_string())
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .expect("writes shutdown response");
+                requests.push(request);
+            }
+            sender.send(requests).expect("returns captured requests");
+        });
+        (port, receiver, handle)
     }
 
     #[test]
@@ -1243,8 +1346,8 @@ mod tests {
                 detached_pid,
             )
         };
-        let survived = !detached.is_null()
-            && unsafe { WaitForSingleObject(detached, 0) } == WAIT_TIMEOUT;
+        let survived =
+            !detached.is_null() && unsafe { WaitForSingleObject(detached, 0) } == WAIT_TIMEOUT;
         if !detached.is_null() {
             unsafe { CloseHandle(detached) };
         }
@@ -1257,7 +1360,10 @@ mod tests {
         let _ = cleanup.status();
         let _ = std::fs::remove_dir_all(root);
 
-        assert!(survived, "user-owned detached session died with the service job");
+        assert!(
+            survived,
+            "user-owned detached session died with the service job"
+        );
     }
 
     #[test]
@@ -1302,6 +1408,143 @@ mod tests {
             launch.generation,
         );
         stop_service_sync(&state).expect("stops long-lived child");
+    }
+
+    #[tokio::test]
+    async fn bounded_shutdown_requests_drain_then_allows_cooperative_child_exit() {
+        let state = ServiceState::new(3333);
+        let marker = std::env::temp_dir().join(format!(
+            "waggle-graceful-stop-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        let launch = spawn_managed_service_with(&state, |_, _| Ok(cooperative_command(&marker)))
+            .expect("starts cooperative child");
+        let (port, requests, server_thread) =
+            spawn_shutdown_endpoint(launch.instance_id.clone(), Some(marker.clone()));
+        let endpoint = ServiceEndpoint {
+            port,
+            instance_id: launch.instance_id.clone(),
+            bootstrap_token: launch.bootstrap_token.clone(),
+        };
+        assert!(commit_endpoint_if_current(&state, &launch, endpoint)
+            .expect("commits shutdown endpoint"));
+
+        assert_eq!(
+            stop_service_bounded_with_timeout(&state, Duration::from_secs(3))
+                .await
+                .expect("stops cooperative child"),
+            ServiceStopOutcome::Graceful
+        );
+        assert!(current_launch_token(&state)
+            .expect("reads stopped launch")
+            .is_none());
+        assert!(spawn_managed_service_with(&state, |_, _| Ok(long_lived_command())).is_err());
+        let build_called = std::cell::Cell::new(false);
+        assert_eq!(
+            recover_service_with(
+                &state,
+                true,
+                Duration::ZERO,
+                WATCHDOG_FAILURE_THRESHOLD,
+                true,
+                |_, _| {
+                    build_called.set(true);
+                    Ok(long_lived_command())
+                },
+            )
+            .expect("suppresses watchdog after graceful shutdown"),
+            WatchdogRecovery::Suppressed
+        );
+        assert!(!build_called.get());
+
+        let captured = requests
+            .recv_timeout(Duration::from_secs(2))
+            .expect("captures shutdown requests");
+        server_thread.join().expect("joins shutdown endpoint");
+        assert_eq!(captured.len(), 3);
+        assert!(captured[0].starts_with("GET /health HTTP/1.1"));
+        assert!(captured[1].starts_with("GET /api/auth/session-token HTTP/1.1"));
+        assert!(captured[2].starts_with("POST /api/auth/desktop-shutdown HTTP/1.1"));
+        let bootstrap_header =
+            format!("x-waggle-desktop-bootstrap: {}", launch.bootstrap_token).to_ascii_lowercase();
+        assert!(captured[1].to_ascii_lowercase().contains(&bootstrap_header));
+        assert!(captured[2]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer desktop-session-token"));
+        assert!(captured[2].to_ascii_lowercase().contains(&bootstrap_header));
+        let _ = std::fs::remove_file(marker);
+    }
+
+    #[tokio::test]
+    async fn bounded_shutdown_forces_only_the_exact_uncooperative_launch() {
+        let state = ServiceState::new(3333);
+        let launch = spawn_managed_service_with(&state, |_, _| Ok(long_lived_command()))
+            .expect("starts uncooperative child");
+        let (port, requests, server_thread) =
+            spawn_shutdown_endpoint(launch.instance_id.clone(), None);
+        let endpoint = ServiceEndpoint {
+            port,
+            instance_id: launch.instance_id.clone(),
+            bootstrap_token: launch.bootstrap_token.clone(),
+        };
+        assert!(commit_endpoint_if_current(&state, &launch, endpoint)
+            .expect("commits shutdown endpoint"));
+        let started = Instant::now();
+
+        assert_eq!(
+            stop_service_bounded_with_timeout(&state, Duration::from_millis(200))
+                .await
+                .expect("forces uncooperative child"),
+            ServiceStopOutcome::Forced
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(current_launch_token(&state)
+            .expect("reads forced launch")
+            .is_none());
+        let build_called = std::cell::Cell::new(false);
+        assert_eq!(
+            recover_service_with(
+                &state,
+                true,
+                Duration::ZERO,
+                WATCHDOG_FAILURE_THRESHOLD,
+                true,
+                |_, _| {
+                    build_called.set(true);
+                    Ok(long_lived_command())
+                },
+            )
+            .expect("suppresses watchdog after forced shutdown"),
+            WatchdogRecovery::Suppressed
+        );
+        assert!(!build_called.get());
+
+        let captured = requests
+            .recv_timeout(Duration::from_secs(2))
+            .expect("captures forced shutdown requests");
+        server_thread.join().expect("joins shutdown endpoint");
+        assert!(captured
+            .iter()
+            .any(|request| request.starts_with("POST /api/auth/desktop-shutdown HTTP/1.1")));
+    }
+
+    #[test]
+    fn forced_shutdown_refuses_a_stale_generation_and_preserves_replacement() {
+        let state = ServiceState::new(3333);
+        let stale = spawn_managed_service_with(&state, |_, _| Ok(long_lived_command()))
+            .expect("starts first generation");
+        stop_service_sync(&state).expect("stops first generation");
+        let replacement = spawn_managed_service_with(&state, |_, _| Ok(long_lived_command()))
+            .expect("starts replacement generation");
+
+        assert!(force_stop_exact_launch(&state, &stale).is_err());
+        let current = current_launch_token(&state)
+            .expect("reads replacement")
+            .expect("replacement remains active");
+        assert_eq!(current.generation, replacement.generation);
+        assert_eq!(current.pid, replacement.pid);
+        stop_service_sync(&state).expect("stops replacement generation");
     }
 
     #[test]
@@ -1542,6 +1785,9 @@ fn spawn_managed_service_with(
     build_command: impl FnOnce(u16, &ManagedLaunchConfig) -> Result<Command, String>,
 ) -> Result<LaunchToken, String> {
     let mut runtime = state.runtime.lock().map_err(|error| error.to_string())?;
+    if runtime.shutdown_started {
+        return Err("Managed service shutdown is already in progress".to_string());
+    }
     runtime.desired_running = true;
     let active_is_running = match runtime.active.as_mut() {
         Some(launch) => managed_launch_is_running(launch)?,
@@ -1571,6 +1817,146 @@ pub(crate) fn stop_service_sync(state: &ServiceState) -> Result<(), String> {
         remove_launch_ready_file(&launch.config.ready_path);
     }
     Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ServiceStopOutcome {
+    AlreadyStopped,
+    Graceful,
+    Forced,
+}
+
+fn begin_service_shutdown(state: &ServiceState) -> Result<Option<LaunchToken>, String> {
+    let mut runtime = state.runtime.lock().map_err(|error| error.to_string())?;
+    runtime.desired_running = false;
+    runtime.shutdown_started = true;
+
+    let exited = match runtime.active.as_mut() {
+        Some(launch) => !managed_launch_is_running(launch)?,
+        None => return Ok(None),
+    };
+    if exited {
+        if let Some(launch) = runtime.active.take() {
+            remove_launch_ready_file(&launch.config.ready_path);
+        }
+        return Ok(None);
+    }
+
+    Ok(runtime
+        .active
+        .as_ref()
+        .map(|launch| launch_token(launch, state.preferred_port)))
+}
+
+async fn request_desktop_shutdown(endpoint: &ServiceEndpoint) -> Result<(), String> {
+    let client = build_loopback_client(reqwest::Client::builder())?;
+    let session_token = bootstrap_session_token(&client, endpoint).await?;
+    let url = format!(
+        "http://127.0.0.1:{}/api/auth/desktop-shutdown",
+        endpoint.port
+    );
+    let response = with_desktop_bootstrap(
+        with_session_bearer(client.post(url), &session_token),
+        &endpoint.bootstrap_token,
+    )
+    .timeout(Duration::from_secs(3))
+    .send()
+    .await
+    .map_err(|error| format!("Managed desktop shutdown request failed: {error}"))?;
+    if response.status() != reqwest::StatusCode::ACCEPTED {
+        return Err(format!(
+            "Managed desktop shutdown returned {}",
+            response.status()
+        ));
+    }
+    Ok(())
+}
+
+async fn wait_for_exact_launch_exit(
+    state: &ServiceState,
+    token: &LaunchToken,
+) -> Result<(), String> {
+    loop {
+        let exited = {
+            let mut runtime = state.runtime.lock().map_err(|error| error.to_string())?;
+            let Some(active) = runtime.active.as_mut() else {
+                return Ok(());
+            };
+            if active.generation != token.generation
+                || active.child.id() != token.pid
+                || active.config.instance_id != token.instance_id
+            {
+                return Err("Managed service launch changed during shutdown".to_string());
+            }
+            if !managed_launch_is_running(active)? {
+                let launch = runtime
+                    .active
+                    .take()
+                    .expect("verified active launch remains registered");
+                remove_launch_ready_file(&launch.config.ready_path);
+                true
+            } else {
+                false
+            }
+        };
+        if exited {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+fn force_stop_exact_launch(state: &ServiceState, token: &LaunchToken) -> Result<(), String> {
+    let mut runtime = state.runtime.lock().map_err(|error| error.to_string())?;
+    let Some(active) = runtime.active.as_ref() else {
+        return Ok(());
+    };
+    if active.generation != token.generation
+        || active.child.id() != token.pid
+        || active.config.instance_id != token.instance_id
+    {
+        return Err("Refusing to stop a replacement managed service launch".to_string());
+    }
+    let mut launch = runtime
+        .active
+        .take()
+        .expect("verified active launch remains registered");
+    let _ = launch.child.kill();
+    let _ = launch.child.wait();
+    remove_launch_ready_file(&launch.config.ready_path);
+    Ok(())
+}
+
+async fn stop_service_bounded_with_timeout(
+    state: &ServiceState,
+    timeout: Duration,
+) -> Result<ServiceStopOutcome, String> {
+    let Some(token) = begin_service_shutdown(state)? else {
+        return Ok(ServiceStopOutcome::AlreadyStopped);
+    };
+
+    let graceful = tokio::time::timeout(timeout, async {
+        let endpoint = discover_owned_endpoint(state, &token)
+            .await?
+            .ok_or_else(|| "Managed service endpoint is not ready".to_string())?;
+        request_desktop_shutdown(&endpoint).await?;
+        wait_for_exact_launch_exit(state, &token).await
+    })
+    .await;
+
+    match graceful {
+        Ok(Ok(())) => Ok(ServiceStopOutcome::Graceful),
+        Ok(Err(_)) | Err(_) => {
+            force_stop_exact_launch(state, &token)?;
+            Ok(ServiceStopOutcome::Forced)
+        }
+    }
+}
+
+pub(crate) async fn stop_service_bounded(
+    state: &ServiceState,
+) -> Result<ServiceStopOutcome, String> {
+    stop_service_bounded_with_timeout(state, GRACEFUL_SHUTDOWN_TIMEOUT).await
 }
 
 fn watchdog_should_restart(
@@ -1669,6 +2055,7 @@ fn read_ready_endpoint(token: &LaunchToken) -> Result<Option<ServiceEndpoint>, S
 
 async fn probe_owned_endpoint(endpoint: &ServiceEndpoint) -> Result<bool, String> {
     let client = reqwest::Client::builder()
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(2))
         .build()
@@ -1777,8 +2164,13 @@ pub async fn ensure_service(state: State<'_, ServiceState>) -> Result<ServiceEnd
 
 #[tauri::command]
 pub async fn stop_service(state: State<'_, ServiceState>) -> Result<String, String> {
-    stop_service_sync(&state)?;
-    Ok("Service stopped".to_string())
+    let outcome = stop_service_bounded(&state).await?;
+    Ok(match outcome {
+        ServiceStopOutcome::AlreadyStopped => "Service already stopped",
+        ServiceStopOutcome::Graceful => "Service stopped gracefully",
+        ServiceStopOutcome::Forced => "Service stopped after graceful timeout",
+    }
+    .to_string())
 }
 
 #[tauri::command]

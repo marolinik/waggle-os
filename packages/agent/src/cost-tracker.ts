@@ -226,14 +226,35 @@ export class CostTracker implements ModelSpendBudget {
     return true;
   }
 
-  addUsage(model: string, inputTokens: number, outputTokens: number, workspaceId?: string): void {
+  addUsage(
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+    workspaceId?: string,
+    accounting: Pick<UsageEntry, 'billingClass' | 'fixedCostUsd'> = {},
+  ): void {
     this.assertValidTokens(inputTokens, outputTokens);
+    if (
+      accounting.fixedCostUsd !== undefined
+      && (!Number.isFinite(accounting.fixedCostUsd) || accounting.fixedCostUsd < 0)
+    ) {
+      throw new RangeError('Fixed model spend must be a non-negative finite number');
+    }
+    if (
+      accounting.billingClass !== undefined
+      && accounting.billingClass !== 'free'
+      && accounting.billingClass !== 'priced'
+    ) {
+      throw new RangeError('Model spend billing class must be priced or free');
+    }
     this.usage.push({
       model,
       input: inputTokens,
       output: outputTokens,
       timestamp: new Date().toISOString(),
       workspaceId,
+      billingClass: accounting.billingClass,
+      fixedCostUsd: accounting.fixedCostUsd,
     });
   }
 
@@ -449,6 +470,18 @@ export class CostTracker implements ModelSpendBudget {
     return this.calculateCostWithPolicy(input, output, model, true);
   }
 
+  /** Calculate the authoritative cost of a recorded usage entry. */
+  calculateUsageCost(
+    entry: Pick<UsageEntry, 'model' | 'input' | 'output' | 'billingClass' | 'fixedCostUsd'>,
+  ): number {
+    if (entry.fixedCostUsd !== undefined) return entry.fixedCostUsd;
+    if (entry.billingClass === 'free') return 0;
+    if (entry.billingClass === 'priced') {
+      return this.calculateCostWithPolicy(entry.input, entry.output, entry.model, false);
+    }
+    return this.calculateCost(entry.input, entry.output, entry.model);
+  }
+
   private calculateCostWithPolicy(
     input: number,
     output: number,
@@ -484,7 +517,7 @@ export class CostTracker implements ModelSpendBudget {
     for (const u of this.usage) {
       totalInput += u.input;
       totalOutput += u.output;
-      const cost = this.usageCost(u);
+      const cost = this.calculateUsageCost(u);
       totalCost += cost;
       if (!byModel[u.model]) byModel[u.model] = { input: 0, output: 0, cost: 0 };
       byModel[u.model].input += u.input;
@@ -500,7 +533,7 @@ export class CostTracker implements ModelSpendBudget {
     let total = 0;
     for (const u of this.usage) {
       if (u.workspaceId === workspaceId) {
-        total += this.usageCost(u);
+        total += this.calculateUsageCost(u);
       }
     }
     return total;
@@ -540,7 +573,7 @@ export class CostTracker implements ModelSpendBudget {
       : 0;
     for (const entry of this.usage) {
       if (entry.timestamp.startsWith(today)) {
-        total += this.usageCost(entry);
+        total += this.calculateUsageCost(entry);
       }
     }
     return total;
@@ -564,15 +597,6 @@ export class CostTracker implements ModelSpendBudget {
       }
     }
     return stored;
-  }
-
-  private usageCost(entry: UsageEntry): number {
-    if (entry.fixedCostUsd !== undefined) return entry.fixedCostUsd;
-    if (entry.billingClass === 'free') return 0;
-    if (entry.billingClass === 'priced') {
-      return this.calculateCostWithPolicy(entry.input, entry.output, entry.model, false);
-    }
-    return this.calculateCost(entry.input, entry.output, entry.model);
   }
 
   private hasValidTokens(inputTokens: number, outputTokens: number): boolean {

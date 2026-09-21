@@ -58,6 +58,7 @@ export interface RateLimiterConfig {
  */
 export const ENDPOINT_RATE_LIMITS: Record<string, number> = {
   '/api/chat': 120,             // raised: echo mode + slash commands are free; LLM calls self-throttle via provider
+  '/api/agent-runs/events': 600, // 1 Hz replay polling; allow several authenticated app views without 429 churn
   '/api/vault/*/reveal': 5,     // decrypts secrets (matched via routeOptions.url pattern)
   '/api/backup': 2,             // reads entire data dir
   '/api/restore': 2,            // writes entire data dir

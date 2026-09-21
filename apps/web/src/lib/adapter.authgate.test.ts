@@ -725,6 +725,34 @@ describe('P1b auth gate', () => {
     await expect(consume()).rejects.toThrow(AdapterHttpError);
   });
 
+  it('sendMessage carries a known starter skill as hidden request metadata', async () => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [
+      [TOKEN_PATH, () => jsonRes({ token: 'tok-A' })],
+      ['/api/chat', () => new Response('', { status: 200 })],
+    ]);
+
+    for await (const _event of a.sendMessage(
+      'ws1',
+      'Build a decision matrix for: choosing a launch vendor',
+      'session-a',
+    )) { /* consume stream */ }
+
+    const request = callsTo(fetchSpy, '/api/chat')[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      message: 'Build a decision matrix for: choosing a launch vendor',
+      selectedSkill: 'decision-matrix',
+    });
+
+    for await (const _event of a.sendMessage(
+      'ws1',
+      'Build a decision matrix for:',
+      'session-b',
+    )) { /* consume stream */ }
+    const incomplete = JSON.parse(String(callsTo(fetchSpy, '/api/chat')[1]?.[1].body));
+    expect(incomplete).not.toHaveProperty('selectedSkill');
+  });
+
   it('fetchWithTimeout preserves fresh and pre-aborted caller cancellation without AbortSignal.any', async () => {
     const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
     Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
@@ -759,6 +787,31 @@ describe('P1b auth gate', () => {
       if (anyDescriptor) Object.defineProperty(AbortSignal, 'any', anyDescriptor);
       else Reflect.deleteProperty(AbortSignal, 'any');
     }
+  });
+
+  it('auditSkills keeps a run-and-grade request alive beyond the default 10-second timeout', async () => {
+    vi.useFakeTimers();
+    const a = new LocalAdapter(BASE);
+    fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      const completion = setTimeout(() => resolve(jsonRes({
+        ok: true,
+        report: {
+          verified: ['decision-matrix'], failed: [], flagged: [], inconclusive: [], demoted: [], skipped: [],
+        },
+      })), 11_000);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(completion);
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      }, { once: true });
+    }));
+
+    const request = a.auditSkills(['decision-matrix']);
+    await vi.advanceTimersByTimeAsync(11_000);
+    await expect(request).resolves.toMatchObject({
+      ok: true,
+      report: { verified: ['decision-matrix'] },
+    });
   });
 
   it('abortAgent cancels only the requested chat session', async () => {

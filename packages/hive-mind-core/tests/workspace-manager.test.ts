@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -35,7 +35,7 @@ describe('WorkspaceManager', () => {
   });
 
   describe('create', () => {
-    it('creates workspace with directory, config, mind file, and sessions dir', () => {
+    it('creates workspace with directory, config, mind file, sessions, and managed files dir', () => {
       const ws = manager.create({ name: 'My Project', group: 'Work' });
 
       expect(ws.id).toBe('my-project');
@@ -49,6 +49,33 @@ describe('WorkspaceManager', () => {
       expect(fs.existsSync(path.join(wsDir, 'workspace.mind'))).toBe(true);
       expect(fs.existsSync(path.join(wsDir, 'sessions'))).toBe(true);
       expect(fs.statSync(path.join(wsDir, 'sessions')).isDirectory()).toBe(true);
+      expect(fs.statSync(path.join(wsDir, 'files')).isDirectory()).toBe(true);
+    });
+
+    it('repairs a missing managed files dir when restoring the default workspace', () => {
+      const ws = manager.ensureDefault();
+      const filesDir = path.join(tmpDir, 'workspaces', ws.id, 'files');
+      fs.rmSync(filesDir, { recursive: true, force: true });
+
+      const restored = manager.ensureDefault();
+
+      expect(restored.id).toBe(ws.id);
+      expect(fs.statSync(filesDir).isDirectory()).toBe(true);
+    });
+
+    it('rejects a managed files junction that escapes the workspace', () => {
+      const ws = manager.ensureDefault();
+      const filesDir = path.join(tmpDir, 'workspaces', ws.id, 'files');
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-files-outside-'));
+      fs.rmSync(filesDir, { recursive: true, force: true });
+      fs.symlinkSync(outsideDir, filesDir, process.platform === 'win32' ? 'junction' : 'dir');
+
+      try {
+        expect(() => manager.ensureDefault()).toThrow(/files path/i);
+      } finally {
+        fs.unlinkSync(filesDir);
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -202,6 +229,79 @@ describe('WorkspaceManager', () => {
       expect(manager.get('to-delete')).toBeNull();
       const wsDir = path.join(tmpDir, 'workspaces', 'to-delete');
       expect(fs.existsSync(wsDir)).toBe(false);
+    });
+
+    it('commits deletion by rename before best-effort recursive cleanup', () => {
+      manager.create({ name: 'Partial Delete', group: 'Temp' });
+      const workspacesDir = path.join(tmpDir, 'workspaces');
+      const workspaceDir = path.join(workspacesDir, 'partial-delete');
+      const originalRmSync = fs.rmSync.bind(fs);
+      let injectedFailure = false;
+      const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+        const targetPath = String(target);
+        if (!injectedFailure && path.basename(targetPath).startsWith('.waggle-deleting-')) {
+          injectedFailure = true;
+          fs.unlinkSync(path.join(targetPath, 'workspace.json'));
+          throw Object.assign(new Error('synthetic Windows partial cleanup refusal'), { code: 'EPERM' });
+        }
+        originalRmSync(target, options);
+      });
+
+      try {
+        expect(() => manager.delete('partial-delete')).not.toThrow();
+        expect(injectedFailure).toBe(true);
+        expect(fs.existsSync(workspaceDir)).toBe(false);
+        expect(manager.get('partial-delete')).toBeNull();
+        expect(manager.list().some(workspace => workspace.id === 'partial-delete')).toBe(false);
+        expect(
+          fs.readdirSync(workspacesDir).filter(name => name.startsWith('.waggle-deleting-')),
+        ).toHaveLength(1);
+
+        const recreated = manager.create({ name: 'Partial Delete', group: 'Temp' });
+        expect(recreated.id).toBe('partial-delete');
+        expect(manager.get('partial-delete')).not.toBeNull();
+      } finally {
+        rmSpy.mockRestore();
+      }
+
+      const recoveryDir = path.join(workspacesDir, '.waggle-deleting-user-recovery');
+      fs.mkdirSync(recoveryDir);
+      fs.writeFileSync(path.join(recoveryDir, 'preserve.txt'), 'manual recovery data');
+      new WorkspaceManager(tmpDir);
+      expect(
+        fs.readdirSync(workspacesDir).filter(
+          name => name.startsWith('.waggle-deleting-') && name !== path.basename(recoveryDir),
+        ),
+      ).toHaveLength(0);
+      expect(fs.readFileSync(path.join(recoveryDir, 'preserve.txt'), 'utf8')).toBe('manual recovery data');
+    });
+
+    it('leaves the active workspace intact when the tombstone rename fails', () => {
+      manager.create({ name: 'Rename Refusal', group: 'Temp' });
+      const workspacesDir = path.join(tmpDir, 'workspaces');
+      const workspaceDir = path.join(workspacesDir, 'rename-refusal');
+      const canonicalWorkspaceDir = fs.realpathSync.native(workspaceDir);
+      const originalRenameSync = fs.renameSync.bind(fs);
+      const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+        if (String(source) === canonicalWorkspaceDir) {
+          throw Object.assign(new Error('synthetic Windows rename refusal'), { code: 'EPERM' });
+        }
+        originalRenameSync(source, destination);
+      });
+
+      try {
+        expect(() => manager.delete('rename-refusal')).toThrow(/rename refusal/i);
+      } finally {
+        renameSpy.mockRestore();
+      }
+
+      expect(fs.statSync(workspaceDir).isDirectory()).toBe(true);
+      expect(fs.statSync(path.join(workspaceDir, 'workspace.json')).isFile()).toBe(true);
+      expect(manager.get('rename-refusal')?.name).toBe('Rename Refusal');
+      expect(manager.list().some(workspace => workspace.id === 'rename-refusal')).toBe(true);
+      expect(
+        fs.readdirSync(workspacesDir).filter(name => name.startsWith('.waggle-deleting-')),
+      ).toHaveLength(0);
     });
 
     it.each(['', '.', '..', '../escape', 'nested/escape', 'nested\\escape', 'C:\\escape'])(

@@ -40,6 +40,19 @@ describe('Starter Skill Catalog', () => {
     expect(body.skills.length).toBe(18);
   });
 
+  it('activates auto-installed starter skills during the first server start', async () => {
+    expect(server.agentState.skills.map(skill => skill.name)).toContain('decision-matrix');
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/skills/starter-pack/catalog',
+    });
+    const decisionMatrix = res.json().skills.find((skill: { id: string }) => (
+      skill.id === 'decision-matrix'
+    ));
+    expect(decisionMatrix).toMatchObject({ state: 'active' });
+  });
+
   it('each skill has the correct shape', async () => {
     const res = await injectWithAuth(server, {
       method: 'GET',

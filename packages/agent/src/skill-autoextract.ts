@@ -19,13 +19,15 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ImprovementSignalStore } from '@waggle/core';
 import {
   detectWorkflowPattern,
   generateSkillMarkdown,
   type SkillTemplate,
 } from './skill-creator.js';
 import { redactSkillContent } from './skill-redaction.js';
+import type {
+  ImprovementSignalPort,
+} from './memory-ports.js';
 
 export interface AutoExtractMessage {
   role: string;
@@ -37,7 +39,7 @@ export interface AutoExtractDeps {
   /** Directory to write personal-scope SKILL.md files into */
   personalSkillsDir: string;
   /** Optional signal store — records workflow_pattern signals on each extraction */
-  improvementSignals?: ImprovementSignalStore;
+  improvementSignals?: ImprovementSignalPort;
   /**
    * Optional LLM enrichment hook. When provided, the template is passed
    * through before serialization so the SKILL.md prose can be rewritten.

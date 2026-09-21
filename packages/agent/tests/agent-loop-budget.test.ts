@@ -5,7 +5,10 @@ import {
   selectAgentRunBudget,
 } from '../src/agent-run-budget.js';
 import { BudgetExceededError, CostTracker } from '../src/cost-tracker.js';
+import { HookRegistry } from '../src/hooks.js';
+import { PERSONAS } from '../src/persona-data.js';
 import type { ToolDefinition } from '../src/tools.js';
+import { VERIFICATION_NO_TOOL_DISCLOSURE } from '../src/verification-gate.js';
 import {
   UNTRUSTED_GUARD_CLOSE,
   UNTRUSTED_GUARD_OPEN,
@@ -81,6 +84,12 @@ function researchConfig(
 }
 
 describe('agent run budget policy', () => {
+  it('describes a no-execution result as evidence-only without denying file inspection', () => {
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).toContain('Verification scope: EVIDENCE-ONLY');
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).toContain('File/source inspection may support content findings');
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).not.toContain('No verification-capable tool');
+  });
+
   it('bounds research while reserving a final synthesis turn', () => {
     const policy = selectAgentRunBudget({
       taskShape: 'research',
@@ -89,7 +98,7 @@ describe('agent run budget policy', () => {
     });
 
     expect(policy.maxToolRounds).toBe(4);
-    expect(policy.maxTurns).toBe(5);
+    expect(policy.maxTurns).toBe(7);
     expect(policy.maxTokenBudget).toBe(56_000);
     expect(policy.synthesisReserveTokens).toBe(13_000);
     expect(policy.toolContextBudget).toEqual({
@@ -120,6 +129,19 @@ describe('agent run budget policy', () => {
     expect(multiStep.maxToolRounds).toBeGreaterThan(12);
     expect(document.maxToolRounds).toBeGreaterThan(12);
     expect(document.toolContextBudget.maxSingleResultChars).toBeGreaterThan(4_000);
+  });
+
+  it('keeps simple read-only workspace inspection within four tool rounds', () => {
+    const policy = selectAgentRunBudget({
+      taskShape: 'draft',
+      complexity: 'simple',
+      selectedToolNames: ['search_files', 'search_content', 'read_file'],
+    });
+
+    expect(policy.maxTurns).toBe(5);
+    expect(policy.maxToolRounds).toBe(4);
+    expect(policy.maxTokenBudget).toBe(48_000);
+    expect(policy.synthesisReserveTokens).toBe(10_000);
   });
 });
 
@@ -190,6 +212,73 @@ describe('model-facing tool context', () => {
 });
 
 describe('bounded agent loop synthesis', () => {
+  it('keeps an enabled sealed tool prefix byte-identical across tool rounds', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let modelCall = 0;
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
+      const current = modelCall++;
+      if (current < 2) {
+        return jsonResponse({
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: `call_${current}`,
+            type: 'function',
+            function: { name: 'web_fetch', arguments: JSON.stringify({ id: current }) },
+          }],
+        }, 100);
+      }
+      return jsonResponse({ role: 'assistant', content: 'Sealed synthesis.' }, 100);
+    }) as unknown as typeof fetch;
+    const webFetch: ToolDefinition = {
+      name: 'web_fetch',
+      description: 'Fetch a source.',
+      parameters: { type: 'object', properties: { id: { type: 'number' } } },
+      execute: vi.fn(async args => `SOURCE_${String(args.id)}\n${'x'.repeat(5_000)}`),
+    };
+    const previous = process.env.WAGGLE_SEAL_TOOL_CONTEXT;
+    process.env.WAGGLE_SEAL_TOOL_CONTEXT = '1';
+
+    try {
+      await runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'test-model',
+        systemPrompt: 'Stable system prompt.',
+        messages: [{ role: 'user', content: 'Fetch two sources.' }],
+        tools: [webFetch],
+        fetch: fetchFn,
+        stream: false,
+        verificationGate: false,
+        skillDistillationGate: false,
+        maxTurns: 3,
+        maxToolRounds: 2,
+        maxTokenBudget: 100_000,
+        synthesisReserveTokens: 1_000,
+        maxOutputTokens: 512,
+        toolContextBudget: {
+          maxSingleResultChars: 500,
+          recentResultCount: 1,
+          historicalResultChars: 200,
+        },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_SEAL_TOOL_CONTEXT;
+      else process.env.WAGGLE_SEAL_TOOL_CONTEXT = previous;
+    }
+
+    expect(requestBodies).toHaveLength(3);
+    const secondMessages = requestBodies[1]?.messages as Array<Record<string, unknown>>;
+    const thirdMessages = requestBodies[2]?.messages as Array<Record<string, unknown>>;
+    expect(thirdMessages.slice(0, secondMessages.length)).toEqual(secondMessages);
+    expect(String(secondMessages.find(message => message.role === 'tool')?.content).length)
+      .toBeGreaterThan(200);
+    expect(String(secondMessages.find(message => message.role === 'tool')?.content).length)
+      .toBeLessThanOrEqual(500);
+  });
+
   it('uses an atomic non-streaming request for forced synthesis after streamed evidence collection', async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -420,6 +509,292 @@ describe('fetched source citations', () => {
     fetch: fetchFn,
     verificationGate: false,
     skillDistillationGate: false,
+  });
+
+  it('abandons an unusable repository and cites only fetched evidence from the replacement', async () => {
+    const failedProjectUrl = 'https://github.com/example/unusable-project';
+    const failedRawUrl = 'https://raw.githubusercontent.com/example/unusable-project/main/README.md';
+    const replacementUrl = 'https://github.com/pgvector/pgvector';
+    const secondSourceUrl = 'https://github.com/asg017/sqlite-vec';
+    const researcher = PERSONAS.find(persona => persona.id === 'researcher');
+    expect(researcher).toBeDefined();
+
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_failed_project',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: failedProjectUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_failed_raw',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: failedRawUrl }) },
+        }],
+      }, 120))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'search_replacement',
+          type: 'function',
+          function: { name: 'web_search', arguments: JSON.stringify({ query: 'pgvector official repository' }) },
+        }],
+      }, 140))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_replacement',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: replacementUrl }) },
+        }],
+      }, 160))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'search_second_source',
+          type: 'function',
+          function: { name: 'web_search', arguments: JSON.stringify({ query: 'sqlite-vec official repository' }) },
+        }],
+      }, 180))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_second_source',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: secondSourceUrl }) },
+        }],
+      }, 200))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: `Both replacement projects provide usable primary evidence. Rejected links: ${failedProjectUrl} and ${failedRawUrl}.`,
+      }, 220)) as unknown as typeof fetch;
+    const webFetch = makeWebFetch(async args => {
+      if (args.url === failedProjectUrl) return '[SECURITY] Content sanitized.';
+      if (args.url === failedRawUrl) return 'Page fetched but no text content found.';
+      return 'Primary project documentation with implementation and usage details.';
+    });
+    const webSearch: ToolDefinition = {
+      name: 'web_search',
+      description: 'Search for a replacement primary source.',
+      parameters: { type: 'object', properties: { query: { type: 'string' } } },
+      execute: vi.fn(async args => (
+        String(args.query).includes('sqlite-vec')
+          ? `Official repository: ${secondSourceUrl}`
+          : `Official repository: ${replacementUrl}`
+      )),
+    };
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, webFetch),
+      systemPrompt: researcher!.systemPrompt,
+      tools: [webFetch, webSearch],
+      maxTurns: 7,
+      maxToolRounds: 4,
+    });
+
+    expect(webFetch.execute).toHaveBeenNthCalledWith(1, { url: failedProjectUrl });
+    expect(webFetch.execute).toHaveBeenNthCalledWith(2, { url: failedRawUrl });
+    expect(webFetch.execute).toHaveBeenNthCalledWith(3, { url: replacementUrl });
+    expect(webFetch.execute).toHaveBeenNthCalledWith(4, { url: secondSourceUrl });
+    expect(webSearch.execute).toHaveBeenCalledWith({ query: 'pgvector official repository' });
+    expect(webSearch.execute).toHaveBeenCalledWith({ query: 'sqlite-vec official repository' });
+    expect(vi.mocked(webSearch.execute).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(webFetch.execute).mock.invocationCallOrder[2]);
+    expect(vi.mocked(webSearch.execute).mock.invocationCallOrder[1])
+      .toBeLessThan(vi.mocked(webFetch.execute).mock.invocationCallOrder[3]);
+    expect(result.content).toContain(`Sources fetched:\n- ${replacementUrl}`);
+    expect(result.content).toContain(`- ${secondSourceUrl}`);
+    expect(result.content).not.toContain(failedProjectUrl);
+    expect(result.content).not.toContain(failedRawUrl);
+    expect(fetchFn).toHaveBeenCalledTimes(7);
+  });
+
+  it('never streams a failed sensitive fetch URL when citations were only required by the persona', async () => {
+    const sensitiveUrl = 'https://user:pass@failed.example/source?token=secret';
+    const researcher = PERSONAS.find(persona => persona.id === 'researcher');
+    expect(researcher).toBeDefined();
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(streamResponse([
+        sse({ choices: [{ delta: {
+          content: `Trying ${sensitiveUrl} before answering.`,
+          tool_calls: [{
+            index: 0,
+            id: 'fetch_sensitive',
+            function: { name: 'web_fetch', arguments: JSON.stringify({ url: sensitiveUrl }) },
+          }],
+        } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        'data: [DONE]\n\n',
+      ]))
+      .mockResolvedValueOnce(streamResponse([
+        sse({ choices: [{ delta: { content: `The unavailable source was ${sensitiveUrl}.` } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 120, completion_tokens: 30 },
+        }),
+        'data: [DONE]\n\n',
+      ])) as unknown as typeof fetch;
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, makeWebFetch(async () => '[SECURITY] Content sanitized.'), 'Compare these projects.'),
+      systemPrompt: researcher!.systemPrompt,
+      stream: true,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(result.content).not.toContain(sensitiveUrl);
+    expect(result.content).toContain('[unavailable source removed]');
+    expect(result.content).not.toContain('Sources fetched:');
+    expect(emitted.join('')).toBe(result.content);
+  });
+
+  it('preserves incremental streaming when no source-fetch tool can expose a later-rejected URL', async () => {
+    const fetchFn = vi.fn(async () => streamResponse([
+      sse({ choices: [{ delta: { content: 'First ' } }] }),
+      sse({ choices: [{ delta: { content: 'second.' } }] }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+      'data: [DONE]\n\n',
+    ])) as unknown as typeof fetch;
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, makeWebFetch(), 'Answer directly without citations.'),
+      tools: [],
+      stream: true,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(emitted).toEqual(['First ', 'second.']);
+    expect(result.content).toBe('First second.');
+  });
+
+  it('keeps a canonical URL when an equivalent retry later succeeds', async () => {
+    const failedUrl = 'https://equivalent.example';
+    const successfulUrl = 'https://equivalent.example/';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [{
+          id: 'fetch_without_slash', type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: failedUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [{
+          id: 'fetch_with_slash', type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: successfulUrl }) },
+        }],
+      }, 120))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: `Verified source: ${successfulUrl}`,
+      }, 140)) as unknown as typeof fetch;
+    let attempt = 0;
+    const webFetch = makeWebFetch(async () => (++attempt === 1 ? 'Fetch failed (500): retry' : 'Verified source'));
+
+    const result = await runAgentLoop(citationConfig(fetchFn, webFetch, 'Cite the source URL.'));
+
+    expect(result.content).toContain(successfulUrl);
+    expect(result.content).not.toContain('[unavailable source removed]');
+  });
+
+  it('keeps a successful canonical URL when an equivalent retry later fails', async () => {
+    const successfulUrl = 'https://equivalent.example/';
+    const failedUrl = 'https://equivalent.example';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [{
+          id: 'fetch_with_slash', type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: successfulUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [{
+          id: 'fetch_without_slash', type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: failedUrl }) },
+        }],
+      }, 120))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: `Verified source: ${successfulUrl}`,
+      }, 140)) as unknown as typeof fetch;
+    let attempt = 0;
+    const webFetch = makeWebFetch(async () => (++attempt === 1 ? 'Verified source' : 'Fetch failed (500): retry'));
+
+    const result = await runAgentLoop(citationConfig(fetchFn, webFetch, 'Cite the source URL.'));
+
+    expect(result.content).toContain(successfulUrl);
+    expect(result.content).not.toContain('[unavailable source removed]');
+  });
+
+  it('removes overlapping and structured-error fetch URLs longest-first', async () => {
+    const baseUrl = 'https://failed.example/source';
+    const sensitiveUrl = `${baseUrl}?token=secret`;
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [
+          {
+            id: 'fetch_base', type: 'function',
+            function: { name: 'web_fetch', arguments: JSON.stringify({ url: baseUrl }) },
+          },
+          {
+            id: 'fetch_sensitive', type: 'function',
+            function: { name: 'web_fetch', arguments: JSON.stringify({ url: sensitiveUrl }) },
+          },
+        ],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: `Rejected ${sensitiveUrl}`,
+      }, 120)) as unknown as typeof fetch;
+    const webFetch = makeWebFetch(async () => '{"error":"blocked"}');
+
+    const result = await runAgentLoop(citationConfig(fetchFn, webFetch));
+
+    expect(result.content).not.toContain(baseUrl);
+    expect(result.content).not.toContain('token=secret');
+    expect(result.content).toBe('Rejected [unavailable source removed]');
+    expect(result.content).not.toContain('Sources fetched:');
+  });
+
+  it('redacts a sensitive web_fetch URL when a pre-tool hook cancels before execution', async () => {
+    const sensitiveUrl = 'https://user:pass@blocked.example/source?token=secret';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: '', tool_calls: [{
+          id: 'blocked_by_hook', type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: sensitiveUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant', content: `The blocked source was ${sensitiveUrl}.`,
+      }, 120)) as unknown as typeof fetch;
+    const webFetch = makeWebFetch();
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ cancel: true, reason: 'blocked by policy' }));
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, webFetch, 'Compare these projects.'),
+      hooks,
+    });
+
+    expect(webFetch.execute).not.toHaveBeenCalled();
+    expect(result.content).toBe('The blocked source was [unavailable source removed].');
+    expect(result.content).not.toContain('token=secret');
+    expect(result.content).not.toContain('Sources fetched:');
   });
 
   it('streams missing successful fetch URLs exactly once in the returned answer', async () => {
@@ -791,7 +1166,7 @@ describe('hard request dispatch budget', () => {
       modelSpendBudget: tracker,
     })).rejects.toThrow();
 
-    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(fetchFn).toHaveBeenCalledTimes(4);
     expect(tracker.getReservedDailyTotal()).toBe(0);
     expect(tracker.getDailyTotal()).toBeGreaterThan(0);
   });
@@ -837,7 +1212,7 @@ describe('hard request dispatch budget', () => {
     const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
     tracker.setBudget(10, 'hard');
 
-    const result = await runAgentLoop({
+    await expect(runAgentLoop({
       litellmUrl: 'http://localhost:4000',
       litellmApiKey: 'test-key',
       model: 'paid',
@@ -850,9 +1225,12 @@ describe('hard request dispatch budget', () => {
       verificationGate: false,
       skillDistillationGate: false,
       modelSpendBudget: tracker,
+    })).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      toolsUsed: [],
     });
-
-    expect(result.content).toMatch(/aborted/i);
     expect(tracker.getReservedDailyTotal()).toBe(0);
     expect(tracker.getDailyTotal()).toBeGreaterThan(0);
   });

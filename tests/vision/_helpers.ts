@@ -8,7 +8,20 @@
  */
 import type { Page } from '@playwright/test';
 
-export const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+type E2ETargetEnv = Partial<Record<'WAGGLE_E2E_BASE_URL' | 'WAGGLE_E2E_PORT', string>>;
+
+export function resolveE2EBaseUrl(env: E2ETargetEnv): string {
+  const explicit = env.WAGGLE_E2E_BASE_URL?.trim();
+  if (explicit) return explicit;
+  const rawPort = env.WAGGLE_E2E_PORT?.trim() ?? '';
+  const parsedPort = /^\d+$/.test(rawPort) ? Number.parseInt(rawPort, 10) : Number.NaN;
+  const port = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65_535
+    ? parsedPort
+    : 3333;
+  return `http://127.0.0.1:${port}`;
+}
+
+export const BASE = resolveE2EBaseUrl(process.env);
 
 /** Console errors / pageerrors / failed requests that are environmental noise,
  * not product defects (mirrors full-product-audit.spec.ts:312). */
@@ -16,6 +29,62 @@ const BENIGN = [
   'Failed to fetch', 'net::ERR', 'favicon', '401', '404', 'sync',
   'WebSocket', 'fetch', 'chunk', 'ResizeObserver',
 ];
+
+const REDACTED = '[REDACTED]';
+const SENSITIVE_TEXT_KEY = [
+  'access_token', 'id_token', 'refresh_token', 'session_token', 'api_key',
+  'accessToken', 'idToken', 'refreshToken', 'sessionToken', 'apiKey',
+  'api-key', 'x-api-key', 'x_api_key', 'xApiKey',
+  'client_secret', 'authorization', 'credential', 'signature', 'password',
+  'clientSecret', 'token', 'apikey', 'secret', 'cookie',
+].join('|');
+const SENSITIVE_STRUCTURED_KEY = `${SENSITIVE_TEXT_KEY}|auth|code|sig|key`;
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s]+)@/gi;
+const AUTHORIZATION_HEADER = /\b(authorization|auth)(\s*[:=]\s*)(?:Bearer|Basic)\s+[^\s,;]+/gi;
+const COOKIE_HEADER = /\b(cookie|set-cookie)(\s*:\s*)[^\r\n]*/gi;
+const QUERY_SECRET = new RegExp(
+  `([?&#](?:${SENSITIVE_STRUCTURED_KEY})=)([^&#\\s]*)`,
+  'gi',
+);
+const QUOTED_STRUCTURED_SECRET = new RegExp(
+  `(["'])(${SENSITIVE_STRUCTURED_KEY})\\1(\\s*:\\s*)(["'])((?:\\\\.|(?!\\4)[^\\r\\n])*)\\4`,
+  'gi',
+);
+const NAMED_SECRET = new RegExp(
+  `\\b(${SENSITIVE_TEXT_KEY})\\b(\\s*[:=]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&}]+)`,
+  'gi',
+);
+
+function redactEmbeddedSecrets(value: string): string {
+  return value
+    .replace(URL_USERINFO, `$1${REDACTED}@`)
+    .replace(AUTHORIZATION_HEADER, (_match, key: string, separator: string) => (
+      `${key}${separator}${REDACTED}`
+    ))
+    .replace(COOKIE_HEADER, (_match, key: string, separator: string) => (
+      `${key}${separator}${REDACTED}`
+    ))
+    .replace(QUERY_SECRET, (_match, prefix: string) => `${prefix}${REDACTED}`)
+    .replace(
+      QUOTED_STRUCTURED_SECRET,
+      (_match, keyQuote: string, key: string, separator: string, valueQuote: string) => (
+        `${keyQuote}${key}${keyQuote}${separator}${valueQuote}${REDACTED}${valueQuote}`
+      ),
+    )
+    .replace(NAMED_SECRET, (_match, key: string, separator: string) => (
+      `${key}${separator}${REDACTED}`
+    ));
+}
+
+/** Preserve diagnostic structure while removing credentials embedded in a URL. */
+export function redactDiagnosticUrl(value: string): string {
+  return redactEmbeddedSecrets(value);
+}
+
+/** Redact URLs, query parameters, and header-like secrets inside diagnostic text. */
+export function redactDiagnosticText(value: string): string {
+  return redactEmbeddedSecrets(value);
+}
 
 export interface ConsoleCapture {
   errors: string[];
@@ -36,13 +105,14 @@ export function attachConsoleCapture(page: Page): ConsoleCapture {
     },
   };
   page.on('console', (msg) => {
-    if (msg.type() === 'error') cap.errors.push(msg.text());
+    if (msg.type() === 'error') cap.errors.push(redactDiagnosticText(msg.text()));
   });
-  page.on('pageerror', (err) => cap.pageErrors.push(err.message));
+  page.on('pageerror', (err) => cap.pageErrors.push(redactDiagnosticText(err.message)));
   page.on('requestfailed', (req) => {
-    const url = req.url();
+    const url = redactDiagnosticUrl(req.url());
     if (!BENIGN.some((b) => url.includes(b))) {
-      cap.networkFailures.push(`${req.method()} ${url} — ${req.failure()?.errorText ?? 'failed'}`);
+      const failure = redactDiagnosticText(req.failure()?.errorText ?? 'failed');
+      cap.networkFailures.push(`${req.method()} ${url} — ${failure}`);
     }
   });
   return cap;

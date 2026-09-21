@@ -1,11 +1,10 @@
-# Windows Solo security review — refreshed 2026-08-27
+# Windows Solo security review — refreshed 2026-09-07
 
 ## Status
 
-The integrated Windows Solo source candidate is
-`23ad3fa5f99bddce648b84750a41365299aeb0da` (private PR #66). Its tested PR
-head and merge commit have the same source tree
-`aab548f77ec64b181086664dad29c32e6bc78779`.
+The frozen Windows Solo internal-pilot source candidate is
+`c4e6a5157310876215d20c5e5f059f26ea1f4ba4` on the private readiness branch.
+It has not yet been merged to or represented as private `main`.
 
 This is an evidence-backed source, dependency, CI, and installed-runtime review. It is
 **not** a substitute for the still-missing sealed managed Deep Security report and does
@@ -23,34 +22,37 @@ not confer public release approval.
 | Knowledge graph | Relationship provenance and source-frame boundaries are preserved and tested | Pass |
 | Local server and tools | Loopback/session authentication, origin controls, SSRF/DNS/socket-pinning defenses, bounded external input, command-vector execution, and fail-closed shim handling are covered by focused and remote gates | Pass |
 | Provider authentication | Historical scoped canaries show Claude Code, Codex, and Hermes using official user-owned authentication with no provider credential-file reads/copies; exact-current carry-forward still needs a concrete no-impact attestation or rerun | Historical evidence; current qualification open |
-| Packaged runtime | Exact-current internal-pilot NSIS passed 64/64 clean-profile install, boot, managed-model, repair, relaunch, Exit/cleanup, and uninstall checks | Pass internal RC |
-| Dependency severity | Exact-current full and production audits contain 0 Critical and 0 High findings | Pass Critical/High gate |
+| Packaged runtime | Exact-candidate internal-pilot NSIS passed 64/64 clean-profile install, boot, managed-model, repair, relaunch, Exit/cleanup, and uninstall checks | Pass internal pilot |
+| Dependency severity | Production audit contains 0 Critical and 0 High; app build-tool audit contains 0 vulnerabilities | Pass Critical/High gate |
 
 ## Exact installer evidence
 
 - Installer SHA-256:
-  `7BFA9F9B13633A51CD3336B42E3EF904B7F7A568C6DEE4F6CED967CBD4F40A59`
+  `2211333B5562F0FEAACFFB37887F0918CBB8A79C591E77C858B62ADFA707E919`
 - Certification receipt:
-  `output/installer-certification/23ad3fa5-20260827T123917Z-exact-main-clean-profile/windows-installer-certification.json`
+  `output/internal-pilot-c4e6a515/windows-installer-certificate-c4e6a515.json`
 - Receipt SHA-256:
-  `AC2A1C54119E28CC22DA931EB43E2815862B01832DD6097CE03F8F79D9D3DF4D`
+  `624EBB7C9529C57F50FB8D31E821E5DBE01CF4503717DAEA81569660B886C214`
 - Managed model: `qwen2.5:0.5b`
 - Managed-model digest:
   `sha256:a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67`
 - Certification checks: 64 passed, 0 failed
 
-The certifier verified source and sidecar provenance, bundled runtime/npm, clean offline
+The certifier verified exact `c4e6a515` source and sidecar provenance, bundled runtime/npm, clean offline
 execution, default Solo onboarding, in-process embeddings, built-in proxy liveness,
 session authentication, managed-model pull/chat, proxy-restart chat, repair and data
 preservation, relaunch, cleanup/uninstall, and unchanged external `.hive-mind`/`.ollama`
 roots. No Waggle-owned process or certificate test profile remained after completion.
 
-## Remote integration evidence
+## Integrated qualification evidence
 
-PR #66 passed primary CI, Playwright smoke and full E2E, Windows and both macOS Tauri
-verification targets, Wave 1, and Hive Mind install/smoke on Windows, Ubuntu, and macOS.
-The full local Waggle Vitest suite, agent/server/app typechecks, lint, and diff checks also
-completed successfully before integration.
+Runtime parent `81087bae` passed 12,699 root tests and 2,442 web tests (15,141 total),
+agent/server/app typechecks, full lint, and Cargo checks. Exact candidate `c4e6a515`
+changes only the app build lock and its packaging regression; its affected 102 tests,
+app typecheck, targeted lint, Cargo check, build, and clean-profile receipt are green.
+Visible-browser PM journeys additionally covered provider persistence/recovery, Qwen chat,
+workspace/session isolation, artifact creation/download, automation, memory continuity,
+compact tools, and deterministic skill verification.
 
 Hive Mind PR #53 passed Linux, Windows, macOS, and Ubuntu first-run smoke before merge as
 `3410327800db3ea23f875d547a0c7f4d08826b7e`.
@@ -64,8 +66,8 @@ Hive Mind PR #53 passed Linux, Windows, macOS, and Ubuntu first-run smoke before
 - The immutable Hive Mind drift baseline reports 22 known reviewed blockers and one
   unreviewed difference, with zero forbidden exports. These block the next OSS package
   release, not this private Windows Solo internal RC.
-- Current persona qualification still needs a fresh exact-candidate seal or an independent
-  bounded semantic-impact attestation because PR #66 changed memory behavior.
+- Current persona qualification still needs a fresh exact-release seal or an independent
+  bounded semantic-impact attestation.
 
 Public GO requires publicly trusted Authenticode, a sealed exact-candidate managed Deep
 Security report with no unresolved Critical/High findings, current persona qualification,

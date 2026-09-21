@@ -80,10 +80,10 @@ describe('validateBody wired into the vault route (real mutating route)', () => 
       expect(bad.json().error).toBe('Invalid request body');
       expect(vault.get('anthropic')).toBeFalsy(); // nothing persisted
 
-      const good = await app.inject({ method: 'POST', url: '/api/vault', payload: { name: 'anthropic', value: 'sk-xyz' } });
+      const good = await app.inject({ method: 'POST', url: '/api/vault', payload: { name: 'CUSTOM_API_KEY', value: 'sk-xyz' } });
       expect(good.statusCode).toBe(200);
       expect(good.json().success).toBe(true);
-      expect(vault.get('anthropic')?.value).toBe('sk-xyz');
+      expect(vault.get('CUSTOM_API_KEY')?.value).toBe('sk-xyz');
     } finally {
       await app.close();
       fs.rmSync(tmpDir, { recursive: true, force: true });

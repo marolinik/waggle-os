@@ -3,6 +3,7 @@ import {
   Route, Loader2, CheckCircle2, XCircle, X, ChevronDown, ShieldAlert, ExternalLink,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 import type {
   RouteProposalPayload,
   RouteProposalConfirmBody,
@@ -13,8 +14,14 @@ interface RouteProposalCardProps {
   proposal: RouteProposalPayload;
   /** Fired once the confirm dispatch lands — ChatApp consumes the composer text. */
   onDispatched?: (result: RouteProposalConfirmResponse) => void;
+  /** Fired only after the service records the user's rejection. */
+  onRejected?: () => void;
+  /** Share the terminal rejection request with parent cleanup paths. */
+  onReject?: () => Promise<void>;
   /** Re-run propose after a revalidation_failed confirm (409). */
   onRePropose?: (preferredExecutorId?: string) => void;
+  /** Keep destructive thread actions blocked until confirm settles. */
+  onDispatchingChange?: (dispatching: boolean) => void;
 }
 
 type Phase = 'proposed' | 'dispatching' | 'dispatched' | 'rejected' | 'error';
@@ -36,7 +43,14 @@ function revalidationReason(err: unknown): string | null {
  * `route_proposal` content block (BlockRenderer). Matches the
  * CapabilityRequestCard tone: inline, quiet, act-without-leaving-the-thread.
  */
-export default function RouteProposalCard({ proposal, onDispatched, onRePropose }: RouteProposalCardProps) {
+export default function RouteProposalCard({
+  proposal,
+  onDispatched,
+  onRejected,
+  onReject,
+  onRePropose,
+  onDispatchingChange,
+}: RouteProposalCardProps) {
   const [phase, setPhase] = useState<Phase>('proposed');
   const [egressOpen, setEgressOpen] = useState(false);
   const [removedFrameIds, setRemovedFrameIds] = useState<string[]>([]);
@@ -68,6 +82,7 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
   };
 
   const confirm = async (opts?: { withoutMemory?: boolean }) => {
+    onDispatchingChange?.(true);
     setPhase('dispatching');
     setErrorReason(null);
     const removeIds = opts?.withoutMemory ? egressItems.map(i => i.frameId) : removedFrameIds;
@@ -84,6 +99,8 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
       setPhase('error');
       const reason = revalidationReason(err);
       setErrorReason(reason ?? (err instanceof Error && err.message ? err.message : 'Dispatch failed'));
+    } finally {
+      onDispatchingChange?.(false);
     }
   };
 
@@ -91,7 +108,10 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
     // The card collapses on the user's intent even if the reject POST fails.
     setPhase('rejected');
     try {
-      await adapter.routeProposals.reject(proposal.routeDecisionId);
+      await (onReject
+        ? onReject()
+        : adapter.routeProposals.reject(proposal.routeDecisionId));
+      onRejected?.();
     } catch { /* best-effort — rejection is a learning signal, not a gate */ }
   };
 
@@ -218,7 +238,7 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
                   <option key={alt.id} value={alt.id}>{alt.displayName}</option>
                 ))}
                 {proposal.rejected.map(rej => (
-                  <option key={rej.id} value={rej.id} disabled title={rej.reason} className="text-muted-foreground/50">
+                  <option key={rej.id} value={rej.id} disabled title={rej.reason} className="text-muted-foreground">
                     {rej.id} — unavailable
                   </option>
                 ))}
@@ -234,7 +254,7 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
           )}
 
           {/* Actions / terminal states */}
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
             {phase === 'proposed' && (
               <>
                 {blocked ? (
@@ -291,12 +311,11 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
               </span>
             )}
             {phase === 'dispatched' && dispatchResult?.resultText && (
-              <p
-                className="w-full text-xs text-foreground/90 whitespace-pre-wrap mt-1.5 border-l-2 border-emerald-500/40 pl-2"
+              <div
+                className="basis-full min-w-0 text-xs text-foreground/90 mt-1.5 border-l-2 border-emerald-500/40 pl-2"
                 data-testid="route-proposal-result-text"
-              >
-                {dispatchResult.resultText}
-              </p>
+                dangerouslySetInnerHTML={{ __html: renderChatMarkdown(dispatchResult.resultText) }}
+              />
             )}
             {phase === 'error' && (
               <>

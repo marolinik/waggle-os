@@ -28,6 +28,8 @@ vi.mock('@/lib/tauri-bindings', () => ({
   markFirstLaunchComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
+const PROFILE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
 describe('useOnboarding ?forceWizard latch (P2)', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -67,16 +69,21 @@ describe('useOnboarding ?forceWizard latch (P2)', () => {
     const { result } = renderHook(() => useOnboarding());
 
     act(() => { result.current.update({ workspaceId: 'ws-live' }); });
-    act(() => { result.current.complete(); });
+    await act(async () => { await result.current.complete(); });
 
     expect(result.current.state.completed).toBe(true);
     // The wizard-completion shape keeps the saved fields (no defaultState wipe).
     expect(result.current.state.workspaceId).toBe('ws-live');
   });
 
-  it('without forceWizard, persisted completed state loads as-is', async () => {
+  it('without forceWizard, profile-bound persisted completion loads as-is', async () => {
     window.history.replaceState({}, '', '/');
-    localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7, tier: 'power' }));
+    localStorage.setItem('waggle:onboarding', JSON.stringify({
+      completed: true,
+      step: 7,
+      tier: 'power',
+      profileId: PROFILE_A,
+    }));
     const { useOnboarding } = await import('@/hooks/useOnboarding');
     const { result } = renderHook(() => useOnboarding());
     expect(result.current.state.completed).toBe(true);

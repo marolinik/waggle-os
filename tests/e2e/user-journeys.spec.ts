@@ -889,7 +889,7 @@ test.describe('User Journey Tests', () => {
 
     await gotoApp(page, '/settings?tab=models');
     const panel = page.getByRole('tabpanel').first();
-    await expect(panel.getByText(/bring your own key/i)).toBeVisible({ timeout: 10_000 });
+    await expect(panel.getByText(/connect a cloud provider with your own key/i)).toBeVisible({ timeout: 10_000 });
     await panel.getByRole('button', { name: /anthropic/i }).click();
     const keyInput = panel.getByLabel(/api key for anthropic/i);
     await keyInput.fill('sk-ant-settings-contract');

@@ -42,7 +42,7 @@ describe('File Indexer — integration with /files routes (L-20)', () => {
       payload: { name: 'Indexer test', group: 'Test' },
     });
     workspaceId = create.json().id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();

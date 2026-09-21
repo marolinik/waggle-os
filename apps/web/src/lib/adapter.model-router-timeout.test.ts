@@ -31,6 +31,143 @@ describe('model router request deadlines', () => {
     ]);
   });
 
+  it('uses an extended compatible-model deadline only for Qwen verification', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      valid: true,
+      verified: true,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      model: 'openai-compatible/qwen3.8-flash-next',
+      models: [{ id: 'openai-compatible/qwen3.8-flash-next', name: 'Qwen' }],
+      modelsSource: 'provider-api',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    await client.testCompatibleProvider(
+      'http://10.33.0.153:4000/v1',
+      undefined,
+      'openai-compatible/qwen3.8-flash-next',
+    );
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/settings/test-compatible',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: 'http://10.33.0.153:4000/v1',
+          model: 'openai-compatible/qwen3.8-flash-next',
+        }),
+      },
+      105_000,
+    );
+
+    await client.testCompatibleProvider(
+      'http://127.0.0.1:4000/v1',
+      undefined,
+      'openai-compatible/local-model',
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/settings/test-compatible',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: 'http://127.0.0.1:4000/v1',
+          model: 'openai-compatible/local-model',
+        }),
+      },
+      60_000,
+    );
+  });
+
+  it('atomically saves compatible endpoint metadata and default model without inventing an empty key', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: ['openai-compatible/qwen3.8-flash-next'],
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/settings',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          defaultModel: 'openai-compatible/qwen3.8-flash-next',
+          providers: {
+            'openai-compatible': {
+              baseUrl: 'http://10.33.0.153:4000/v1',
+              models: ['openai-compatible/qwen3.8-flash-next'],
+            },
+          },
+        }),
+      },
+      105_000,
+    );
+  });
+
+  it('allows a non-Qwen compatible provider save to finish its server verification', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      models: ['openai-compatible/local-model'],
+      defaultModel: 'openai-compatible/local-model',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[2]).toBe(60_000);
+  });
+
+  it('uses the safe Qwen deadline when a compatible metadata update omits its stored model', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://127.0.0.1:4000/v1',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[2]).toBe(105_000);
+  });
+
+  it('preserves the existing keyed-provider settings payload through setProviderKey', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderKey(
+      'openai',
+      'secret-key',
+      ['openai/gpt-4o'],
+      'openai/gpt-4o',
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/settings',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          defaultModel: 'openai/gpt-4o',
+          providers: {
+            openai: {
+              apiKey: 'secret-key',
+              models: ['openai/gpt-4o'],
+            },
+          },
+        }),
+      },
+      45_000,
+    );
+  });
+
   it('allows chat time-to-first-token to exceed the generic request timeout', async () => {
     const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response([
       'event: done',

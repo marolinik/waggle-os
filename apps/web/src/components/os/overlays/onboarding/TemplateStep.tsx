@@ -62,7 +62,11 @@ const TemplateStep = ({ templates, onSelect, creating, creatingId, createError, 
       })}
     </div>
 
-    {createError && <p className="text-xs text-muted-foreground mb-3">{createError}</p>}
+    {createError && (
+      <p role="alert" className="text-xs text-[var(--sem-risk,theme(colors.red.400))] mb-3">
+        {createError}
+      </p>
+    )}
   </motion.div>
   );
 };

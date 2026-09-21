@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
 import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal, Square, Route } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,6 +9,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import type { RouteProposalPayload } from '@/lib/route-proposals';
+import type { ChatHistoryStatus } from '@/hooks/useChat';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
 import ChatWorkCanvas, { selectCanvasArtifact } from './chat-blocks/ChatWorkCanvas';
@@ -18,13 +19,18 @@ import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
 import { extractSuggestedActions } from '@/lib/suggested-actions';
 import { shouldAutoSendFirstTask } from '@/lib/auto-send-first-task';
-import {
-  buildRecallQuery,
-  previewRecall,
-  shouldFireMemoryRecall,
-} from '@/lib/memory-recall-toast';
+import { findNewestMemoryRecallNotice } from '@/lib/memory-recall-toast';
 import { useToast } from '@/hooks/use-toast';
 import { DUR } from '@/lib/motion/tokens';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export interface TeamMember {
   id: string;
@@ -32,6 +38,9 @@ export interface TeamMember {
   status: string;
   avatar?: string;
 }
+
+export type ModelCatalogStatus = 'loading' | 'ready' | 'empty' | 'unavailable';
+export type ModelHealthStatus = 'checking' | 'ready' | 'unavailable' | 'unconfigured';
 
 type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
@@ -41,7 +50,7 @@ interface ChatAppProps {
   /** F2: widened to observe send success for the wizard auto-send. Existing
    *  callers ignore the return value — non-breaking. */
   onSendMessage: (content: string) => void | Promise<boolean | void>;
-  onClearHistory: () => void;
+  onClearHistory: () => boolean | void | Promise<boolean | void>;
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean, opts?: { always?: boolean }) => void;
   currentPersona?: string;
@@ -49,11 +58,23 @@ interface ChatAppProps {
   currentModel?: string;
   onModelChange?: (model: string) => void;
   availableModels?: string[];
+  /** Truthful state of the provider-backed model catalog refresh. */
+  modelCatalogStatus?: ModelCatalogStatus;
+  /** Truthful live-probe state of the exact selected model. */
+  modelHealthStatus?: ModelHealthStatus;
+  /** Retry the provider-backed model catalog refresh. */
+  onRetryModels?: () => void;
   teamPresence?: TeamMember[];
   sessions?: { id: string; title: string; messageCount?: number; lastActive?: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
-  onNewSession?: () => void;
+  onNewSession?: () => void | Promise<unknown>;
+  sessionCreating?: boolean;
+  sessionLoading?: boolean;
+  sessionReady?: boolean;
+  sessionError?: string | null;
+  sessionListFailed?: boolean;
+  onRetrySessions?: () => void | Promise<boolean>;
   workspaceId?: string | null;
   templateId?: string;
   storageType?: 'virtual' | 'local' | 'team';
@@ -71,12 +92,20 @@ interface ChatAppProps {
   autoSendInitial?: boolean;
   /** F2: true once a real session's history has landed — gates the auto-send. */
   historyLoaded?: boolean;
-  /** F4: re-issue the last failed turn (Retry button on error blocks). */
+  /** Truthful state of the active session's authoritative history read. */
+  historyStatus?: ChatHistoryStatus;
+  /** Safe user-facing history failure copy (never raw provider/server detail). */
+  historyError?: string | null;
+  /** Retry the active session's authoritative history read. */
+  onRetryHistory?: () => void;
+  /** F4: re-issue the last failed or stopped turn from its recovery action. */
   onRetry?: () => void;
   /** Lane S2 (Pillar 3.1): halt the in-flight reply mid-stream. Wired to the
    *  useChat abort/cancel path; the partial answer stays and send returns. When
    *  omitted, the Stop control is not rendered. */
-  onStopStreaming?: () => void;
+  onStopStreaming?: (
+    options?: { discardQueued?: boolean },
+  ) => void | Promise<void | (() => void)>;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -557,14 +586,21 @@ const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
   onPersonaChange, currentModel, onModelChange, availableModels,
+  modelCatalogStatus: modelCatalogStatusProp, modelHealthStatus: modelHealthStatusProp,
+  onRetryModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
+  sessionCreating = false, sessionLoading = false, sessionReady = true, sessionError = null,
+  sessionListFailed = false, onRetrySessions,
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
   initialMessage,
   autoSendInitial = false,
   historyLoaded = false,
+  historyStatus = 'ready',
+  historyError = null,
+  onRetryHistory,
   onRetry,
   onStopStreaming,
 }: ChatAppProps) => {
@@ -572,11 +608,125 @@ const ChatApp = ({
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashIndex, setSlashIndex] = useState(0);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   // Default the session sidebar open when the user already has chats — the
   // collapsed state hides "New Session" + history (w-0 container), which made
   // P2/P3/P5 unable to start a fresh chat without finding the unlabelled
   // chevron toggle. Empty-state stays collapsed (nothing to show).
-  const [showSessions, setShowSessions] = useState(() => Boolean(sessions && sessions.length > 0));
+  const sessionCount = sessions?.length ?? 0;
+  const [showSessions, setShowSessions] = useState(() => sessionCount > 0);
+  const previousSessionCount = useRef(sessionCount);
+  const sessionSidebarTouched = useRef(false);
+  const sessionSidebarWorkspace = useRef(workspaceId);
+  const newSessionTransitionRef = useRef<Promise<void> | null>(null);
+  const [newSessionTransitioning, setNewSessionTransitioning] = useState(false);
+  useEffect(() => {
+    if (sessionSidebarWorkspace.current !== workspaceId) {
+      sessionSidebarWorkspace.current = workspaceId;
+      sessionSidebarTouched.current = false;
+      previousSessionCount.current = sessionCount;
+      setShowSessions(sessionCount > 0);
+      return;
+    }
+    if (sessionCount === 0) {
+      setShowSessions(false);
+    } else if (!sessionSidebarTouched.current && previousSessionCount.current === 0) {
+      setShowSessions(true);
+    }
+    previousSessionCount.current = sessionCount;
+  }, [sessionCount, workspaceId]);
+  const sessionStatusId = useId();
+  const modelPickerId = useId();
+  const modelCatalogStatus = modelCatalogStatusProp
+    ?? (availableModels?.length ? 'ready' : 'empty');
+  const modelCatalogLabel = modelCatalogStatus === 'ready'
+    ? 'available'
+    : modelCatalogStatus === 'loading'
+      ? 'checking'
+      : modelCatalogStatus === 'empty'
+        ? 'no models'
+        : 'unavailable';
+  const modelHealthStatus = modelHealthStatusProp
+    ?? (currentModel ? 'checking' : 'unconfigured');
+  const modelHealthLabel = modelHealthStatus === 'ready'
+    ? 'ready'
+    : modelHealthStatus === 'checking'
+      ? 'checking'
+      : modelHealthStatus === 'unavailable'
+        ? 'unavailable'
+        : 'no model';
+  const modelHealthTone = modelHealthStatus === 'ready'
+    ? 'healthy'
+    : modelHealthStatus === 'checking'
+      ? 'attention'
+      : modelHealthStatus === 'unconfigured'
+        ? 'neutral'
+        : 'risk';
+  const modelCatalogWarning = modelCatalogStatus === 'ready'
+    ? ''
+    : `, model list ${modelCatalogLabel}`;
+  const modelTriggerLabel = `${currentModel ? formatModelLabel(currentModel) : 'Auto'}, ${modelHealthLabel}${modelCatalogWarning}`;
+  const sessionInputLocked = sessionCreating
+    || sessionLoading
+    || !sessionReady
+    || newSessionTransitioning;
+  const newSessionLocked = sessionInputLocked || (isLoading && !onStopStreaming);
+  const sessionControlsLocked = isLoading || sessionInputLocked;
+  const sessionStatusIsError = Boolean(
+    sessionError && !newSessionTransitioning && !sessionCreating && !sessionLoading,
+  );
+  const sessionStatus = newSessionTransitioning
+    ? 'Starting a new session…'
+    : sessionCreating
+      ? 'Creating a new session…'
+      : sessionLoading
+        ? 'Loading sessions…'
+        : sessionError
+          ? `Session error: ${sessionError}`
+          : !sessionReady
+            ? 'No chat session is ready.'
+            : isLoading
+              ? 'New session stops the current response. Finish it before switching existing sessions.'
+              : null;
+  const handleNewSession = () => {
+    if (!onNewSession || newSessionLocked || newSessionTransitionRef.current) return;
+    sessionSidebarTouched.current = true;
+    setShowSessions(true);
+    setNewSessionTransitioning(true);
+    const transition = (async () => {
+      let releaseStoppedSession: (() => void) | undefined;
+      try {
+        if (isLoading) {
+          const release = await onStopStreaming?.({ discardQueued: true });
+          if (typeof release === 'function') releaseStoppedSession = release;
+        }
+        const created = await onNewSession();
+        if (created == null) releaseStoppedSession?.();
+      } catch {
+        releaseStoppedSession?.();
+      }
+    })().finally(() => {
+      if (newSessionTransitionRef.current === transition) {
+        newSessionTransitionRef.current = null;
+        setNewSessionTransitioning(false);
+      }
+    });
+    newSessionTransitionRef.current = transition;
+    void transition.catch(() => undefined);
+  };
+  const handleStopStreaming = () => {
+    if (!onStopStreaming) return;
+    try {
+      void Promise.resolve(onStopStreaming()).catch(() => undefined);
+    } catch {
+      // Local cancellation already owns visible recovery; transport stop is best-effort.
+    }
+  };
+  const handleToggleSessions = () => {
+    sessionSidebarTouched.current = true;
+    setShowSessions((current) => !current);
+  };
   const [dragging, setDragging] = useState(false);
   const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
@@ -602,6 +752,8 @@ const ChatApp = ({
   const composerThreadKey = `${workspaceId ?? ''}\u0000${activeSessionId ?? ''}`;
   const composerThreadKeyRef = useRef(composerThreadKey);
   composerThreadKeyRef.current = composerThreadKey;
+  const sessionInputLockedRef = useRef(sessionInputLocked);
+  sessionInputLockedRef.current = sessionInputLocked;
   const starterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (starterTimeoutRef.current) clearTimeout(starterTimeoutRef.current);
@@ -653,35 +805,14 @@ const ChatApp = ({
     lastCanvasPath.current = path;
   }, [canvasArtifact]);
 
-  // M-22 / ENG-1: surface a relevant memory on the 5th user message of
-  // a session. Reset when the workspace or session changes so each
-  // session gets one chance to wow.
   const { toast } = useToast();
-  const [recallFired, setRecallFired] = useState(false);
+  const announcedMemoryReceiptIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    setRecallFired(false);
-  }, [workspaceId, activeSessionId]);
-  useEffect(() => {
-    const userCount = messages.filter(m => m.role === 'user').length;
-    if (!shouldFireMemoryRecall({ userMessageCount: userCount, alreadyFired: recallFired })) return;
-    const query = buildRecallQuery(messages);
-    if (!query) return;
-    let cancelled = false;
-    const scope = workspaceId ?? 'global';
-    adapter.searchMemory(query, scope).then(frames => {
-      if (cancelled) return;
-      const top = frames[0];
-      if (!top?.content) return;
-      const preview = previewRecall(top.content);
-      if (!preview) return;
-      toast({
-        title: 'I just remembered something relevant',
-        description: preview,
-      });
-      setRecallFired(true);
-    }).catch(() => { /* quiet — memory search is best-effort */ });
-    return () => { cancelled = true; };
-  }, [messages, recallFired, workspaceId, toast]);
+    const pending = findNewestMemoryRecallNotice(messages, announcedMemoryReceiptIds.current);
+    if (!pending) return;
+    announcedMemoryReceiptIds.current.add(pending.receipt.receiptId);
+    toast(pending.notice);
+  }, [messages, toast]);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
 
@@ -812,7 +943,7 @@ const ChatApp = ({
   // there is text, INCLUDING while a previous reply streams. useChat queues a
   // send fired mid-stream behind the in-flight one (optimistic `queued` turn),
   // so there is no disabled window — the next message is accepted immediately.
-  const canSend = Boolean(input.trim());
+  const canSend = Boolean(input.trim()) && !sessionInputLocked;
   const prevCanSendRef = useRef(canSend);
   useEffect(() => {
     if (canSend && !prevCanSendRef.current) {
@@ -825,6 +956,10 @@ const ChatApp = ({
   }, [canSend]);
 
   const submitComposerMessage = useCallback((content: string, restoreText = content) => {
+    if (sessionInputLockedRef.current) {
+      setInput(current => current || restoreText);
+      return;
+    }
     const submission = ++sendSubmissionRef.current;
     const editRevision = composerEditRevisionRef.current;
     const threadKey = composerThreadKeyRef.current;
@@ -861,6 +996,7 @@ const ChatApp = ({
   // seed clears immediately so the first generated turn never looks duplicate.
   const autoSentRef = useRef(false);
   useEffect(() => {
+    if (sessionInputLocked) return;
     const inputUnchanged = !inputRef.current || inputRef.current.value === initialMessage;
     if (!shouldAutoSendFirstTask({
       autoSendInitial, alreadySent: autoSentRef.current, initialMessage,
@@ -874,6 +1010,7 @@ const ChatApp = ({
     initialMessage,
     activeSessionId,
     historyLoaded,
+    sessionInputLocked,
     submitComposerMessage,
   ]);
 
@@ -885,21 +1022,178 @@ const ChatApp = ({
     blockId: string; prompt: string; proposal: RouteProposalPayload;
   }>>([]);
   const [bestFitBusy, setBestFitBusy] = useState(false);
+  const routeProposalEpochRef = useRef(0);
+  const routeReProposalRevisionRef = useRef(new Map<string, number>());
+  const routeProposalsRef = useRef(routeProposals);
+  routeProposalsRef.current = routeProposals;
+  const [dispatchingRouteProposalIds, setDispatchingRouteProposalIds] = useState<Set<string>>(new Set());
+  const dispatchingRouteProposalIdsRef = useRef(dispatchingRouteProposalIds);
+  dispatchingRouteProposalIdsRef.current = dispatchingRouteProposalIds;
+  const dispatchingRouteDecisionIdsRef = useRef(new Map<string, string>());
+  const settledRouteProposalIdsRef = useRef(new Set<string>());
+  const routeProposalRejectionRequestsRef = useRef(new Map<string, {
+    routeDecisionId: string;
+    request: Promise<void>;
+  }>());
+  const rejectRouteProposal = useCallback((blockId: string, routeDecisionId: string) => {
+    const existing = routeProposalRejectionRequestsRef.current.get(blockId);
+    if (existing?.routeDecisionId === routeDecisionId) return existing.request;
+    const tracked = {
+      routeDecisionId,
+      request: adapter.routeProposals.reject(routeDecisionId),
+    };
+    routeProposalRejectionRequestsRef.current.set(blockId, tracked);
+    void tracked.request.finally(() => {
+      if (routeProposalRejectionRequestsRef.current.get(blockId) === tracked) {
+        routeProposalRejectionRequestsRef.current.delete(blockId);
+      }
+    }).catch(() => undefined);
+    return tracked.request;
+  }, []);
+  const activeThreadKey = `${workspaceId ?? ''}:${activeSessionId ?? ''}`;
+  const activeThreadKeyRef = useRef(activeThreadKey);
+  activeThreadKeyRef.current = activeThreadKey;
   useEffect(() => {
+    const dispatching = dispatchingRouteProposalIdsRef.current;
+    const abandoned = routeProposalsRef.current.filter(
+      ({ blockId }) => (
+        !settledRouteProposalIdsRef.current.has(blockId)
+        && !dispatching.has(blockId)
+        && !routeProposalRejectionRequestsRef.current.has(blockId)
+      ),
+    );
+    void Promise.allSettled(
+      abandoned.map(({ blockId, proposal }) => rejectRouteProposal(blockId, proposal.routeDecisionId)),
+    );
+    routeProposalEpochRef.current += 1;
+    routeReProposalRevisionRef.current.clear();
+    routeProposalsRef.current = [];
+    dispatchingRouteProposalIdsRef.current = new Set();
+    settledRouteProposalIdsRef.current.clear();
     setRouteProposals([]);
-  }, [activeSessionId, workspaceId]);
+    setDispatchingRouteProposalIds(new Set());
+    setBestFitBusy(false);
+    setClearDialogOpen(false);
+    setClearingHistory(false);
+  }, [activeSessionId, workspaceId, rejectRouteProposal]);
+
+  const handleConfirmedClear = async () => {
+    if (clearingHistory) return;
+    const targetThreadKey = activeThreadKeyRef.current;
+    const targetProposalEpoch = routeProposalEpochRef.current;
+    if (dispatchingRouteProposalIdsRef.current.size > 0) {
+      toast({
+        title: 'Route handoff in progress',
+        description: 'Wait for the handoff to finish before clearing this conversation.',
+      });
+      return;
+    }
+    setClearingHistory(true);
+    try {
+      const cleared = await onClearHistory();
+      if (cleared === false) {
+        if (
+          activeThreadKeyRef.current === targetThreadKey
+          && routeProposalEpochRef.current === targetProposalEpoch
+        ) {
+          toast({
+            variant: 'destructive',
+            title: "Couldn't clear this conversation",
+            description: 'Your messages and pending route suggestions are still here.',
+          });
+        }
+        return;
+      }
+      if (
+        activeThreadKeyRef.current !== targetThreadKey
+        || routeProposalEpochRef.current !== targetProposalEpoch
+      ) return;
+      routeProposalEpochRef.current += 1;
+      routeReProposalRevisionRef.current.clear();
+      setBestFitBusy(false);
+      const pendingProposals = routeProposalsRef.current.filter(
+        ({ blockId }) => !settledRouteProposalIdsRef.current.has(blockId),
+      );
+      routeProposalsRef.current = [];
+      dispatchingRouteProposalIdsRef.current = new Set();
+      settledRouteProposalIdsRef.current.clear();
+      setRouteProposals([]);
+      setDispatchingRouteProposalIds(new Set());
+      setInput('');
+      setShowSlash(false);
+      setClearDialogOpen(false);
+      const cancellationResults = await Promise.allSettled(
+        pendingProposals.map(({ blockId, proposal }) => (
+          rejectRouteProposal(blockId, proposal.routeDecisionId)
+        )),
+      );
+      if (
+        activeThreadKeyRef.current !== targetThreadKey
+        || routeProposalEpochRef.current !== targetProposalEpoch + 1
+      ) return;
+      if (cancellationResults.some(result => result.status === 'rejected')) {
+        toast({
+          variant: 'destructive',
+          title: 'Conversation cleared, route cancellation incomplete',
+          description: 'Old route cards were disabled, but the service could not record every cancellation.',
+        });
+      }
+    } catch (err) {
+      console.error('[ChatApp] clear history failed:', err);
+      if (
+        activeThreadKeyRef.current === targetThreadKey
+        && routeProposalEpochRef.current === targetProposalEpoch
+      ) {
+        toast({
+          variant: 'destructive',
+          title: "Couldn't clear this conversation",
+          description: 'Your messages and pending route suggestions are still here.',
+        });
+      }
+    } finally {
+      const currentProposalEpoch = routeProposalEpochRef.current;
+      if (
+        activeThreadKeyRef.current === targetThreadKey
+        && (
+          currentProposalEpoch === targetProposalEpoch
+          || currentProposalEpoch === targetProposalEpoch + 1
+        )
+      ) setClearingHistory(false);
+    }
+  };
 
   const handleBestFit = async () => {
     const text = input.trim();
     if (!text || !workspaceId || bestFitBusy) return;
+    const proposalEpoch = routeProposalEpochRef.current;
+    const proposalThreadKey = activeThreadKeyRef.current;
     setBestFitBusy(true);
     try {
-      const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: text });
-      setRouteProposals(prev => [
-        ...prev,
-        { blockId: `route-${proposal.routeDecisionId}`, prompt: text, proposal },
-      ]);
+      const proposal = await adapter.routeProposals.propose({
+        workspaceId,
+        ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        prompt: text,
+      });
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      setRouteProposals(prev => {
+        const next = [
+          ...prev,
+          { blockId: `route-${proposal.routeDecisionId}`, prompt: text, proposal },
+        ];
+        routeProposalsRef.current = next;
+        return next;
+      });
     } catch (err) {
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+      ) return;
       console.error('[ChatApp] route propose failed:', err);
       toast({
         variant: 'destructive',
@@ -907,28 +1201,100 @@ const ChatApp = ({
         description: 'Please try again.',
       });
     } finally {
-      setBestFitBusy(false);
+      if (
+        routeProposalEpochRef.current === proposalEpoch
+        && activeThreadKeyRef.current === proposalThreadKey
+      ) setBestFitBusy(false);
     }
   };
 
   const handleRouteProposalDispatched = (blockId: string) => {
-    const entry = routeProposals.find(p => p.blockId === blockId);
+    settledRouteProposalIdsRef.current.add(blockId);
+    const entry = routeProposalsRef.current.find(p => p.blockId === blockId);
+    if (!entry) return;
     // Consume the composer text on confirm — but only if the user hasn't
     // edited it since the proposal was made.
-    if (entry && input.trim() === entry.prompt) setInput('');
+    if (inputRef.current?.value.trim() === entry.prompt) setInput('');
+  };
+
+  const handleRouteProposalDispatchingChange = (blockId: string, dispatching: boolean) => {
+    const next = new Set(dispatchingRouteProposalIdsRef.current);
+    if (dispatching) {
+      next.add(blockId);
+      const entry = routeProposalsRef.current.find(proposal => proposal.blockId === blockId);
+      if (entry) {
+        dispatchingRouteDecisionIdsRef.current.set(blockId, entry.proposal.routeDecisionId);
+      }
+    } else {
+      next.delete(blockId);
+      const routeDecisionId = dispatchingRouteDecisionIdsRef.current.get(blockId);
+      dispatchingRouteDecisionIdsRef.current.delete(blockId);
+      const stillVisible = routeProposalsRef.current.some(proposal => proposal.blockId === blockId);
+      if (
+        routeDecisionId
+        && !stillVisible
+        && !settledRouteProposalIdsRef.current.has(blockId)
+      ) {
+        void rejectRouteProposal(blockId, routeDecisionId).catch(() => undefined);
+      }
+      if (!stillVisible) settledRouteProposalIdsRef.current.delete(blockId);
+    }
+    dispatchingRouteProposalIdsRef.current = next;
+    setDispatchingRouteProposalIds(next);
+  };
+
+  const handleRouteProposalRejected = (blockId: string) => {
+    settledRouteProposalIdsRef.current.add(blockId);
   };
 
   const handleRouteProposalRePropose = async (blockId: string, preferredExecutorId?: string) => {
     const entry = routeProposals.find(p => p.blockId === blockId);
     if (!entry || !workspaceId) return;
+    const proposalEpoch = routeProposalEpochRef.current;
+    const proposalThreadKey = activeThreadKeyRef.current;
+    const proposalRevision = (routeReProposalRevisionRef.current.get(blockId) ?? 0) + 1;
+    routeReProposalRevisionRef.current.set(blockId, proposalRevision);
+    const supersededRouteDecisionId = entry.proposal.routeDecisionId;
     try {
       const proposal = await adapter.routeProposals.propose({
         workspaceId,
+        ...(activeSessionId ? { sessionId: activeSessionId } : {}),
         prompt: entry.prompt,
         ...(preferredExecutorId ? { preferredExecutorId } : {}),
       });
-      setRouteProposals(prev => prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p)));
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      try {
+        await rejectRouteProposal(blockId, supersededRouteDecisionId);
+      } catch (err) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        throw err;
+      }
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      setRouteProposals(prev => {
+        const next = prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p));
+        routeProposalsRef.current = next;
+        return next;
+      });
     } catch (err) {
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) return;
       console.error('[ChatApp] route re-propose failed:', err);
       toast({
         variant: 'destructive',
@@ -940,12 +1306,12 @@ const ChatApp = ({
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || sessionInputLocked) return;
 
     // Client-only commands — handled locally, not sent to server
     if (text === '/clear') {
-      onClearHistory();
-      setInput('');
+      setShowSlash(false);
+      setClearDialogOpen(true);
       return;
     }
     if (text.startsWith('/model ') && onModelChange) {
@@ -1053,16 +1419,29 @@ const ChatApp = ({
 
       {/* Session sidebar */}
       {sessions && sessions.length > 0 && (
-        <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
-          <div className="p-2 space-y-1">
-            <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full">
+        <div
+          className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`}
+          data-testid="chat-session-sidebar"
+          aria-hidden={!showSessions}
+        >
+          {showSessions ? <div className="p-2 space-y-1">
+            <button
+              onClick={handleNewSession}
+              disabled={newSessionLocked}
+              aria-describedby={sessionStatus ? sessionStatusId : undefined}
+              className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Plus className="w-3 h-3" /> New Session
             </button>
             {sessions.map(s => (
               <button
                 key={s.id}
+                data-session-id={s.id}
                 onClick={() => onSelectSession?.(s.id)}
-                className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors ${
+                disabled={sessionControlsLocked}
+                aria-current={activeSessionId === s.id ? 'true' : undefined}
+                aria-describedby={sessionStatus ? sessionStatusId : undefined}
+                className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   activeSessionId === s.id ? 'bg-primary/20' : 'hover:bg-muted/50'
                 }`}
               >
@@ -1070,7 +1449,7 @@ const ChatApp = ({
                   {s.title}
                 </span>
                 {(s.messageCount != null || s.lastActive) && (
-                  <span className="text-[11px] text-muted-foreground/60">
+                  <span className={`text-[11px] ${activeSessionId === s.id ? 'text-[var(--text-2)]' : 'text-[var(--text-tertiary)]'}`}>
                     {s.messageCount != null && `${s.messageCount} msgs`}
                     {s.messageCount != null && s.lastActive && ' · '}
                     {s.lastActive && new Date(s.lastActive).toLocaleDateString(DATE_LOCALE)}
@@ -1078,7 +1457,7 @@ const ChatApp = ({
                 )}
               </button>
             ))}
-          </div>
+          </div> : null}
         </div>
       )}
 
@@ -1135,7 +1514,75 @@ const ChatApp = ({
               without it the icons sat flush against (and visually cut by) the
               boundary just above the composer. */}
           <div className={`mx-auto w-full max-w-[680px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : 'pb-6'}`}>
-          {messages.length === 0 && workspaceId && (
+          {messages.length > 0 && historyStatus === 'error' && (
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-lg border border-[var(--attention)]/30 bg-[var(--attention)]/10 px-3 py-2 text-xs text-muted-foreground"
+              data-testid="chat-history-refresh-error"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--attention)]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="font-medium text-foreground">Couldn't refresh this conversation.</span>{' '}
+                {historyError}
+              </span>
+              {onRetryHistory && (
+                <button
+                  type="button"
+                  onClick={onRetryHistory}
+                  className="shrink-0 rounded-md border border-border/50 px-2 py-1 font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  aria-label="Retry loading conversation"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+          {messages.length > 0 && historyStatus === 'loading' && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 rounded-lg border border-border/40 bg-[var(--surface-2)] px-3 py-2 text-xs text-muted-foreground"
+              data-testid="chat-history-refreshing"
+            >
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-honey motion-reduce:animate-none" aria-hidden="true" />
+              <span>Refreshing conversation…</span>
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'loading' && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground"
+              data-testid="chat-history-loading"
+            >
+              <Loader2 className="h-6 w-6 animate-spin text-honey motion-reduce:animate-none" aria-hidden="true" />
+              <p className="text-sm">Loading conversation…</p>
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'error' && (
+            <div
+              role="alert"
+              className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center"
+              data-testid="chat-history-load-error"
+            >
+              <AlertTriangle className="h-7 w-7 text-[var(--attention)]" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Couldn't load this conversation.</p>
+                {historyError && <p className="mt-1 text-xs text-muted-foreground">{historyError}</p>}
+              </div>
+              {onRetryHistory && (
+                <button
+                  type="button"
+                  onClick={onRetryHistory}
+                  className="rounded-md border border-border/60 bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  aria-label="Retry loading conversation"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'ready' && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
               personaId={currentPersona}
@@ -1199,8 +1646,23 @@ const ChatApp = ({
           {messages.map((msg, msgIdx) => {
             const messagePersona = msg.persona ? getPersonaById(msg.persona) : undefined;
             const persistedMessageIndex = persistedMessageIndices[msgIdx];
+            const isRetryingTurn = isLoading
+              && msg.role === 'assistant'
+              && msg.retrying === true;
+            const isWaitingForModel = isLoading
+              && msgIdx === messages.length - 1
+              && msg.role === 'assistant'
+              && !msg.content.trim()
+              && !msg.draft?.content.trim()
+              && (!msg.blocks || msg.blocks.length === 0)
+              && (!msg.tools || msg.tools.length === 0)
+              && !isRetryingTurn;
             return (
-            <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
+            <div
+              key={msg.id}
+              data-testid="chat-message"
+              data-message-role={msg.role}
+              className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
                 if (onContextRail && msg.content) {
                   onContextRail({ type: 'message', id: msg.id, label: msg.content.slice(0, 60) });
@@ -1246,12 +1708,16 @@ const ChatApp = ({
                     {msg.model && <span>· {formatModelLabel(msg.model)}</span>}
                     {msg.draft && (
                       <span data-testid="chat-draft-status">
-                        · {msg.draft.status === 'stopped' ? 'Stopped draft' : 'Draft'} · not saved
+                        · {msg.draft.status === 'stopped'
+                          ? 'Stopped draft'
+                          : msg.retrying
+                          ? 'Retry queued'
+                          : 'Draft'} · not saved
                       </span>
                     )}
                   </div>
                 )}
-                <div className={`relative select-text cursor-text group/msg text-sm ${
+                <div data-testid="chat-message-content" className={`relative select-text cursor-text group/msg text-sm ${
                   msg.role === 'user'
                     // Round-6 fix 3: honey-tinted user bubble (theme-aware tokens)
                     // so it reads against the canvas in BOTH themes — the old
@@ -1280,14 +1746,37 @@ const ChatApp = ({
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
                       workspaceId={workspaceId}
                       sessionId={activeSessionId}
-                      onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
+                      onRetry={msgIdx === messages.length - 1 && !isLoading && !sessionInputLocked ? onRetry : undefined}
                     />
                   ) : msg.role === 'assistant' ? (
-                    <BlockRenderer blocks={[{
-                      type: 'text',
-                      blockId: `legacy-${msg.id}`,
-                      content: msg.content,
-                    }]} />
+                    <div data-testid={isWaitingForModel ? 'chat-first-response-indicator' : undefined}>
+                      {isRetryingTurn ? (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          data-testid="chat-retry-wait-indicator"
+                          className="text-xs text-muted-foreground"
+                        >
+                          Waiting to retry…
+                        </span>
+                      ) : isWaitingForModel && (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          aria-label="Model response status"
+                          className="sr-only"
+                        >
+                          Waiting for the model to respond.
+                        </span>
+                      )}
+                      {!isRetryingTurn && (
+                        <BlockRenderer blocks={[{
+                          type: 'text',
+                          blockId: `legacy-${msg.id}`,
+                          content: msg.content,
+                        }]} isStreaming={isWaitingForModel} />
+                      )}
+                    </div>
                   ) : (
                     <span className="whitespace-pre-wrap">
                       {msg.content}
@@ -1324,6 +1813,26 @@ const ChatApp = ({
                     </HintTooltip>
                   )}
                 </div>
+                {msg.role === 'assistant'
+                  && msg.draft?.status === 'stopped'
+                  && msgIdx === messages.length - 1
+                  && !isLoading
+                  && !sessionInputLocked
+                  && onRetry && (
+                  <div className="mt-1 flex items-center">
+                    <HintTooltip content="Retry from the beginning — this stopped draft is not saved">
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        aria-label="Retry stopped response"
+                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--honey-wash)] hover:text-[var(--honey-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                      >
+                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                        <span>Retry response</span>
+                      </button>
+                    </HintTooltip>
+                  </div>
+                )}
                 {/* Lane C (Pillar 2.5): an optimistic turn typed+sent while the
                     previous reply was still streaming. Truthful "waiting" state —
                     it dispatches the moment the current reply finishes, never
@@ -1350,7 +1859,7 @@ const ChatApp = ({
                     sessionId={activeSessionId ?? undefined}
                     feedback={msg.feedback}
                     content={msg.content}
-                    onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
+                    onRetry={msgIdx === messages.length - 1 && !isLoading && !sessionInputLocked ? onRetry : undefined}
                   />
                 )}
                 {/* M-28 / ENG-7: clickable next-action chips on the last
@@ -1392,6 +1901,9 @@ const ChatApp = ({
                 <BlockRenderer
                   blocks={[{ type: 'route_proposal', blockId: rp.blockId, proposal: rp.proposal }]}
                   onRouteProposalDispatched={handleRouteProposalDispatched}
+                  onRouteProposalRejected={handleRouteProposalRejected}
+                  onRouteProposalReject={rejectRouteProposal}
+                  onRouteProposalDispatchingChange={handleRouteProposalDispatchingChange}
                   onRouteProposalRePropose={(blockId, preferredExecutorId) => void handleRouteProposalRePropose(blockId, preferredExecutorId)}
                 />
               </div>
@@ -1495,13 +2007,13 @@ const ChatApp = ({
             data-testid="chat-agent-strip"
             data-compact={isStripCompact ? 'true' : 'false'}
           >
-            {sessions && (
+            {sessionCount > 0 && (
               /* R10 Lane D fix 2: the bare '>' toggle read as unlabeled chrome —
                  a styled hover tooltip (matching the strip family) names what it
                  does; aria-label + aria-expanded keep the a11y contract. */
               <HintTooltip content={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}>
                 <button
-                  onClick={() => setShowSessions(p => !p)}
+                  onClick={handleToggleSessions}
                   aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
                   aria-expanded={showSessions}
                   className={STRIP_ICON_PILL}
@@ -1509,6 +2021,56 @@ const ChatApp = ({
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
                 </button>
               </HintTooltip>
+            )}
+
+            {onNewSession && (
+              <HintTooltip content={newSessionLocked && sessionStatus
+                ? sessionStatus
+                : isLoading
+                  ? 'Stop response and start a new session'
+                  : 'New session'}>
+                <button
+                  type="button"
+                  onClick={handleNewSession}
+                  disabled={newSessionLocked}
+                  aria-label="New session"
+                  aria-describedby={sessionStatus ? sessionStatusId : undefined}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] hover:text-foreground active:bg-[var(--honey-wash)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden />
+                  <span>New session</span>
+                </button>
+              </HintTooltip>
+            )}
+
+            {sessionStatus && (
+              <>
+                <span
+                  id={sessionStatusId}
+                  role={sessionStatusIsError ? 'alert' : 'status'}
+                  title={sessionStatus}
+                  className={`max-w-64 truncate text-[11px] ${sessionStatusIsError ? 'text-destructive' : 'text-muted-foreground'}`}
+                >
+                  {sessionStatus}
+                </span>
+                {sessionError
+                  && !newSessionTransitioning
+                  && !sessionCreating
+                  && sessionListFailed
+                  && onRetrySessions && (
+                  <button
+                    type="button"
+                    onClick={() => { void onRetrySessions(); }}
+                    disabled={sessionLoading}
+                    aria-label="Retry loading sessions"
+                    aria-describedby={sessionStatusId}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-3 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                    <span>Retry</span>
+                  </button>
+                )}
+              </>
             )}
 
             {/* Persona picker */}
@@ -1563,7 +2125,7 @@ const ChatApp = ({
             {/* Memory-active trust signal — always visible (not gated by
                 isStripCompact). Signals that the workspace memory layer is
                 feeding context into this chat (5-persona UX audit, dim 9). */}
-            <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
+            <HintTooltip content="Saved context is available when relevant. When Waggle brings it into a reply, Activity shows what was recalled and where it came from. Open Memory to review or edit what is saved.">
               <span
                 data-testid="chat-header-memory-active"
                 className={`${STRIP_PILL} cursor-help font-display text-honey`}
@@ -1689,32 +2251,127 @@ const ChatApp = ({
               {/* Model picker */}
               <div className="relative" ref={modelPickerRef}>
                 <button
+                  type="button"
                   onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
-                  title="Waggle picked the model — click to override"
-                  className={STRIP_PILL}
+                  aria-label={modelTriggerLabel}
+                  aria-expanded={showModelPicker}
+                  aria-controls={modelPickerId}
+                  title={modelHealthStatus === 'unavailable'
+                    ? 'Selected model is not responding — click to retry or switch'
+                    : modelHealthStatus === 'checking'
+                      ? 'Checking the selected model…'
+                      : modelHealthStatus === 'unconfigured'
+                        ? 'No model selected — click for details'
+                        : modelCatalogStatus === 'unavailable'
+                          ? 'Selected model responds; model list is unavailable'
+                          : 'Selected model responds — click to switch'}
+                  className={`${STRIP_PILL} focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]`}
                 >
-                  <DotLive tone="healthy" size={7} />
+                  <DotLive
+                    tone={modelHealthTone}
+                    live={modelHealthStatus === 'checking'}
+                    size={7}
+                  />
                   <span className="max-w-[82px] truncate font-mono text-[var(--text-2)] sm:max-w-[140px]">
                     {currentModel ? formatModelLabel(currentModel) : 'auto'}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
+                  <span
+                    data-testid="chat-model-health-label"
+                    className="max-w-[82px] truncate text-[10px] text-[var(--text-tertiary)]"
+                  >
+                    · {modelHealthLabel}{modelHealthStatus === 'checking' ? '…' : ''}
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" aria-hidden="true" />
                 </button>
+                <span className="sr-only" aria-live="polite">
+                  Selected model {modelHealthLabel}; model catalog {modelCatalogLabel}
+                </span>
                 {showModelPicker && (
-                  <div className="absolute bottom-full right-0 mb-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                    {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                          currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-                        }`}
-                      >
-                        <Cpu className="w-3 h-3 text-honey shrink-0" />
-                        <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
-                      </button>
-                    ))}
-                    {(!availableModels || availableModels.length === 0) && !currentModel && (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
+                  <div
+                    id={modelPickerId}
+                    role="region"
+                    aria-label="Available models"
+                    className="absolute bottom-full right-0 mb-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto"
+                  >
+                    {modelHealthStatus === 'unavailable' && modelCatalogStatus === 'ready' && (
+                      <div role="status" aria-live="polite" className="space-y-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
+                        <p>Your saved model isn't responding. Choose another model or retry.</p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry selected model"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Model
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {modelHealthStatus === 'checking' && modelCatalogStatus === 'ready' && (
+                      <div role="status" aria-live="polite" className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+                        Checking the selected model…
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'ready' && (
+                      <div aria-label="Available models list">
+                        {availableModels?.map(m => (
+                          <button
+                            type="button"
+                            key={m}
+                            aria-pressed={currentModel === m}
+                            onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] ${
+                              currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                            }`}
+                          >
+                            <Cpu className="w-3 h-3 text-honey shrink-0" aria-hidden="true" />
+                            <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'loading' && (
+                      <div role="status" aria-live="polite" className="px-3 py-2 text-xs text-muted-foreground">
+                        Refreshing available models…
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'unavailable' && (
+                      <div role="status" aria-live="polite" className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
+                        <p>Waggle couldn't refresh available models. Your saved selection is unchanged.</p>
+                        <p>Retry now or check Models in Settings.</p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry available models"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Models
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'empty' && (
+                      <div role="status" aria-live="polite" className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
+                        <p>
+                          {modelHealthStatus === 'unconfigured'
+                            ? 'No model configured. Add a model in Settings, then retry.'
+                            : modelHealthStatus === 'ready'
+                              ? 'No other models are available to switch to. Your verified model remains selected.'
+                              : 'No models were discovered to switch to. Your saved selection is unchanged.'}
+                        </p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry available models"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Models
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1754,6 +2411,7 @@ const ChatApp = ({
               name="message"
               autoComplete="off"
               value={input}
+              aria-describedby={sessionInputLocked && sessionStatus ? sessionStatusId : undefined}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Reply, or ask Waggle to take the next step…"
@@ -1769,7 +2427,7 @@ const ChatApp = ({
               {isLoading && onStopStreaming && (
                 <HintTooltip content="Stop generating">
                   <button
-                    onClick={onStopStreaming}
+                    onClick={handleStopStreaming}
                     aria-label="Stop generating"
                     data-testid="chat-stop-stream"
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
@@ -1808,6 +2466,7 @@ const ChatApp = ({
                 onClick={handleSend}
                 disabled={!canSend}
                 aria-label="Send"
+                aria-describedby={sessionInputLocked && sessionStatus ? sessionStatusId : undefined}
                 className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-mo-base ${
                   canSend
                     ? 'bg-primary text-[#1a1407] hover:opacity-90'
@@ -1829,6 +2488,38 @@ const ChatApp = ({
           onClose={() => setCanvasOpen(false)}
         />
       )}
+
+      <AlertDialog
+        open={clearDialogOpen}
+        onOpenChange={(open) => {
+          if (!clearingHistory) setClearDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear this conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the conversation history shown here and cancels its pending route suggestions.
+              Pinned items, saved memories, and other conversations are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={clearingHistory}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={clearingHistory || dispatchingRouteProposalIds.size > 0}
+              onClick={() => void handleConfirmedClear()}
+              className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
+            >
+              {clearingHistory
+                ? 'Clearing…'
+                : dispatchingRouteProposalIds.size > 0
+                  ? 'Route handoff in progress'
+                  : 'Clear conversation'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

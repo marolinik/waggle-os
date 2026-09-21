@@ -486,7 +486,9 @@ export class FrameStore {
   /** Get frame statistics for monitoring. */
   getStats(): { total: number; byType: Record<string, number>; byImportance: Record<string, number> } {
     const raw = this.db.getDatabase();
-    const total = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
+    // R-3: the trigger-maintained counter, not a scan. The two groupings below
+    // still read the table; `importance` is indexed for that reason.
+    const total = this.db.memoryCounts().frameCount;
 
     const byType: Record<string, number> = {};
     for (const row of raw.prepare('SELECT frame_type, COUNT(*) as cnt FROM memory_frames GROUP BY frame_type').all() as { frame_type: string; cnt: number }[]) {

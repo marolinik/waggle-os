@@ -67,7 +67,7 @@ describe('P7/B3 — Command Center error containment', () => {
                 id: 'watch-agent',
                 group: 'power',
                 name: 'Watch a coding agent live',
-                subtitle: 'Claude Code · Cursor · Codex — stream its output',
+                subtitle: 'Claude Code · Codex · Hermes — stream its output',
                 icon: Icon,
                 to: '/launcher?watch=1',
               },

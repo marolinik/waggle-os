@@ -75,9 +75,27 @@ describe('Self-Awareness', () => {
     expect(result).toContain('fresh start');
   });
 
+  it('advertises only tools serialized for the current turn', () => {
+    const caps: AgentCapabilities = {
+      tools: [{ name: 'read_file', description: 'Read a workspace file' }],
+      skills: [],
+      model: 'openai-compatible/qwen3.8-flash-next',
+      memoryStats: { frameCount: 3, sessionCount: 1, entityCount: 0 },
+      mode: 'local',
+      version: '1.0.0',
+    };
+
+    const result = buildSelfAwareness(caps);
+
+    expect(result).toContain('1 tool available: read_file');
+    expect(result).not.toContain('search_memory');
+    expect(result).not.toContain('run commands');
+    expect(result).not.toContain('acquire_capability');
+  });
+
   it('includes groundedness guidance', () => {
     const caps: AgentCapabilities = {
-      tools: [],
+      tools: [{ name: 'acquire_capability', description: 'Find an installable capability' }],
       skills: [],
       model: 'test',
       memoryStats: { frameCount: 0, sessionCount: 0, entityCount: 0 },

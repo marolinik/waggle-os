@@ -5,6 +5,7 @@ import type {
   RouteProposalPayload, RouteProposalConfirmBody, RouteProposalConfirmResponse, RouteProposalProposeBody,
 } from './route-proposals';
 import { getSelectedShape } from './shape-selection';
+import { resolveSkillStarterIntent } from './skill-recommendations';
 import {
   isTauri,
   recallMemory as tauriRecallMemory,
@@ -36,6 +37,18 @@ import type {
   CollaborationRun, CollaborationRunEvent, CollaborationRunSnapshot,
   CollaborationRunControl, ExternalToolAccess, ToolDetectionResult,
 } from '@waggle/shared';
+import { COLLABORATION_RUN_STATUSES } from '@waggle/shared';
+
+export type ChatRetryTarget =
+  | {
+      kind: 'assistant-pair';
+      expectedMessageCount: number;
+      expectedAssistantContent: string;
+    }
+  | {
+      kind: 'lone-user';
+      expectedMessageCount: number;
+    };
 
 export interface SpawnAgentResult {
   id: string;
@@ -49,6 +62,16 @@ export interface SpawnAgentResult {
   task: string;
   persona: string;
   model: string;
+}
+
+type AgentRunHandoff = Pick<SpawnAgentResult,
+  'runId' | 'roomId' | 'workspaceId' | 'sessionId' | 'status' | 'statusUrl' | 'resumable' | 'task'>;
+
+const VALID_RUN_STATUSES = new Set<string>(COLLABORATION_RUN_STATUSES);
+function isSafeRunHandoffId(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length <= 256
+    && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 }
 
 export interface AgentGroupRunResult {
@@ -100,6 +123,12 @@ const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
 const LOCAL_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+export const MODEL_SETTINGS_CHANGED_EVENT = 'waggle:model-settings-changed';
+
+function announceModelSettingsChanged(model: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(MODEL_SETTINGS_CHANGED_EVENT, { detail: { model } }));
+}
 
 export type ChannelPlatform = 'telegram' | 'discord' | 'slack' | 'whatsapp';
 
@@ -160,6 +189,11 @@ const AUTH_EXEMPT_PATHS = new Set(['/health', '/api/auth/session-token']);
  */
 const CONNECT_DEADLINE_MS = 15000;
 const MODEL_ROUTER_REQUEST_TIMEOUT_MS = 45000;
+// Candidate verification can consume a 5s catalog lookup followed by a 45s
+// cold-model completion. The client deadline must cover that composed server
+// budget instead of cancelling a valid response just before it arrives.
+const COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS = 60000;
+const COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS = 105000;
 
 /**
  * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
@@ -297,6 +331,12 @@ class LocalAdapter {
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
   private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
+  /** One physical notifications socket carries both unnamed and named events. */
+  private notificationSseStream: {
+    close: () => void;
+    messages: Set<(data: unknown) => void>;
+    subagents: Set<(data: unknown) => void>;
+  } | null = null;
   /** Active chat requests, session-scoped with workspace-wide Stop fallback. */
   private activeChatControllers = new Map<string, Set<AbortController>>();
 
@@ -838,15 +878,19 @@ class LocalAdapter {
   // boot-time wsManager.ensureDefault() stub means a clean install always has
   // ≥1 workspace, which silently skipped the wizard for brand-new users.
 
-  async getOnboardingStatus(): Promise<{ completed: boolean; source?: string }> {
+  async getOnboardingStatus(): Promise<{ completed: boolean; source?: string; profileId?: string }> {
     const res = await this.fetch('/api/onboarding/status');
     if (!res.ok) throw new Error(`getOnboardingStatus failed: ${res.status}`);
     return res.json();
   }
 
-  /** Idempotent completion stamp (`<dataDir>/first-launch.flag`). */
-  async markOnboardingComplete(): Promise<void> {
-    await this.fetch('/api/onboarding/complete', { method: 'POST' });
+  /** Idempotent completion stamp, bound to the server-issued logical profile. */
+  async markOnboardingComplete(expectedProfileId: string): Promise<void> {
+    const res = await this.fetch('/api/onboarding/complete', {
+      method: 'POST',
+      body: JSON.stringify({ expectedProfileId }),
+    });
+    if (!res.ok) throw new Error(`markOnboardingComplete failed: ${res.status}`);
   }
 
   // --- Workspaces ---
@@ -1067,12 +1111,14 @@ class LocalAdapter {
     autonomy?: { level: 'normal' | 'trusted' | 'yolo'; expiresAt?: number },
     retry?: boolean,
     model?: string,
+    retryTarget?: ChatRetryTarget,
   ): AsyncGenerator<StreamEvent> {
     // CC Sesija A §2.2 — thread the user-selected Faza 1 GEPA shape into the
     // chat body. Sidecar /api/chat ignores `shape` until A3.1 wires it into
     // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
     // change with no client redeploy needed.
     const shape = getSelectedShape();
+    const selectedSkill = resolveSkillStarterIntent(message);
     const controller = new AbortController();
     const chatControllerKey = this.chatControllerKey(workspaceId, sessionId);
     let controllers = this.activeChatControllers.get(chatControllerKey);
@@ -1086,7 +1132,18 @@ class LocalAdapter {
     try {
       const res = await this.fetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry, model }),
+        body: JSON.stringify({
+          workspaceId,
+          message,
+          sessionId,
+          persona,
+          autonomy,
+          shape,
+          retry,
+          model,
+          retryTarget,
+          ...(selectedSkill ? { selectedSkill } : {}),
+        }),
         signal: controller.signal,
       }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
 
@@ -1692,6 +1749,7 @@ class LocalAdapter {
       { method: 'PUT', body: JSON.stringify({ model }) },
       MODEL_ROUTER_REQUEST_TIMEOUT_MS,
     );
+    announceModelSettingsChanged(model);
   }
 
   async getModel(): Promise<string> {
@@ -1755,7 +1813,7 @@ class LocalAdapter {
     const res = await this.fetch('/api/skills/audit', {
       method: 'POST',
       body: JSON.stringify(names && names.length ? { names } : {}),
-    });
+    }, 180_000);
     return res.json();
   }
 
@@ -2062,9 +2120,7 @@ class LocalAdapter {
   /** C23: one-shot fleet-spawn into a chosen workspace. The server 400s with
    *  `error: 'workspace_ambiguous'` (+ workspaceIds) when the agent has several
    *  workspaces and none was picked — the FE shows a picker then retries. */
-  async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<{
-    sessionId: string; workspaceId: string; status: string; task: string;
-  }> {
+  async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<AgentRunHandoff> {
     const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/run`, {
       method: 'POST', body: JSON.stringify(opts),
     });
@@ -2081,7 +2137,28 @@ class LocalAdapter {
       err.body = errBody;
       throw err;
     }
-    return res.json();
+    const rawBody = await res.json().catch(() => null);
+    const body = rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
+      ? rawBody as Partial<AgentRunHandoff>
+      : null;
+    const canonicalStatusUrl = body?.runId
+      ? `/api/agent-runs/${encodeURIComponent(body.runId)}`
+      : null;
+    const valid = body
+      && isSafeRunHandoffId(body.runId)
+      && isSafeRunHandoffId(body.roomId)
+      && isSafeRunHandoffId(body.sessionId)
+      && isSafeRunHandoffId(body.workspaceId)
+      && typeof body.status === 'string'
+      && VALID_RUN_STATUSES.has(body.status)
+      && body.statusUrl === canonicalStatusUrl
+      && typeof body.resumable === 'boolean'
+      && typeof body.task === 'string'
+      && (!opts.workspaceId || body.workspaceId === opts.workspaceId);
+    if (!valid) {
+      throw new Error('Agent run returned an invalid navigation handoff. Restart Waggle and try again.');
+    }
+    return body as AgentRunHandoff;
   }
 
   /** NOTE: fleet pause ABORTS the in-flight one-shot run (stop, not suspend). */
@@ -2273,7 +2350,7 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
-    return this.subscribeSSE('/api/notifications/stream', (data) => {
+    return this.subscribeNotificationSSE((data) => {
       // The route writes an UNNAMED `data: {"type":"connected"}` handshake on
       // every accept (notifications.ts:96) — with the reconnect loop that
       // would mint a junk unread Notification per connect/reopen. Filter it
@@ -2305,7 +2382,7 @@ class LocalAdapter {
    *
    * The server emits these as NAMED SSE events (`event: subagent_status`), so
    * the default `onmessage` used by subscribeNotifications doesn't catch them.
-   * We open a dedicated EventSource with `addEventListener('subagent_status')`.
+   * The shared notifications EventSource attaches a named listener for them.
    */
   subscribeSubagentStatus(
     onEvent: (event: {
@@ -2324,16 +2401,10 @@ class LocalAdapter {
       timestamp: string;
     }) => void,
   ): () => void {
-    // P1b-SSE: dedicated reconnecting EventSource (NOT subscribeSSE — that
-    // dedups by path, and this shares /api/notifications/stream with
-    // subscribeNotifications). configure re-attaches the named listener on
-    // every reopen.
-    const handler = (e: MessageEvent) => {
-      try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
-    };
-    return this.openSSE('/api/notifications/stream', (es) => {
-      es.addEventListener('subagent_status', handler as EventListener);
-    });
+    return this.subscribeNotificationSSE(
+      (data) => onEvent(data as Parameters<typeof onEvent>[0]),
+      'subagent_status',
+    );
   }
 
   /**
@@ -2457,6 +2528,7 @@ class LocalAdapter {
 
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     await this.fetch('/api/settings', { method: 'PUT', body: JSON.stringify(settings) });
+    if (settings.defaultModel) announceModelSettingsChanged(settings.defaultModel);
   }
 
   async getChannels(): Promise<ChannelStatus[]> {
@@ -2562,6 +2634,39 @@ class LocalAdapter {
   }
 
   /**
+   * Discover and optionally verify a candidate OpenAI-compatible endpoint
+   * without saving it. `verified:true` means the exact selected model returned
+   * a non-empty assistant response; discovery alone deliberately remains
+   * unverified so onboarding cannot advance on a catalog-only false positive.
+   */
+  async testCompatibleProvider(
+    baseUrl: string,
+    apiKey?: string,
+    model?: string,
+  ): Promise<{
+    valid: boolean;
+    verified: boolean;
+    baseUrl: string;
+    model?: string;
+    models: Array<{ id: string; name: string; cost: string; speed: string }>;
+    modelsSource: 'provider-api' | 'stale-provider-api' | 'unavailable';
+    error?: string;
+  }> {
+    const timeoutMs = model && /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(model)
+      ? COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS
+      : COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS;
+    const res = await this.fetch('/api/settings/test-compatible', {
+      method: 'POST',
+      body: JSON.stringify({
+        baseUrl,
+        ...(apiKey ? { apiKey } : {}),
+        ...(model ? { model } : {}),
+      }),
+    }, timeoutMs);
+    return res.json();
+  }
+
+  /**
    * F3: live-probe a STORED provider key (resolved server-side from the Vault /
    * config by provider id — no raw key crosses the wire). Powers the ModelGate
    * readiness banner's "verified" state. Returns booleans only.
@@ -2616,14 +2721,52 @@ class LocalAdapter {
       error?: string;
     };
   }> {
+    return this.setProviderConfig(providerId, { apiKey, models, defaultModel });
+  }
+
+  async setProviderConfig(
+    providerId: string,
+    config: {
+      apiKey?: string;
+      baseUrl?: string;
+      models?: string[];
+      defaultModel?: string;
+    },
+  ): Promise<{
+    router?: {
+      managed: boolean;
+      ready: boolean;
+      port: number;
+      models: string[];
+      unavailableProviders: string[];
+      error?: string;
+    };
+  }> {
+    const compatibleModels = [config.defaultModel, ...(config.models ?? [])]
+      .filter((model): model is string => Boolean(model));
+    const compatibleTimeoutMs = compatibleModels.length === 0
+      || compatibleModels.some((model) => /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(model))
+      ? COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS
+      : COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS;
+    const timeoutMs = providerId === 'openai-compatible'
+      ? compatibleTimeoutMs
+      : MODEL_ROUTER_REQUEST_TIMEOUT_MS;
     const res = await this.fetch('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
-        ...(defaultModel ? { defaultModel } : {}),
-        providers: { [providerId]: { apiKey, ...(models ? { models } : {}) } },
+        ...(config.defaultModel ? { defaultModel: config.defaultModel } : {}),
+        providers: {
+          [providerId]: {
+            ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+            ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+            ...(config.models !== undefined ? { models: config.models } : {}),
+          },
+        },
       }),
-    }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
-    return res.json();
+    }, timeoutMs);
+    const result = await res.json();
+    if (config.defaultModel) announceModelSettingsChanged(config.defaultModel);
+    return result;
   }
 
   async restartModelRouter(): Promise<{
@@ -2650,8 +2793,9 @@ class LocalAdapter {
     providers: Array<{
       id: string; name: string; hasKey: boolean; badge: string | null;
       keyUrl: string | null; requiresKey: boolean;
+      baseUrl?: string;
       models: Array<{ id: string; name: string; cost: string; speed: string }>;
-      modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'local-runtime';
+      modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'requires-endpoint' | 'local-runtime';
       modelsUpdatedAt?: string;
       modelsError?: string;
     }>;
@@ -3280,14 +3424,14 @@ class LocalAdapter {
       const res = await this.fetch('/api/route-proposals', {
         method: 'POST',
         body: JSON.stringify(body),
-      });
+      }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
       return res.json();
     },
     confirm: async (id: string, body: RouteProposalConfirmBody = {}): Promise<RouteProposalConfirmResponse> => {
       const res = await this.fetch(`/api/route-proposals/${encodeURIComponent(id)}/confirm`, {
         method: 'POST',
         body: JSON.stringify(body),
-      });
+      }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
       return res.json();
     },
     reject: async (id: string): Promise<void> => {
@@ -3606,6 +3750,46 @@ class LocalAdapter {
       if (entry.listeners.size === 0) {
         entry.close();
         if (this.sseStreams.get(key) === entry) this.sseStreams.delete(key);
+      }
+    };
+  }
+
+  /**
+   * Notifications use one endpoint for ordinary `message` events and named
+   * `subagent_status` events. Multiplex them over one EventSource so two app
+   * windows do not consume the browser's entire per-origin HTTP/1 connection
+   * pool and starve ordinary workspace requests.
+   */
+  private subscribeNotificationSSE(
+    onData: (data: unknown) => void,
+    eventName: 'message' | 'subagent_status' = 'message',
+  ): () => void {
+    let stream = this.notificationSseStream;
+    if (!stream) {
+      const messages = new Set<(data: unknown) => void>();
+      const subagents = new Set<(data: unknown) => void>();
+      const dispatch = (listeners: Set<(data: unknown) => void>) => (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          for (const listener of listeners) listener(data);
+        } catch { /* skip malformed */ }
+      };
+      const close = this.openSSE('/api/notifications/stream', (source) => {
+        source.onmessage = dispatch(messages);
+        source.addEventListener('subagent_status', dispatch(subagents) as EventListener);
+      });
+      stream = { close, messages, subagents };
+      this.notificationSseStream = stream;
+    }
+
+    const entry = stream;
+    const listeners = eventName === 'subagent_status' ? entry.subagents : entry.messages;
+    listeners.add(onData);
+    return () => {
+      listeners.delete(onData);
+      if (entry.messages.size === 0 && entry.subagents.size === 0) {
+        entry.close();
+        if (this.notificationSseStream === entry) this.notificationSseStream = null;
       }
     };
   }

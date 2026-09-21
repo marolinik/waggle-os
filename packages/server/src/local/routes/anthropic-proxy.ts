@@ -7,11 +7,16 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
-import { fetchOllamaRoutingModels } from '../model-availability.js';
+import {
+  fetchOllamaRoutingModels,
+  isExactConfiguredKeylessCompatibleModel,
+} from '../model-availability.js';
 import { getAuthenticatedRunToken } from '../security-middleware.js';
 
 interface OpenAIMessage {
@@ -35,14 +40,23 @@ interface OpenAITool {
   };
 }
 
+type OpenAIToolChoice = 'auto' | 'none' | 'required' | {
+  type: 'function';
+  function: { name: string };
+};
+
 interface ChatCompletionBody {
   model: string;
   messages: OpenAIMessage[];
   tools?: OpenAITool[];
+  tool_choice?: OpenAIToolChoice;
+  parallel_tool_calls?: boolean;
   stream?: boolean;
   stream_options?: { include_usage?: boolean };
   max_tokens?: number;
   temperature?: number;
+  chat_template_kwargs?: { enable_thinking?: boolean };
+  extra_body?: Record<string, unknown> & { enable_thinking?: boolean };
 }
 
 const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
@@ -101,6 +115,10 @@ function isValidChatCompletionBody(body: unknown): body is ChatCompletionBody {
     !Array.isArray(value.tools)
     || !value.tools.every(isValidOpenAITool)
   )) return false;
+  if (!isValidOpenAIToolChoice(value.tool_choice, value.tools)) return false;
+  if (value.parallel_tool_calls !== undefined && typeof value.parallel_tool_calls !== 'boolean') {
+    return false;
+  }
   return value.messages.every((message) => (
     message !== null
     && typeof message === 'object'
@@ -113,6 +131,37 @@ function isValidChatCompletionBody(body: unknown): body is ChatCompletionBody {
     ))
     && (message.tool_call_id === undefined || typeof message.tool_call_id === 'string')
   ));
+}
+
+function isValidOpenAIToolChoice(
+  choice: unknown,
+  tools: readonly OpenAITool[] | undefined,
+): choice is OpenAIToolChoice | undefined {
+  if (choice === undefined) return true;
+  if (choice === 'auto' || choice === 'none' || choice === 'required') return true;
+  if (!choice || typeof choice !== 'object') return false;
+  const value = choice as { type?: unknown; function?: { name?: unknown } };
+  if (value.type !== 'function' || typeof value.function?.name !== 'string') return false;
+  const name = value.function.name.trim();
+  return name.length > 0 && !!tools?.some(tool => tool.function.name === name);
+}
+
+function toAnthropicToolChoice(
+  choice: OpenAIToolChoice | undefined,
+  parallelToolCalls: boolean | undefined,
+): Record<string, string | boolean> | undefined {
+  if (choice === undefined) return undefined;
+  const parallelPolicy: Record<string, boolean> = parallelToolCalls === false
+    ? { disable_parallel_tool_use: true }
+    : {};
+  if (choice === 'auto') return { type: 'auto', ...parallelPolicy };
+  if (choice === 'none') return { type: 'none' };
+  if (choice === 'required') return { type: 'any', ...parallelPolicy };
+  return {
+    type: 'tool',
+    name: choice.function.name.trim(),
+    ...parallelPolicy,
+  };
 }
 
 function isValidOpenAIContent(content: unknown): boolean {
@@ -161,34 +210,40 @@ function reserveProxySpend(
   const spendRequest = proxySpendRequest(body);
   const claimed = claimProxySpendHandoff(server, request, body, spendRequest);
   if (claimed) {
-    const { dailyBudgetUsd, mode } = budget.getBudget();
-    const hardBudgetEnabled = mode === 'hard' && dailyBudgetUsd !== null;
-    const estimatedCostUsd = claimed.estimatedCostUsd;
-    if (estimatedCostUsd === undefined || claimed.durableTraceId === undefined || !server.traceStore) {
-      if (!hardBudgetEnabled) return claimed;
-      const error = new ProxySpendLedgerUnavailableError();
+    // The provider may have become keyed after the caller reserved this exact
+    // request as free. Never let a stale zero-cost handoff bypass the proxy's
+    // current priced classification: release caller ownership and reserve again.
+    if (claimed.estimatedCostUsd !== undefined && claimed.estimatedCostUsd <= 0) {
       budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
-      throw error;
-    }
-    if (estimatedCostUsd <= 0) return claimed;
-    try {
-      const traceCostReservationId = server.traceStore.reserveCost(
-        claimed.durableTraceId,
-        estimatedCostUsd,
-      );
-      budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'commit');
-      return {
-        ...claimed,
-        traceId: claimed.durableTraceId,
-        traceCostReservationId,
-      };
-    } catch (error) {
-      budget.markModelSpendPersistenceUnavailable(error);
-      if (hardBudgetEnabled) {
+    } else {
+      const { dailyBudgetUsd, mode } = budget.getBudget();
+      const hardBudgetEnabled = mode === 'hard' && dailyBudgetUsd !== null;
+      const estimatedCostUsd = claimed.estimatedCostUsd;
+      if (estimatedCostUsd === undefined || claimed.durableTraceId === undefined || !server.traceStore) {
+        if (!hardBudgetEnabled) return claimed;
+        const error = new ProxySpendLedgerUnavailableError();
         budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
-        throw new ProxySpendLedgerUnavailableError(error);
+        throw error;
       }
-      return claimed;
+      try {
+        const traceCostReservationId = server.traceStore.reserveCost(
+          claimed.durableTraceId,
+          estimatedCostUsd,
+        );
+        budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'commit');
+        return {
+          ...claimed,
+          traceId: claimed.durableTraceId,
+          traceCostReservationId,
+        };
+      } catch (error) {
+        budget.markModelSpendPersistenceUnavailable(error);
+        if (hardBudgetEnabled) {
+          budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
+          throw new ProxySpendLedgerUnavailableError(error);
+        }
+        return claimed;
+      }
     }
   }
 
@@ -596,6 +651,137 @@ const OLLAMA_READINESS_MAX_CONCURRENCY = 4;
 const OLLAMA_READINESS_CALL_TIMEOUT_MS = 2_000;
 const OLLAMA_READINESS_OVERALL_TIMEOUT_MS = 2_750;
 const CLOUD_PROVIDER_REQUEST_TIMEOUT_MS = 120_000;
+const PROVIDER_COOLDOWN_DEFAULT_MS = 5_000;
+const PROVIDER_COOLDOWN_MAX_MS = 60_000;
+const TRANSIENT_PROVIDER_STATUSES = new Set([429, 502, 503, 504]);
+
+interface ProviderReadinessCooldowns {
+  capture: (providerId: string) => string;
+  isCurrent: (providerId: string, fingerprint: string) => boolean;
+  markHttpFailure: (providerId: string, response: Response, fingerprint: string) => void;
+  markTransportFailure: (providerId: string, fingerprint: string) => void;
+  clear: (providerId: string, fingerprint: string) => void;
+  remainingMs: (providerId: string) => number;
+}
+
+interface ProviderReadinessCooldown {
+  configurationFingerprint: string;
+  unavailableUntil: number;
+}
+
+function retryAfterMilliseconds(value: string | null, now: number): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  const requested = Number.isFinite(seconds) && seconds >= 0
+    ? seconds * 1_000
+    : Date.parse(value) - now;
+  if (!Number.isFinite(requested) || requested <= 0) return null;
+  return Math.min(PROVIDER_COOLDOWN_MAX_MS, Math.max(1_000, requested));
+}
+
+export function providerConfigurationFingerprint(server: FastifyInstance, providerId: string): string {
+  const normalizedProviderId = providerId.toLowerCase();
+  let configuredModels: string[] = [];
+  try {
+    const configEntry = new WaggleConfig(server.localConfig.dataDir)
+      .getProviders()[normalizedProviderId];
+    configuredModels = configEntry?.models ?? [];
+  } catch {
+    // A missing or temporarily unreadable config is itself a distinct state.
+  }
+  let vaultModels: string[] = [];
+  try {
+    const metadataModels = server.vault?.get(normalizedProviderId)?.metadata?.models;
+    if (Array.isArray(metadataModels)) {
+      vaultModels = metadataModels.filter((model): model is string => typeof model === 'string');
+    }
+  } catch {
+    // Never expose or depend on vault errors while calculating readiness state.
+  }
+  let credentials: string[] = [];
+  try {
+    credentials = normalizedProviderId === 'anthropic'
+      ? [getAnthropicKey(server) ?? '']
+      : getProviderApiKeys(normalizedProviderId, server.vault);
+  } catch {
+    credentials = ['unavailable'];
+  }
+  return createHash('sha256').update(JSON.stringify({
+    providerId: normalizedProviderId,
+    selectedModel: server.agentState?.currentModel ?? '',
+    baseUrl: configuredProviderBaseUrl(server, normalizedProviderId),
+    models: [...new Set([...configuredModels, ...vaultModels])].sort(),
+    credentials: [...credentials].sort(),
+  })).digest('hex');
+}
+
+function createProviderReadinessCooldowns(server: FastifyInstance): ProviderReadinessCooldowns {
+  const cooldowns = new Map<string, ProviderReadinessCooldown>();
+  const capture = (providerId: string) => providerConfigurationFingerprint(server, providerId);
+  const isCurrent = (providerId: string, fingerprint: string) => {
+    return capture(providerId) === fingerprint;
+  };
+  const mark = (providerId: string, durationMs: number, fingerprint: string) => {
+    const key = providerId.toLowerCase();
+    if (!isCurrent(key, fingerprint)) return;
+    cooldowns.set(key, {
+      configurationFingerprint: fingerprint,
+      unavailableUntil: Date.now() + durationMs,
+    });
+  };
+  const remainingMs = (providerId: string): number => {
+    const key = providerId.toLowerCase();
+    const cooldown = cooldowns.get(key);
+    if (!cooldown) return 0;
+    if (cooldown.configurationFingerprint !== providerConfigurationFingerprint(server, key)) {
+      cooldowns.delete(key);
+      return 0;
+    }
+    const remaining = cooldown.unavailableUntil - Date.now();
+    if (remaining <= 0) cooldowns.delete(key);
+    return Math.max(0, remaining);
+  };
+  return {
+    capture,
+    isCurrent,
+    markHttpFailure: (providerId, response, fingerprint) => {
+      if (!TRANSIENT_PROVIDER_STATUSES.has(response.status)) return;
+      mark(
+        providerId,
+        retryAfterMilliseconds(response.headers.get('retry-after'), Date.now())
+          ?? PROVIDER_COOLDOWN_DEFAULT_MS,
+        fingerprint,
+      );
+    },
+    markTransportFailure: (providerId, fingerprint) => {
+      mark(providerId, PROVIDER_COOLDOWN_DEFAULT_MS, fingerprint);
+    },
+    clear: (providerId, fingerprint) => {
+      const key = providerId.toLowerCase();
+      if (!isCurrent(key, fingerprint)) return;
+      const cooldown = cooldowns.get(key);
+      if (!cooldown || cooldown.configurationFingerprint === fingerprint) cooldowns.delete(key);
+    },
+    remainingMs,
+  };
+}
+
+function markProxyProviderDegraded(
+  server: FastifyInstance,
+  providerId: string,
+  detail: string,
+  providerCooldowns: ProviderReadinessCooldowns,
+  providerFingerprint: string,
+): void {
+  if (!providerCooldowns.isCurrent(providerId, providerFingerprint)) return;
+  if (server.agentState?.llmProvider?.provider !== 'anthropic-proxy') return;
+  server.agentState.llmProvider = {
+    provider: 'anthropic-proxy',
+    health: 'degraded',
+    detail: `Built-in provider proxy (${providerId} ${detail})`,
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 interface CloudProviderAbort {
   signal: AbortSignal;
@@ -794,15 +980,58 @@ function translateAnthropicStopReason(
   return stopReason;
 }
 
-function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
-  const entry = server.vault?.get(providerId);
+function configuredProviderBaseUrl(server: FastifyInstance, providerId: string): string {
+  let entry: { metadata?: Record<string, unknown> } | null | undefined;
+  try {
+    entry = server.vault?.get(providerId);
+  } catch {
+    entry = null;
+  }
   const customBaseUrl = typeof entry?.metadata?.baseUrl === 'string'
     ? entry.metadata.baseUrl.trim()
     : '';
   if (customBaseUrl) return customBaseUrl;
+  try {
+    return new WaggleConfig(server.localConfig.dataDir).getProviders()[providerId]?.baseUrl?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
+  const customBaseUrl = configuredProviderBaseUrl(server, providerId);
+  if (customBaseUrl) return customBaseUrl;
   // Google's native catalog is not under its OpenAI-compatibility namespace.
   if (providerId === 'google') return 'https://generativelanguage.googleapis.com/v1beta/openai';
   return PROVIDER_MODEL_CATALOGS[providerId].endpoint;
+}
+
+function pointsToCurrentWaggleService(server: FastifyInstance, baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+    const mappedIpv4 = hostname.match(
+      /^::(?:ffff:(?:0:)?)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i,
+    );
+    const isMappedIpv4Loopback = mappedIpv4
+      ? (Number.parseInt(mappedIpv4[1], 16) >>> 8) === 127
+      : false;
+    const isLoopback = hostname === 'localhost'
+      || hostname === '::1'
+      || hostname === '::'
+      || hostname === '0.0.0.0'
+      || /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      || isMappedIpv4Loopback;
+    if (!isLoopback) return false;
+    const address = server.server.address();
+    if (!address || typeof address === 'string') return false;
+    const endpointPort = url.port
+      ? Number.parseInt(url.port, 10)
+      : url.protocol === 'https:' ? 443 : 80;
+    return endpointPort === address.port;
+  } catch {
+    return false;
+  }
 }
 
 async function sendCompatibleResponse(
@@ -810,9 +1039,16 @@ async function sendCompatibleResponse(
   stream: boolean | undefined,
   origin: string | undefined,
   reply: FastifyReply,
+  onStreamFailure?: () => void,
 ): Promise<unknown> {
   const contentType = upstream.headers.get('content-type')
     ?? (stream ? 'text/event-stream' : 'application/json');
+  if (stream && upstream.ok && !upstream.body) {
+    onStreamFailure?.();
+    return reply.status(502).send({
+      error: { message: 'Model provider returned an empty streaming response.' },
+    });
+  }
   if (stream && upstream.body) {
     reply.code(upstream.status);
     await reply.hijack();
@@ -823,18 +1059,30 @@ async function sendCompatibleResponse(
       'Access-Control-Allow-Origin': validateOrigin(origin),
     });
     const reader = upstream.body.getReader();
-    let completed = false;
+    const decoder = new TextDecoder();
+    let readCompleted = false;
+    let terminalSeen = false;
+    let terminalTail = '';
+    const observeTerminal = (text: string) => {
+      const candidate = terminalTail + text;
+      if (/(?:^|\r?\n)data:\s*\[DONE\](?=\r?\n|$)/.test(candidate)) terminalSeen = true;
+      terminalTail = candidate.slice(-64);
+    };
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        observeTerminal(decoder.decode(value, { stream: true }));
         reply.raw.write(Buffer.from(value));
+        if (terminalSeen) break;
       }
-      completed = true;
+      observeTerminal(decoder.decode());
+      readCompleted = true;
     } catch {
       // Upstream or client closed the stream; the finally block terminates it.
     } finally {
-      if (!completed) await reader.cancel().catch(() => undefined);
+      if (onStreamFailure && (!readCompleted || !terminalSeen)) onStreamFailure();
+      if (terminalSeen || !readCompleted) await reader.cancel().catch(() => undefined);
       reader.releaseLock();
       if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
     }
@@ -902,9 +1150,14 @@ async function forwardCompatibleProvider(
   body: ChatCompletionBody,
   origin: string | undefined,
   reply: FastifyReply,
+  providerCooldowns: ProviderReadinessCooldowns,
+  publishProviderHealth: boolean,
 ): Promise<unknown> {
   const apiKeys = getProviderApiKeys(route.providerId, server.vault);
-  if (apiKeys.length === 0) {
+  const keylessCompatible = route.providerId === 'openai-compatible'
+    && apiKeys.length === 0
+    && Boolean(configuredProviderBaseUrl(server, route.providerId));
+  if (apiKeys.length === 0 && !keylessCompatible) {
     return reply.status(500).send({
       error: {
         message: `No ${route.providerId} API key configured. Add one in Settings > API Keys.`,
@@ -912,9 +1165,55 @@ async function forwardCompatibleProvider(
     });
   }
 
+  const baseUrl = directProviderBaseUrl(server, route.providerId);
+  if (!baseUrl) {
+    return reply.status(500).send({
+      error: { message: `No ${route.providerId} endpoint configured. Add one in Settings.` },
+    });
+  }
+  if (pointsToCurrentWaggleService(server, baseUrl)) {
+    return reply.status(400).send({
+      error: { message: 'The configured model endpoint cannot point to the Waggle service itself.' },
+    });
+  }
+  const providerFingerprint = providerCooldowns.capture(route.providerId);
   const requestAbort = createCloudProviderAbort(reply);
-  const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
+  const url = completionEndpoint(baseUrl);
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
+  if (
+    route.providerId === 'openai-compatible'
+    && /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(route.model)
+  ) {
+    // Qwen-compatible servers commonly default to long hidden reasoning. Keep
+    // interactive Waggle chat responsive while honoring an explicit one-shot
+    // agent shape selection and leaving every other provider unchanged.
+    const templateKwargs = body.chat_template_kwargs
+      && typeof body.chat_template_kwargs === 'object'
+      && !Array.isArray(body.chat_template_kwargs)
+      ? body.chat_template_kwargs
+      : {};
+    const extraBody = body.extra_body
+      && typeof body.extra_body === 'object'
+      && !Array.isArray(body.extra_body)
+      ? body.extra_body
+      : {};
+    const requestedThinking = typeof templateKwargs.enable_thinking === 'boolean'
+      ? templateKwargs.enable_thinking
+      : typeof extraBody.enable_thinking === 'boolean'
+        ? extraBody.enable_thinking
+        : false;
+    outboundBody.chat_template_kwargs = {
+      enable_thinking: requestedThinking,
+    };
+    if ('enable_thinking' in extraBody) {
+      const { enable_thinking: _ignored, ...remainingExtraBody } = extraBody;
+      if (Object.keys(remainingExtraBody).length > 0) {
+        outboundBody.extra_body = remainingExtraBody;
+      } else {
+        delete outboundBody.extra_body;
+      }
+    }
+  }
   if (
     route.providerId === 'openai'
     && body.max_tokens !== undefined
@@ -925,20 +1224,34 @@ async function forwardCompatibleProvider(
   }
   let upstream: Response | null = null;
   let credentialRejected = false;
-  for (let index = 0; index < apiKeys.length; index += 1) {
-    const apiKey = apiKeys[index];
+  const credentials: Array<string | undefined> = apiKeys.length > 0 ? apiKeys : [undefined];
+  for (let index = 0; index < credentials.length; index += 1) {
+    const apiKey = credentials[index];
     try {
       upstream = await fetch(url, {
         method: 'POST',
         signal: requestAbort.signal,
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(body.stream ? { Accept: 'text/event-stream' } : {}),
         },
         body: JSON.stringify(outboundBody),
       });
     } catch (error) {
+      if (!requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+        if (publishProviderHealth) {
+          markProxyProviderDegraded(
+            server,
+            route.providerId,
+            requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
+      }
       return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
     }
 
@@ -956,18 +1269,37 @@ async function forwardCompatibleProvider(
       credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
     }
     if (!credentialRejected) {
-      applyProviderKeyToEnv(route.providerId, apiKey, true);
-      if (server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+      if (upstream.ok) providerCooldowns.clear(route.providerId, providerFingerprint);
+      else providerCooldowns.markHttpFailure(route.providerId, upstream, providerFingerprint);
+      if (upstream.ok
+        && apiKey
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)) {
+        applyProviderKeyToEnv(route.providerId, apiKey, true);
+      }
+      if (upstream.ok
+        && publishProviderHealth
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+        && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
           provider: 'anthropic-proxy',
           health: 'healthy',
-          detail: `Built-in provider proxy (${route.providerId} credential verified)`,
+          detail: `Built-in provider proxy (${route.providerId} ${apiKey ? 'credential' : 'endpoint'} verified)`,
+          checkedAt: new Date().toISOString(),
+        };
+      } else if (!upstream.ok
+        && publishProviderHealth
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+        && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+        server.agentState.llmProvider = {
+          provider: 'anthropic-proxy',
+          health: 'degraded',
+          detail: `Built-in provider proxy (${route.providerId} returned HTTP ${upstream.status})`,
           checkedAt: new Date().toISOString(),
         };
       }
       break;
     }
-    if (index < apiKeys.length - 1) {
+    if (index < credentials.length - 1) {
       await upstream.body?.cancel().catch(() => undefined);
       upstream = null;
     }
@@ -978,7 +1310,10 @@ async function forwardCompatibleProvider(
       error: { message: `${route.providerId} rejected every configured API key.` },
     });
   }
-  if (credentialRejected && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+  if (publishProviderHealth
+    && credentialRejected
+    && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+    && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
     server.agentState.llmProvider = {
       provider: 'anthropic-proxy',
       health: 'degraded',
@@ -988,8 +1323,38 @@ async function forwardCompatibleProvider(
   }
 
   try {
-    return await sendCompatibleResponse(upstream, body.stream, origin, reply);
+    return await sendCompatibleResponse(
+      upstream,
+      body.stream,
+      origin,
+      reply,
+      upstream.ok ? () => {
+        if (requestAbort.clientDisconnected()) return;
+        providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+        if (publishProviderHealth) {
+          markProxyProviderDegraded(
+            server,
+            route.providerId,
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
+      } : undefined,
+    );
   } catch (error) {
+    if (!requestAbort.clientDisconnected()) {
+      providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+      if (publishProviderHealth) {
+        markProxyProviderDegraded(
+          server,
+          route.providerId,
+          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
+    }
     return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
   }
 }
@@ -1022,6 +1387,7 @@ function mapModel(model: string): string {
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   const hasReadyOllamaModel = createOllamaReadinessChecker();
+  const providerCooldowns = createProviderReadinessCooldowns(server);
   let registeredSpendTarget: string | undefined;
   let registeredSpendBudget: ProxyModelSpendBudget | undefined;
 
@@ -1052,17 +1418,36 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   // separate from liveness so a clean Solo install remains operational while
   // chat can truthfully ask the user to configure a model.
   server.get('/v1/health/readiness', async (_request, reply) => {
-    let hasConfiguredProvider = Boolean(getAnthropicKey(server))
-      || Object.keys(PROVIDER_MODEL_CATALOGS)
-        .some((providerId) => getProviderApiKeys(providerId, server.vault).length > 0);
-    if (!hasConfiguredProvider) hasConfiguredProvider = await hasReadyOllamaModel();
-    if (!hasConfiguredProvider) {
+    const configuredProviderIds = new Set<string>();
+    if (getAnthropicKey(server)) configuredProviderIds.add('anthropic');
+    for (const providerId of Object.keys(PROVIDER_MODEL_CATALOGS)) {
+      if (providerId !== 'openai-compatible'
+        && getProviderApiKeys(providerId, server.vault).length > 0) {
+        configuredProviderIds.add(providerId);
+      }
+    }
+    if (configuredProviderBaseUrl(server, 'openai-compatible')) {
+      configuredProviderIds.add('openai-compatible');
+    }
+    const remainingCooldowns = [...configuredProviderIds]
+      .map((providerId) => providerCooldowns.remainingMs(providerId));
+    if (remainingCooldowns.some((remaining) => remaining === 0)) {
+      return { status: 'ready' };
+    }
+    if (await hasReadyOllamaModel()) return { status: 'ready' };
+    if (configuredProviderIds.size === 0) {
       return reply.status(503).send({
         status: 'unavailable',
         detail: 'No provider credential configured',
       });
     }
-    return { status: 'ready' };
+    const retryAfterMs = Math.min(...remainingCooldowns);
+    reply.header('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1_000))));
+    return reply.status(503).send({
+      status: 'unavailable',
+      detail: 'Configured model provider is temporarily unavailable',
+      retryAfterMs,
+    });
   });
 
   // POST /v1/chat/completions — translate to Anthropic Messages API
@@ -1076,6 +1461,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
     const body = request.body;
+    const publishProviderHealth = request.headers['x-waggle-readiness-probe'] !== 'passive';
     const route = resolveProviderRoute(body.model);
     if (!route) {
       return reply.status(400).send({
@@ -1120,7 +1506,13 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         error: { message: 'No Anthropic API key configured. Add one in Settings > API Keys.' },
       });
     }
-    if (route.providerId !== 'anthropic' && getProviderApiKeys(route.providerId, server.vault).length === 0) {
+    const keylessCompatible = route.providerId === 'openai-compatible'
+      && Boolean(configuredProviderBaseUrl(server, route.providerId));
+    if (
+      route.providerId !== 'anthropic'
+      && getProviderApiKeys(route.providerId, server.vault).length === 0
+      && !keylessCompatible
+    ) {
       releaseProxySpend(server, claimProxySpendHandoff(server, request, body));
       return reply.status(500).send({
         error: {
@@ -1129,12 +1521,14 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
     let spend: ProxySpendReservation | undefined;
-    try {
-      spend = reserveProxySpend(server, request, body);
-    } catch (error) {
-      const code = modelSpendFailureCode(error);
-      if (code) return sendProxyBudgetFailure(reply, error, code);
-      throw error;
+    if (!isExactConfiguredKeylessCompatibleModel(server, body.model)) {
+      try {
+        spend = reserveProxySpend(server, request, body);
+      } catch (error) {
+        const code = modelSpendFailureCode(error);
+        if (code) return sendProxyBudgetFailure(reply, error, code);
+        throw error;
+      }
     }
     if (route.providerId !== 'anthropic') {
       const compatibleResult = await forwardCompatibleProvider(
@@ -1143,6 +1537,8 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         body,
         request.headers.origin as string | undefined,
         reply,
+        providerCooldowns,
+        publishProviderHealth,
       );
       if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(reply.statusCode)) {
         releaseProxySpend(server, spend);
@@ -1152,6 +1548,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const apiKey = getAnthropicKey(server)!;
+    const providerFingerprint = providerCooldowns.capture('anthropic');
 
     const mappedModel = mapModel(route.model);
 
@@ -1209,6 +1606,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       description: t.function.description ?? '',
       input_schema: t.function.parameters ?? { type: 'object', properties: {} },
     }));
+    const toolChoice = toAnthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
 
     // Apply Anthropic prompt caching — cache system prompt for multi-turn efficiency
     // See: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
@@ -1243,6 +1641,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     };
     if (body.temperature !== undefined) anthropicBody.temperature = body.temperature;
     if (tools && tools.length > 0) anthropicBody.tools = tools;
+    if (toolChoice) anthropicBody.tool_choice = toolChoice;
 
     const requestAbort = createCloudProviderAbort(reply);
     let anthropicRes: Response;
@@ -1259,7 +1658,32 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     } catch (error) {
       settleProxySpend(server, spend);
+      if (!requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
       return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+    }
+
+    if (anthropicRes.ok) {
+      providerCooldowns.clear('anthropic', providerFingerprint);
+    } else {
+      providerCooldowns.markHttpFailure('anthropic', anthropicRes, providerFingerprint);
+      if (TRANSIENT_PROVIDER_STATUSES.has(anthropicRes.status)) {
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          `returned HTTP ${anthropicRes.status}`,
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
     }
 
     if (!anthropicRes.ok) {
@@ -1268,6 +1692,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         errText = await anthropicRes.text();
       } catch (error) {
         settleProxySpend(server, spend);
+        if (!requestAbort.clientDisconnected()) {
+          providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+          markProxyProviderDegraded(
+            server,
+            'anthropic',
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
       }
       if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(anthropicRes.status)) {
@@ -1277,6 +1711,21 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       }
       return reply.status(anthropicRes.status).send({
         error: { message: `Anthropic API error: ${errText}` },
+      });
+    }
+
+    if (body.stream && !anthropicRes.body) {
+      settleProxySpend(server, spend);
+      providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+      markProxyProviderDegraded(
+        server,
+        'anthropic',
+        'returned an empty streaming response',
+        providerCooldowns,
+        providerFingerprint,
+      );
+      return reply.status(502).send({
+        error: { message: 'Anthropic API returned an empty streaming response.' },
       });
     }
 
@@ -1389,6 +1838,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         // A read failure is not a protocol terminal event. End without [DONE]
         // so the downstream completion-integrity check rejects partial output.
       }
+      if (!messageStopObserved && !requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
 
       await reader.cancel().catch(() => undefined);
       reader.releaseLock();
@@ -1405,6 +1864,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         data = await anthropicRes.json() as AnthropicMessageResponse;
       } catch (error) {
         settleProxySpend(server, spend);
+        if (!requestAbort.clientDisconnected()) {
+          providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+          markProxyProviderDegraded(
+            server,
+            'anthropic',
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
       }
 

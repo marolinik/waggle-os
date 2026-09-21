@@ -284,3 +284,290 @@ Instructions for the agent...
 - **Audit Trail**: Every capability install, uninstall, and security decision is recorded.
 - **Input Validation**: All route parameters validated against path traversal and injection.
 - **YOLO Mode**: Opt-in auto-approval, disabled by default.
+
+---
+
+## Layer Map & Dependency Rule
+
+Added by Phase 5 (`clean-architecture`) of the technical-debt journey — see
+[`REMOVE-TECHNICAL-DEBT-PLAN.md`](./REMOVE-TECHNICAL-DEBT-PLAN.md). The Dependency Rule:
+source dependencies point inward, and nothing in an inner circle names anything in an outer one.
+
+| Circle | What lives there | Where |
+|---|---|---|
+| Entities | tiers, wire types, Zod schemas, MCP catalog | `@waggle/shared` |
+| Use cases | agent loop, personas, routing, evolution, capability/trust | `@waggle/agent` |
+| Interface adapters | routes, persona/tool filters, governance, persistence, stores | `@waggle/server`, `@waggle/core`, `@waggle/hive-mind-core` |
+| Frameworks & drivers | Fastify, better-sqlite3 + sqlite-vec, Tauri shell, Vite/React | `sidecar/`, `app/`, `apps/web` |
+
+**Score: 4/10** (2 of 7 diagnostics satisfied, measured 2026-09-17 at `edf21ef6`).
+
+Satisfied: the framework is confined to `packages/server` (no `fastify` import anywhere in
+`@waggle/agent`, `@waggle/core` or `@waggle/shared`), and the component graph is acyclic —
+`shared ← hive-mind-core ← core ← agent ← server`, with the only apparent back-edges being
+comments in `hive-mind-core` that explain why the dependency was *avoided*. ADP holds, so no
+component split is warranted here.
+
+Failing: business rules cannot be tested without the DB and the framework; dependencies do not
+all point inward; the DB cannot be swapped without touching use cases; the chat use case *is*
+the delivery mechanism; and the composition root does not wire everything.
+
+### Measured cost of the violations
+
+| Import | Cost | Note |
+|---|---|---|
+| `routes/chat.ts` | 1352 ms | the whole server graph, for one pure predicate |
+| `routes/chat-helpers.ts` | 77 ms | leaf module, same kind of rules |
+| `@waggle/agent` (barrel) | 937 ms | the only entry point before this phase |
+| `@waggle/agent/permissions` | 4 ms | where `READONLY_TOOLS` actually lives |
+| `@waggle/agent/tool-filter` | 7 ms | where `isBoundedSingleFileRoundTrip` lives |
+
+Measured with a `process.dlopen`-instrumented `tsx` probe under Node 22.23.2. No native binding
+loads at import time in any of these paths — the cost is module graph, not SQLite.
+
+### Violations
+
+| # | Violation | Location | Fix | Priority | Status |
+|---|---|---|---|---|---|
+| CA-1 | ~770 lines of pure turn policy defined inside the Fastify plugin module, so every consumer and every test loads the delivery mechanism | `routes/chat.ts` (was lines 608–1781) | move to `routes/chat-turn-policy.ts`, re-export from `chat.ts`, guard the graph | P1 | **closed** — `a2f24546` + `3e380190` |
+| CA-2 | `@waggle/agent` published only its barrel, so importing one frozen array cost 937 ms (CRP violated at the `exports` map) | `packages/agent/package.json` | additive `./permissions` and `./tool-filter` subpaths | P1 | **closed** — `86d0d19f` |
+| CA-3 | Use cases construct concrete persistence classes — **12 `new` sites**, not a spread: 7 in the `Orchestrator` constructor, 4 in `setWorkspaceMind()`, 1 in `cross-workspace-tools.ts` | `agent/src/orchestrator.ts:189-196,233-236`, `agent/src/cross-workspace-tools.ts:107` | the use case owns the store *interfaces*; `@waggle/core` implements them; Parameterize Constructor with production defaults | P1 | **closed** — `cbf65c12` (pins) + `f24d192b` (inversion) + `edc2f455` (seam) |
+| CA-4 | `@waggle/agent` (use cases) imports `@waggle/core` (persistence) in **60** files — but **48 are type-only**, so the runtime edge is **12 files**, and outside `orchestrator.ts` it is `createCoreLogger` (8), `evaluateExternalMemoryIngress` (5) and `isSensitiveFilePath` (1), none of them persistence | package edge `agent → core` | invert the memory boundary per CA-3; the logger and the ingress guard are separate, smaller edges | P1 | **closed** — `memory-layers-default.ts` owns all 12 gateway constructions; guarded by `memory-gateway-confinement.test.ts` |
+| CA-5 | `TraceRecorder` built per request in the chat handler while the composition root already built its own for `HarnessTraceBridge` — two instances over one store | `routes/chat.ts`, `local/index.ts` | decorate `server.traceRecorder` at the root and share the instance | P2 | **closed** — see the CA-5 note below |
+| CA-5b | The same duplicate construction at two fleet sites | `local/fleet-run-executor.ts:660`, `local/routes/fleet.ts:380` | same remedy, but **no fleet test touches the trace path** — pin first | P3 | open |
+| CA-6 | Business rules still in the route module: regulated-content disclaimer, goal ancestry, approval-timeout policy | `routes/chat.ts` | second slice, same pattern as CA-1 | P2 | **closed** — `5b616dd2` (pin) + `2fe718da` (move) + `1c49e805` (disclaimer rule) |
+| CA-7 | Nothing but one test enforces the layer; a new module in `routes/` inherits no boundary | `eslint.config.js` | `@typescript-eslint/no-restricted-imports` scoped to all three files of the policy graph — **not** `import/no-restricted-paths`, whose plugin is only a transitive dep of `eslint-config-next` under `apps/www` | P3 | **closed** — `a40475e2` (Phase 6) |
+
+### The boundary that now exists
+
+`routes/chat-turn-policy.ts` (814 lines) holds the rules that decide what one chat turn may do.
+Its entire transitive graph is three files — itself, `chat-helpers.ts`, and the import-free
+`provider-model-catalog.ts` — and its only runtime package dependencies are
+`@waggle/agent/permissions` and `@waggle/agent/tool-filter`. No framework, no persistence, no
+`node:` I/O. `tests/local/chat-turn-policy-boundary.test.ts` walks that graph at the source level
+and fails the first time an outward import appears; it was verified non-vacuous by adding
+`import { FrameStore } from '@waggle/core'` and watching the first case go red.
+
+Control flow still crosses inward from the route; only the source dependency was inverted.
+
+CA-6 widened the same boundary rather than drawing a new one. `resolveChatAncestry`,
+`hasRegulatedDisclaimer` and `resolveApprovalTimeoutPolicy` moved verbatim; the regulated-content
+disclaimer — a `Record` literal rebuilt inside the handler body on every turn, plus a three-way
+conjunction the route kept in step with two detectors it did not own — became
+`regulatedDisclaimerSuffix`, which answers the whole question and returns the suffix or `''`. The
+route keeps only `allowResponseDecoration`, which is turn scope, not the rule. The graph did not
+change: the one new import is `GoalAncestry`, type-only and therefore erased.
+
+### CA-5 — what the row actually was
+
+The row said `CredentialPool` **and** `TraceRecorder` were constructed inside the handler.
+Only half held. `credentialPools` is a `Map` at plugin-registration scope with a lazy
+per-provider loader — built once for the plugin's lifetime, not per request — so it was never
+the violation the row described and it was left alone.
+
+`TraceRecorder` was. The handler ran `new TraceRecorder(server.traceStore)` on every turn while
+`local/index.ts` already constructed one and buried it inside `HarnessTraceBridge` instead of
+decorating it. So the defect was a duplicate instance over a single store, not a misplaced
+construction.
+
+Sharing one recorder is only safe because of a property worth stating: its `reasoningBuffer`,
+`toolCallBuffer`, `artifactBuffer` and `pendingTools` are keyed by trace id and cleared only by
+`flush` / `finalize`. A per-request instance made any un-finalized turn's leak invisible rather
+than absent; a shared one accumulates for the server's lifetime. The chat route survives that
+because the defensive `finalize` at `chat.ts:5376` sits inside the `finally` at `chat.ts:5348`,
+so every exit path clears. Any future consumer of `server.traceRecorder` owes the same guarantee.
+
+### CA-3 / CA-4 — what the rows actually were
+
+Measured 2026-09-18, before the pin program. The CA-4 row read "imports `@waggle/core` in 61
+files", and CA-3 read "the use case owns a `FrameStore`/`SessionStore` interface" as though the
+two store names were spread across those files. Neither survived a count.
+
+Sixty files import `@waggle/core`, and **48 of them import types only** — no runtime edge at all.
+The single most-imported symbol is `VaultStore`, in 32 files, and **every one of the 32 is
+`import type`**: the vault edge that dominates the count does not exist at runtime. Twelve files
+import a value, and nine of those import only `createCoreLogger` (8), `evaluateExternalMemoryIngress`
+(5) or `isSensitiveFilePath` (1) — a logger and two guards, none of them persistence.
+
+The memory boundary itself is **two files**: `orchestrator.ts`, which imports nineteen symbols and
+is the composition root for the layers, and `cross-workspace-tools.ts`, which constructs one
+`HybridSearch`. The whole of CA-3 is twelve `new` sites in those two files.
+
+That makes the fix smaller and better-shaped than the row implied. `CognifyPipeline` and
+`createMindTools` **already** take the stores as parameters — the downstream consumers are
+inverted today, and only the root that builds them is not. So CA-3 is Parameterize Constructor at
+one class, not a 61-file migration, and CA-4's remaining edges (logger, ingress guard) are
+separate and smaller.
+
+**Closed 2026-09-19.** `packages/agent/src/memory-ports.ts` declares seven ports — the methods the
+use cases actually call, 8 of `FrameStore`'s 22 — and the orchestrator takes them, falling back to
+the `@waggle/core` implementations when a caller supplies none. The ports do not redeclare
+`MemoryFrame`, `Session`, `Entity` or `Identity`: those are enterprise data structures every layer
+may depend on, not gateways, so the system still has one definition of a frame. The core classes
+satisfy the ports structurally — no implementation changed, no `implements` clause was added.
+
+The edge after the change: **56** files import `@waggle/core`, 12 by value, down from 60/12, and
+the files naming a concrete memory class fell from 11 to **5** — of which `context-loader.ts`,
+`pattern-write-back.ts` and `tools.ts` name only `MindDB`, the database handle. What is left is
+`orchestrator.ts`, which holds the production defaults because it is the place that already owned
+composition, and `cross-workspace-tools.ts`, whose `createSearch` factory defaults the same way.
+**CA-4 closed 2026-09-19**, and not the way the row imagined.
+
+Three shapes were on the table. Requiring `layers` and exporting a factory from `@waggle/core` is
+the truest inversion, and it was rejected on cost: all **54** `new Orchestrator(...)` sites — 4 in
+production, 50 in tests — would have to compose their own layers, which buys a cleaner graph by
+making every caller do the work. Declaring the orchestrator the composition root and stopping was
+the other option.
+
+What shipped is the middle one: `memory-layers-default.ts` holds every concrete construction, and
+no other module in `@waggle/agent` names a gateway in code — verified across the whole `src` tree,
+where the only remaining mentions are in comments. The honest caveat is in the file's own header:
+the package edge is **relocated, not removed**. `@waggle/agent` still imports `@waggle/core` there.
+What changed is that persistence choice now lives in one file named for that job, a caller that
+wants none of it passes `layers`, and `memory-gateway-confinement.test.ts` fails the moment a
+gateway name reappears anywhere else — including in a type position reached through
+`import('@waggle/core').FrameStore`, which a module-graph guard would miss.
+
+The pins live in `packages/agent/tests/orchestrator-memory-boundary-pins.test.ts` and assert on
+the **databases**, never on the layer objects — a pin reaching through `getFrames()` would be
+pinning the object graph the inversion replaces. Non-vacuity was checked twice, and the second
+check is the one that mattered: binding the workspace layers to the personal db inside
+`setWorkspaceMind()` left all eleven original pins green, because `workspaceLayers` is private and
+nothing wrote through it. `save_memory`'s `target` routing is the reachable sensing point; with
+those two pins added, the same mutation fails.
+
+`orchestrator-memory-ports.test.ts` is the other half: four tests drive the orchestrator through
+in-memory fakes that touch no SQLite, which nothing could do before the inversion.
+
+## Bounded Contexts & Context Map
+
+Phase 8 (`domain-driven-design`), 2026-09-18. Scored **5/10** — 3 of 7 diagnostic rows, plus 2
+of 3 depth points.
+
+### The finding
+
+The package graph is already acyclic and enforced (see the Layer Map above), so the *code*
+boundaries are in good shape. The model boundary that is **not** drawn is inside the memory
+substrate: one `MindDB` owns **18 tables** belonging to five different models.
+
+One SQLite file is the right *persistence* boundary for a desktop app — portable, atomically
+backed up, no server. The mistake is letting it also be the *model* boundary by default.
+
+The proof that the split is real and not theoretical was already in the repo: `CLAUDE.md` §7.5
+excludes `evolution_runs`, `execution_traces`, `improvement_signals` and the `install_audit` DDL
+from the public OSS mirror. **The mirror already ships a different subset of this schema** — a
+context boundary discovered by necessity and never drawn as one.
+
+### Current context map
+
+| Context | Tables | Type | OSS |
+|---|---|---|---|
+| **memory** | `memory_frames`, `memory_frame_chunks`, `sessions`, `raw_archive`, `procedures`, `meta` | **Core Domain** | shared |
+| knowledge | `knowledge_entities`, `knowledge_relations`, `kg_entity_frames` | supporting | shared |
+| presence | `identity`, `awareness` | supporting | shared |
+| harvest | `harvest_sources`, `erased_subjects` | supporting | shared |
+| evolution | `evolution_runs`, `execution_traces`, `improvement_signals` | supporting | **excluded** |
+| governance | `install_audit`, `ai_interactions` | supporting | **excluded** |
+
+Pinned by `tests/mind-context-boundaries.test.ts`, which fails when a table appears without a
+context and keeps the OSS exclusion list in step with the schema. It is a **manifest, not a
+refactor** — splitting the schema is a multi-session arc that would break the OSS forward-port,
+and Evans is explicit that premature extraction is the larger risk.
+
+Relationships between contexts, in the mapping vocabulary:
+
+- `knowledge` is **Customer/Supplier** to `memory` — it distils entities and relations *from*
+  frames, and `kg_entity_frames` is the join that keeps the two models in step.
+- `harvest` is **Conformist upstream, ACL downstream** (below).
+- `evolution` and `governance` are **Separate Ways** in the OSS mirror: they simply do not exist
+  there, which is why their absence has never broken it.
+
+### The Anti-Corruption Layer that already exists
+
+`packages/hive-mind-core/src/harvest/` is a textbook ACL and deserves to be named as one. Ten
+adapters — `chatgpt-adapter`, `claude-adapter`, `claude-code-adapter`, `gemini-adapter`,
+`perplexity-adapter`, `pdf-adapter`, `markdown-adapter`, `plaintext-adapter`, `url-adapter`,
+`universal-adapter` — each take a foreign export format with its own vendor model and translate
+it into `MemoryFrame`s. **No vendor schema reaches the Core Domain.** When ChatGPT changes its
+export format, exactly one adapter changes.
+
+That is why the substrate absorbed five separate vendor corpora without the frame model
+acquiring a single vendor-shaped field.
+
+The gap worth naming: `stableHarvestId` and the dedup rules in `pipeline.ts` / `dedup.ts` are
+shared by every adapter, so the ACL has a **Shared Kernel** at its centre. Keep it small and
+explicitly governed — it is the one place a vendor concept could leak in for all ten at once.
+
+### Target: the first context worth extracting
+
+**`governance` — `install_audit` + `ai_interactions`.** It is the best first candidate precisely
+because it is the least entangled:
+
+- It is already OSS-excluded, so extraction *removes* work from the curated forward-port instead
+  of adding it. `CLAUDE.md` §7.5 currently documents an interleaved strip of the `install_audit`
+  DDL out of `mind/{schema,db}.ts` that "a file filter cannot catch". Extracting the context makes
+  that strip a file boundary instead of a hand edit.
+- Its consumers are narrow: `packages/core/src/compliance/` and `install-audit.ts`.
+- Its retention rules are legal (EU AI Act), not behavioural — a different lifecycle, different
+  backup expectations, and an audit trail arguably should not live in a file that a
+  memory-erasure command can rewrite.
+
+Not proposed for execution now, and deliberately: the erasure surface (`erased_subjects`, sticky
+erasure) crosses `memory` and `harvest`, and a compliance trail that a GDPR erase must *not*
+delete needs that interaction thought through first.
+
+### Ubiquitous language: what is already good
+
+87% of exported classes (181 of 208) carry domain names, and the repository surface reads as the
+domain: `createIFrame`, `getPFramesSinceLastI`, `reconstructState`, `getGopFrames`. The I/P/B
+frame vocabulary is borrowed from video encoding and is genuinely the substrate model, not a
+technical convenience — that is the depth point this phase awards.
+
+The 27 technical-only names (`WorkspaceManager`, `PluginManager`, `OfflineManager`, `*Service`, …)
+are almost all infrastructure, where the technical name IS the domain term. Logged as a ledger
+row, not a rename arc.
+
+**Anemic entities, on purpose.** `MemoryFrame` is an `interface` — a data shape with no behavior;
+the rules live in `FrameStore`. For SQLite rows in a desktop app this is the right trade:
+rehydrating every read into behavior-bearing objects has a cost the Core Domain would pay on
+every recall. Recorded as a conscious position rather than scored as a failure.
+
+## Domain Glossary (Ubiquitous Language)
+
+Canonical. `CLAUDE.md` §11 carries a shorter operational copy; this is the definitive one.
+
+| Term | Meaning |
+|---|---|
+| **Mind** | One user or workspace whole memory substrate — the SQLite file and the six contexts inside it |
+| **Frame** | The atomic unit of memory. Never "record" or "row" |
+| **I-frame** | Independent frame — a complete state, readable without any other frame |
+| **P-frame** | Predicted frame — a delta against a base frame |
+| **B-frame** | Bidirectional frame — references several frames to express a relation between them |
+| **GOP** | Group of Pictures — the I-frame and the P/B-frames that depend on it. One conversational episode |
+| **Importance** | A frame decay resistance, not its priority. Drives `getImportanceMultiplier` |
+| **Harvest** | Ingesting a foreign corpus (a ChatGPT export, a PDF) and translating it into frames |
+| **Adapter** | One vendor translator inside the harvest ACL. Never "parser" — it translates a model, not a syntax |
+| **Sticky erasure** | An erasure that survives re-import: `erased_subjects` outlives the frames it erased |
+| **Cognify** | Extracting durable memory from a live exchange, as opposed to harvesting a finished corpus |
+| **Recall** | Retrieving frames for a turn. Never "query" or "search" at the domain level |
+| **Turn** | One user message and everything the system does because of it. The unit of tracing and of policy |
+| **Turn policy** | The rules deciding what a single turn may do — see `routes/chat-turn-policy.ts` |
+| **Persona** | A named operating mode with its own prompt, tool allowlist and guardrails |
+| **Workspace** | A bounded working context with its own Mind. Never "project" in code |
+| **Skill** | An installable capability with frontmatter, distinct from a tool |
+| **Signal** | A WaggleDance message between agents or tools |
+| **Trace** | The durable record of one turn execution, in `execution_traces` |
+
+## Decision Log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-09-17 | The extracted policy lives at `routes/chat-turn-policy.ts`, beside the four existing framework-free chat modules, rather than in a new folder or in `@waggle/agent` | The boundary is enforced by dependency direction and a guard test, not by folder name. `@waggle/agent` is the architecturally correct home but the cluster depends on `TurnMutationPolicy` from `chat-helpers.ts`; moving it there would either invert a dependency (agent importing server) or drag `chat-helpers.ts` along. Relocation is a Phase 8 concern, and CA-6 will use the same pattern first |
+| 2026-09-17 | The `@waggle/agent` barrel leak is fixed by additive export subpaths, not by inlining the constants | Inlining `READONLY_TOOLS` would duplicate knowledge `@waggle/agent` owns — the DRY violation Phase 6 exists to catch. The subpaths are additive: no existing barrel consumer changes, and every future inward import has a light path to take |
+| 2026-09-17 | Enforcement is a source-level import-graph walk, not a runtime probe and not a lint rule | An outward import that only a rare branch reaches still costs every consumer the load, and a runtime probe would not see it. A lint rule covers the whole layer at once and is the better long-term answer — it is ledgered as CA-7 for Phase 6, where habits that stop re-accumulation are the explicit subject |
+| 2026-09-17 | The slice is the 33-commit churn cluster, moved verbatim, with `chat.ts` re-exporting every previously public symbol | 652 non-blank lines moved; six differ, each by a leading `export` keyword, because `chat.ts` still consumes them and they were module-private. No test file was edited, so the 717 pins that cover the cluster prove behavior preservation rather than being adjusted to fit it |
+| 2026-09-17 | CA-5 closed for the chat route only; the two fleet sites became CA-5b rather than riding along | Phase 1 forbids touching code absent from the Safety Net Map, and **no** fleet test asserts anything about traces — `fleet.test.ts`, `fleet-isolation.test.ts` and `fleet-ancestry.test.ts` never mention `traceStore`, `traceId` or `outcomeCounts`. Widening the change there would have been an unpinned edit to production code; narrowing it silently would have left CA-5 looking closed when a third of the duplication remained |
+| 2026-09-17 | `CredentialPool` dropped from the CA-5 row instead of being hoisted | It is constructed once at plugin registration, not per request, so it never matched the violation the row described. Correcting the ledger is cheaper than performing a move that buys nothing, and a wrong row costs the next reader more than an open one |
+| 2026-09-17 | CA-6's disclaimer rule was pinned at the HTTP boundary before it moved, not after | `REGULATED_DISCLAIMER_MAP` is a `const` inside the handler body: no unit seam reaches it that the move itself would not have to create first, so a unit pin would have encoded the new shape and proved nothing about what shipped. An injected `agentRunner` isolates the block exactly — the neighbouring `/schedule` nudge and grounding hedge are both `!hasCustomRunner` gated. Proven non-vacuous by shortening the hr-manager string and watching that case go red |
+| 2026-09-17 | CA-6 landed as two commits — a verbatim move, then an Extract Function — never one | The two need different proofs. The move is provable by set-differencing the destination's added lines against the source's removed lines (exactly one survives: the `GoalAncestry` type import). The extraction genuinely changes shape, so its proof is the seven pins written against the old code passing unchanged against the new. Mixing them would have left a reviewer unable to trust either |
+| 2026-09-17 | No component split proposed | The package graph is already acyclic and the framework is already confined to one package. The debt is *inside* `packages/server` and at the `agent → core` edge — splitting services would add a distributed monolith on top of an unsolved boundary problem |

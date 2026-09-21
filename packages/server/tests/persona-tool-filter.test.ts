@@ -19,7 +19,15 @@ const tool = (name: string): ToolDefinition =>
 const persona = (over: Partial<AgentPersona>): AgentPersona =>
   ({ id: 'p', name: 'P', tools: [], ...over }) as unknown as AgentPersona;
 
-const POOL = ['chat_x', 'create_skill', 'read_skill', 'delete_skill', 'search_skills', 'write_file'].map(tool);
+const POOL = [
+  'chat_x',
+  'create_skill',
+  'read_skill',
+  'calculate_decision_matrix',
+  'delete_skill',
+  'search_skills',
+  'write_file',
+].map(tool);
 
 describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => {
   it('create_skill survives a persona allowlist (the loop can author skills)', () => {
@@ -28,6 +36,7 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
     const out = applyPersonaToolFilter(POOL, persona({ tools: ['chat_x'] })).map(t => t.name);
     expect(out).toContain('create_skill');
     expect(out).toContain('read_skill');
+    expect(out).toContain('calculate_decision_matrix');
     expect(out).toContain('delete_skill');
     expect(out).toContain('search_skills'); // read-side always worked
     expect(out).toContain('chat_x'); // persona's own declared tool
@@ -39,11 +48,16 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
     expect(out).not.toContain('delete_skill');
     expect(out).not.toContain('write_file');
     expect(out).toContain('read_skill'); // a read — allowed even for read-only personas
+    expect(out).toContain('calculate_decision_matrix'); // pure deterministic calculation
   });
 
   it('disallowedTools wins over the always-available set', () => {
-    const out = applyPersonaToolFilter(POOL, persona({ tools: ['chat_x'], disallowedTools: ['create_skill'] })).map(t => t.name);
+    const out = applyPersonaToolFilter(POOL, persona({
+      tools: ['chat_x'],
+      disallowedTools: ['create_skill', 'calculate_decision_matrix'],
+    })).map(t => t.name);
     expect(out).not.toContain('create_skill');
+    expect(out).not.toContain('calculate_decision_matrix');
     expect(out).toContain('read_skill'); // not denied
   });
 
@@ -56,10 +70,14 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
   it('the policy sets encode the write-side skill tools correctly', () => {
     expect(ALWAYS_AVAILABLE_TOOLS.has('create_skill')).toBe(true);
     expect(ALWAYS_AVAILABLE_TOOLS.has('read_skill')).toBe(true);
+    expect(ALWAYS_AVAILABLE_TOOLS.has('calculate_decision_matrix')).toBe(true);
     expect(ALWAYS_AVAILABLE_TOOLS.has('delete_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('create_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('delete_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('read_skill')).toBe(false);
+    for (const generator of ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx']) {
+      expect(READ_ONLY_WRITE_TOOLS.has(generator)).toBe(true);
+    }
   });
 });
 
@@ -97,6 +115,7 @@ describe('applyPersonaToolFilter — read-only allowlist (no write tool leaks)',
   it('the read-only allowlist enumerates reads + ephemeral plan authoring, excludes real writes', () => {
     expect(READ_ONLY_ALLOWED_TOOLS.has('read_file')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('read_skill')).toBe(true);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('calculate_decision_matrix')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('create_plan')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('add_plan_step')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('add_task')).toBe(false);
@@ -166,6 +185,41 @@ describe('applyPersonaToolFilter — dynamic connector safety rails', () => {
 
     expect(out).not.toContain('connector_slack_list_channels');
     expect(out).not.toContain('connector_slack_send_message');
+  });
+});
+
+describe('applyPersonaToolFilter — explicit artifact requests', () => {
+  const ARTIFACT_POOL = [
+    'generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx',
+    'write_file', 'edit_file', 'search_memory',
+  ].map(tool);
+
+  it('lets a writable persona use only the explicitly requested specialized generator', () => {
+    const out = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['generate_docx', 'write_file', 'search_memory'] }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+
+    expect(out).toContain('generate_xlsx');
+    expect(out).not.toContain('generate_pdf');
+    expect(out).not.toContain('generate_pptx');
+  });
+
+  it('does not broaden a read-only persona or override an explicit denylist', () => {
+    const readOnly = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['search_memory'], isReadOnly: true }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+    const denied = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['generate_docx'], disallowedTools: ['generate_xlsx'] }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+
+    expect(readOnly).not.toContain('generate_xlsx');
+    expect(denied).not.toContain('generate_xlsx');
   });
 });
 

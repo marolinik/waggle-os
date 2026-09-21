@@ -90,6 +90,133 @@ describe('MultiMindCache eviction / session-pinning', () => {
     cache.closeAll();
   });
 
+  it('binds a cache lease release to the exact generation it pinned', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquireLease('A');
+
+    cache.close('A');
+    expect(retired.db.isOpen()).toBe(false);
+    const replacement = cache.acquireLease('A');
+    expect(replacement.db).not.toBe(retired.db);
+
+    retired.release();
+    retired.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(replacement.db.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    replacement.release();
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
+  it('does not carry an exact lease pin into an out-of-band reopened generation', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquireLease('A');
+
+    retired.db.close();
+    const replacement = cache.acquireLease('A');
+    expect(replacement.db).not.toBe(retired.db);
+
+    retired.release();
+    replacement.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(false);
+    expect(replacement.db.isOpen()).toBe(false);
+    cache.closeAll();
+  });
+
+  it('does not let a duplicate release consume another lease on the same generation', () => {
+    const cache = makeCache(2);
+    const first = cache.acquireLease('A');
+    const second = cache.acquireLease('A');
+
+    first.release();
+    first.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(second.db.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    second.release();
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
+  it('binds legacy acquire/release calls to their cache generation', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquire('A');
+
+    cache.close('A');
+    expect(retired.isOpen()).toBe(false);
+    const replacement = cache.acquire('A');
+    expect(replacement).not.toBe(retired);
+
+    cache.release('A');
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(replacement.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    cache.release('A');
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
+  it('retires a workspace only after its exact generation drains', async () => {
+    const cache = makeCache(2);
+    const lease = cache.acquireLease('A');
+    const retirement = cache.beginRetirement('A');
+    let drained = false;
+    void retirement.drained.then(() => { drained = true; });
+
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.getOrOpen('A')).toBeNull();
+    expect(() => cache.acquireLease('A')).toThrow(/cannot open mind/i);
+
+    lease.release();
+    await retirement.drained;
+    expect(lease.db.isOpen()).toBe(false);
+    expect(cache.has('A')).toBe(false);
+    expect(cache.getOrOpen('A')).toBeNull();
+
+    retirement.release();
+    expect(cache.getOrOpen('A')?.isOpen()).toBe(true);
+    retirement.release();
+    cache.closeAll();
+  });
+
+  it('can cancel a pending retirement without later closing the live generation', async () => {
+    const cache = makeCache(2);
+    const lease = cache.acquireLease('A');
+    const retirement = cache.beginRetirement('A');
+
+    retirement.release();
+    await retirement.drained;
+    expect(cache.getOrOpen('A')).toBe(lease.db);
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.has('A')).toBe(true);
+
+    lease.release();
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.has('A')).toBe(true);
+    cache.closeAll();
+  });
+
   it('REOPEN-GUARD: a handle closed out-of-band is transparently reopened', () => {
     const cache = makeCache(2);
     const dbA = cache.getOrOpen('A');

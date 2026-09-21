@@ -34,6 +34,15 @@ describe('tierForModel', () => {
     expect(tierForModel('qwen3-32b')).toBe('small');
   });
 
+  it('provider-prefixed Qwen 3.8 Flash Next → small', () => {
+    expect(tierForModel('openai-compatible/qwen3.8-flash-next')).toBe('small');
+    expect(tierForModel('openrouter/qwen/qwen3.8-flash-next')).toBe('small');
+  });
+
+  it('provider-prefixed Claude Opus → frontier', () => {
+    expect(tierForModel('anthropic/claude-opus-4-7')).toBe('frontier');
+  });
+
   // LOCKED 2026-04-19 target model — consistent with Qwen3 family tier
   // convention (small). Despite Opus-class standalone benchmarks, stay
   // conservative on scaffold behavior until empirical PA/memory signal

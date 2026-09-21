@@ -307,6 +307,7 @@ Sample text:
 "${text.slice(0, 1500)}"`,
           }],
         }),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (res.ok) {
@@ -366,6 +367,7 @@ Brand description:
 "${description.slice(0, 2000)}"`,
           }],
         }),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (res.ok) {
@@ -438,6 +440,7 @@ Industry: ${profile.industry}
 Write a factual, professional bio. If you don't have enough info, write what you can based on the role and industry.`,
           }],
         }),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (res.ok) {

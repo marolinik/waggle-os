@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type SyntheticEvent } from 'react';
 import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion';
 import beeMascot from '@/assets/personas/general-purpose.png';
 import { adapter } from '@/lib/adapter';
@@ -24,14 +24,69 @@ interface OnboardingWizardProps {
   serverBaseUrl: string;
   state: OnboardingState;
   onUpdate: (updates: Partial<OnboardingState>) => void;
-  onComplete: (serverBaseUrl: string) => void;
-  onDismiss: () => void;
+  onComplete: (serverBaseUrl: string) => Promise<boolean>;
+  onDismiss: () => Promise<boolean>;
   onFinish: (workspaceId: string, workspaceName: string, firstMessage: string, personaId?: string) => void;
 }
 
 /* ─── M2-7: Fire-and-forget telemetry via adapter ─── */
 function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Record<string, unknown>) {
   adapter.trackTelemetry(event, properties);
+}
+
+type HarvestCommitOutcome =
+  | { completed: true; message: string }
+  | { completed: false; message: string; empty: boolean };
+
+function classifyHarvestCommit(result: unknown): HarvestCommitOutcome {
+  const record = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+  const saved = typeof record.saved === 'number' && Number.isInteger(record.saved) && record.saved >= 0
+    ? record.saved
+    : null;
+  const itemCount = typeof record.itemCount === 'number' && Number.isInteger(record.itemCount) && record.itemCount >= 0
+    ? record.itemCount
+    : null;
+  const couldNotVerify = typeof record.couldNotVerify === 'number'
+    && Number.isInteger(record.couldNotVerify)
+    && record.couldNotVerify >= 0
+    ? record.couldNotVerify
+    : 0;
+
+  if (saved === null || itemCount === null) {
+    return {
+      completed: false,
+      empty: false,
+      message: "Waggle couldn't confirm how many memories were imported. It is safe to try again, or skip and review Memory later.",
+    };
+  }
+  if (couldNotVerify > 0) {
+    const savedText = saved > 0
+      ? `Imported ${saved} memory ${saved === 1 ? 'item' : 'items'}, but`
+      : 'No new memories were imported, and';
+    return {
+      completed: false,
+      empty: false,
+      message: `${savedText} ${couldNotVerify} ${couldNotVerify === 1 ? 'item' : 'items'} could not be verified and ${couldNotVerify === 1 ? 'was' : 'were'} skipped. Try again later, or continue and review Memory.`,
+    };
+  }
+  if (record.skipped === true && itemCount > 0) {
+    return { completed: true, message: 'Memory is already up to date.' };
+  }
+  if (saved > 0) {
+    return { completed: true, message: `Imported ${saved} memory ${saved === 1 ? 'item' : 'items'}.` };
+  }
+  if (itemCount === 0) {
+    return {
+      completed: false,
+      empty: true,
+      message: 'No importable memories were found. Try again later, or skip and import from Memory.',
+    };
+  }
+  return {
+    completed: false,
+    empty: false,
+    message: 'No new memories were imported. It is safe to try again, or skip and review Memory later.',
+  };
 }
 
 /* ─── PR5 6-step chain (S12→S17, C33) with the hard model gate at step 3.
@@ -50,6 +105,7 @@ const FIRST_NAV_INDEX = stepIndex('who-are-you');
 const LAST_NAV_INDEX = stepIndex('first-task');
 
 const DEFAULT_FIRST_MESSAGE = 'Hello! What can you help me with?';
+const COMPLETION_ERROR = 'Waggle couldn’t finish setup. Wait a moment and try again. If this keeps happening, restart Waggle.';
 
 /* ─── Main Component (shell) ─── */
 const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismiss, onFinish }: OnboardingWizardProps) => {
@@ -67,21 +123,34 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     name: '', role: '', industry: '', workType: '', teamSize: '', goals: [],
   });
   const [savingProfile, setSavingProfile] = useState(false);
+  const savingProfileRef = useRef(false);
+  const profilePersistedPayloadRef = useRef<string | null>(null);
+  const profileSkipHandledRef = useRef(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
 
   /* ── Import (S15 / C33) ── */
   const [importSource, setImportSource] = useState<string | null>(null);
   const [importData, setImportData] = useState<unknown>(null);
   const [importItems, setImportItems] = useState<ClassifiedHarvestItem[]>([]);
   const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [importDone, setImportDone] = useState(false);
   const [claudeCodeDetected, setClaudeCodeDetected] = useState<{ found: boolean; itemCount: number; path: string } | null>(null);
 
   /* ── Workspace + first task (PR5 Template → First-task steps) ── */
   const [workspaceName, setWorkspaceName] = useState('');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [verifyingWorkspace, setVerifyingWorkspace] = useState(false);
+  const verifyingWorkspaceRef = useRef(false);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [firstMessage, setFirstMessage] = useState(DEFAULT_FIRST_MESSAGE);
+  const [completionPending, setCompletionPending] = useState(false);
+  const completionPendingRef = useRef(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const completionAlertRef = useRef<HTMLDivElement>(null);
 
   /* ── Connect on mount + track start; hydrate any existing profile ── */
   useEffect(() => {
@@ -111,18 +180,57 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const runCompletion = useCallback(async (completeAction: () => Promise<boolean>): Promise<boolean> => {
+    if (completionPendingRef.current) return false;
+    completionPendingRef.current = true;
+    setCompletionPending(true);
+    setCompletionError(null);
+    try {
+      const completed = await completeAction();
+      if (!completed) {
+        setCompletionError(COMPLETION_ERROR);
+        return false;
+      }
+      return true;
+    } catch {
+      setCompletionError(COMPLETION_ERROR);
+      return false;
+    } finally {
+      completionPendingRef.current = false;
+      setCompletionPending(false);
+    }
+  }, []);
+
+  const requestDismiss = useCallback(async (via: string): Promise<void> => {
+    if (completionPendingRef.current) return;
+    clearTimeout(autoTimer.current);
+    const completed = await runCompletion(onDismiss);
+    if (completed) {
+      trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via });
+    }
+  }, [onDismiss, runCompletion, serverBaseUrl, step]);
+
+  useEffect(() => {
+    if (completionError) completionAlertRef.current?.focus();
+  }, [completionError]);
+
+  const blockInteractionDuringCompletion = useCallback((event: SyntheticEvent) => {
+    if (!completionPendingRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
   /* ── A11y (WCAG 2.1.1): Escape maps to Skip. Clears any pending timer. ── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        clearTimeout(autoTimer.current);
-        trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
-        onDismiss();
+        if (savingProfileRef.current || importingRef.current || creatingWorkspace || verifyingWorkspaceRef.current || completionPendingRef.current) return;
+        void requestDismiss('escape');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, onDismiss, serverBaseUrl]);
+  }, [creatingWorkspace, requestDismiss]);
 
   const goToStep = useCallback((n: number) => {
     setStep(n);
@@ -134,61 +242,120 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   /* ── S13 / B8: write profile AND seed identity in one Continue. ── */
   const handleProfileContinue = useCallback(async () => {
+    if (savingProfileRef.current) return;
+    savingProfileRef.current = true;
+    profileSkipHandledRef.current = false;
     setSavingProfile(true);
+    setProfileSaveError(null);
+    const payload: Partial<OnboardingProfileFields> = {
+      name: profile.name?.trim() || undefined,
+      role: profile.role?.trim() || undefined,
+      industry: profile.industry || undefined,
+      workType: profile.workType || undefined,
+      teamSize: profile.teamSize || undefined,
+      goals: profile.goals && profile.goals.length > 0 ? profile.goals : undefined,
+    };
+    const payloadFingerprint = JSON.stringify(payload);
     try {
-      const payload: Partial<OnboardingProfileFields> = {
-        name: profile.name?.trim() || undefined,
-        role: profile.role?.trim() || undefined,
-        industry: profile.industry || undefined,
-        workType: profile.workType || undefined,
-        teamSize: profile.teamSize || undefined,
-        goals: profile.goals && profile.goals.length > 0 ? profile.goals : undefined,
-      };
-      try {
-        await adapter.updateProfile(payload as Record<string, unknown>);
-        // B8: seed the per-mind identity so the Home cockpit greets by name.
-        await adapter.setIdentity({
-          name: payload.name,
-          role: payload.role,
-          department: payload.industry,
-        });
-        onUpdate({ profileSeeded: true });
-      } catch { /* sidecar offline — proceed; profile can be set later in My Profile */ }
+      await adapter.updateProfile(payload as Record<string, unknown>);
+      profilePersistedPayloadRef.current = payloadFingerprint;
+      // B8: seed the per-mind identity so the Home cockpit greets by name.
+      await adapter.setIdentity({
+        name: payload.name,
+        role: payload.role,
+        department: payload.industry,
+      });
+      onUpdate({ profileSeeded: true });
       trackTelemetry(serverBaseUrl, 'onboarding_profile_seeded', {
         hasName: Boolean(payload.name),
         hasRole: Boolean(payload.role),
         goalCount: payload.goals?.length ?? 0,
       });
       goToName('model-gate');
+    } catch {
+      if (profilePersistedPayloadRef.current === payloadFingerprint) {
+        setProfileSaveError("Your profile was saved, but Waggle couldn't finish personalization. Retry to finish, or continue without personalization.");
+      } else if (profilePersistedPayloadRef.current) {
+        setProfileSaveError("Your earlier profile is still saved, but Waggle couldn't confirm your latest changes or finish personalization. Retry, or continue without personalization.");
+      } else {
+        setProfileSaveError("We couldn't confirm your profile was saved. Retry, or continue without personalization.");
+      }
     } finally {
+      savingProfileRef.current = false;
       setSavingProfile(false);
     }
   }, [profile, onUpdate, serverBaseUrl, goToName]);
 
+  const handleProfileContinueWithoutPersonalization = useCallback(() => {
+    if (savingProfileRef.current || profileSkipHandledRef.current) return;
+    profileSkipHandledRef.current = true;
+    setProfileSaveError(null);
+    trackTelemetry(serverBaseUrl, 'onboarding_profile_skipped', { reason: 'save-failed' });
+    goToName('model-gate');
+  }, [goToName, serverBaseUrl]);
+
   /* ── S15 / C33: file import → classified preview ── */
   const handleFileImport = async (file: File, source: string) => {
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
       const text = await file.text();
       let data: unknown;
       try { data = JSON.parse(text); } catch { data = text; }
-      setImportData(data);
-      setImportSource(source);
       const result = await adapter.harvestPreview(data, source);
       const items = (result?.items ?? result?.preview ?? []) as ClassifiedHarvestItem[];
+      if (items.length === 0) {
+        setImportData(null);
+        setImportSource(null);
+        setImportItems([]);
+        setImportError('No importable memories were found. Choose another file, or skip and import it later from Memory.');
+        return;
+      }
+      setImportData(data);
+      setImportSource(source);
       setImportItems(items);
-    } catch { /* ignore parse errors */ }
+    } catch {
+      setImportData(null);
+      setImportSource(null);
+      setImportItems([]);
+      setImportError("Couldn't read this export. Choose the file again, or skip and import it later from Memory.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
 
   // C33: commit-all default — every item lands `status:'unreviewed'` server-side.
   const handleImportCommit = async () => {
-    if (!importData || !importSource) return;
+    if (importingRef.current || importData == null || !importSource) return;
+    importingRef.current = true;
     setImporting(true);
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
-      await adapter.harvestCommit(importData, importSource);
-      setImportDone(true);
-      setTimeout(() => goToName('template'), 800);
-    } catch { /* ignore */ }
-    finally { setImporting(false); }
+      const result = await adapter.harvestCommit(importData, importSource);
+      const outcome = classifyHarvestCommit(result);
+      if (outcome.completed) {
+        setImportSuccessMessage(outcome.message);
+        setImportDone(true);
+      } else {
+        setImportDone(false);
+        setImportError(outcome.message);
+        if ('empty' in outcome && outcome.empty) {
+          setImportData(null);
+          setImportSource(null);
+          setImportItems([]);
+        }
+      }
+    } catch {
+      setImportError("Couldn't confirm the import. It is safe to try again, or skip and review Memory later.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
 
   /* ── Claude Code auto-detect on mount ── */
@@ -204,15 +371,34 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   }, []);
 
   const handleClaudeCodeHarvest = async () => {
+    if (importingRef.current) return;
+    importingRef.current = true;
     setImporting(true);
-    setImportSource('claude-code');
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
-      await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
-      setImportDone(true);
-      setTimeout(() => goToName('template'), 800);
-    } catch { /* ignore */ }
-    finally { setImporting(false); }
+      const result = await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
+      const outcome = classifyHarvestCommit(result);
+      if (outcome.completed) {
+        setImportSource('claude-code');
+        setImportSuccessMessage(outcome.message);
+        setImportDone(true);
+      } else {
+        setImportDone(false);
+        setImportError(outcome.message);
+      }
+    } catch {
+      setImportError("Couldn't confirm the Claude Code import. It is safe to try again, or skip and review Memory later.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
+
+  const handleImportContinue = useCallback(() => {
+    if (importingRef.current) return;
+    goToName('template');
+  }, [goToName]);
 
   /* ── PR5 Template step: create the first workspace from the chosen template
        (matching specialist persona + template id), then seed the first task. The
@@ -221,6 +407,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     const tmpl = CURATED_ONBOARDING_TEMPLATES.find(t => t.id === templateId);
     const persona = TEMPLATE_PERSONA[templateId] ?? 'general-purpose';
     const wsName = tmpl?.name || 'My Workspace';
+    setCreateError(null);
     setCreatingWorkspace(true);
     setCreatingTemplateId(templateId);
     try {
@@ -229,9 +416,27 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       // possible): if this exact template already created a workspace, reuse it
       // instead of minting a duplicate. Picking a DIFFERENT template still
       // creates a new one (the prior workspace is orphaned but cheap/deletable).
-      if (state.workspaceId && state.templateId === templateId) {
-        wsId = state.workspaceId;
-        setCreateError(null);
+      if (state.workspaceId && state.templateId === templateId && !state.workspaceId.startsWith('local-')) {
+        try {
+          const workspaces = await adapter.getWorkspaces();
+          if (workspaces.some((workspace) => workspace.id === state.workspaceId)) {
+            wsId = state.workspaceId;
+            setCreateError(null);
+          } else {
+            const ws = await adapter.createWorkspace({
+              name: wsName,
+              group: 'Personal',
+              type: 'project',
+              persona,
+              templateId,
+            });
+            wsId = ws.id;
+            setCreateError(null);
+          }
+        } catch {
+          setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+          return;
+        }
       } else {
         try {
           const ws = await adapter.createWorkspace({
@@ -244,8 +449,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           wsId = ws.id;
           setCreateError(null);
         } catch {
-          setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
-          wsId = `local-${Date.now()}`;
+          setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+          return;
         }
       }
       setWorkspaceName(wsName);
@@ -263,14 +468,42 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     }
   }, [importDone, onUpdate, serverBaseUrl, goToName, state.workspaceId, state.templateId]);
 
-  const handleLetsGo = useCallback(() => {
+  const handleLetsGo = useCallback(async () => {
     clearTimeout(autoTimer.current);
-    onComplete(serverBaseUrl);
-    const wsId = state.workspaceId || `local-${Date.now()}`;
+    if (verifyingWorkspaceRef.current || completionPendingRef.current) return;
+    const workspaceId = state.workspaceId;
+    if (!workspaceId || workspaceId.startsWith('local-')) {
+      setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+      onUpdate({ workspaceId: undefined });
+      goToName('template');
+      return;
+    }
+    verifyingWorkspaceRef.current = true;
+    setVerifyingWorkspace(true);
+    let workspaceExists = false;
+    try {
+      const workspaces = await adapter.getWorkspaces();
+      workspaceExists = workspaces.some((workspace) => workspace.id === workspaceId);
+    } catch {
+      setCreateError('Could not verify the workspace. Check that Waggle is running, then try again.');
+      goToName('template');
+      return;
+    } finally {
+      verifyingWorkspaceRef.current = false;
+      setVerifyingWorkspace(false);
+    }
+    if (!workspaceExists) {
+      setCreateError('That workspace is no longer available. Pick a starting point to create it again.');
+      onUpdate({ workspaceId: undefined });
+      goToName('template');
+      return;
+    }
+    const completed = await runCompletion(() => onComplete(serverBaseUrl));
+    if (!completed) return;
     const wsName = workspaceName.trim() || 'My Workspace';
     const personaId = state.personaId || 'general-purpose';
-    onFinish(wsId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
-  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.personaId, workspaceName, firstMessage]);
+    onFinish(workspaceId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
+  }, [serverBaseUrl, onComplete, onFinish, onUpdate, runCompletion, state.workspaceId, state.personaId, workspaceName, firstMessage, goToName]);
 
   if (state.completed) return null;
 
@@ -282,6 +515,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
   const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
+  const workspaceTransitionPending = savingProfile || importing || creatingWorkspace || verifyingWorkspace || completionPending;
 
   return (
     // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
@@ -355,12 +589,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
             />
           )}
           {showNavChrome && (
-            <button
-              onClick={() => {
-                clearTimeout(autoTimer.current);
-                goToStep(step - 1);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          <button
+            onClick={() => {
+              clearTimeout(autoTimer.current);
+              goToStep(step - 1);
+            }}
+            disabled={workspaceTransitionPending}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="Go to previous step"
             >
               ← Back
@@ -388,19 +623,43 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           )}
         </div>
         <button
-          onClick={() => {
-            trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step });
-            onDismiss();
-          }}
+          onClick={() => { void requestDismiss('skip-button'); }}
+          disabled={workspaceTransitionPending}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Skip setup
         </button>
       </div>
 
+      {(completionPending || completionError) && (
+        <div
+          ref={completionAlertRef}
+          role={completionError ? 'alert' : 'status'}
+          tabIndex={completionError ? -1 : undefined}
+          aria-live="polite"
+          aria-atomic="true"
+          className={`mx-auto mb-2 w-[min(92vw,36rem)] rounded-lg border px-4 py-3 text-center text-sm ${
+            completionError
+              ? 'border-destructive/40 bg-destructive/10 text-destructive'
+              : 'border-border/60 bg-card/80 text-muted-foreground'
+          }`}
+        >
+          {completionError ?? 'Finishing setup…'}
+        </div>
+      )}
+
       {/* Content area — renders current step by NAME */}
       <div className="flex-1 flex items-start justify-center overflow-y-auto px-4 py-3 sm:items-center sm:px-6 sm:py-0">
-        <div className="w-full max-w-2xl">
+        <div
+          role="group"
+          aria-label="Current onboarding step"
+          aria-busy={completionPending}
+          inert={completionPending ? true : undefined}
+          onClickCapture={blockInteractionDuringCompletion}
+          onKeyDownCapture={blockInteractionDuringCompletion}
+          onSubmitCapture={blockInteractionDuringCompletion}
+          className={`w-full max-w-2xl ${completionPending ? 'pointer-events-none select-none opacity-60' : ''}`}
+        >
           <AnimatePresence mode="wait">
             {step === stepIndex('first-launch') && (
               <WelcomeStep
@@ -413,16 +672,16 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 profile={profile}
                 onChange={(patch) => setProfile(prev => ({ ...prev, ...patch }))}
                 onContinue={handleProfileContinue}
+                onContinueWithoutPersonalization={handleProfileContinueWithoutPersonalization}
                 saving={savingProfile}
+                saveError={profileSaveError}
               />
             )}
             {step === stepIndex('model-gate') && (
               <ModelGateStep
                 onContinue={() => goToName('memory-import')}
                 onLater={() => {
-                  clearTimeout(autoTimer.current);
-                  trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'model-gate-later' });
-                  onDismiss();
+                  void requestDismiss('model-gate-later');
                 }}
               />
             )}
@@ -432,11 +691,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 importItems={importItems}
                 importDone={importDone}
                 importing={importing}
+                importError={importError}
+                importSuccessMessage={importSuccessMessage}
                 onFileImport={handleFileImport}
                 onImportCommit={handleImportCommit}
                 claudeCodeDetected={claudeCodeDetected}
                 onClaudeCodeHarvest={handleClaudeCodeHarvest}
-                onContinue={() => goToName('template')}
+                onContinue={handleImportContinue}
               />
             )}
             {step === stepIndex('template') && (
@@ -449,7 +710,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 recommendedId={recommendedId}
               />
             )}
-            {step === stepIndex('first-task') && (
+          {step === stepIndex('first-task') && (
+            <fieldset
+              disabled={verifyingWorkspace || completionPending}
+              aria-busy={verifyingWorkspace || completionPending}
+              className="m-0 min-w-0 border-0 p-0"
+            >
               <FirstTaskStep
                 message={firstMessage}
                 onMessageChange={setFirstMessage}
@@ -458,7 +724,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onLetsGo={handleLetsGo}
                 createError={createError}
               />
-            )}
+            </fieldset>
+          )}
           </AnimatePresence>
         </div>
       </div>

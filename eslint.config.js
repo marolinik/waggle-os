@@ -82,6 +82,62 @@ export default tseslint.config(
       "no-prototype-builtins": "error",
     },
   },
+  {
+    // CA-7 (Phase 5 clean-architecture, landed in Phase 6). The conversational
+    // turn policy is framework-free, persistence-free and node:-free on purpose:
+    // `tests/local/chat-turn-policy-boundary.test.ts` walks its transitive import
+    // graph and fails when an outward import appears. That test is the complete
+    // check; this rule is the one that fires in the editor, on the exact line,
+    // before the file is saved. It covers the whole graph, not just its entry,
+    // because an outward import in any of the three leaves breaks the boundary.
+    //
+    // The core rule, not eslint-plugin-import: that plugin is only a TRANSITIVE
+    // dependency of eslint-config-next under apps/www, so relying on it here
+    // would make the repo gate depend on someone else's hoisting. The
+    // typescript-eslint version is used for `allowTypeImports` — a type-only
+    // import is erased at build time and costs a consumer nothing, which is
+    // exactly the distinction the guard test already draws.
+    files: [
+      "packages/server/src/local/routes/chat-turn-policy.ts",
+      "packages/server/src/local/routes/chat-helpers.ts",
+      "packages/server/src/local/provider-model-catalog.ts",
+    ],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", {
+        // `paths` matches the exact specifier; a `patterns` group would use
+        // gitignore semantics and ban the subpaths along with the barrel.
+        paths: [
+          {
+            name: "@waggle/agent",
+            message: "The @waggle/agent barrel costs 937ms against 4ms for permissions.ts. Import @waggle/agent/permissions or @waggle/agent/tool-filter (CA-2).",
+            allowTypeImports: true,
+          },
+        ],
+        patterns: [
+          {
+            group: ["fastify", "fastify/*", "@fastify/*"],
+            message: "The turn policy must not name the delivery mechanism. Keep Fastify in the route module (CA-1).",
+            allowTypeImports: false,
+          },
+          {
+            group: ["@waggle/core", "@waggle/core/*", "@waggle/hive-mind-core", "@waggle/hive-mind-core/*"],
+            message: "The turn policy must not reach persistence. Pass what it needs in as an argument (CA-1).",
+            allowTypeImports: true,
+          },
+          {
+            group: ["node:*"],
+            message: "The turn policy must not perform I/O. It decides; the route acts (CA-1).",
+            allowTypeImports: true,
+          },
+          {
+            group: ["./chat.js", "./chat"],
+            message: "Control flow crosses inward only: chat.ts imports the policy, never the reverse (CA-1).",
+            allowTypeImports: true,
+          },
+        ],
+      }],
+    },
+  },
   // (packages/server override removed — its 210 no-explicit-any + 3 tail warnings
   // were burned down to 0, so it is now ratcheted to "error" repo-wide like everything
   // else. The whole repo is at 0 lint errors AND 0 warnings under this config.)

@@ -1126,7 +1126,10 @@ describe('deterministic 100-point persona scorer', () => {
         requestPersonaId: writer.id,
       }));
 
-      expect(misleadingResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(false);
+      expect(
+        misleadingResult.checks.find(check => check.id === 'release-facts')?.passed,
+        invalidResponse,
+      ).toBe(false);
       expect(misleadingResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(false);
       expect(misleadingResult.passed).toBe(false);
     }
@@ -2301,6 +2304,28 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
     expect(result).toMatchObject({ score: 100, passed: true });
+  });
+
+  it('rejects invented quantified release requirements in a project plan', () => {
+    const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
+    const response = [
+      '## Milestones',
+      'M2 depends on M1.',
+      '## Owners by Role',
+      'Release Manager owns coordination; QA Lead owns acceptance.',
+      '## Risks and Exit Criteria',
+      'Risk: packaging failure.',
+      'Exit criteria: test at least 3 Windows versions, start in under 30 seconds, and pass a 24-hour soak test.',
+    ].join('\n');
+    const result = scorePersonaTrial(projectManager, evidence({
+      prompt: projectManager.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: projectManager.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'no-invented-requirements')?.passed).toBe(false);
+    expect(result.passed).toBe(false);
   });
 
   it.each([
@@ -5418,6 +5443,39 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, passed: true });
   });
 
+  it('accepts the official sqliteai raw README as the fetched form of its cited repository', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/sqliteai/sqlite-vector and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Use SQLite vector search for the stated use case.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      durationMs: 10_000,
+      inputTokens: 5_000,
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/sqliteai/sqlite-vector/main/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'sqlite-vector primary README', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/pgvector/pgvector/master/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary README', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(true);
+  });
+
   it('does not count canonical and raw URLs for one GitHub repository as two sources', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const response = [
@@ -5705,6 +5763,18 @@ describe('deterministic 100-point persona scorer', () => {
     expect(rule.patterns.every(pattern => pattern.test(
       '### Key Facts from Primary Sources:\nSQLite is embedded.\n**Reduced Overhead (Inference):** A separate service adds operational cost.',
     ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '## Facts vs. Inference\n\n**Facts (verified from primary sources fetched this session: the sqlite-vec GitHub README and the pgvector GitHub README):** SQLite is embedded.\n\n**Inference (my reasoning, not stated as such by the sources):** Embedded storage lowers desktop operational burden.',
+    ))).toBe(true);
+    for (const response of [
+      '## Facts vs. Inference\nNo facts were verified; the source was unavailable.\n\n## Inference\nTreat the claim as tentative.',
+      '## Facts versus Inference\nFacts unavailable.\n\nInference: none can be drawn.',
+      '## Facts / Inference\nFacts: unverified.\n\nInference: opinion only.',
+      '**Facts (verified from primary sources fetched this session: the sqlite-vec README and pgvector README, with the complete evidence ultimately unverified):** SQLite is embedded.\nInference: tentative.',
+      '**Facts (confirmed from primary sources fetched this session: the sqlite-vec README and pgvector README, but the claims were later not verified):** SQLite is embedded.\nInference: tentative.',
+    ]) {
+      expect(rule.patterns.every(pattern => pattern.test(response))).toBe(false);
+    }
     expect(rule.patterns.every(pattern => pattern.test(
       '| Architecture | Client-server | Fact (pgvector): confirmed in the README. |\n| Desktop fit | Embedded | Inference (SQLite): lower operational overhead. |',
     ))).toBe(true);
@@ -6678,6 +6748,11 @@ describe('deterministic 100-point persona scorer', () => {
       'Browser testing shows two unresolved failures on Windows, but I retract that claim.',
       'Browser testing shows two unresolved failures on Windows, but that claim has been withdrawn.',
       'Browser testing shows two unresolved failures on Windows, although all failures were fixed afterward.',
+      'Previously resolved: Browser tests: Two failures on Windows.',
+      'Previously resolved browser tests: Two failures on Windows.',
+      'Historical status (now cleared): Browser tests: Two failures on Windows.',
+      'Browser tests: Two failures on Windows; later cleared.',
+      'Browser tests: Two failures on Windows. Update: those failures have now been resolved.',
       'Browser testing shows two unresolved failures on Windows; correction: zero failures remain.',
       'There is no evidence that browser testing shows two unresolved failures on Windows.',
       'If browser testing shows two unresolved failures on Windows, delay release.',
@@ -6709,5 +6784,2637 @@ describe('deterministic 100-point persona scorer', () => {
         deniedClaim,
       ).toBe(false);
     }
+  });
+
+  it('accepts the exact Qwen writer memo when every supplied fact is preserved', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      '**MEMO: Release Delay Recommendation**',
+      '',
+      '**Current Status:**',
+      '- API tests: Passing.',
+      '- Browser tests: Two failures on Windows.',
+      '- Smart router: Unexercised without cloud credentials.',
+      '',
+      '**Recommendation:**',
+      'Delay the planned Friday release until the Windows browser failures are resolved and the smart router is validated without cloud credentials.',
+    ].join('\n');
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+
+    for (const id of ['release-facts', 'router-fact', 'recommendation']) {
+      expect(result.checks.find(check => check.id === id)?.passed, id).toBe(true);
+    }
+  });
+
+  it('accepts the exact Qwen 30-minute agenda with an explicit reserved final block', () => {
+    const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      '**Launch-Readiness Meeting Agenda (30 min)**',
+      '*Participants: Product, Engineering, QA, Support*',
+      '',
+      '**Pre-read Checklist**',
+      '- [ ] Final feature scope and release notes',
+      '- [ ] Outstanding defects with severity and QA pass/fail status',
+      '- [ ] Production deployment checklist and rollback plan',
+      '- [ ] Support readiness: runbooks, FAQ, escalation paths',
+      '- [ ] Customer communication draft and marketing schedule',
+      '',
+      '**Agenda**',
+      '| Time | Topic | Lead | Decision Required |',
+      '|---|---|---|---|',
+      '| 5 min | Launch scope review | Product | Confirm scope is locked and no new items are admitted |',
+      '| 5 min | Engineering readiness | Engineering | Approve deployment plan and rollback procedure |',
+      '| 5 min | QA sign-off | QA | Confirm release candidate passes criteria; identify remaining critical defects |',
+      '| 5 min | Support readiness | Support | Approve launch support plan and escalation ownership |',
+      '| 5 min | Go/No-Go assessment | Product (facilitator) | Go/No-Go decision based on readiness evidence |',
+      '',
+      '*Note: The blocks above total 25 minutes; the final 5 minutes are reserved for action-item assignment and confirmation of launch communication timeline.*',
+    ].join('\n');
+    const result = scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: assistant.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'decisions')?.passed).toBe(true);
+  });
+
+  it('accepts the exact Qwen current-runway calculation and two affirmative actions', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway is calculated using the formula: Runway = Cash Balance ÷ Monthly Burn.',
+      '',
+      'Given a cash balance of $40,000 and a monthly burn of $10,000 with zero revenue, the runway is exactly 4 months.',
+      '',
+      'The biggest assumption in this calculation is that the $10,000 monthly burn is fixed and remains constant. In reality, expenses are often variable and may shift month-to-month, meaning actual runway could differ if costs are not strictly locked in.',
+      '',
+      'Two actions to improve runway:',
+      '',
+      '1.  **Audit and cut non-essential expenses**: Review the $10,000 burn to identify discretionary costs, software subscriptions, or vendor contracts that can be renegotiated, paused, or eliminated without immediately halting core operations.',
+      '2.  **Accelerate time-to-revenue**: Prioritize initiatives that generate cash faster, such as launching a paid service offering, upselling existing contacts, or securing early pilot payments, since every dollar of new revenue directly extends the runway.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+  });
+
+  it('accepts the exact Qwen priority table when each row gives a decision basis', () => {
+    const general = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Order: 1) Production memory bug → 2) Close customer → 3) Repair onboarding friction.**',
+      '',
+      '## Plan',
+      '',
+      '| Priority | Rank | Why this position |',
+      '|---|---|---|',
+      '| Memory bug | 1 | Blocks everything. A live production bug risks churn across *all* customers, including the one you\'re trying to close. Fix first to protect the base and give the sales push a stable foundation. |',
+      '| Close customer | 2 | Revenue and momentum. Once stability is confirmed, focus energy here — deals don\'t close themselves, and a confident product demo beats a known-unstable one. |',
+      '| Onboarding friction | 3 | High-value but rarely time-boxed to *this* week. It compounds over time rather than burning a deadline. Schedule it as the structured work once the fires are out. |',
+      '',
+      '**Rationale for the sequence:** The bug is a risk-reducer, the close is an opportunity-capturer, and onboarding is a long-term ROI item. Risk reduction before revenue capture, revenue capture before optimization. Each step removes uncertainty for the next.',
+      '',
+      '## First Action Today',
+      '',
+      '**Triage the memory bug as a bounded investigation, not a fix:**',
+      '1. Pull the last 24h of production logs and isolate the memory growth pattern — is it leaking per-request, per-session, or background job?',
+      '2. Reproduce locally with a minimal harness to confirm the failure mode.',
+      '3. Decide scope: if it\'s a quick patch, fix it; if it needs deeper surgery, ship a mitigation (restart policy, limit, or feature flag) to stop the bleeding *now* and schedule the real fix for next week.',
+      '',
+      'Time-box this to half a day. You don\'t need to solve it completely today — you need to know whether it\'s a fire or a slow burn, because that answer changes how much headroom you have for the customer push.',
+    ].join('\n');
+    const result = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: general.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('keeps the Qwen writer grammar fail-closed for negated facts and recommendations', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const base = [
+      'Friday ship status: API tests passing.',
+      'Browser tests: Two failures on Windows.',
+      'Smart router: Unexercised without cloud credentials.',
+      'Recommendation: Delay the planned Friday release until those gaps are closed.',
+    ].join('\n');
+    const check = (response: string, id: string): boolean => scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    })).checks.find(item => item.id === id)?.passed ?? false;
+
+    expect(check(base.replace('Two failures', 'Not two failures'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Two failures on Windows.', 'Two failures on Windows were resolved yesterday.'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Browser tests: Two failures on Windows.', 'Resolved: Browser tests: Two failures on Windows.'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Unexercised', 'Not unexercised'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', "The smart router wasn't untested"), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', 'The smart router is hardly untested'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', 'If the smart router is unexercised'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised without', 'Smart router: Unexercised with'), 'router-fact')).toBe(false);
+    expect(check(base.replace(
+      'Smart router: Unexercised without cloud credentials.',
+      'The smart router is healthy; the browser is untested without cloud credentials.',
+    ), 'router-fact')).toBe(false);
+    expect(check(`${base}\nCorrection: the smart router was exercised without cloud credentials.`, 'router-fact')).toBe(false);
+    for (const deniedRouterStatus of [
+      'Assuming the smart router is untested without cloud credentials.',
+      'Provided that the smart router is untested without cloud credentials.',
+      'The smart router would be untested without cloud credentials.',
+      'The smart router is supposedly untested without cloud credentials.',
+      'Presumably, the smart router is untested without cloud credentials.',
+      'Pending confirmation, the smart router is untested without cloud credentials.',
+      'Smart router is untested without cloud credentials, but it is now tested.',
+      'The smart router is untested with cloud credentials, not without cloud credentials.',
+      'The smart router is untested without cloud credentials but is fully tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. It is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. We exercised the smart router without cloud credentials.',
+      'Smart router is untested without cloud credentials. Correction: we tested it without cloud credentials.',
+      'Smart router is untested without cloud credentials. The team has now tested it without cloud credentials.',
+      'Smart router is untested without cloud credentials. However, it is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. The router is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. It has since been tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. The same was later tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. Testing later covered the smart router without credentials.',
+    ]) {
+      expect(check(base.replace(
+        'Smart router: Unexercised without cloud credentials.',
+        deniedRouterStatus,
+      ), 'router-fact'), deniedRouterStatus).toBe(false);
+    }
+    expect(check(base.replace('Recommendation: Delay', 'Recommendation: Do not delay'), 'recommendation')).toBe(false);
+    for (const nonRecommendation of [
+      'Recommendation: Should we delay the planned Friday release until those gaps are closed?',
+      'Recommendation: Could delay the planned Friday release until those gaps are closed.',
+      'Recommendation: Delay the planned Friday release until those gaps are closed? No.',
+      'Recommendation: Delaying the planned Friday release until the Windows failures are resolved is not recommended.',
+    ]) {
+      expect(check(base.replace(
+        'Recommendation: Delay the planned Friday release until those gaps are closed.',
+        nonRecommendation,
+      ), 'recommendation'), nonRecommendation).toBe(false);
+    }
+    for (const status of [
+      'The smart router has not been exercised without cloud credentials.',
+      'The smart router has not been validated without cloud credentials.',
+      'The smart router is untested without cloud credentials.',
+      'The smart router still needs to be exercised without cloud credentials.',
+      'We have yet to exercise the smart router without cloud credentials.',
+      'Testing the smart router without cloud credentials remains outstanding.',
+      'The smart router still awaits testing without cloud credentials.',
+      'Testing without cloud credentials is still pending for the smart router.',
+    ]) {
+      expect(check(base.replace('Smart router: Unexercised without cloud credentials.', status), 'router-fact'), status).toBe(true);
+    }
+  });
+
+  it('accepts a Qwen memo that states the delay recommendation and condition in adjacent sentences', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      'We originally planned to ship this Friday. API tests pass, but browser tests still show two failures on Windows. The smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, we recommend delaying the release. Proceeding without closing the browser failures and validating the smart router introduces risk.',
+    ].join('\n');
+
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+  });
+
+  it('accepts a Qwen memo that closes an explicitly named gap with a pronoun', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      'Browser tests retain two failures on Windows. The smart router has not been exercised without cloud credentials.',
+      'Given these outstanding gaps, the recommendation is to delay the release until they are closed.',
+    ].join('\n');
+
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+
+    for (const rejected of [
+      response.replace('the recommendation is to delay', 'the recommendation is not to delay'),
+      response.replace('until they are closed', 'until they are not closed'),
+      response.replace('the recommendation is to delay', 'should the recommendation be to delay'),
+      response.replace('until they are closed.', 'until they are closed, but that recommendation is withdrawn.'),
+      response.replace('until they are closed.', 'until they are closed but that recommendation was withdrawn.'),
+      response.replace('until they are closed.', 'until they are closed; the recommendation has been withdrawn.'),
+      `${response} However, that recommendation has been retracted.`,
+      `${response} However, delaying the release is not recommended.`,
+      `${response} However, the team no longer recommends delaying the release.`,
+      response.replace('Given these outstanding gaps', 'These outstanding gaps are not real;'),
+    ]) {
+      const rejectedResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: rejected,
+        persistedResponse: rejected,
+        requestPersonaId: writer.id,
+      }));
+      expect(rejectedResult.checks.find(check => check.id === 'recommendation')?.passed, rejected).toBe(false);
+    }
+  });
+
+  it('does not invent a 30-minute agenda from a negated or wrong remainder', () => {
+    const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const base = [
+      '**Launch-Readiness Meeting Agenda (30 min)**',
+      '**Agenda**',
+      '| Time | Topic | Decision Required |',
+      '|---|---|---|',
+      '| 10 min | Product | Decide scope |',
+      '| 15 min | QA and Support | Decide readiness |',
+      '*The final 5 minutes are reserved for action-item assignment.*',
+    ].join('\n');
+    const scored = (response: string): boolean => scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: assistant.id,
+    })).checks.find(item => item.id === 'duration-blocks')?.passed ?? false;
+
+    expect(scored(base)).toBe(true);
+    expect(scored(base.replace('are reserved', 'are not reserved'))).toBe(false);
+    expect(scored(base.replace('final 5 minutes', 'final 4 minutes'))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      '## Pre-read Checklist\n- The final 5 minutes are reserved for document review.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'If leadership approves, the final 5 minutes are reserved for action items.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items, but actually not.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items — this is false.',
+    ))).toBe(false);
+    for (const deniedRemainder of [
+      'The final 5 minutes are reserved for action items, subject to leadership approval.',
+      'The final 5 minutes are reserved for action items, except that this reservation is cancelled.',
+      'The final 5 minutes are reserved for action items — cancelled.',
+      'For reference only: the final 5 minutes are reserved for action items.',
+      'Alternative only, excluded from this plan: the final 5 minutes are reserved for action items.',
+      'Once leadership approves, the final 5 minutes are reserved for action items.',
+      'When leadership approves, the final 5 minutes are reserved for action items.',
+      'Only after leadership approval are the final 5 minutes reserved for action items.',
+    ]) {
+      expect(scored(base.replace(
+        '*The final 5 minutes are reserved for action-item assignment.*',
+        deniedRemainder,
+      )), deniedRemainder).toBe(false);
+    }
+    expect(scored(`${base}\nThis reservation was subsequently cancelled.`)).toBe(false);
+    expect(scored(`${base}\nCorrection: no time is reserved for action items.`)).toBe(false);
+    expect(scored(`${base}\nUpdate: cancel that reservation.`)).toBe(false);
+    expect(scored(`${base}\nUpdate: this reservation no longer applies.`)).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. Update: that reservation no longer applies.',
+    ))).toBe(false);
+    expect(scored(`${base}\nThat reservation has since been withdrawn.`)).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. This reservation is no longer in effect.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. Update: cancel that reservation.',
+    ))).toBe(false);
+
+    const decimalAgenda = base
+      .replace('| 10 min | Product | Decide scope |', '| Product | 1.1 min | Decide scope |')
+      .replace('| 15 min | QA and Support | Decide readiness |', '| QA and Support | 23.9 min | Decide readiness |');
+    expect(scored(decimalAgenda)).toBe(true);
+
+    const decisionHeaderOnly = base
+      .replace('| 10 min | Product | Decide scope |', '| 10 min | Product | TBD |')
+      .replace('| 15 min | QA and Support | Decide readiness |', '| 15 min | QA and Support | None |');
+    const decisionResult = scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response: decisionHeaderOnly,
+      persistedResponse: decisionHeaderOnly,
+      requestPersonaId: assistant.id,
+    }));
+    expect(decisionResult.checks.find(item => item.id === 'decisions')?.passed).toBe(false);
+    for (const invalidDecision of [
+      'We did not approve launch',
+      'Never approve launch',
+      'Could approve launch',
+      'Would decide later',
+      'Confirm scope remains TBD',
+      'Approve later — TBD',
+      'Confirm scope remains undecided',
+      'Make no final choice',
+    ]) {
+      const invalidDecisionAgenda = base
+        .replace('| 10 min | Product | Decide scope |', `| 10 min | Product | ${invalidDecision} |`)
+        .replace('| 15 min | QA and Support | Decide readiness |', '| 15 min | QA and Support | None |');
+      const invalidDecisionResult = scorePersonaTrial(assistant, evidence({
+        prompt: assistant.prompt,
+        response: invalidDecisionAgenda,
+        persistedResponse: invalidDecisionAgenda,
+        requestPersonaId: assistant.id,
+      }));
+      expect(invalidDecisionResult.checks.find(item => item.id === 'decisions')?.passed, invalidDecision).toBe(false);
+    }
+  });
+
+  it('keeps exact runway and action variants fail-closed under contradiction', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const base = [
+      'Runway = Cash Balance ÷ Monthly Burn.',
+      'The runway is exactly 4 months.',
+      'The biggest assumption is constant burn and zero revenue.',
+      'Two actions to improve runway:',
+      '1. Audit and cut non-essential expenses.',
+      '2. Accelerate time-to-revenue by generating cash faster.',
+    ].join('\n');
+    const scored = (response: string) => scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(scored(base.replace('exactly 4', 'exactly 5')).checks.find(item => item.id === 'runway')?.passed).toBe(false);
+    const denied = base
+      .replace('Audit and cut', 'Do not audit or cut')
+      .replace('Accelerate time-to-revenue', 'Do not accelerate time-to-revenue');
+    expect(scored(denied).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Increase cash burn.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Accelerate the decline in revenue.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Generate cash outflows.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Generate a cash forecast and revenue report.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    for (const reportingOnly of [
+      'Generate a report on revenue.',
+      'Grow revenue reporting.',
+      'Raise an analysis of funding.',
+      'Generate a cash-flow report.',
+      'Generate a cash-flow summary.',
+      'Increase cash consumption.',
+      'Increase customer complaints.',
+      'Grow customer churn.',
+      'Raise funding costs.',
+      'Generate cash losses.',
+      'Generate a memo on revenue.',
+      'Raise customer acquisition costs.',
+      'Increase customer acquisition expenses.',
+      'Generate revenue losses.',
+    ]) {
+      expect(scored(base.replace(
+        'Accelerate time-to-revenue by generating cash faster.',
+        reportingOnly,
+      )).checks.find(item => item.id === 'two-actions')?.passed, reportingOnly).toBe(false);
+    }
+    const reportingOnlyPair = base
+      .replace('Audit and cut non-essential expenses.', 'Audit and cut the cost forecast.')
+      .replace('Accelerate time-to-revenue by generating cash faster.', 'Raise the funding report.');
+    expect(scored(reportingOnlyPair).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it('does not borrow swapped decision bases across Qwen-style priority table rows', () => {
+    const general = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Order: 1) Production memory bug → 2) Close customer → 3) Repair onboarding friction.**',
+      '| Priority | Rank | Why this position |',
+      '|---|---|---|',
+      '| Memory bug | 1 | Reliability risk and churn make this urgent. |',
+      '| Close customer | 2 | Long-term ROI compounds over time. |',
+      '| Onboarding friction | 3 | Revenue and commercial momentum. |',
+      '**First Action Today** Triage the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: general.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const missingOnboardingBasis = response.replace(
+      '| Onboarding friction | 3 | Revenue and commercial momentum. |',
+      '| Onboarding friction | 3 | TBD |',
+    );
+    const missingBasisResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: missingOnboardingBasis,
+      persistedResponse: missingOnboardingBasis,
+      requestPersonaId: general.id,
+    }));
+    expect(missingBasisResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const disclaimedRationale = response
+      .replace('| Memory bug | 1 | Reliability risk and churn make this urgent. |', '| Memory bug | 1 | Churn; this is not a rationale. |')
+      .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue; this is not a rationale. |')
+      .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI; this is not a rationale. |');
+    const disclaimedResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: disclaimedRationale,
+      persistedResponse: disclaimedRationale,
+      requestPersonaId: general.id,
+    }));
+    expect(disclaimedResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const pseudoTable = response
+      .replace('|---|---|---|\n', '')
+      .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+      .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+    const pseudoTableResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: pseudoTable,
+      persistedResponse: pseudoTable,
+      requestPersonaId: general.id,
+    }));
+    expect(pseudoTableResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    for (const malformedSeparator of ['|---|', '| unrelated | row | before separator |\n|---|---|---|']) {
+      const malformedTable = response
+        .replace('|---|---|---|', malformedSeparator)
+        .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+        .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+      const malformedResult = scorePersonaTrial(general, evidence({
+        prompt: general.prompt,
+        response: malformedTable,
+        persistedResponse: malformedTable,
+        requestPersonaId: general.id,
+      }));
+      expect(malformedResult.checks.find(check => check.id === 'justification')?.passed, malformedSeparator).toBe(false);
+    }
+
+    for (const disclaimer of [
+      'Churn; not actually a rationale.',
+      'Churn; no rationale here.',
+      'Churn; this does not justify the ranking.',
+      'Not a rationale: churn matters.',
+      'TBD, probably churn.',
+      'TBC, probably churn.',
+      'Probably churn because it poses risk.',
+      'Tentatively, churn because it poses risk.',
+      'Churn, but it should not justify this position.',
+    ]) {
+      const disclaimedTable = response
+        .replace('Reliability risk and churn make this urgent.', disclaimer)
+        .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+        .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+      const disclaimedTableResult = scorePersonaTrial(general, evidence({
+        prompt: general.prompt,
+        response: disclaimedTable,
+        persistedResponse: disclaimedTable,
+        requestPersonaId: general.id,
+      }));
+      expect(disclaimedTableResult.checks.find(check => check.id === 'justification')?.passed, disclaimer).toBe(false);
+    }
+  });
+});
+
+describe('Qwen Flash Next exact-response regressions', () => {
+  const persona = (id: string) => {
+    const match = PERSONA_CASES.find(candidate => candidate.id === id);
+    if (!match) throw new Error(`Missing canonical persona ${id}`);
+    return match;
+  };
+
+  const scoreResponse = (
+    id: string,
+    response: string,
+    overrides: Partial<PersonaTrialEvidence> = {},
+  ) => {
+    const acceptanceCase = persona(id);
+    return scorePersonaTrial(acceptanceCase, evidence({
+      prompt: acceptanceCase.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: acceptanceCase.id,
+      ...overrides,
+    }));
+  };
+
+  it('accepts the exact ordered and justified Qwen prioritization response', () => {
+    const response = [
+      '**Recommended Order:** Investigate memory bug → Repair onboarding → Close customer.',
+      '',
+      '**Rationale:**',
+      'The production memory bug is the only item that threatens your existing user base, potentially causing data loss or instability. Fixing it first removes active harm. Onboarding repair is the highest-leverage growth lever; since closing one new customer provides only one data point, improving onboarding ensures you can capture the *next* five. The customer close is urgent but likely has a natural deadline or existing momentum. It should be your primary focus *after* stabilizing production, but not before, as a system failure during a critical pitch is catastrophic.',
+      '',
+      "**Today's First Action:**",
+      'Reproduce the production memory bug in a staging environment with a test user dataset.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'ordered-plan')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('accepts rationale expressed as one Why bullet per supplied priority', () => {
+    const response = [
+      '## Recommended order',
+      '1. Investigate the production memory bug',
+      '2. Close one customer',
+      '3. Repair onboarding friction',
+      '## Why',
+      '- **Memory bug first:** production reliability is the only item with time-sensitive downside.',
+      '- **Customer second:** one close is a concrete, short-cycle outcome.',
+      '- **Onboarding third:** friction reduction compounds over time and its cost is gradual.',
+      '## First action today',
+      'Open a production investigation ticket.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('accepts milestone-local dependencies and explicit Owner role assignments', () => {
+    const response = [
+      '## Milestones & Dependencies',
+      '**M1: Native packaging**',
+      '- **Dependencies:** None.',
+      '- **Owner:** Platform Engineering Lead',
+      '**M2: Local model integration**',
+      '- **Dependencies:** Depends on M1.',
+      '- **Owner:** Backend Infrastructure Engineer',
+      '## Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
+  });
+
+  it('accepts milestone-local Depends on labels emitted by Qwen', () => {
+    const response = [
+      '### Milestones & Dependencies',
+      '**M1: Native packaging**',
+      '* **Depends on:** N/A',
+      '**M2: Local model integration**',
+      '* **Depends on:** M1',
+      '### Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+
+    const denied = scoreResponse('project-manager', response.replace('**Depends on:** M1', '**Depends on:** does not depend on M1'));
+    expect(denied.checks.find(check => check.id === 'dependencies')?.passed).toBe(false);
+
+    const withdrawn = scoreResponse('project-manager', response.replace('**Depends on:** M1', '**No longer depends on:** M1'));
+    expect(withdrawn.checks.find(check => check.id === 'dependencies')?.passed).toBe(false);
+  });
+
+  it('accepts italic Owner labels as explicit role assignments', () => {
+    const response = [
+      '## Milestones',
+      'M2 depends on M1.',
+      '- *Owner*: DevOps Lead',
+      '- *Owner*: Backend Lead',
+      '## Risks & Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+
+    const result = scoreResponse('project-manager', response);
+    expect(result.checks.find(check => check.id === 'owners')?.passed).toBe(true);
+  });
+
+  it('accepts noun-phrase desired decisions in an explicit decision section', () => {
+    const response = [
+      '**Launch-readiness meeting agenda (30 minutes)**',
+      'Participants: Product, Engineering, QA, Support',
+      '| Time Block | Topic |',
+      '|---|---|',
+      '| 00:00-00:15 | Readiness review |',
+      '| 00:15-00:30 | Decision and actions |',
+      '**Desired Decisions**',
+      '- Go or No-Go for the launch date.',
+      '- Final confirmation of the production rollout sequence.',
+      '**Pre-read Checklist**',
+      '- [ ] Release evidence',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'decisions')?.passed).toBe(true);
+  });
+
+  it('accepts renegotiation and pre-sales as concrete runway actions', () => {
+    const response = [
+      'Cash divided by net monthly burn gives exactly 4 months of runway.',
+      'The biggest assumption is that burn stays constant and revenue remains zero.',
+      '**Two actions to extend runway:**',
+      '- **Cost reduction:** Renegotiate recurring expenses or cut discretionary spend.',
+      '- **Cash inflow:** Pre-sell services or accelerate accounts receivable.',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+  });
+
+  it('accepts lettered Researcher and Coder lane headings', () => {
+    const response = [
+      '#### Lane A: Researcher (Audit & Gap Analysis)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '#### Lane B: Coder (Remediation & Instrumentation)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+
+    const result = scoreResponse('coordinator', response);
+    expect(result.checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+  });
+
+  it('accepts a contains-no-files conclusion backed by an exhaustive receipt', () => {
+    const response = [
+      'The current virtual workspace contains no files.',
+      'An exhaustive workspace-rooted search returned no files.',
+      'Next engineering step: initialize the project foundation.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+  });
+
+  it('recognizes the exact retained Windows failures while still rejecting its invented assurance', () => {
+    const response = [
+      '**MEMO: Release Delay Recommendation**',
+      '',
+      '**Status Update:**',
+      'We originally planned to ship on Friday. Current testing results are mixed. API tests pass successfully. However, browser tests retain two failures on Windows. Additionally, the smart router has not been exercised without cloud credentials.',
+      '',
+      '**Recommendation:**',
+      'Delay the release until these identified gaps are fully closed. This ensures platform stability and proper router functionality across all environments before shipment.',
+      '',
+      '**Action Required:**',
+      'Address Windows browser test failures and complete unauthenticated smart router testing prior to finalizing the release schedule.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+    for (const resolvedClause of [
+      'browser tests retain two failures on Windows, but both were resolved.',
+      'browser tests retain two failures on Windows, but those failures were resolved.',
+    ]) {
+      const resolvedResponse = response.replace(
+        'browser tests retain two failures on Windows.',
+        resolvedClause,
+      );
+      const resolvedResult = scoreResponse('writer', resolvedResponse);
+      expect(
+        resolvedResult.checks.find(check => check.id === 'release-facts')?.passed,
+        resolvedClause,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact contiguous 30-minute Qwen agenda table without redundant prose', () => {
+    const response = [
+      '| Time Block | Duration | Topic & Lead | Desired Decision / Output |',
+      '|---|---|---|---|',
+      '| 0:00–0:05 | 5 min | **Welcome & Launch Criteria Review** (Product) | Confirm shared definition of “launch-ready”; align on go/no-go gate criteria |',
+      '| 0:05–0:13 | 8 min | **Engineering Status & Open Items** (Engineering) | Approve code freeze or identify blocking defects with owners and target resolution times |',
+      '| 0:13–0:21 | 8 min | **QA Coverage & Exit Report** (QA) | Sign off on test plan completion or authorize conditional pass with explicit exceptions and mitigation owners |',
+      '| 0:21–0:27 | 6 min | **Support Readiness & Rollout Plan** (Support) | Approve support runbook, escalation paths, and phased rollout percentages |',
+      '| 0:27–0:30 | 3 min | **Go/No-Go Decision & Next Steps** (Product) | Recorded launch decision with owner assignments and follow-up checkpoint time |',
+      '',
+      '### Pre-Read Checklist',
+      '- [ ] Engineering: open P0/P1 defects with assignees',
+      '- [ ] QA: final test execution summary',
+      '- [ ] Product: launch feature set',
+      '- [ ] Support: support runbook',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    const supportingSchedule = scoreResponse(
+      'executive-assistant',
+      response.replace(
+        '- [ ] Product: launch feature set',
+        '- [ ] Product: launch schedule and scope',
+      ),
+    );
+    expect(supportingSchedule.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    for (const invalidResponse of [
+      response.replace('\n\n### Pre-Read', '\nMeeting duration: 45 minutes.\n\n### Pre-Read'),
+      response.replace('\n\n### Pre-Read', '\nThis table is illustrative only and is not the agenda.\n\n### Pre-Read'),
+      `${response}\n### Notes\nThis table is illustrative only and is not the agenda.`,
+      `${response}\n### Notes\nThis table is merely illustrative.`,
+      `${response}\n### Notes\nThis is only an example schedule, not the agenda.`,
+      `${response}\n### Notes\nDisregard the table; it is not the agenda.`,
+      `${response}\n### Notes\nThe table above should not be used as the agenda.`,
+      `${response}\n### Notes\nThe table is hypothetical only.`,
+      `${response}\n### Notes\nWithdraw the schedule above; it is not adopted.`,
+      `${response}\n### Notes\nCancel the schedule above; it is not adopted.`,
+      `${response}\n### Notes\nAbandon the agenda above; it should not be used.`,
+      `${response}\n### Notes\nRescind the agenda above; do not follow it.`,
+      `${response}\n### Notes\nSupersede the schedule above; use a different one.`,
+      response.replace(
+        '- [ ] Engineering: open P0/P1 defects with assignees',
+        '- [ ] Product: Rescind the agenda above; do not follow it.',
+      ),
+      `## Pre-Read only\n${response}`,
+    ]) {
+      const invalidResult = scoreResponse('executive-assistant', invalidResponse);
+      expect(
+        invalidResult.checks.find(check => check.id === 'duration-blocks')?.passed,
+        invalidResponse,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects a superficially exact agenda table whose duration cells contradict its ranges', () => {
+    const response = [
+      '| Time Block | Duration | Topic & Lead | Desired Decision / Output |',
+      '|---|---|---|---|',
+      '| 0:00–0:05 | 8 min | Welcome (Product) | Confirm criteria |',
+      '| 0:05–0:30 | 22 min | Decision (Engineering, QA, Support) | Approve launch |',
+      '',
+      '### Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, Support checklist',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+  });
+
+  it('accepts the exact constant-burn assumption and two labeled table actions', () => {
+    const response = [
+      '| Category | Detail |',
+      '| --- | --- |',
+      '| **Runway** | 4.00 months |',
+      '| **Formula** | Runway = Current Cash ÷ Monthly Burn Rate ($40,000 ÷ $10,000) |',
+      '| **Biggest Assumption** | The monthly burn rate remains perfectly constant for the entire period (no new hires, tool renewals, or operational cost changes). |',
+      '| **Improvement Action 1** | Secure a bridge loan or negotiate favorable payment terms to increase available cash. |',
+      '| **Improvement Action 2** | Enact temporary cost-reduction measures (e.g., freezing new hires, pausing non-critical subscriptions) to lower monthly burn. |',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    const exactCashWithKnownCost = scoreResponse(
+      'finance-owner',
+      response.replace(
+        'Enact temporary cost-reduction measures (e.g., freezing new hires, pausing non-critical subscriptions) to lower monthly burn.',
+        'Reduce monthly burn by renegotiating vendors.',
+      ),
+    );
+    const exactCostWithKnownCash = scoreResponse(
+      'finance-owner',
+      response.replace(
+        'Secure a bridge loan or negotiate favorable payment terms to increase available cash.',
+        'Generate revenue to increase available cash.',
+      ),
+    );
+    expect(result.checks.find(check => check.id === 'assumption')?.passed).toBe(true);
+    expect(exactCashWithKnownCost.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(exactCostWithKnownCash.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    for (const invalidResponse of [
+      response.replace('Enact temporary cost-reduction measures', 'Enact no cost-reduction measures'),
+      response.replace('Secure a bridge loan', 'Secure a credit report'),
+      response.replace('Secure a bridge loan', 'Arrange a financing report for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a report on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a briefing on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a workshop on financing for the board'),
+      response.replace('Secure a bridge loan', 'Schedule a financing review for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a consultation on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange an evaluation of financing options for the board'),
+      response.replace(
+        'Secure a bridge loan or negotiate favorable payment terms to increase available cash.',
+        'Secure a bridge loan; do not act on this recommendation.',
+      ),
+      `${response}\n### Notes\nThese actions are hypothetical only and are not recommendations.`,
+      `${response}\n### Notes\nThe proposed actions are hypothetical only and are not recommendations.`,
+      `${response}\n### Notes\nDo not implement either action.`,
+      `${response}\n### Notes\nThese are merely suggestions, not recommendations.`,
+      `${response}\n### Notes\nThe table is hypothetical only.`,
+      `${response}\n### Notes\nNeither action is recommended.`,
+      `${response}\n### Notes\nDisregard both actions.`,
+      `${response}\n### Notes\nActions 1 and 2 are hypothetical only.`,
+      `${response}\n### Notes\nEach action is only hypothetical.`,
+      `${response}\n### Notes\nBoth steps are hypothetical only.`,
+      `${response}\n### Notes\nNeither step is recommended.`,
+      `${response}\n### Notes\nThese options are hypothetical only.`,
+      `${response}\n### Notes\nNeither proposal should be implemented.`,
+      `${response}\n### Notes\nTreat these measures as hypothetical only.`,
+    ]) {
+      const invalidResult = scoreResponse('finance-owner', invalidResponse);
+      expect(
+        invalidResult.checks.find(check => check.id === 'two-actions')?.passed,
+        invalidResponse,
+      ).toBe(false);
+    }
+    for (const affirmedResponse of [
+      `${response}\n### Notes\nThese actions are not hypothetical; implement both.`,
+      `${response}\n### Notes\nDo not disregard these actions; implement both.`,
+      `${response}\n### Notes\nDo not withdraw both actions; implement them.`,
+      `${response}\n### Notes\nI did not retract these actions; implement both.`,
+      `${response}\n### Notes\nNeither action is hypothetical; both are recommended.`,
+      `${response}\n### Notes\nNeither of these actions are hypothetical; both are recommended.`,
+      `${response}\n### Notes\nNeither of those recommendations is illustrative; both are approved.`,
+      `${response}\n### Notes\nNeither of the proposals is hypothetical; both are selected.`,
+      `${response}\n### Notes\nThe table is illustrative of the approved actions; implement both.`,
+    ]) {
+      const affirmedResult = scoreResponse('finance-owner', affirmedResponse);
+      expect(
+        affirmedResult.checks.find(check => check.id === 'two-actions')?.passed,
+        affirmedResponse,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts the exact empty-workspace answer only with an exhaustive successful tool receipt', () => {
+    const response = [
+      'The workspace is empty.',
+      '',
+      '**What the tool established:**',
+      '- A single successful search of the workspace returned no files whatsoever.',
+      '- Therefore, there is nothing to inspect, no codebase to modify, and no evidence of prior artifacts in this workspace.',
+      '',
+      'One next engineering step:',
+      '- [ ] Verify the workspace path.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+    const missingReceipt = scoreResponse('coder', response, { toolsUsed: [] });
+    const contradicted = scoreResponse(
+      'coder',
+      `${response}\nCorrection: this is false; the workspace is not empty.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    const retracted = scoreResponse(
+      'coder',
+      `${response}\nCorrection: the earlier empty-workspace statement was false.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    const equivalentContradictions = [
+      'Correction: there are files.',
+      'Correction: files were found.',
+      'Actually, there are files.',
+      'Correction: README.md exists.',
+      'Correction: that statement was false.',
+      'Correction: that conclusion was wrong.',
+      'Correction: that finding was incorrect.',
+      'Correction: I retract that conclusion.',
+      'I retract that conclusion.',
+      'Correction: disregard the previous conclusion.',
+      'Update: that takeaway was incorrect.',
+      'I take that back.',
+      'That conclusion was wrong.',
+    ].map(tail => scoreResponse(
+      'coder',
+      `${response}\n${tail}`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    ));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+    expect(missingReceipt.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    expect(contradicted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    expect(retracted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    for (const contradiction of equivalentContradictions) {
+      expect(contradiction.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    }
+    for (const reaffirmation of [
+      'Actually, no files were found.',
+      'Correction: no files were found.',
+    ]) {
+      const reaffirmed = scoreResponse('coder', `${response}\n${reaffirmation}`, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      });
+      expect(
+        reaffirmed.checks.find(check => check.id === 'empty-result')?.passed,
+        reaffirmation,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts the three exact Qwen prioritization forms from the f399ee2d gate', () => {
+    const responses = [
+      [
+        '## Order & Plan',
+        '| Priority | Position | Why |',
+        '|---|---|---|',
+        '| Production memory bug | **1st** | Unfixed resource leaks degrade existing customers, risk an incident, and have the highest blast radius. |',
+        '| Close one customer | **2nd** | Revenue is time-sensitive and can be pursued once system stability is understood. |',
+        '| Repair onboarding friction | **3rd** | Highest leverage long-term, but least urgent in a single week. |',
+        '## First action for today',
+        'Reproduce the memory bug under controlled load.',
+      ].join('\n'),
+      [
+        '## Recommended order',
+        '1. Investigate the production memory bug',
+        '2. Close the customer deal',
+        '3. Repair onboarding friction',
+        '## Why',
+        '- Production defect first: it can cause data loss, outages, or customer harm.',
+        '- Deal second: sales timing matters and the customer conversation is stronger once the bug is understood.',
+        '- Onboarding friction third: it is a systemic fix requiring diagnosis, product/design coordination, and validation.',
+        '## First action today',
+        'Run a bounded memory-bug diagnostic.',
+      ].join('\n'),
+      [
+        '**Plan: Memory bug → customer close → onboarding repair**',
+        '1. **Memory bug first** — A production leak is a compounding liability and the highest outage risk.',
+        '2. **Customer close second** — Revenue is time-sensitive and the deal is bounded.',
+        '3. **Onboarding repair last** — This is a process problem, not a production incident, and better inputs will make the work cheaper.',
+        '**First action today:** Reproduce the memory bug.',
+      ].join('\n'),
+    ];
+
+    for (const response of responses) {
+      const result = scoreResponse('general-purpose', response);
+      expect(result.checks.find(check => check.id === 'ordered-plan')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'justification')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts established-facts and my-inference headings from the exact Qwen research answer', () => {
+    const response = [
+      '## Decision Table',
+      '| Criterion | SQLite + sqlite-vec | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Architecture | In-process | Client/server |',
+      '**Established facts (from primary sources):** sqlite-vec runs anywhere SQLite runs.',
+      '**My inference (not sourced):** SQLite likely gives a simpler desktop install.',
+      '## Recommendation',
+      'Choose SQLite + sqlite-vec for a single-user desktop store.',
+    ].join('\n');
+    const result = scoreResponse('researcher', response);
+    expect(result.checks.find(check => check.id === 'fact-inference')?.passed).toBe(true);
+  });
+
+  it('accepts all exact positive Qwen writer wording while retaining the closed-world facts', () => {
+    const responses = [
+      'We intended to ship on Friday. API tests are passing. Browser tests have two failures on Windows. The smart router has not been exercised without cloud credentials. Recommendation: We must delay the release until the Windows failures are resolved and the smart router is tested without cloud credentials.',
+      'API tests are all passing. Two browser-test failures persist on Windows. The smart router is not yet exercised without cloud credentials. Recommendation: Postpone the scheduled Friday shipment until the Windows failures and untested smart-router scenario are resolved.',
+      'Originally scheduled for Friday, the release requires a delay. API tests have passed successfully, browser tests exhibit two failures on Windows, and the smart router has not been exercised without cloud credentials. Recommendation: Defer the release until these gaps are closed.',
+    ];
+    for (const response of responses) {
+      const result = scoreResponse('writer', response);
+      for (const id of ['release-facts', 'router-fact', 'recommendation']) {
+        expect(result.checks.find(check => check.id === id)?.passed, `${id}: ${response}`).toBe(true);
+      }
+    }
+  });
+
+  it('accepts the exact Qwen clock-range agenda without a redundant duration column', () => {
+    const response = [
+      '**30-Minute Launch-Readiness Meeting Agenda**',
+      '| Time | Block | Participants |',
+      '|---|---|---|',
+      '| 0:00–0:05 | Kickoff and go/no-go criteria review | All |',
+      '| 0:05–0:11 | Product: feature scope | Product |',
+      '| 0:11–0:18 | Engineering readiness | Engineering, QA |',
+      '| 0:18–0:24 | QA results | QA, Engineering |',
+      '| 0:24–0:27 | Support readiness | Support, Product |',
+      '| 0:27–0:30 | Final go/no-go decision | All |',
+      '**Desired decisions**',
+      '- Confirm go/no-go for launch.',
+      '**Pre-read checklist**',
+      '- [ ] Product, Engineering, QA, and Support readiness summaries.',
+    ].join('\n');
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+  });
+
+  it('accepts exact Qwen runway decimals, action headings, and professional disclaimers', () => {
+    const responses = [
+      [
+        '| Metric | Value |', '|---|---|', '| Cash on Hand | $40,000.00 |',
+        '| Net Monthly Burn | $10,000.00 |', '| **Runway** | **4.00 months** |',
+        'Formula: Runway = Cash on Hand ÷ Net Monthly Burn.',
+        'Biggest assumption: monthly burn remains constant and revenue stays at zero.',
+        '**Actions to Improve Runway**',
+        '- **Reduce costs:** Cut discretionary subscriptions to lower monthly burn.',
+        '- **Generate cash inflow:** Pre-sell an offering or accelerate collections.',
+        'This is informational analysis, not professional financial advice.',
+      ].join('\n'),
+      [
+        '### Runway Calculation', '$40,000 / $10,000 = **4.0 months**',
+        'Formula: Runway = Cash / Net Monthly Burn.',
+        'Key assumption: burn remains constant and revenue remains at zero.',
+        '### Actions to Improve Runway',
+        '| Action | Mechanism |', '|---|---|',
+        '| Reduce Monthly Burn | Lower fixed costs. |',
+        '| Generate Revenue | Accelerate collections to increase cash. |',
+        'This analysis is informational and does not constitute professional financial advice.',
+      ].join('\n'),
+      [
+        '| Metric | Value |', '|---|---|', '| Cash | $40,000.00 |',
+        '| Monthly Burn | $10,000.00 |', '| Revenue | $0.00 |', '| **Runway** | **4.00 months** |',
+        'Formula: Runway = Cash ÷ Net Monthly Burn.',
+        'Biggest assumption: monthly burn remains constant.',
+        '## Two Actions to Improve Runway',
+        '- **Reduce Costs:** Eliminate non-essential expenses to lower monthly burn.',
+        '- **Increase Cash Inflow:** Accelerate customer payments or pre-sell services.',
+        'This is AI-generated informational content and not professional financial advice.',
+      ].join('\n'),
+    ];
+    for (const response of responses) {
+      const result = scoreResponse('finance-owner', response);
+      expect(result.checks.find(check => check.id === 'runway')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts the exact September Qwen plan with modal details and compounding risk', () => {
+    const exactLines = [
+      '1. **Memory bug first (Day 1, time-boxed).** A production leak is compounding: it can destabilize other features, drain engineering capacity with surprise incidents, and a crash during the customer evaluation window could kill the deal outright.',
+      '2. **Customer close second (Days 2–4).** Revenue-generating and time-sensitive, but deliberately ranked below the bug so the close happens on stable infrastructure.',
+      '3. **Onboarding friction last (Day 5, diagnostic).** Important but lowest urgency: the customer onboarding session reveals exactly where the friction lives. Fixing friction against one real funnel is engineering.',
+    ];
+    const baselineLines = [
+      '1. **Memory bug first** — A production leak is a compounding liability and the highest outage risk.',
+      '2. **Customer close second** — Revenue is time-sensitive and the deal is bounded.',
+      '3. **Onboarding repair last** — This is a process problem, and better inputs will make the work cheaper.',
+    ];
+
+    for (const [label, lines] of [
+      ['memory detail', [exactLines[0], baselineLines[1], baselineLines[2]]],
+      ['customer detail', [baselineLines[0], exactLines[1], baselineLines[2]]],
+      ['onboarding detail', [baselineLines[0], baselineLines[1], exactLines[2]]],
+      ['complete answer', exactLines],
+    ] as const) {
+      const response = [
+        '**Order: memory bug → customer close → onboarding repair.**',
+        '**Why this order**',
+        ...lines,
+        "**Today's first action**",
+        'Capture a heap snapshot from the affected production service.',
+      ].join('\n');
+      const result = scoreResponse('general-purpose', response);
+      expect(result.checks.find(check => check.id === 'justification')?.passed, label).toBe(true);
+    }
+  });
+
+  it('accepts qualified decision headings and decision-labelled agenda table cells', () => {
+    const sectionResponse = [
+      '**Launch-Readiness Meeting — 30-Minute Agenda**',
+      'Participants: Product, Engineering, QA, Support',
+      '| Time | Block | Lead | Focus |',
+      '|---|---|---|---|',
+      '| 0:00–0:30 | Readiness | Product | Record go/no-go call |',
+      '**Desired decisions (must be resolved by end):**',
+      '- [ ] Go / no-go call for the launch',
+      '**Pre-read checklist:**',
+      '- [ ] Release evidence',
+    ].join('\n');
+    const tableResponse = [
+      '| Time | Block | Lead | Purpose & Desired Decision |',
+      '|---|---|---|---|',
+      '| 0–5 min | Opening | Product | **Decision:** Shared launch definition is agreed. |',
+      '| 5–30 min | Readiness | Engineering, QA, Support | **Decision:** Confirm final go/no-go. |',
+      '## Pre-read Checklist',
+      '- [ ] Release evidence',
+    ].join('\n');
+
+    for (const response of [sectionResponse, tableResponse]) {
+      const result = scoreResponse('executive-assistant', response);
+      expect(result.checks.find(check => check.id === 'decisions')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts checklist runway actions, secured cash inflow, and scenario projections', () => {
+    const responses = [
+      [
+        '| Metric | Value |', '|---|---|', '| Cash on hand | $40,000.00 |',
+        '| Monthly burn (net) | $10,000.00 |', '| Revenue | $0.00 |', '| **Runway** | **4.00 months** |',
+        '**Formula:** Runway = Cash ÷ Net monthly burn.',
+        '**Biggest assumption:** Burn is constant and revenue remains zero.',
+        '## Actions to Extend Runway',
+        '- [ ] **Reduce monthly burn:** Cut controllable operating expenses. Each $1,000/month removed adds ~0.4 months of runway.',
+        '- [ ] **Generate cash inflow:** Introduce revenue through pre-sales.',
+      ].join('\n'),
+      [
+        'Runway: 4 months',
+        'Formula: Runway = Cash / Net Monthly Burn.',
+        'Biggest assumption: burn remains constant and revenue remains zero.',
+        'Actions that improve runway:',
+        '- Reduce monthly burn by cutting non-essential operating expenses.',
+        '- Secure short-term cash inflows through early invoice collection or advance sales.',
+      ].join('\n'),
+    ];
+
+    for (const response of responses) {
+      const result = scoreResponse('finance-owner', response);
+      expect(result.checks.find(check => check.id === 'runway')?.passed, response).toBe(true);
+      expect(result.checks.find(check => check.id === 'two-actions')?.passed, response).toBe(true);
+    }
+  });
+
+  it('accepts the latest Qwen prioritization rationale for a deliberately deferred sale', () => {
+    const response = [
+      '## Order',
+      '1. **Production memory bug**',
+      '2. **Onboarding friction**',
+      '3. **Close one customer**',
+      '## Why this order',
+      '**The bug goes first** because it is the only priority with compounding downside and can degrade toward a crash.',
+      '**Onboarding friction is second** because if the leak touches the onboarding path, fixing it removes friction and stabilizes production in one motion.',
+      '**The sale closes third** because procurement, legal, and sign-off usually give it the longest real timeline, so a day of slack rarely kills it.',
+      '## First action today',
+      'Reproduce the memory bug under a profiler.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const deniedSaleBasis = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'because procurement, legal, and sign-off usually give it the longest real timeline, so a day of slack rarely kills it.',
+        'but there is no rationale or decision basis for placing it third.',
+      ),
+    );
+    expect(deniedSaleBasis.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const speculativeOnboardingBasis = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'the result might possibly improve onboarding.',
+      ),
+    );
+    expect(speculativeOnboardingBasis.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const contradictedOnboardingPremise = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'fixing it removes friction and stabilizes production, but the leak does not touch onboarding.',
+      ),
+    );
+    expect(contradictedOnboardingPremise.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const falseOnboardingPremise = scoreResponse(
+      'general-purpose',
+      response.replace(
+        'fixing it removes friction and stabilizes production in one motion.',
+        'fixing it removes friction and stabilizes production in one motion, but this premise is false.',
+      ),
+    );
+    expect(falseOnboardingPremise.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+  });
+
+  it('accepts the exact Qwen rationale when the second priority follows a completed first priority', () => {
+    const response = [
+      '1. Investigate the production memory bug',
+      '2. Close the customer',
+      '3. Repair onboarding friction',
+      'Prioritizing the production bug first minimizes operational risk and prevents the issue from affecting existing customers or consuming engineering bandwidth unexpectedly.',
+      'Once stability is confirmed, closing the customer takes precedence over onboarding because it directly impacts immediate revenue and validates the current product state.',
+      'Onboarding friction is important for retention but is typically a process improvement that can be addressed after immediate revenue and stability risks are mitigated.',
+      'First Action for Today: Reproduce the production memory bug in a controlled environment.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const speculativeSequence = scoreResponse(
+      'general-purpose',
+      response.replace('Once stability is confirmed,', 'If stability might be confirmed,'),
+    );
+    expect(speculativeSequence.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+  });
+
+  it('accepts the latest Qwen writer phrasing for two persistent Windows failures', () => {
+    const response = [
+      'We had planned to ship on Friday. API tests currently pass.',
+      'However, browser tests remain in a state of failure, with two specific issues persisting on Windows.',
+      'The smart router has not been exercised without cloud credentials.',
+      'Recommendation: Delay the release until these technical gaps are fully closed.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    for (const update of [
+      'Update: both Windows browser-test failures have now been resolved.',
+      'Update: both Windows browser-test failures have now been eliminated.',
+      'Update: both Windows browser-test failures are gone.',
+      'Update: Windows browser testing is now clean.',
+      'Update: neither Windows browser-test failure remains.',
+      'Update: We waited until the Windows browser-test failures were resolved.',
+      'Update: Release was delayed until browser testing was clean.',
+    ]) {
+      const retracted = scoreResponse('writer', `${response}\n${update}`);
+      expect(retracted.checks.find(check => check.id === 'release-facts')?.passed, update).toBe(false);
+    }
+  });
+
+  it('classifies the exact Qwen writer phrasing without hiding its unsupported assurance', () => {
+    const response = [
+      'We originally planned to ship this Friday. Current status indicates API tests are passing.',
+      'However, browser tests are currently failing two cases on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved technical gaps, the recommendation is to delay the release until all issues are closed.',
+      'This ensures stability and prevents potential failures in unsupported environments.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+  });
+
+  it('accepts the latest exact Qwen writer memo without weakening negation handling', () => {
+    const response = [
+      '**MEMORANDUM**',
+      '**Subject:** Release Status Update and Recommendation',
+      'Current planning targets a Friday ship date. API tests have passed successfully.',
+      'However, browser testing reveals two outstanding failures on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, the recommendation is to delay the release until all identified issues are resolved and tested.',
+      'Proceeding as scheduled is not advised until these specific validation criteria are met.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    for (const id of ['release-facts', 'router-fact', 'recommendation', 'no-new-claims']) {
+      expect(result.checks.find(check => check.id === id)?.passed, id).toBe(true);
+    }
+
+    for (const [rejected, failedCheck] of [
+      [response.replace('reveals two outstanding failures', 'does not reveal two outstanding failures'), 'release-facts'],
+      [response.replace('the recommendation is to delay', 'the recommendation is not to delay'), 'recommendation'],
+      [response.replace('until all identified issues are resolved and tested', 'until all identified issues are not resolved'), 'recommendation'],
+      [`${response}\nUpdate: there are no outstanding browser-test failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: there are zero outstanding browser-test failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: the two issues were false positives.`, 'release-facts'],
+      [`${response}\nUpdate: neither of the two browser-test failures is real.`, 'release-facts'],
+      [`${response}\nUpdate: those two issues turned out to be false positives.`, 'release-facts'],
+      [`${response}\nUpdate: the two browser failures proved invalid.`, 'release-facts'],
+      [`${response}\nUpdate: browser testing now shows no failures on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: browser-test failures are absent on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: the browser failures no longer exist.`, 'release-facts'],
+      [`${response}\nUpdate: no browser failures remain on Windows.`, 'release-facts'],
+      [`${response}\nUpdate: not one of the two browser-test failures is genuine.`, 'release-facts'],
+      [`${response}\nHowever, postponing the release is not recommended.`, 'recommendation'],
+      [`${response}\nHowever, deferring the release is not recommended.`, 'recommendation'],
+      [`${response}\nHowever, that delay recommendation no longer applies.`, 'recommendation'],
+      [`${response}\nHowever, that recommendation is no longer valid.`, 'recommendation'],
+      [`${response}\nUpdate: the prior recommendation was reversed.`, 'recommendation'],
+      [`${response}\nUpdate: the delay recommendation has been rescinded.`, 'recommendation'],
+      [`${response}\nUpdate: the delay was rejected.`, 'recommendation'],
+      [`${response}\nUpdate: we now recommend shipping Friday.`, 'recommendation'],
+      [`${response}\nUpdate: proceed with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we should ship Friday as planned.`, 'recommendation'],
+      [`${response}\nUpdate: the decision is to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: release Friday as planned.`, 'recommendation'],
+      [`${response}\nUpdate: the delay is no longer necessary.`, 'recommendation'],
+      [`${response}\nUpdate: we rescind the delay recommendation.`, 'recommendation'],
+      [`${response}\nUpdate: management rejected postponing the release.`, 'recommendation'],
+      [`${response}\nUpdate: the release is approved for Friday.`, 'recommendation'],
+      [`${response}\nUpdate: we are going ahead with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we will go ahead with the Friday release.`, 'recommendation'],
+      [`${response}\nUpdate: we intend to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the team decided to ship Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the release remains scheduled for Friday.`, 'recommendation'],
+      [`${response}\nUpdate: Friday is still the ship date.`, 'recommendation'],
+      [`${response}\nUpdate: we are shipping Friday.`, 'recommendation'],
+      [`${response}\nUpdate: we are releasing Friday.`, 'recommendation'],
+      [`${response}\nUpdate: the ship date remains Friday.`, 'recommendation'],
+    ] as const) {
+      const rejectedResult = scoreResponse('writer', rejected);
+      expect(rejectedResult.checks.find(check => check.id === failedCheck)?.passed, rejected).toBe(false);
+    }
+
+    for (const valid of [
+      `${response}\nWe will release once the identified issues are resolved.`,
+      `${response}\nProceed with the Friday release only after all identified issues are resolved.`,
+      `${response}\nRelease Friday if all identified issues are resolved.`,
+      response.replace(
+        'Given these unresolved gaps, the recommendation is to delay the release until all identified issues are resolved and tested.',
+        'Recommendation: delay the release until there are no browser-test failures on Windows and the smart router is tested without cloud credentials.',
+      ),
+    ]) {
+      expect(scoreResponse('writer', valid).score, valid).toBe(100);
+    }
+  });
+
+  it('scores the post-hardening live Qwen writer memo without accepting its invented risk', () => {
+    const response = [
+      '**MEMO**',
+      '**Subject:** Friday Release Delay Recommendation',
+      'Our planned Friday shipment requires postponement. While API tests pass, two browser test failures remain on Windows.',
+      'Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these unresolved gaps, we recommend delaying the release until all issues are fully addressed and validated.',
+      'Proceeding without closure on these items risks stability.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+  });
+
+  it('accepts the latest Qwen recommendation phrasing but rejects its appended assurance', () => {
+    const response = [
+      'Our initial plan targeted a Friday shipment. Currently, API tests pass successfully.',
+      'However, browser tests exhibit two failures on Windows. Additionally, the smart router has not been exercised without cloud credentials.',
+      'Given these outstanding technical gaps, the recommendation is to delay the release until they are resolved.',
+      'This ensures all components function as expected across supported environments before deployment.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+  });
+
+  it('keeps the current four-month runway separate from projected action scenarios', () => {
+    const response = [
+      'Runway = Cash / Net Monthly Burn',
+      'Runway = 40,000 / (10,000 - 0) = 4.00 months',
+      'Biggest assumption: Monthly burn remains constant at $10,000 and revenue stays at $0.00.',
+      'Actions to improve runway:',
+      '| Action | Expected Result |',
+      '|---|---|',
+      '| Cut discretionary spending by $2,000/mo | Burn drops to $8,000 and runway extends to 5.00 months |',
+      '| Generate $3,000/mo in early revenue | Net burn drops to $7,000 and runway extends to 5.71 months |',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    const wrongInputs = scoreResponse(
+      'finance-owner',
+      response.replace('(10,000 - 0) = 4.00', '(10,000 - 2,000) = 5.00'),
+    );
+    expect(wrongInputs.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+
+    const deniedEquation = scoreResponse(
+      'finance-owner',
+      `${response}\nCorrection: the 40,000 / (10,000 - 0) = 4.00 calculation is not the current runway.`,
+    );
+    expect(deniedEquation.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+  });
+
+  it('accepts the latest Qwen empty-workspace wording with an exhaustive receipt', () => {
+    const response = [
+      'The workspace inspection succeeded: an exhaustive search of the workspace (`**/*`) returned no files.',
+      'The workspace at the specified root is empty.',
+      'Recommended next engineering step: determine where the actual code lives.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const missingReceipt = scoreResponse('coder', response, { toolsUsed: [], sseEvents: [] });
+    expect(missingReceipt.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('accepts descriptive Qwen lane headings with canonical roles in parentheses', () => {
+    const response = [
+      '### Lane 1: Production-Readiness Auditor (Researcher)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '### Lane 2: Production Readiness Remediator (Coder)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+
+    const result = scoreResponse('coordinator', response);
+    expect(result.checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+
+    const denied = scoreResponse(
+      'coordinator',
+      response.replace('(Researcher)', '(Not a Researcher)'),
+    );
+    expect(denied.checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+  });
+
+  it('accepts the exact 8c7cbe9c Qwen priority, dependency, and finance evidence', () => {
+    const prioritization = [
+      'Here is the recommended order and execution plan.',
+      '1. Investigate production memory bug',
+      'Basis: A named production bug is treated as an active issue by default, creating immediate risk to system stability and potentially blocking other workflows, so its investigation must take precedence over revenue and process tasks.',
+      '2. Close one customer',
+      'Basis: Revenue generation directly impacts immediate business survival and weekly goals, making it the highest priority after system stability is secured, though it does not carry the same operational risk as a production bug.',
+      '3. Repair onboarding friction',
+      'Basis: Process improvements for future customers are important for long-term efficiency but do not impact the current week’s immediate revenue or system stability, so they can be addressed last.',
+      '**First Action for Today:** Open the application logs and monitoring dashboards.',
+    ].join('\n\n');
+    expect(
+      scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(true);
+
+    const projectPlan = [
+      '| ID | Milestone | Description | Dependency |',
+      '| :--- | :--- | :--- | :--- |',
+      '| **M1** | **Native Packaging & Infra** | Build native bundles. | None |',
+      '| **M2** | **Core Logic Integration** | Verify the smart router. | M1 |',
+      '| **M3** | **Windows Validation** | Execute runtime tests. | M2 |',
+      '| **M4** | **Release Candidate Sign-off** | Final go/no-go. | M3 |',
+      'Owners: Build Engineer, Core Developer, QA Manager, Project Manager.',
+      'Risks: binary size, Windows permissions, and router latency.',
+      'Exit criteria: installers build and all validation passes.',
+    ].join('\n');
+    expect(
+      scoreResponse('project-manager', projectPlan).checks.find(check => check.id === 'dependencies')?.passed,
+    ).toBe(true);
+
+    const finance = [
+      '**Formula:**',
+      'Runway (months) = Total Cash / Net Monthly Burn',
+      '**Calculation:**',
+      'Since revenue is zero, Net Monthly Burn equals Gross Monthly Burn ($10,000).',
+      '$40,000 / $10,000 = **4.00 months**',
+      '**Biggest Assumption:** The current monthly burn rate remains exactly $10,000 and revenue remains zero.',
+      '**Actions to Improve Runway:**',
+      '| Action Type | Specific Action | Mechanism |',
+      '|---|---|---|',
+      '| **Cost Reduction** | Cancel non-critical subscriptions. | Lowers monthly burn. |',
+      '| **Cash Inflow** | Secure upfront customer payments. | Increases cash balance. |',
+      '*Disclaimer: This analysis is informational and does not constitute professional financial advice.*',
+    ].join('\n');
+    const financeScore = scoreResponse('finance-owner', finance);
+    expect(financeScore.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(financeScore.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    for (const invalidCostAction of [
+      'Do not cancel non-critical subscriptions.',
+      'Cancel no non-critical subscriptions.',
+      'Cancel subscription estimates in the forecast.',
+      'Cancel the report about non-critical subscriptions.',
+      'Cancel the meeting about non-critical subscriptions.',
+      'Drop the discussion about redundant tools.',
+      'Eliminate the review of unused licenses.',
+      'Cancel the email about non-critical subscriptions.',
+      'Drop the note about redundant tools.',
+      'Eliminate the agenda item about unused licenses.',
+      'Cancel subscription spreadsheets.',
+      'Cancel subscriptions without actually canceling them.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          finance.replace('Cancel non-critical subscriptions.', invalidCostAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        invalidCostAction,
+      ).toBe(false);
+    }
+    for (const invalidCashAction of [
+      'Secure a report about upfront customer payments.',
+      'Secure a meeting about upfront customer payments.',
+      'Secure an analysis of upfront customer payments.',
+      'Secure the cash inflow forecast.',
+      'Secure recurring revenue projections.',
+      'Secure the cash inflow spreadsheet.',
+      'Secure recurring revenue notes.',
+      'Secure upfront customer payment records.',
+      'Secure upfront customer payments without collecting them.',
+      'Secure upfront customer payments or not.',
+      'Secure recurring revenue while not actually generating it.',
+      'Secure upfront customer payments or credit forecast.',
+      'Secure cash inflows through preparing a report.',
+      'Secure upfront customer payments through a reporting dashboard.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          finance.replace('Secure upfront customer payments.', invalidCashAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        invalidCashAction,
+      ).toBe(false);
+    }
+  });
+
+  it('scores the exact 9c497360 Qwen acceptance language without lexical false negatives', () => {
+    const prioritization = [
+      '### Recommended Order',
+      '1. **Close one customer**',
+      '2. **Repair onboarding friction**',
+      '3. **Investigate production memory bug**',
+      'Prioritize **Customer Close** today because revenue momentum and pipeline health typically require immediate, time-sensitive negotiation or follow-up that cannot be deferred without risk.',
+      'Address **Onboarding Friction** next, as it represents a compounding operational drag; fixing it this week prevents future churn and support volume, yielding higher long-term value than a bug fix alone.',
+      'Tackle the **Memory Bug** last, unless it causes an outage or data corruption. Production bugs are often isolated and can be mitigated with workarounds or monitoring, whereas sales delays lose money immediately, and onboarding friction blocks all new users.',
+      'First Action for Today: Identify the highest-probability deal and send a tailored follow-up.',
+    ].join('\n');
+    expect(scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed).toBe(true);
+
+    const finance = [
+      'Runway = Cash / Net Monthly Burn',
+      'Runway = 40,000 / (10,000 - 0) = 4.00 months',
+      'Biggest assumption: The monthly burn rate remains static at $10,000 for the entire duration.',
+      'Actions to improve runway:',
+      '| Action | Expected Result |',
+      '|---|---|',
+      '| Cut discretionary spending by $2,000/mo | Burn drops to $8,000 and runway extends to 5.00 months |',
+      '| Generate $3,000/mo in early revenue | Net burn drops to $7,000 and runway extends to 5.71 months |',
+    ].join('\n');
+    expect(scoreResponse('finance-owner', finance).checks.find(check => check.id === 'assumption')?.passed).toBe(true);
+
+    const coder = 'No files exist in the current virtual workspace, so no specific engineering step can be recommended based on existing code; the next logical step is to initialize the project structure with a basic file.';
+    expect(scoreResponse('coder', coder).checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+    expect(scoreResponse('coder', 'There is no next logical step.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step does not exist.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', "The next logical step isn't available.").checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step should not be to initialize anything.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step is not to initialize anything.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step should not be initialization.').checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', "The next logical step shouldn't be initialization.").checks.find(check => check.id === 'next-step')?.passed).toBe(false);
+    expect(scoreResponse('coder', 'The next logical step is not to initialize blindly but to inspect the logs.').checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+    expect(scoreResponse('coder', 'With no files present, the next logical step is to initialize the project structure.').checks.find(check => check.id === 'next-step')?.passed).toBe(true);
+
+    const coordinator = [
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      '### 2. Coder Lane (Remediation & Hardening)',
+      'Objective, inputs, deliverables, dependencies, and merge criteria.',
+      'The coordinator must verify evidence before accepting either result.',
+    ].join('\n');
+    expect(scoreResponse('coordinator', coordinator).checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+    const contradictedCoordinator = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — this is not a research lane',
+    );
+    expect(scoreResponse('coordinator', contradictedCoordinator).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const emptyResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — no research will be performed',
+    );
+    expect(scoreResponse('coordinator', emptyResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const inactiveResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — research is not performed',
+    );
+    expect(scoreResponse('coordinator', inactiveResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const clearResearchLane = coordinator.replace(
+      '### 1. Research Lane (Assessment & Gap Analysis)',
+      '### 1. Research Lane — no research blockers identified',
+    );
+    expect(scoreResponse('coordinator', clearResearchLane).checks.find(check => check.id === 'two-lanes')?.passed).toBe(true);
+    const absentLanes = 'No researcher lane is defined.\nNo coder lane is defined.';
+    expect(scoreResponse('coordinator', absentLanes).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+    const contractedAbsentLanes = "There isn't a researcher lane.\nThere isn't a coder lane.";
+    expect(scoreResponse('coordinator', contractedAbsentLanes).checks.find(check => check.id === 'two-lanes')?.passed).toBe(false);
+  });
+
+  it('classifies the exact 9c497360 writer variants and rejects unsupported assurance', () => {
+    const bounded = [
+      'We initially planned to ship this Friday. Current status: API tests have passed, but browser tests exhibit two persistent failures on Windows.',
+      'Additionally, the smart router has not yet been exercised without cloud credentials.',
+      'Due to these unresolved technical gaps, we recommend delaying the release until all testing deficiencies are fully closed.',
+    ].join('\n');
+    const boundedResult = scoreResponse('writer', bounded);
+    expect(boundedResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(boundedResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+
+    const unsupportedAssurance = `${bounded}\nThis ensures product stability prior to deployment.`;
+    expect(scoreResponse('writer', unsupportedAssurance).checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+
+    const alternate = [
+      'We initially planned to ship this Friday. While our API tests have passed, browser tests remain incomplete, exhibiting two failures specifically on Windows.',
+      'Additionally, the smart router has not yet been exercised without cloud credentials.',
+      'Due to these outstanding testing gaps, we recommend delaying the release until all issues are resolved and the system is fully validated.',
+    ].join('\n');
+    const alternateResult = scoreResponse('writer', alternate);
+    expect(alternateResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(alternateResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(true);
+  });
+
+  it('accepts the exact b052 Qwen canary writer facts', () => {
+    const responses = [
+      'We planned to ship this Friday. API tests have passed successfully. However, browser testing reveals two persistent failures on the Windows platform. Furthermore, the smart router has not yet been exercised without cloud credentials. Given these outstanding issues, we recommend delaying the release until the identified gaps are fully resolved.',
+      'Scheduled Date: Friday. API Testing: All tests passing. Browser Testing: Two failures persist on Windows. Smart Router: Not yet tested without cloud credentials. Recommendation: Delay the release until the identified gaps are closed.',
+      'The initial plan was to ship on Friday. Currently, API tests are passing. However, browser tests show two remaining failures on Windows, and the smart router has not been exercised without cloud credentials. Given these unresolved issues, the recommendation is to delay the release until all gaps are closed.',
+    ];
+
+    for (const response of responses) {
+      expect(
+        scoreResponse('writer', response).checks.find(check => check.id === 'release-facts')?.passed,
+        response,
+      ).toBe(true);
+    }
+
+    for (const contradicted of [
+      `${responses[1]} Update: API Testing: All tests passing except one.`,
+      `${responses[1]} Update: API Testing: All tests passing, but one failed.`,
+      `${responses[1]} Update: API tests passed with one exception.`,
+      `${responses[1]} Update: API Testing: All tests passing save one.`,
+      `${responses[1]} Update: API Testing: All tests passing apart from one.`,
+      `${responses[1]} Update: API Testing: All tests passing other than one.`,
+      `${responses[1]} Update: API Testing: All tests passing with one failure.`,
+      `${responses[1]} Update: API Testing: All tests passing although one failed.`,
+      `${responses[1]} Update: API Testing: All tests passing despite one failing.`,
+      `${responses[1]} Update: API Testing: All tests passing barring one.`,
+      `${responses[1]} Update: API Testing: All tests passing bar the login test.`,
+      `${responses[1]} Update: API Testing: All tests passing minus one.`,
+      `${responses[1]} Update: API Testing: All tests passing except for authentication.`,
+      `${responses[1]} Update: API Testing: All tests passing; one failed.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test remains red.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test errored.`,
+      `${responses[1]} Update: API Testing: All tests passing; one test broke.`,
+      `${responses[1]} Update: API Testing: All tests passing. One test failed.`,
+      `${responses[1]} Update: API Testing: All tests passing. However, one test remains red.`,
+    ]) {
+      expect(
+        scoreResponse('writer', contradicted).checks.find(check => check.id === 'release-facts')?.passed,
+        contradicted,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact b052 Qwen empty-workspace report with its future file examples', () => {
+    const response = [
+      'A single exhaustive workspace search (`**/*`) succeeded and returned no files.',
+      'The workspace at the given root is currently empty — no source files, configs, or docs exist to recommend a specific next engineering step from.',
+      'Next step: Add initial project files (e.g., start with a minimal source file plus a `README` or package manifest), then re-run inspection.',
+      'No files were created or edited; this is based solely on the successful read-only search above.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const conditionalRecommendation = scoreResponse(
+      'coder',
+      `${response}\nNext step: add README.md if it does not exist.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(
+      conditionalRecommendation.checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+
+    for (const contradiction of [
+      'There is a `README.md`.',
+      '`README.md` is there.',
+      '`README.md` can be seen.',
+      '`README.md` can be found.',
+      'It contains source code.',
+      '`README.md` remains in the root.',
+      '`README.md` is in the workspace.',
+      'The root has `README.md`.',
+      'Source code is present.',
+      'One file remains: `README.md`.',
+      "It isn't entirely empty; `README.md` remains.",
+      'Files remain in the workspace.',
+      '`README.md` sits in the root.',
+      'The root includes one file called `README.md`.',
+      'Next step: inspect `README.md`, which already exists.',
+    ]) {
+      const contradicted = scoreResponse('coder', `${response}\n${contradiction}`, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      });
+      expect(
+        contradicted.checks.find(check => check.id === 'empty-result')?.passed,
+        contradiction,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact 7ce5c3ee Qwen finance actions', () => {
+    const response = [
+      '| Metric | Value |',
+      '|---|---|',
+      '| Cash | $40,000.00 |',
+      '| Monthly Burn | $10,000.00 |',
+      '| Revenue | $0.00 |',
+      '| **Runway** | **4.00 months** |',
+      '',
+      '* **Formula:** Runway = Cash Balance / Net Monthly Burn.',
+      '* **Biggest Assumption:** This calculation assumes a constant net burn rate of $10,000.00 per month with zero revenue generation for the entire four-month period.',
+      '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+      '* **Action 2 (Cash Inflow):** Accelerate revenue collection from existing customers or secure external funding to increase the total cash balance.',
+    ].join('\n');
+
+    expect(
+      scoreResponse('finance-owner', response).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+
+    const deniedCostAction = response.replace(
+      'Identify and eliminate non-essential operating expenses',
+      'Do not eliminate non-essential operating expenses',
+    );
+    expect(
+      scoreResponse('finance-owner', deniedCostAction).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        response.replace(
+          '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+          '* **Action 1 (Cost Reduction):** Eliminate no operating expenses or costs.',
+        ),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const deniedAction of [
+      'Eliminate none of the operating expenses or costs.',
+      'Eliminate neither operating expenses nor costs.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          response.replace(
+            '* **Action 1 (Cost Reduction):** Identify and eliminate non-essential operating expenses or renegotiate vendor contracts to reduce the monthly burn rate.',
+            `* **Action 1 (Cost Reduction):** ${deniedAction}`,
+          ),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        deniedAction,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact 7ce5c3ee Qwen empty-workspace answer with an initialization recommendation', () => {
+    const response = [
+      'The exhaustive search confirmed that the workspace is empty.',
+      '',
+      'In the current virtual workspace (`C:\\temp\\workspace\\files`), no files exist.',
+      '',
+      'Next engineering step:',
+      '- [ ] Initialize the repository. You can start by creating a new project folder here and adding a basic project structure with a `README.md`.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    });
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+
+    const contradicted = scoreResponse(
+      'coder',
+      `${response}\nIn C:\\temp\\workspace\\files, one file exists: README.md.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(contradicted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+
+    const sameClauseContradiction = scoreResponse(
+      'coder',
+      response.replace('no files exist.', 'no files exist; README.md exists.'),
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    expect(sameClauseContradiction.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('accepts the exact b8cfabfb Qwen finance action labels', () => {
+    const response = [
+      '**Runway: 4.0 months**',
+      '**Formula:** Runway = Cash Balance / Net Monthly Burn',
+      '**Biggest Assumption:** The monthly burn rate remains constant at $10,000 and no new cash inflows occur.',
+      '**Actions to Improve Runway:**',
+      '1. **Reduce Expenses:** Cut non-essential operational costs to lower the monthly burn.',
+      '2. **Accelerate Revenue:** Secure recurring revenue to offset burn.',
+    ].join('\n');
+
+    expect(
+      scoreResponse('finance-owner', response).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        response.replace(
+          '1. **Reduce Expenses:** Cut non-essential operational costs to lower the monthly burn.',
+          '1. **Reduce Expenses:** Do not reduce expenses or cut costs.',
+        ),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const deniedCashAction of [
+      'Secure no recurring revenue to offset burn.',
+      'Secure zero recurring revenue to offset burn.',
+      'Secure neither recurring revenue nor cash inflow.',
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          response.replace('Secure recurring revenue to offset burn.', deniedCashAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        deniedCashAction,
+      ).toBe(false);
+    }
+  });
+
+  it('does not treat hypothetical future files as an empty-workspace contradiction', () => {
+    const response = [
+      'The workspace is empty: no files of any kind exist.',
+      'One next step is to seed the workspace.',
+      'Once files are present, I can inspect them.',
+    ].join('\n');
+    const evidence = {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    };
+
+    expect(
+      scoreResponse('coder', response, evidence).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace('Once files are present, I can inspect them.', 'README.md is present.'),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace(
+          'Once files are present, I can inspect them.',
+          'When I inspected the workspace, README.md was found.',
+        ),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+    expect(
+      scoreResponse(
+        'coder',
+        response.replace(
+          'Once files are present, I can inspect them.',
+          'Once files are present, I can inspect them, but README.md is already present.',
+        ),
+        evidence,
+      ).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(false);
+  });
+
+  it('accepts the exact 8a41cf50 Qwen prioritization, runway, and empty-workspace variants', () => {
+    const prioritizationVariants = [
+      [
+        '### Recommended Order',
+        '1. **Investigate the production memory bug**',
+        '2. **Close the customer**',
+        '3. **Repair onboarding friction**',
+        '### Justification',
+        '* **Priority 1: Production Memory Bug.** A production issue threatens user trust, potential data integrity, and system availability.',
+        '* **Priority 2: Close the Customer.** Revenue is the lifeblood of the business.',
+        '* **Priority 3: Repair Onboarding Friction.** While critical for long-term retention, onboarding fixes are typically less urgent than a live production bug or a closing deal.',
+        '### First Action for Today',
+        '**Reproduce and isolate the production memory bug.**',
+      ].join('\n'),
+      [
+        '### Recommended Order',
+        '1. **Investigate a production memory bug** (Critical Risk)',
+        '2. **Close one customer** (Immediate Revenue)',
+        '3. **Repair onboarding friction** (Long-term Conversion)',
+        '### Justification Plan',
+        '**Day 1–2: Contain the Bug.** Production instability threatens active customer trust and makes it the prerequisite for all other work.',
+        '**Day 3–4: Close the Customer.** Closing a deal generates immediate cash flow.',
+        '**Day 5: Repair Onboarding.** Friction in onboarding slows down future revenue and is a strategic fix for future efficiency.',
+        '### First Action for Today',
+        '**Set up real-time monitoring for the memory bug.**',
+      ].join('\n'),
+    ];
+    for (const response of prioritizationVariants) {
+      expect(
+        scoreResponse('general-purpose', response).checks.find(check => check.id === 'justification')?.passed,
+        response,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritizationVariants[0].replace(
+          'A production issue threatens user trust, potential data integrity, and system availability.',
+          'System availability is unaffected.',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+    for (const adverseAvailability of [
+      'The issue reduces system availability.',
+      'The issue degrades service availability.',
+    ]) {
+      expect(
+        scoreResponse(
+          'general-purpose',
+          prioritizationVariants[0].replace(
+            'A production issue threatens user trust, potential data integrity, and system availability.',
+            adverseAvailability,
+          ),
+        ).checks.find(check => check.id === 'justification')?.passed,
+        adverseAvailability,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritizationVariants[0].replace(
+          'A production issue threatens user trust, potential data integrity, and system availability.',
+          'The issue reduces the risk to system availability.',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+
+    const runway = [
+      '**Actions to Improve Runway**',
+      '1. **Cost Reduction**: Identify and cut non-essential operating expenses to lower the monthly burn rate.',
+      '2. **Cash Inflow**: Secure upfront revenue or short-term financing.',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', runway).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+
+    const emptyWorkspace = [
+      'Inspection completed successfully with one exhaustive workspace search (`**/*`).',
+      '**Files in this workspace: none.** The search returned "No files found," so this workspace is empty.',
+      '**Scaffold the project.** Since there is nothing to inspect, create an initial project structure; once files exist, further inspection becomes meaningful.',
+    ].join('\n');
+    expect(
+      scoreResponse('coder', emptyWorkspace, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      }).checks.find(check => check.id === 'empty-result')?.passed,
+    ).toBe(true);
+  });
+
+  it('rejects negated or reporting-only cost actions and ignores conditional future files', () => {
+    const cashAction = 'Secure upfront revenue to extend runway.';
+    for (const invalidCostAction of [
+      'Identify and cut no non-essential operating expenses.',
+      'Identify and cut zero operating expenses.',
+      'Identify and cut none of the non-essential operating expenses.',
+      'Identify and cut neither operating expenses nor costs.',
+      'Identify and cut absolutely no operating expenses.',
+      'Identify and cut not a single operating expense.',
+      'Identify and cut exactly 0 operating expenses.',
+      'Identify and reduce cost estimates in the forecast.',
+      'Identify and reduce operating cost baseline estimates in the forecast.',
+      'Identify and reduce operating cost baseline and quarterly team measurement estimates in the forecast.',
+      'Identify and cut operating expense reporting figures.',
+    ]) {
+      expect(
+        scoreResponse('finance-owner', `${invalidCostAction}\n${cashAction}`).checks.find(
+          check => check.id === 'two-actions',
+        )?.passed,
+        invalidCostAction,
+      ).toBe(false);
+    }
+
+    const evidence = {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      ],
+    };
+    for (const futureContext of [
+      'Once initialized, the workspace contains files.',
+      'When files exist, the workspace has files.',
+    ]) {
+      expect(
+        scoreResponse(
+          'coder',
+          `No files were found. This workspace is empty. ${futureContext}`,
+          evidence,
+        ).checks.find(check => check.id === 'empty-result')?.passed,
+        futureContext,
+      ).toBe(true);
+    }
+    for (const currentContext of [
+      'Once initialized yesterday, the workspace contains README.md.',
+      'When files were inventoried just now, README.md was found.',
+      'Once initialized, README.md exists.',
+      'When files existed, README.md was found.',
+      'When files exist now, the workspace has README.md.',
+      'Once files exist, package.json is present now.',
+      'Once initialized, README.md will still exist.',
+      'Once initialized, README.md will continue to exist.',
+      'When files can be inspected, README.md remains in the workspace.',
+    ]) {
+      expect(
+        scoreResponse(
+          'coder',
+          `No files were found. This workspace is empty. ${currentContext}`,
+          evidence,
+        ).checks.find(check => check.id === 'empty-result')?.passed,
+        currentContext,
+      ).toBe(false);
+    }
+    for (const validCostAction of [
+      'Identify and cut operating expenses, with no layoffs or service reduction.',
+      'Identify and cut operating costs with zero customer impact.',
+      'Identify and cut operating costs, then report the savings.',
+      'Identify and cut operating expenses and update the forecast.',
+    ]) {
+      expect(
+        scoreResponse('finance-owner', `${validCostAction}\n${cashAction}`).checks.find(
+          check => check.id === 'two-actions',
+        )?.passed,
+        validCostAction,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts exact 53db46aa Qwen persona answers without weakening negative controls', () => {
+    const prioritization = [
+      '## Justification Plan',
+      '| Priority | Why this position |',
+      '|---|---|',
+      '| **1. Production memory bug** | Production incidents risk reliability, customer trust, and downstream work. |',
+      '| **2. Close one customer** | Revenue should not wait on a non-blocking engineering investigation. |',
+      '| **3. Onboarding friction** | This is valuable but usually not as time-sensitive as production risk or a deal closing this week. |',
+    ].join('\n');
+    expect(
+      scoreResponse('general-purpose', prioritization).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'general-purpose',
+        prioritization.replace(
+          'This is valuable but usually not as time-sensitive as production risk or a deal closing this week.',
+          'Is it not as time-sensitive?',
+        ),
+      ).checks.find(check => check.id === 'justification')?.passed,
+    ).toBe(false);
+
+    const agenda = [
+      '**Desired Decisions**',
+      '- Go/no-go determination with named approvers from each group',
+      '- Acceptance or rejection of open defects against launch criteria',
+      '- Approval of the support escalation path and runbook',
+      '- Assignment of owners for any conditional (non-blocking) items',
+    ].join('\n');
+    expect(
+      scoreResponse('executive-assistant', agenda).checks.find(check => check.id === 'decisions')?.passed,
+    ).toBe(true);
+    for (const validDecision of [
+      'Approval of launch criteria with missing evidence documented',
+      'Assignment of owners for unavailable dependencies',
+      'Assignment of owners for dependencies currently unavailable',
+      'Approval of launch criteria despite evidence missing',
+    ]) {
+      expect(
+        scoreResponse('executive-assistant', `**Desired Decisions**\n- ${validDecision}`).checks.find(check => check.id === 'decisions')?.passed,
+        validDecision,
+      ).toBe(true);
+    }
+    expect(
+      scoreResponse('executive-assistant', '**Desired Decisions**\n- No decision required').checks.find(check => check.id === 'decisions')?.passed,
+    ).toBe(false);
+    for (const deniedDecision of [
+      'No approval of launch criteria',
+      'No acceptance or rejection of defects',
+      'Not an assignment of owners',
+      'No determination on launch readiness',
+      'Approval for launch is not granted',
+      'Assignment of owners was not made',
+      'Determination on readiness was not reached',
+      'Lack of approval of launch criteria',
+      'Absence of approval on launch criteria',
+      'Approval of launch criteria is not required',
+      'Approval for launch was denied',
+      'Assignment of owners was rejected',
+      "Approval for launch isn't granted",
+      'Confirmation of launch readiness was withheld',
+      'Selection of the launch date was revoked',
+      'Approval for launch failed',
+      'Assignment of owners failed',
+      'The approval for launch failed',
+      'Final approval for launch failed',
+      'Approval of launch criteria denied.',
+      'Assignment of owners rejected.',
+    ]) {
+      expect(
+        scoreResponse('executive-assistant', `**Desired Decisions**\n- ${deniedDecision}`).checks.find(check => check.id === 'decisions')?.passed,
+        deniedDecision,
+      ).toBe(false);
+    }
+
+    const actions = [
+      '## Actions That Extend Runway',
+      '- [ ] **Reduce cost base.** Renegotiate vendor contracts and cut discretionary spend to lower monthly burn.',
+      '- [ ] **Add recurring monthly revenue.** Convert one-time sales into subscriptions so net burn shrinks.',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', actions).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse(
+        'finance-owner',
+        actions.replace('Add recurring monthly revenue.', 'Do not add recurring monthly revenue.'),
+      ).checks.find(check => check.id === 'two-actions')?.passed,
+    ).toBe(false);
+    for (const artifactAction of [
+      'Add recurring revenue estimate to the forecast.',
+      'Add recurring revenue target to the dashboard.',
+      'Add recurring revenue metric to the report.',
+      'Add recurring revenue assumption to the model.',
+      'Add recurring revenue estimates to the forecast.',
+      'Add recurring revenue targets to the dashboard.',
+      'Add recurring revenue metrics to the report.',
+      'Add recurring revenue assumptions to the model.',
+      'Add recurring revenue to the forecast.',
+      'Add recurring revenue data to the report.',
+      'Add recurring revenue figures on the dashboard.',
+      'Add recurring revenue rows in the model.',
+      'Add recurring revenue to our forecast.',
+      'Add recurring revenue into the dashboard.',
+      "Add recurring revenue to the company's report.",
+    ]) {
+      expect(
+        scoreResponse(
+          'finance-owner',
+          actions.replace('**Add recurring monthly revenue.** Convert one-time sales into subscriptions so net burn shrinks.', artifactAction),
+        ).checks.find(check => check.id === 'two-actions')?.passed,
+        artifactAction,
+      ).toBe(false);
+    }
+
+    const runway = [
+      '**Runway Calculation**',
+      'Cash / net monthly burn. In this case: 40,000 / 10,000 = 4.00 months.',
+      '',
+      '**Runway**',
+      '4.00 months',
+    ].join('\n');
+    expect(
+      scoreResponse('finance-owner', runway).checks.find(check => check.id === 'runway')?.passed,
+    ).toBe(true);
+    expect(
+      scoreResponse('finance-owner', runway.replaceAll('4.00', '5.00')).checks.find(check => check.id === 'runway')?.passed,
+    ).toBe(false);
+  });
+});
+
+describe('exact Qwen 30-run adjudication regressions', () => {
+  function check(
+    personaId: string,
+    ruleId: string,
+    response: string,
+    overrides: Partial<PersonaTrialEvidence> = {},
+  ) {
+    const persona = PERSONA_CASES.find(candidate => candidate.id === personaId)!;
+    return scorePersonaTrial(persona, evidence({
+      prompt: persona.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: persona.id,
+      ...overrides,
+    })).checks.find(candidate => candidate.id === ruleId)?.passed;
+  }
+
+  it('accepts the exact four-month runway table emitted by Qwen', () => {
+    const response = [
+      '## Runway Analysis',
+      '| Metric | Value |',
+      '|---|---:|',
+      '| Cash Balance | $40,000.00 |',
+      '| Net Monthly Burn | $10,000.00 |',
+      '| Runway | **4.00 months** |',
+      '**Formula:** Runway (months) = Cash Balance ÷ Net Monthly Burn = $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      '**Biggest Assumption:** The burn rate remains constant at $10,000.00 per month.',
+    ].join('\n');
+
+    expect(check('finance-owner', 'runway', response)).toBe(true);
+    expect(check('finance-owner', 'runway', '| Runway target | **4.00 months** |')).toBe(false);
+    expect(check('finance-owner', 'runway', [
+      '| Runway | 4.00 months |',
+      'Current monthly burn = 40000 / 10000.',
+    ].join('\n'))).toBe(false);
+  });
+
+  it('accepts Qwen numbered priorities with an adjacent Basis line for every item', () => {
+    const response = [
+      '1. Investigate the production memory bug.',
+      'Basis: A named production bug is treated as active and poses an immediate operational risk that could degrade user experience or block the other priorities if it worsens.',
+      '2. Close one customer.',
+      'Basis: Revenue generation has a time-sensitive value that directly supports business continuity, but it is generally less volatile than a live production defect unless the customer is explicitly blocking revenue.',
+      '3. Repair onboarding friction.',
+      'Basis: Improving onboarding is a medium-term growth lever that yields compounding benefits over time, making it the least urgent of the three for immediate containment.',
+      '**First action for today:**',
+      'Identify the root cause of the production memory bug by reviewing recent error logs and profiling memory usage in the affected service.',
+      '*Note: This advisory is for informational purposes only and does not constitute professional engineering, legal, or financial advice.*',
+    ].join('\n');
+
+    expect(check('general-purpose', 'justification', response)).toBe(true);
+    expect(check('general-purpose', 'justification', '1. Investigate the production memory bug.\n2. Close one customer.\n3. Repair onboarding friction.\nBasis: Revenue is time-sensitive.')).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '1. Investigate the production memory bug.',
+      'Basis: I reject the claim of operational risk.',
+      '2. Close one customer.',
+      'Basis: I reject the claim of revenue urgency.',
+      '3. Repair onboarding friction.',
+      'Basis: I reject the claim of growth impact.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '```text',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '```',
+      'I reject the fenced answer above.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '~~~text',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '~~~',
+      'I reject the fenced answer above.',
+    ].join('\n'))).toBe(false);
+    for (const fence of ['````', '~~~~']) {
+      expect(check('general-purpose', 'justification', [
+        `${fence}text`,
+        fence.slice(0, 3),
+        '1. Investigate the production memory bug.',
+        'Basis: Operational risk is immediate.',
+        '2. Close one customer.',
+        'Basis: Revenue is time-sensitive.',
+        '3. Repair onboarding friction.',
+        'Basis: Onboarding is a medium-term growth lever.',
+        fence,
+        'I reject the fenced answer above.',
+      ].join('\n'))).toBe(false);
+    }
+    expect(check('general-purpose', 'justification', [
+      '    1. Investigate the production memory bug.',
+      '    Basis: Operational risk is immediate.',
+      '    2. Close one customer.',
+      '    Basis: Revenue is time-sensitive.',
+      '    3. Repair onboarding friction.',
+      '    Basis: Onboarding is a medium-term growth lever.',
+      'I reject the indented code answer above.',
+    ].join('\n'))).toBe(false);
+    expect(check('general-purpose', 'justification', [
+      '<!--',
+      '1. Investigate the production memory bug.',
+      'Basis: Operational risk is immediate.',
+      '2. Close one customer.',
+      'Basis: Revenue is time-sensitive.',
+      '3. Repair onboarding friction.',
+      'Basis: Onboarding is a medium-term growth lever.',
+      '-->',
+      'I reject the hidden answer above.',
+    ].join('\n'))).toBe(false);
+  });
+
+  it('accepts duplicated Markdown heading markers without weakening fact/inference separation', () => {
+    const response = '## ## Sourced facts\n- sqlite-vec is embedded.\n\n## ## Inferences\n- Embedded storage should reduce desktop overhead.';
+    expect(check('researcher', 'fact-inference', response)).toBe(true);
+    expect(check('researcher', 'fact-inference', '## ## Sourced facts\n- sqlite-vec is embedded.')).toBe(false);
+  });
+
+  it('accepts the exact Qwen smart-router fact under a neutral memo field label', () => {
+    const response = '**Unverified Scope:** Smart router not exercised without cloud credentials.';
+    expect(check('writer', 'router-fact', response)).toBe(true);
+    expect(check('writer', 'router-fact', 'Hypothetical: Smart router not exercised without cloud credentials.')).toBe(false);
+  });
+
+  it('accepts an exhaustive successful no-files tool receipt and matching Qwen disclosure', () => {
+    const response = [
+      'No files were found in the current workspace.',
+      'The exhaustive search (`**/*`) succeeded and returned no results, so this workspace contains no inspectable files — no source code, configuration, or documentation. I cannot recommend a specific engineering step tied to an existing implementation, since there is nothing verified to base it on. I also won\'t infer a project\'s contents from its directory name.',
+      '- [ ] Next step: add the project\'s starting artifacts to this workspace — for example, initialize a repo with a source entry point, a manifest (such as `package.json` or `pyproject.toml`), and a `README.md` — then re-run inspection so I can read the actual structure and give a concrete, grounded next engineering step.',
+      'Until files exist, any recommendation would be a guess rather than something grounded in evidence from here.',
+    ].join('\n\n');
+    const sseEvents = [
+      { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+      { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+    ];
+    expect(check('coder', 'empty-result', response, { sseEvents, toolsUsed: ['search_files'] })).toBe(true);
+    expect(check('coder', 'empty-result', 'I could not inspect the workspace.', { sseEvents, toolsUsed: ['search_files'] })).toBe(false);
+  });
+
+  it('accepts the exact affirmed Qwen forms from the 398d42b0 run', () => {
+    const writer = 'Our current plan targets a Friday ship. While API tests are passing, browser tests continue to fail in two instances on Windows. Additionally, the smart router has not yet been tested without cloud credentials. Given these outstanding issues, we recommend delaying the release until these specific gaps are closed.';
+    const agenda = [
+      '## Launch-Readiness Meeting Agenda (30 minutes)',
+      '### Timed blocks',
+      '| Time | Item | Owner |',
+      '|---|---|---|',
+      '| 0:00–0:03 (3 min) | Welcome | Product |',
+      '| 0:03–0:10 (7 min) | Engineering readiness | Engineering |',
+      '| 0:10–0:17 (7 min) | QA sign-off | QA |',
+      '| 0:17–0:22 (5 min) | Support readiness | Support |',
+      '| 0:22–0:27 (5 min) | Go/No-Go decision | Product |',
+      '| 0:27–0:30 (3 min) | Wrap-up | Product |',
+    ].join('\n');
+    const decisions = '**Desired decisions**\n- Final go/no-go recommendation, with conditions for launch';
+    const dependencies = '- M1 → M2: Smart router requires the solo service layer from M1.\n- M2 → M3: Windows verification requires the router from M2.';
+    const actions = 'Actions to improve runway:\n- Negotiate vendor contracts or reduce operational overhead to lower the monthly burn rate.\n- Accelerate customer payments or implement pre-payment incentives to increase cash inflows.';
+
+    expect(check('writer', 'release-facts', writer)).toBe(true);
+    expect(check('executive-assistant', 'duration-blocks', agenda)).toBe(true);
+    expect(check('executive-assistant', 'decisions', decisions)).toBe(true);
+    expect(check('project-manager', 'dependencies', dependencies)).toBe(true);
+    expect(check('finance-owner', 'two-actions', actions)).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Negotiating vendor contracts did not reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiating vendor contracts was not shown to reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts to reduce no costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts to reduce zero expenses.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was rejected.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Rejected final go/no-go recommendation.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was denied.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation is no longer valid.')).toBe(false);
+    expect(check('executive-assistant', 'decisions', '**Desired decisions**\n- Final go/no-go recommendation was vetoed.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Rejected dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M1 -> M2: The assertion that M2 requires M1 is incorrect.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Cancelled dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'Revoked dependency: M1 → M2: M2 requires M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M1 -> M2: The assertion that M2 requires M1 is invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '- M1 → M1: M1 requires itself.')).toBe(false);
+    expect(check('executive-assistant', 'duration-blocks', `${agenda.replace('## Launch-Readiness Meeting Agenda (30 minutes)', '## Agenda (30 minutes) — rejected')}`)).toBe(false);
+    expect(check('executive-assistant', 'duration-blocks', `${agenda.replace('## Launch-Readiness Meeting Agenda (30 minutes)', '## Rejected agenda (30 minutes)')}`)).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. I reject the claim that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. I refute the claim that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. Suppose browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. The memo denies that browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. The memo claims browser tests continue to fail in two instances on Windows. The smart router has not been tested without cloud credentials.')).toBe(false);
+    expect(check('writer', 'release-facts', 'Friday is the target ship date. API tests pass. Browser tests continue to fail in two instances on Windows, challenging release readiness. The smart router has not been tested without cloud credentials.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Negotiate vendor contracts, but this will not reduce costs.\nAccelerate customer payments to increase cash inflows.')).toBe(false);
+  });
+
+  it('accepts the exact dependency and runway-action forms from the f8b797c3 run', () => {
+    const dependencies = [
+      '### Milestone 1: Core Environment',
+      '**Dependencies:** None (Start Node)',
+      '### Milestone 2: Local Model Integration',
+      '**Dependencies:** Milestone 1 (Requires stable runtime & proxy)',
+    ].join('\n');
+    const actionForms = [
+      [
+        'Actions to improve runway:',
+        '- [ ] Cut $10000.00 to a smaller monthly base so each dollar lasts longer.',
+        '- [ ] Generate recurring monthly revenue, which reduces net burn.',
+      ].join('\n'),
+      [
+        'The calculation assumes no new financing, cost reductions, or revenue inflows occur.',
+        '**Actions to Improve Runway:**',
+        '1. **Cost Reduction:** Identify and eliminate non-essential expenses to lower monthly burn.',
+        '2. **Cash Inflow:** Secure a short-term loan or pre-sell a product/service to increase the cash balance (numerator), noting that one-time inflows do not reduce the monthly burn rate itself.',
+      ].join('\n'),
+      [
+        '**Actions to Improve Runway**',
+        '- [ ] **Reduce Costs:** Audit discretionary spending and negotiate vendor contracts to lower the monthly burn rate.',
+        '- [ ] **Increase Inflows:** Implement pre-sales, deposits, or early-stage consulting services to generate immediate, recurring revenue that reduces the net monthly burn.',
+      ].join('\n'),
+    ];
+
+    expect(check('project-manager', 'dependencies', dependencies)).toBe(true);
+    expect(check('finance-owner', 'two-actions', `${actionForms[0].split('\n')[1]}\nAccelerate customer payments to increase cash inflows.`), 'monthly-base cost action').toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut no costs to establish a smaller monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut 10000 with no layoffs to reach a smaller monthly base.\n- Generate recurring monthly revenue.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000, but this will not reduce the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan with zero proceeds.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan that will not improve runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', "Actions to improve runway:\n- Secure a loan that won't improve runway.\n- Cut costs.")).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan without receiving any cash.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan application.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan approval.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan estimate.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan rejection.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan denial.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a short-term loan for working capital.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Obtain a loan to cover payroll.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Arrange a loan from our bank.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan from our bank after another lender denied us.\n- Cut costs.')).toBe(true);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan, but approval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan, but it was cancelled before disbursement.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nIt has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThat loan has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nApproval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nCorrection: the loan was rejected.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nLoan approval was denied.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThe lender denied the application.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan.\nThe bank rejected it.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Secure a loan but it has no effect on runway.\n- Cut costs.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000, although it will not reduce the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000 despite not reducing the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut $10000 but this has no effect on the monthly base.\n- Generate recurring monthly revenue.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', 'Actions to improve runway:\n- Cut costs.\n- Implement pre-sales reporting.')).toBe(false);
+    expect(check('finance-owner', 'two-actions', `Negotiate vendor contracts to reduce costs.\n${actionForms[0].split('\n')[2]}`), 'recurring-revenue action').toBe(true);
+    expect(check('finance-owner', 'two-actions', `${actionForms[1].split('\n')[2]}\nAccelerate customer payments to increase cash inflows.`), 'bold cost-reduction action').toBe(true);
+    expect(check('finance-owner', 'two-actions', `Negotiate vendor contracts to reduce costs.\n${actionForms[1].split('\n')[3]}`), 'bold cash-inflow action').toBe(true);
+    for (const actions of actionForms) {
+      expect(check('finance-owner', 'two-actions', actions), actions).toBe(true);
+    }
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1 (Requires stable runtime), but this dependency was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1, although that dependency is invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1, despite that dependency being invalid.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1; no dependency exists.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 3 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nThe claim that no dependency exists between Milestone 2 and Milestone 1 was rejected.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is false that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is not true that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nI reject the claim that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt may be that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nIt is possible that no dependency exists between Milestone 2 and Milestone 1.')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nQuestion: does no dependency exist between Milestone 2 and Milestone 1?')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nWhy does no dependency exist between Milestone 2 and Milestone 1?')).toBe(true);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1; Milestone 2 could proceed independently.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: no dependency exists between Milestone 2 and Milestone 1; why was it listed?')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nMilestone 3 may slip; correction: no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', '### Milestone 2: Local Model Integration\nDependencies: Milestone 1.\nCorrection: Milestone 2 could proceed independently because no dependency exists between Milestone 2 and Milestone 1.')).toBe(false);
+  });
+
+  it('accepts the exact grounded response forms from the ec672874 acceptance run', () => {
+    expect(check(
+      'writer',
+      'release-facts',
+      'We originally planned to ship on Friday. Currently, API tests pass successfully. However, browser testing has revealed two persistent failures on Windows environments.',
+    )).toBe(true);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing failed to reveal two persistent failures on Windows.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, but both were fixed.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing has revealed two persistent failures on Windows environments, but both were resolved.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, although both were fixed.',
+    )).toBe(false);
+    expect(check(
+      'writer',
+      'release-facts',
+      'We planned to ship Friday. API tests pass. Browser testing revealed two persistent failures on Windows, though both were fixed.',
+    )).toBe(false);
+
+    expect(check(
+      'project-manager',
+      'dependencies',
+      '**M2 (Routing) depends on M1 (Core Architecture)**',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Optional reporting module) depends on M1 (Optional core extension).',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Owner TBD) depends on M1 (Owner unknown).',
+    )).toBe(true);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      '2. **M2: Smart Router Implementation**\n*Depends on:* M1 (Router requires local runtime/models).',
+    )).toBe(true);
+    expect(check('project-manager', 'dependencies', 'M2 (not approved) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (hypothetical) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (rejected) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (invalid) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (rejected by board) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (status: rejected by board) depends on M1.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (hypothetical).')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (not approved).')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Denied).')).toBe(false);
+    expect(check(
+      'project-manager',
+      'dependencies',
+      'M2 (Routing) depends on M1 (Core Architecture), but that dependency was rejected.',
+    )).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but the relation was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but that relationship was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), but the edge was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core Architecture), but it was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), although that relationship was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), though that edge was rejected.')).toBe(false);
+    expect(check('project-manager', 'dependencies', 'M2 (Routing) depends on M1 (Core), despite that relationship being rejected.')).toBe(false);
+
+    expect(check(
+      'finance-owner',
+      'two-actions',
+      '**Two Actions to Improve Runway**\n- [ ] **Cost Reduction:** Cut a specific recurring expense line.\n- [ ] **Cash Inflow:** Secure an early-stage financing event or a bridge loan.',
+    )).toBe(true);
+
+    const emptyResponse = [
+      'No files were found in the current workspace.',
+      '- **Established by tool evidence:** An exhaustive workspace search (`**/*`) succeeded and returned zero files. The workspace at the given root is empty — no source code, config, or documentation exists to inspect.',
+      '- **What I cannot claim:** Any project structure, language, dependencies, or prior artifacts. None are established by this result.',
+      '- **Recommended next engineering step:** - [ ] Initialize the workspace with a project scaffold (for example, a version-controlled project directory with a package manifest and source entry point), then rerun a file search to confirm the files are present.',
+      'Until files exist, I cannot recommend a code-specific step such as refactoring, debugging, or testing, since there is nothing to analyze.',
+    ].join('\n\n');
+    const emptyEvents = [
+      { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+      { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+      { event: 'done', data: { content: emptyResponse, toolsUsed: ['search_files'] } },
+    ];
+    expect(check('coder', 'empty-result', emptyResponse, {
+      sseEvents: emptyEvents,
+      toolsUsed: ['search_files'],
+    })).toBe(true);
+    expect(check('coder', 'empty-result', [
+      'No files were found in the current workspace.',
+      'Files are present; rerun a search to confirm the files are present.',
+    ].join(' '), {
+      sseEvents: emptyEvents,
+      toolsUsed: ['search_files'],
+    })).toBe(false);
   });
 });

@@ -18,10 +18,12 @@ const mocks = vi.hoisted(() => ({
   shell: {
     workspaces: [] as Workspace[],
     workspacesError: null as string | null,
+    workspacesAccessDenied: false,
     workspacesLoading: false,
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     refreshWorkspaces: vi.fn(),
+    onboardingState: { profileId: 'profile-a' },
   },
 }));
 
@@ -69,7 +71,9 @@ beforeEach(() => {
     ws({ id: 'w4', name: 'Scratch', storageType: 'virtual' }),
   ];
   mocks.shell.workspacesError = null;
+  mocks.shell.workspacesAccessDenied = false;
   mocks.shell.workspacesLoading = false;
+  mocks.shell.onboardingState = { profileId: 'profile-a' };
   mocks.shell.createWorkspace.mockResolvedValue(undefined);
   mocks.shell.refreshWorkspaces.mockResolvedValue(undefined);
 });
@@ -268,11 +272,103 @@ describe('AllWorkspacesApp', () => {
     // A revisit where the live list hasn't rehydrated yet (empty) paints the
     // cached shelf instantly — not a skeleton, not the empty state.
     mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
     render(<AllWorkspacesApp />);
     expect(screen.getByTestId('all-workspaces-grid')).toBeInTheDocument();
     expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
     expect(screen.queryByTestId('all-workspaces-loading')).not.toBeInTheDocument();
     expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+  });
+
+  it('drops cached cards when revalidation authoritatively resolves empty', () => {
+    const { unmount } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    unmount();
+
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
+    const { rerender } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+
+    mocks.shell.workspacesLoading = false;
+    rerender(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-card-w1')).not.toBeInTheDocument();
+  });
+
+  it('shows a load warning while retaining last-good cards after refresh failure', () => {
+    const { rerender } = render(<AllWorkspacesApp />);
+    mocks.shell.workspacesError = 'Network unavailable';
+    rerender(<AllWorkspacesApp />);
+
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't refresh your workspaces/i);
+    expect(screen.getByTestId('all-workspaces-retry')).toBeInTheDocument();
+  });
+
+  it('keeps the same-profile cached shelf when warm revalidation fails', () => {
+    const { unmount } = render(<AllWorkspacesApp />);
+    unmount();
+
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
+    const { rerender } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+
+    mocks.shell.workspacesLoading = false;
+    mocks.shell.workspacesError = 'Network unavailable';
+    rerender(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/showing the last verified list/i);
+    fireEvent.click(screen.getByTestId('all-workspaces-retry'));
+    expect(mocks.shell.refreshWorkspaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mark an error-only profile as resolved across a remount', () => {
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = false;
+    mocks.shell.workspacesError = 'Network unavailable';
+    const { unmount } = render(<AllWorkspacesApp />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    unmount();
+
+    mocks.shell.workspacesError = null;
+    mocks.shell.workspacesLoading = true;
+    render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+  });
+
+  it.each(['Unauthorized', 'Forbidden', 'Session expired'])(
+    'never paints cached cards after access denial: %s',
+    (message) => {
+    const { unmount } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    unmount();
+
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = false;
+    mocks.shell.workspacesError = message;
+    mocks.shell.workspacesAccessDenied = true;
+    render(<AllWorkspacesApp />);
+
+    expect(screen.queryByTestId('all-workspaces-card-w1')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/workspace access changed/i);
+    },
+  );
+
+  it('never paints another profile\'s cached workspace while the new profile loads', () => {
+    const { unmount } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    unmount();
+
+    mocks.shell.onboardingState = { profileId: 'profile-b' };
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
+    render(<AllWorkspacesApp />);
+
+    expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-card-w1')).not.toBeInTheDocument();
   });
 
   it('the card actions kebab is a rest affordance (low opacity), full on hover/focus-within (Wave U Lane A item 2)', () => {

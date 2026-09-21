@@ -317,6 +317,18 @@ function RunData({ run }: { run: CollaborationRun }) {
           {result.exitCode !== undefined && <span>Exit · {result.exitCode ?? 'pending'}</span>}
         </div>
       )}
+      {run.kind === 'worker'
+        && run.status === 'completed'
+        && result?.summary?.trim()
+        && !result.error?.startsWith('Assistant history could not be persisted:')
+        && result.sessionId && (
+        <a
+          href={`/workspaces/${encodeURIComponent(run.workspaceId)}/chat?session=${encodeURIComponent(result.sessionId)}`}
+          className="inline-flex items-center rounded-md bg-primary/15 px-2 py-1 text-[11px] font-display font-medium text-honey hover:bg-primary/25 transition-colors"
+        >
+          Open result in chat
+        </a>
+      )}
       {metrics && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground" data-testid={`run-metrics-${run.id}`}>
           {(metrics.toolsUsed?.length ?? 0) > 0 && <span>Tools · {metrics.toolsUsed!.join(', ')}</span>}
@@ -591,7 +603,7 @@ const RoomApp = ({ workspaceId, roomId, workspaceNames = {} }: RoomAppProps) => 
         </div>
       ) : roomId && !focusedRoom ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-4" data-testid="room-not-found">
-          <AlertCircle className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <AlertCircle className="w-10 h-10 text-muted-foreground mb-3" />
           <p className="text-sm font-display text-foreground">Room not found</p>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-sm">
             No durable Room exists for <span className="font-mono">{roomId}</span>. Check the link or open the Room overview.
@@ -599,7 +611,7 @@ const RoomApp = ({ workspaceId, roomId, workspaceNames = {} }: RoomAppProps) => 
         </div>
       ) : !hasRoster ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-          <Users className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <Users className="w-10 h-10 text-muted-foreground mb-3" />
           <p className="text-sm font-display text-foreground">No agents running</p>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
             Spawn a Waggle agent, run an agent group, or launch a captured external task to watch it work here.

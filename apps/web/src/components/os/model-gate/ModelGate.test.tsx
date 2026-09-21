@@ -4,15 +4,19 @@
  * detect/pull a local model. Honesty: "verified" only when the live probe confirmed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
+import { StrictMode } from 'react';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
     getProviders: vi.fn(),
+    getSettings: vi.fn(),
     getLocalInferenceStatus: vi.fn(),
     getLocalInferenceModels: vi.fn(),
     bootstrapLocalRuntime: vi.fn(),
     testApiKey: vi.fn(),
+    testCompatibleProvider: vi.fn(),
+    setProviderConfig: vi.fn(),
     setProviderKey: vi.fn(),
     restartModelRouter: vi.fn(),
     saveSettings: vi.fn(),
@@ -28,6 +32,9 @@ import { ModelGate } from './ModelGate';
 const providersResp = (...defs: {
   id: string;
   hasKey: boolean;
+  requiresKey?: boolean;
+  baseUrl?: string;
+  modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'requires-endpoint' | 'local-runtime';
   models?: Array<{ id: string; name: string; cost?: string; speed?: string }>;
 }[]) => ({
   providers: defs.map((d) => ({
@@ -36,7 +43,9 @@ const providersResp = (...defs: {
     hasKey: d.hasKey,
     badge: null,
     keyUrl: 'https://example.com/keys',
-    requiresKey: d.id !== 'ollama',
+    requiresKey: d.requiresKey ?? d.id !== 'ollama',
+    ...(d.baseUrl ? { baseUrl: d.baseUrl } : {}),
+    ...(d.modelsSource ? { modelsSource: d.modelsSource } : {}),
     models: (d.models ?? []).map((m) => ({
       id: m.id,
       name: m.name,
@@ -74,6 +83,7 @@ beforeEach(() => {
   mocks.adapter.getProviders.mockResolvedValue(
     providersResp({ id: 'anthropic', hasKey: false }, { id: 'openai', hasKey: false }, { id: 'ollama', hasKey: false }),
   );
+  mocks.adapter.getSettings.mockResolvedValue({ defaultModel: 'claude-sonnet-4-6' });
   mocks.adapter.getLocalInferenceStatus.mockResolvedValue(noLocal);
   mocks.adapter.getLocalInferenceModels.mockResolvedValue({
     source: 'native',
@@ -87,6 +97,20 @@ beforeEach(() => {
     dockerRequired: false,
   });
   mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: true });
+  mocks.adapter.testCompatibleProvider.mockResolvedValue({
+    valid: true,
+    verified: true,
+    baseUrl: 'http://10.33.0.153:4000/v1',
+    model: 'openai-compatible/qwen3.8-flash-next',
+    models: [{
+      id: 'openai-compatible/qwen3.8-flash-next',
+      name: 'Qwen 3.8 Flash Next',
+      cost: '$',
+      speed: 'fast',
+    }],
+    modelsSource: 'provider-api',
+  });
+  mocks.adapter.setProviderConfig.mockResolvedValue({});
   mocks.adapter.setProviderKey.mockResolvedValue({ router: { managed: true, ready: true } });
   mocks.adapter.restartModelRouter.mockResolvedValue({
     running: true,
@@ -107,7 +131,7 @@ beforeEach(() => {
   // back to the F3 per-provider path the existing cases assert against.
   mocks.adapter.probeModel.mockResolvedValue({ model: null, configured: false, verified: false });
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 async function selectProviderAndType(providerName: RegExp, key: string) {
   fireEvent.click(await screen.findByRole('button', { name: providerName }));
@@ -116,6 +140,870 @@ async function selectProviderAndType(providerName: RegExp, key: string) {
 }
 
 describe('ModelGate', () => {
+  it('offers a visible keyless LAN gateway path during onboarding', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    render(<ModelGate variant="onboarding" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /use a lan or custom gateway/i }));
+    expect(screen.getByLabelText(/endpoint url/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/api key \(optional\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/no api key is needed if your gateway does not require one/i)).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/endpoint url/i)));
+  });
+
+  it('discovers, verifies, and atomically saves a keyless compatible endpoint', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const emptyCompatible = {
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint' as const,
+    };
+    const readyCompatible = {
+      ...emptyCompatible,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api' as const,
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    };
+    mocks.adapter.getProviders
+      .mockResolvedValueOnce(providersResp(emptyCompatible))
+      .mockResolvedValueOnce(providersResp(readyCompatible));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next', cost: '$', speed: 'fast' }],
+      modelsSource: 'provider-api',
+    });
+    const onModelReady = vi.fn();
+    render(<ModelGate onModelReady={onModelReady} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(await screen.findByLabelText(/endpoint url/i), { target: { value: endpoint } });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    expect(mocks.adapter.setProviderConfig).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+    await waitFor(() => expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      {
+        baseUrl: endpoint,
+        models: [model],
+        defaultModel: model,
+      },
+    ));
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+    expect(mocks.adapter.testCompatibleProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('discovers all LAN gateway models and saves the selected primary without a key', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const names = ['qwen3.8-flash-next', 'qwen3.8-27b-uncensored', 'qwen3.8-27b'];
+    const models = names.map((name) => ({
+      id: `openai-compatible/${name}`,
+      name,
+      cost: '$',
+      speed: 'fast',
+    }));
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models,
+      modelsSource: 'provider-api',
+    });
+    render(<ModelGate variant="onboarding" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /use a lan or custom gateway/i }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/endpoint url/i)));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: endpoint } });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    await screen.findByRole('option', { name: names[2] });
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText(/^model$/i), { target: { value: models[1].id } });
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      {
+        baseUrl: endpoint,
+        models: models.map((model) => model.id),
+        defaultModel: models[1].id,
+      },
+    ));
+  });
+
+  it('prefills a persisted compatible endpoint after remount', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [{ id: 'openai-compatible/qwen3.8-flash-next', name: 'Qwen 3.8 Flash Next' }],
+    }));
+    const first = render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    expect(await screen.findByLabelText(/endpoint url/i)).toHaveValue(endpoint);
+    expect(screen.getByLabelText(/^model$/i)).toHaveValue('openai-compatible/qwen3.8-flash-next');
+    expect(screen.getByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    first.unmount();
+
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    expect(await screen.findByLabelText(/endpoint url/i)).toHaveValue(endpoint);
+    expect(screen.getByLabelText(/^model$/i)).toHaveValue('openai-compatible/qwen3.8-flash-next');
+    expect(screen.getByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+  });
+
+  it('restores a persisted compatible default that is not first in the catalog', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const firstModel = 'openai-compatible/qwen3.8-27b';
+    const persistedDefault = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getSettings.mockResolvedValue({ defaultModel: persistedDefault });
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [
+        { id: firstModel, name: 'Qwen 3.8 27B' },
+        { id: persistedDefault, name: 'Qwen 3.8 Flash Next' },
+      ],
+    }));
+
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^model$/i)).toHaveValue(persistedDefault);
+    });
+  });
+
+  it('does not expose a compatible save candidate until the persisted default is hydrated', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const firstModel = 'openai-compatible/qwen3.8-27b';
+    const persistedDefault = 'openai-compatible/qwen3.8-flash-next';
+    let resolveSettings!: (value: { defaultModel: string }) => void;
+    mocks.adapter.getSettings.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSettings = resolve;
+    }));
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [
+        { id: firstModel, name: 'Qwen 3.8 27B' },
+        { id: persistedDefault, name: 'Qwen 3.8 Flash Next' },
+      ],
+    }));
+
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+
+    const hydrationStatus = await screen.findByText(/loading saved model/i);
+    expect(hydrationStatus).toBeInTheDocument();
+    expect(hydrationStatus.querySelector('svg')).toHaveClass('motion-reduce:animate-none');
+    expect(screen.queryByRole('button', { name: /verify & save/i })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSettings({ defaultModel: persistedDefault });
+    });
+
+    expect(await screen.findByLabelText(/^model$/i)).toHaveValue(persistedDefault);
+    expect(screen.getByRole('button', { name: /verify & save/i })).toBeEnabled();
+  });
+
+  it('requires fresh discovery when the persisted compatible default cannot be loaded', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const firstModel = 'openai-compatible/qwen3.8-27b';
+    const discoveredModel = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getSettings.mockRejectedValueOnce(new Error('settings unavailable'));
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [{ id: firstModel, name: 'Qwen 3.8 27B' }],
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models: [{ id: discoveredModel, name: 'Qwen 3.8 Flash Next', cost: '$', speed: 'fast' }],
+      modelsSource: 'provider-api',
+    });
+
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not load the saved model/i);
+    expect(screen.queryByLabelText(/^model$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /verify & save/i })).not.toBeInTheDocument();
+    expect(mocks.adapter.setProviderConfig).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByLabelText(/^model$/i)).toHaveValue(discoveredModel);
+    expect(screen.getByRole('button', { name: /verify & save/i })).toBeEnabled();
+  });
+
+  it('lets manual discovery supersede pending persisted-default hydration', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const staleModel = 'openai-compatible/stale-model';
+    const discoveredModel = 'openai-compatible/qwen3.8-flash-next';
+    let resolveSettings!: (value: { defaultModel: string }) => void;
+    mocks.adapter.getSettings.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSettings = resolve;
+    }));
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'stale-provider-api',
+      models: [{ id: staleModel, name: 'Stale Model' }],
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models: [{ id: discoveredModel, name: 'Qwen 3.8 Flash Next', cost: '$', speed: 'fast' }],
+      modelsSource: 'provider-api',
+    });
+
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    expect(await screen.findByText(/loading saved model/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSettings({ defaultModel: staleModel });
+    });
+
+    expect(screen.getByLabelText(/^model$/i)).toHaveValue(discoveredModel);
+    expect(screen.getByRole('button', { name: /verify & save/i })).toBeEnabled();
+  });
+
+  it('describes a keyless compatible failure as an endpoint or model failure', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getSettings.mockResolvedValue({ defaultModel: model });
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model,
+      configured: true,
+      verified: false,
+      rejected: true,
+    });
+
+    render(<ModelGate />);
+
+    const failureCopy = await screen.findByRole('status');
+    expect(failureCopy).toHaveTextContent(/(?:endpoint|model).*not responding/i);
+    expect(failureCopy).not.toHaveTextContent(/key/i);
+    expect(screen.getByLabelText(/(?:endpoint|model).*not responding/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/key not responding/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps a saved compatible endpoint in Your providers when its catalog is stale', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'stale-provider-api',
+      models: [{ id: 'openai-compatible/qwen3.8-flash-next', name: 'Qwen 3.8 Flash Next' }],
+    }));
+    render(<ModelGate />);
+
+    const owned = await screen.findByText(/your providers/i);
+    expect(owned.parentElement).toHaveTextContent(/openai-compatible/i);
+    expect(owned.parentElement).toHaveTextContent(/endpoint saved/i);
+    expect(screen.queryByText(/no endpoint yet/i)).not.toBeInTheDocument();
+  });
+
+  it('does not claim readiness when the atomic compatible save rejects the model', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [{
+        id: 'openai-compatible/qwen3.8-flash-next',
+        name: 'Qwen 3.8 Flash Next',
+        cost: '$',
+        speed: 'fast',
+      }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockRejectedValueOnce(
+      new Error('Selected model returned no assistant response.'),
+    );
+    const onModelReady = vi.fn();
+    render(<ModelGate onModelReady={onModelReady} />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    await screen.findByRole('option', { name: /qwen 3.8 flash next/i });
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no assistant response/i);
+    expect(mocks.adapter.setProviderConfig).toHaveBeenCalledTimes(1);
+    expect(onModelReady).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reuse a stored compatible-provider key for a different endpoint', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: true,
+      requiresKey: false,
+      baseUrl: 'https://old.example.test/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: 'openai-compatible/old-model', name: 'Old Model' }],
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(await screen.findByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+
+    expect(await screen.findByText(/stored key is tied to the current endpoint/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+
+    expect(mocks.adapter.testCompatibleProvider).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.setProviderConfig).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late compatible discovery after the endpoint changes', async () => {
+    let resolveDiscovery!: (value: Awaited<ReturnType<typeof mocks.adapter.testCompatibleProvider>>) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    mocks.adapter.testCompatibleProvider.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDiscovery = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://127.0.0.1:4000/v1' },
+    });
+    await act(async () => {
+      resolveDiscovery({
+        valid: true,
+        verified: false,
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        models: [{
+          id: 'openai-compatible/qwen3.8-flash-next',
+          name: 'Qwen 3.8 Flash Next',
+          cost: '$',
+          speed: 'fast',
+        }],
+        modelsSource: 'provider-api',
+      });
+    });
+
+    expect(screen.getByLabelText(/endpoint url/i)).toHaveValue('http://127.0.0.1:4000/v1');
+    expect(screen.queryByRole('option', { name: /qwen 3.8 flash next/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the verified candidate immutable while its atomic save is in flight', async () => {
+    let resolveReadiness!: (value: Awaited<ReturnType<typeof mocks.adapter.probeModel>>) => void;
+    let resolveSave!: (value: unknown) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      { id: 'anthropic', hasKey: true, models: [{ id: 'anthropic/current', name: 'Current' }] },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        modelsSource: 'requires-endpoint',
+      },
+    ));
+    mocks.adapter.probeModel
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveReadiness = resolve;
+      }))
+      .mockResolvedValueOnce({ model: null, configured: false, verified: false });
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [{
+        id: 'openai-compatible/qwen3.8-flash-next',
+        name: 'Qwen 3.8 Flash Next',
+        cost: '$',
+        speed: 'fast',
+      }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    expect(screen.getByLabelText(/endpoint url/i)).toBeDisabled();
+    expect(screen.getByLabelText(/api key \(optional\)/i)).toBeDisabled();
+    expect(screen.getByLabelText(/^model$/i)).toBeDisabled();
+    expect(screen.getByRole('button', { name: /discover models/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /anthropic/i })).toBeDisabled();
+    await act(async () => {
+      resolveSave({});
+    });
+
+    expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      {
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        models: ['openai-compatible/qwen3.8-flash-next'],
+        defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      },
+    );
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+    await act(async () => {
+      resolveReadiness({
+        model: 'anthropic/current',
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    });
+    expect(screen.getByText(/model verified \(openai-compatible\/qwen3\.8-flash-next\)/i)).toBeInTheDocument();
+  });
+
+  it('restarts readiness after an exact compatible verification fails while the mount probe is pending', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      { id: 'anthropic', hasKey: true, models: [{ id: 'anthropic/current', name: 'Current' }] },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        modelsSource: 'requires-endpoint',
+      },
+    ));
+    mocks.adapter.probeModel
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce({ model: null, configured: false, verified: false });
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [{
+        id: 'openai-compatible/qwen3.8-flash-next',
+        name: 'Qwen 3.8 Flash Next',
+        cost: '$',
+        speed: 'fast',
+      }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockRejectedValueOnce(
+      new Error('Selected model returned no assistant response.'),
+    );
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    await screen.findByRole('option', { name: /qwen 3.8 flash next/i });
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no assistant response/i);
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/checking your models/i)).not.toBeInTheDocument();
+  });
+
+  it('restarts readiness after failed verification under React StrictMode', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeModel
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce({ model: null, configured: false, verified: false });
+    mocks.adapter.setProviderConfig.mockRejectedValueOnce(
+      new Error('Selected model returned no assistant response.'),
+    );
+    render(<StrictMode><ModelGate /></StrictMode>);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    const readinessCallsBeforeVerification = mocks.adapter.probeModel.mock.calls
+      .filter(([requested]) => requested === undefined).length;
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no assistant response/i);
+    await waitFor(() => expect(
+      mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === undefined),
+    ).toHaveLength(readinessCallsBeforeVerification + 1));
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+  });
+
+  it('locks provider switching while the atomic compatible save is in flight', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let resolveSave!: (value: unknown) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      { id: 'anthropic', hasKey: true, models: [{ id: 'anthropic/current', name: 'Current' }] },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        baseUrl: endpoint,
+        modelsSource: 'provider-api',
+        models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+      },
+    ));
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /retry check/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /anthropic/i }));
+
+    expect(screen.queryByLabelText(/api key for anthropic/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/endpoint url/i)).toHaveValue(endpoint);
+    await act(async () => {
+      resolveSave({});
+    });
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+  });
+
+  it('lets an explicit compatible verification own the result when a stale readiness probe rejects another provider', async () => {
+    let resolveReadiness!: (value: Awaited<ReturnType<typeof mocks.adapter.probeModel>>) => void;
+    let resolveSave!: (value: unknown) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      {
+        id: 'anthropic',
+        hasKey: true,
+        models: [{ id: 'anthropic/claude-model', name: 'Claude Model' }],
+      },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        modelsSource: 'requires-endpoint',
+      },
+    ));
+    mocks.adapter.probeModel.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReadiness = resolve;
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [{
+        id: 'openai-compatible/qwen3.8-flash-next',
+        name: 'Qwen 3.8 Flash Next',
+        cost: '$',
+        speed: 'fast',
+      }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+    expect(mocks.adapter.probeModel).toHaveBeenCalled();
+    await act(async () => {
+      resolveReadiness({
+        model: 'anthropic/claude-model',
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    });
+    expect(screen.queryByLabelText(/api key for anthropic/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    await act(async () => {
+      resolveSave({});
+    });
+
+    await waitFor(() => expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      {
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        models: ['openai-compatible/qwen3.8-flash-next'],
+        defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      },
+    ));
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+  });
+
+  it('ignores a stale rejected-model result while its compatible model verification is in flight', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let resolveReadiness!: (value: Awaited<ReturnType<typeof mocks.adapter.probeModel>>) => void;
+    let resolveSave!: (value: unknown) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: endpoint,
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeModel.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReadiness = resolve;
+    }));
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+    expect(await screen.findByRole('button', { name: /saving/i })).toBeInTheDocument();
+    await act(async () => {
+      resolveReadiness({
+        model,
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    });
+
+    expect(await screen.findByLabelText(/endpoint url/i)).toHaveValue(endpoint);
+    expect(screen.getByLabelText(/^model$/i)).toHaveValue(model);
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    await act(async () => {
+      resolveSave({});
+    });
+    await waitFor(() => expect(mocks.adapter.setProviderConfig).toHaveBeenCalledWith(
+      'openai-compatible',
+      { baseUrl: endpoint, models: [model], defaultModel: model },
+    ));
+  });
+
+  it('ignores a stale rejected-model result that arrives after the compatible save completes', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let resolveReadiness!: (value: Awaited<ReturnType<typeof mocks.adapter.probeModel>>) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      { id: 'anthropic', hasKey: true, models: [{ id: 'anthropic/current', name: 'Current' }] },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        baseUrl: endpoint,
+        modelsSource: 'provider-api',
+        models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+      },
+    ));
+    mocks.adapter.probeModel.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReadiness = resolve;
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /verify & save/i }));
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveReadiness({
+        model: 'anthropic/current',
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    });
+
+    expect(screen.getByText(/model verified \(openai-compatible\/qwen3\.8-flash-next\)/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /openai-compatible/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText(/api key for anthropic/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps compatible controls locked through an atomic save despite a late readiness failure', async () => {
+    const endpoint = 'http://10.33.0.153:4000/v1';
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let resolveReadiness!: (value: Awaited<ReturnType<typeof mocks.adapter.probeModel>>) => void;
+    let resolveSave!: (value: unknown) => void;
+    const onModelReady = vi.fn();
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      {
+        id: 'anthropic',
+        hasKey: true,
+        models: [{ id: 'anthropic/claude-model', name: 'Claude Model' }],
+      },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        modelsSource: 'requires-endpoint',
+      },
+    ));
+    mocks.adapter.probeModel.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReadiness = resolve;
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: endpoint,
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next', cost: '$', speed: 'fast' }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    render(<ModelGate onModelReady={onModelReady} />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: endpoint } });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+    expect(await screen.findByRole('button', { name: /saving/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /anthropic/i })).toBeDisabled();
+    expect(screen.getByRole('tab', { name: /local model/i })).toBeDisabled();
+    await act(async () => {
+      resolveReadiness({
+        model: 'anthropic/claude-model',
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    });
+    expect(screen.getByLabelText(/endpoint url/i)).toHaveValue(endpoint);
+    expect(screen.queryByLabelText(/api key for anthropic/i)).not.toBeInTheDocument();
+    await act(async () => {
+      resolveSave({});
+    });
+
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+  });
+
+  it('does not publish readiness after an atomic compatible save resolves post-unmount', async () => {
+    let resolveSave!: (value: unknown) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    mocks.adapter.testCompatibleProvider.mockResolvedValueOnce({
+      valid: true,
+      verified: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [{
+        id: 'openai-compatible/qwen3.8-flash-next',
+        name: 'Qwen 3.8 Flash Next',
+        cost: '$',
+        speed: 'fast',
+      }],
+      modelsSource: 'provider-api',
+    });
+    mocks.adapter.setProviderConfig.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    const onModelReady = vi.fn();
+    const view = render(<ModelGate onModelReady={onModelReady} />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+    view.unmount();
+    await act(async () => {
+      resolveSave({});
+    });
+
+    expect(mocks.adapter.setProviderConfig).toHaveBeenCalledTimes(1);
+    expect(onModelReady).not.toHaveBeenCalled();
+  });
+
+  it('clears discovered compatible models when the endpoint or credential changes', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      modelsSource: 'requires-endpoint',
+    }));
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://10.33.0.153:4000/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/api key \(optional\)/i), {
+      target: { value: 'replacement-key' },
+    });
+    expect(screen.queryByRole('option', { name: /qwen 3.8 flash next/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /verify & save/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /discover models/i }));
+    expect(await screen.findByRole('option', { name: /qwen 3.8 flash next/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'http://127.0.0.1:4000/v1' },
+    });
+    expect(screen.queryByRole('option', { name: /qwen 3.8 flash next/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /verify & save/i })).not.toBeInTheDocument();
+  });
+
   it('renders a chip per key-requiring provider, excluding the keyless local runtime (ollama)', async () => {
     render(<ModelGate />);
     expect(await screen.findByRole('button', { name: /anthropic/i })).toBeInTheDocument();
@@ -177,7 +1065,7 @@ describe('ModelGate', () => {
     // "you have a working model" key-presence flash (only visible pre-probe) is gone.
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     render(<ModelGate />);
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/no working model yet/i)).not.toBeInTheDocument();
   });
 
@@ -196,6 +1084,7 @@ describe('ModelGate', () => {
   });
 
   it('saving the first cloud key also selects that provider default model', async () => {
+    const onModelReady = vi.fn();
     mocks.adapter.getProviders.mockResolvedValue(
       providersResp({
         id: 'openai',
@@ -203,11 +1092,30 @@ describe('ModelGate', () => {
         models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
       }),
     );
-    render(<ModelGate />);
+    render(<ModelGate onModelReady={onModelReady} />);
     await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
     fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
 
     await waitFor(() => expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'gpt-4o' }));
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'gpt-4o', verified: true });
+  });
+
+  it('does not emit a verified model receipt when selecting the default model fails', async () => {
+    const onModelReady = vi.fn();
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp({
+        id: 'openai',
+        hasKey: false,
+        models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      }),
+    );
+    mocks.adapter.saveSettings.mockRejectedValueOnce(new Error('settings unavailable'));
+    render(<ModelGate onModelReady={onModelReady} />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    expect(await screen.findByText(/choose a model in settings/i)).toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'gpt-4o', verified: false });
   });
 
   it('saving the first cloud key also selects its model when a local model is available', async () => {
@@ -283,15 +1191,17 @@ describe('ModelGate', () => {
     await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalledWith('openai', 'sk-xxxxxxxxxxxxxxxxxxxxxxxx'));
   });
 
-  it('a format-only valid key (not live-verified) saves but does NOT claim "verified"', async () => {
+  it('a format-only valid key saves without emitting a verified readiness receipt', async () => {
+    const onModelReady = vi.fn();
     mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: false });
-    render(<ModelGate />);
+    render(<ModelGate onModelReady={onModelReady} />);
     await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
     fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
 
     await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalled());
     expect(await screen.findByText(/looks valid/i)).toBeInTheDocument();
     expect(screen.queryByText(/✓ verified/i)).not.toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: undefined, verified: false });
   });
 
   it('a rejected key shows the error and never writes to the vault', async () => {
@@ -368,16 +1278,131 @@ describe('ModelGate', () => {
     expect(await screen.findByText(/you.re ready to go/i)).toBeInTheDocument();
   });
 
-  it('a network-degraded probe (valid, not verified) settles on the honest neutral, never an over-claim', async () => {
-    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
-    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
-    render(<ModelGate />);
-    // Wave V single-truth: the ONE verdict is the honest "couldn’t verify … just
-    // now" — it must NOT over-claim "verified" nor "you’re ready to go" off a key
-    // it could not confirm (the old wording only appeared as a pre-probe flash).
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+  it('a network-degraded probe stays unavailable and offers a real retry', async () => {
+    const onModelReady = vi.fn();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let exactModelProbes = 0;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: false, valid: false, verified: false });
+    mocks.adapter.probeModel.mockImplementation(async (requested?: string) => {
+      if (!requested) return { model: null, configured: false, verified: false };
+      exactModelProbes += 1;
+      return { model: requested, configured: true, verified: exactModelProbes > 1 };
+    });
+    render(<ModelGate variant="onboarding" onModelReady={onModelReady} />);
+    // Single truth: the verdict is provider/model-neutral and offers recovery.
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/key verified/i)).toBeNull();
     expect(screen.queryByText(/ready to go/i)).toBeNull();
+    expect(screen.queryByText(/you can continue/i)).toBeNull();
+
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledWith(model));
+    const exactCallsBeforeRetry = mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === model).length;
+    fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+    await waitFor(() => expect(
+      mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === model),
+    ).toHaveLength(exactCallsBeforeRetry + 1));
+    expect(await screen.findByText((text) => text.includes('Model verified') && text.includes(model))).toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+    expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
+  });
+
+  it('does not discard a slow Qwen readiness success after six seconds', async () => {
+    vi.useFakeTimers();
+    const onModelReady = vi.fn();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeModel.mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ model, configured: true, verified: true }), 7_000);
+    }));
+
+    try {
+      render(<ModelGate variant="onboarding" onModelReady={onModelReady} />);
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(7_000); });
+
+      expect(screen.getByText((text) => text.includes('Model verified') && text.includes(model))).toBeInTheDocument();
+      expect(onModelReady).not.toHaveBeenCalled();
+      expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('makes a manual retry timeout terminal even if the old probe resolves later', async () => {
+    const onModelReady = vi.fn();
+    let resolveRetry!: (value: { configured: boolean; valid: boolean; verified: boolean }) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider
+      .mockResolvedValueOnce({ configured: true, valid: true, verified: false })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRetry = resolve;
+      }));
+    render(<ModelGate onModelReady={onModelReady} />);
+
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+      await act(async () => { await Promise.resolve(); });
+      expect(mocks.adapter.probeProvider).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(16_000); });
+      expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+
+      await act(async () => {
+        resolveRetry({ configured: true, valid: true, verified: true });
+        await Promise.resolve();
+      });
+      expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+      expect(screen.queryByText(/anthropic key verified/i)).toBeNull();
+      expect(onModelReady).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let a stale retry overwrite a newly verified provider save', async () => {
+    let resolveRetry!: (value: { configured: boolean; valid: boolean; verified: boolean }) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider
+      .mockResolvedValueOnce({ configured: true, valid: true, verified: false })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRetry = resolve;
+      }));
+    render(<ModelGate />);
+
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+    const callsBeforeRetry = mocks.adapter.probeProvider.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+    await waitFor(() => expect(mocks.adapter.probeProvider).toHaveBeenCalledTimes(callsBeforeRetry + 1));
+
+    await selectProviderAndType(/anthropic/i, 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+    await waitFor(() => expect(screen.getByLabelText(/api key for anthropic/i)).toHaveFocus());
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+    expect(await screen.findByText(/anthropic key verified/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRetry({ configured: true, valid: true, verified: false });
+    });
+    expect(screen.getByText(/anthropic key verified/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
   });
 
   // ── MODEL-GATE: probe the workspace's actual default model ──
@@ -398,6 +1423,36 @@ describe('ModelGate', () => {
     expect(await screen.findByText(/not responding/i)).toBeInTheDocument();
     // Grid auto-opened on the keyed provider → its key input is visible.
     expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
+  });
+
+  it('makes Fix it now actionable when a rejected stale model has no catalog owner', async () => {
+    const compatibleModel = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders.mockResolvedValue(providersResp(
+      { id: 'anthropic', hasKey: true, models: [{ id: 'anthropic/current', name: 'Current' }] },
+      {
+        id: 'openai-compatible',
+        hasKey: false,
+        requiresKey: false,
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        modelsSource: 'provider-api',
+        models: [{ id: compatibleModel, name: 'Qwen 3.8 Flash Next' }],
+      },
+    ));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model: 'retired-provider/deleted-model',
+      configured: true,
+      verified: false,
+      rejected: true,
+    });
+    render(<ModelGate />);
+
+    expect(await screen.findByText(/key found but not responding/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /openai-compatible/i }));
+    expect(await screen.findByLabelText(/endpoint url/i)).toHaveValue('http://10.33.0.153:4000/v1');
+    fireEvent.click(screen.getByRole('button', { name: /fix it now/i }));
+
+    const keyInput = await screen.findByLabelText(/api key for anthropic/i);
+    await waitFor(() => expect(document.activeElement).toBe(keyInput));
   });
 
   it('falls back to the per-provider key probe when no default model is configured', async () => {
@@ -473,7 +1528,7 @@ describe('ModelGate', () => {
     await waitFor(() => expect(mocks.adapter.pullLocalModel).toHaveBeenCalledWith('llama3.2'));
     expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'ollama/llama3.2:latest' });
     expect(await screen.findByText(/installed and verified "llama3\.2:latest"/i)).toBeInTheDocument();
-    expect(onModelReady).toHaveBeenCalled();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'ollama/llama3.2:latest', verified: true });
   });
 
   it('does not report ready when the verified model cannot be selected as default', async () => {

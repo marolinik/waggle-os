@@ -112,8 +112,9 @@ Use descriptive titles that indicate the type of change:
 ### Error Handling
 
 - Route handlers catch errors and return appropriate HTTP status codes
-- Non-critical operations use try/catch with empty catch (logging is acceptable)
+- Non-critical operations may use an empty catch; it carries a why-comment naming what is lost and logs when the swallow is user-visible (see docs/TECH-DEBT.md, Adopted Conventions)
 - Critical operations throw with descriptive error messages
+- On a security boundary, never swallow: fail closed AND log a warning carrying the original cause. A refused operation is exactly when someone needs to know why it was refused
 - Avoid swallowing errors silently in core logic
 
 ## Package Structure

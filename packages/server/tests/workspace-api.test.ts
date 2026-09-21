@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { buildLocalServer } from '../src/local/index.js';
+import {
+  chatSessionStateKey,
+  isChatSessionStateKeyForWorkspace,
+} from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from './test-utils.js';
 
@@ -519,6 +523,12 @@ describe('Workspace & Session API', () => {
   });
 
   it('deletes a session', async () => {
+    const stateKey = chatSessionStateKey(workspaceId, sessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'deleted-session-memory-sentinel',
+    }]);
+
     const res = await injectWithAuth(server, {
       method: 'DELETE',
       url: `/api/sessions/${sessionId}?workspace=${workspaceId}`,
@@ -535,14 +545,303 @@ describe('Workspace & Session API', () => {
     const sessions = JSON.parse(listRes.body);
     const deleted = sessions.find((s: { id: string }) => s.id === sessionId);
     expect(deleted).toBeUndefined();
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${workspaceId}&session=${sessionId}`,
+    });
+    expect(historyRes.statusCode).toBe(200);
+    expect(JSON.parse(historyRes.body)).toMatchObject({
+      sessionId,
+      messages: [],
+      count: 0,
+    });
+  });
+
+  it('does not retain histories loaded only for browsing', async () => {
+    const sessionsDir = path.join(dataDir, 'workspaces', workspaceId, 'sessions');
+    const browsedSessionIds = Array.from(
+      { length: 65 },
+      (_, index) => `browsed-history-${index}`,
+    );
+
+    try {
+      for (const browsedSessionId of browsedSessionIds) {
+        fs.writeFileSync(
+          path.join(sessionsDir, `${browsedSessionId}.jsonl`),
+          `${JSON.stringify({ type: 'meta', title: browsedSessionId })}\n${JSON.stringify({
+            role: 'user',
+            content: `history-${browsedSessionId}`,
+          })}\n`,
+          'utf-8',
+        );
+        const historyRes = await injectWithAuth(server, {
+          method: 'GET',
+          url: `/api/history?workspace=${workspaceId}&session=${browsedSessionId}`,
+        });
+        expect(historyRes.statusCode).toBe(200);
+        expect(JSON.parse(historyRes.body).count).toBe(1);
+      }
+
+      const retainedWorkspaceKeys = [...server.agentState.sessionHistories.keys()]
+        .filter((stateKey) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      expect(retainedWorkspaceKeys).toEqual([]);
+    } finally {
+      for (const browsedSessionId of browsedSessionIds) {
+        fs.rmSync(path.join(sessionsDir, `${browsedSessionId}.jsonl`), { force: true });
+        server.agentState.chatStateController?.evictSession(workspaceId, browsedSessionId);
+      }
+    }
+  });
+
+  it('evicts an oversized idle chat history from RAM without deleting its file', async () => {
+    const oversizedSessionId = 'oversized-retained-history';
+    const stateKey = chatSessionStateKey(workspaceId, oversizedSessionId);
+    const sessionPath = path.join(
+      dataDir,
+      'workspaces',
+      workspaceId,
+      'sessions',
+      `${oversizedSessionId}.jsonl`,
+    );
+    fs.writeFileSync(sessionPath, `${JSON.stringify({ type: 'meta' })}\n`, 'utf-8');
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'x'.repeat(2_000_001),
+    }]);
+
+    server.agentState.chatStateController?.touchSession(stateKey);
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+    expect(fs.existsSync(sessionPath)).toBe(true);
+    fs.rmSync(sessionPath, { force: true });
+  });
+
+  it('bounds aggregate idle chat-history content retained in RAM', () => {
+    const aggregateSessionIds = Array.from(
+      { length: 9 },
+      (_, index) => `aggregate-history-${index}`,
+    );
+    try {
+      for (const aggregateSessionId of aggregateSessionIds) {
+        const stateKey = chatSessionStateKey(workspaceId, aggregateSessionId);
+        server.agentState.sessionHistories.set(stateKey, [{
+          role: 'user',
+          content: 'x'.repeat(1_000_000),
+        }]);
+        server.agentState.chatStateController?.touchSession(stateKey);
+      }
+
+      const retained = [...server.agentState.sessionHistories.entries()]
+        .filter(([stateKey]) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      const retainedChars = retained.reduce(
+        (total, [, history]) => total + history.reduce(
+          (historyTotal, message) => historyTotal + message.content.length,
+          0,
+        ),
+        0,
+      );
+      expect(retainedChars).toBeLessThanOrEqual(8_000_000);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, aggregateSessionIds[0]!),
+      )).toBe(false);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, aggregateSessionIds.at(-1)!),
+      )).toBe(true);
+    } finally {
+      for (const aggregateSessionId of aggregateSessionIds) {
+        server.agentState.chatStateController?.evictSession(workspaceId, aggregateSessionId);
+      }
+    }
+  });
+
+  it('bounds the complete retained history payload including tool receipts', () => {
+    const receiptSessionId = 'oversized-tool-receipts';
+    const stateKey = chatSessionStateKey(workspaceId, receiptSessionId);
+    server.agentState.sessionHistories.set(
+      stateKey,
+      Array.from({ length: 63 }, (_, index) => ({
+        role: 'assistant',
+        content: 'ok',
+        tools: [{
+          id: `capability-${index}`,
+          name: 'acquire_capability' as const,
+          status: 'done' as const,
+          input: { need: 'one capability' },
+          output: 'x'.repeat(32_000),
+        }],
+      })),
+    );
+
+    server.agentState.chatStateController?.touchSession(stateKey);
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+  });
+
+  it('limits the number of small idle chat session states', () => {
+    const boundedSessionIds = Array.from(
+      { length: 65 },
+      (_, index) => `bounded-state-${index}`,
+    );
+    try {
+      for (const boundedSessionId of boundedSessionIds) {
+        const stateKey = chatSessionStateKey(workspaceId, boundedSessionId);
+        server.agentState.sessionHistories.set(stateKey, [{
+          role: 'user',
+          content: boundedSessionId,
+        }]);
+        server.agentState.chatStateController?.touchSession(stateKey);
+      }
+
+      const retainedWorkspaceKeys = [...server.agentState.sessionHistories.keys()]
+        .filter((stateKey) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      expect(retainedWorkspaceKeys).toHaveLength(64);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, boundedSessionIds[0]!),
+      )).toBe(false);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, boundedSessionIds.at(-1)!),
+      )).toBe(true);
+    } finally {
+      for (const boundedSessionId of boundedSessionIds) {
+        server.agentState.chatStateController?.evictSession(workspaceId, boundedSessionId);
+      }
+    }
+  });
+
+  it('evicts retained chat history after a workspace is deleted', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Delete Cached Workspace', group: 'Test' },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const deletedWorkspace = JSON.parse(createRes.body) as { id: string };
+    const deletedSessionId = 'cached-before-workspace-delete';
+    const stateKey = chatSessionStateKey(deletedWorkspace.id, deletedSessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'deleted-workspace-memory-sentinel',
+    }]);
+
+    const deleteRes = await injectWithAuth(server, {
+      method: 'DELETE',
+      url: `/api/workspaces/${deletedWorkspace.id}`,
+    });
+    expect(deleteRes.statusCode).toBe(204);
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${deletedWorkspace.id}&session=${deletedSessionId}`,
+    });
+    expect(historyRes.statusCode).toBe(200);
+    expect(JSON.parse(historyRes.body).messages).toEqual([]);
+  });
+
+  it('rejects deletion as active before consulting the session file', async () => {
+    const activeSessionId = 'active-before-first-persist';
+    const chatState = server.agentState.chatStateController;
+    expect(chatState).toBeDefined();
+    const originalIsSessionActive = chatState!.isSessionActive;
+    chatState!.isSessionActive = (candidateWorkspaceId, candidateSessionId) => (
+      candidateWorkspaceId === workspaceId && candidateSessionId === activeSessionId
+        ? true
+        : originalIsSessionActive(candidateWorkspaceId, candidateSessionId)
+    );
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+    } finally {
+      chatState!.isSessionActive = originalIsSessionActive;
+    }
+  });
+
+  it('rejects session deletion while a real chat turn is active', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: `/api/workspaces/${workspaceId}/sessions`,
+      payload: { title: 'Active deletion guard' },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const activeSessionId = JSON.parse(createRes.body).id as string;
+    const originalRunner = server.agentRunner;
+    let markEntered!: () => void;
+    let releaseTurn!: () => void;
+    const entered = new Promise<void>((resolve) => { markEntered = resolve; });
+    const released = new Promise<void>((resolve) => { releaseTurn = resolve; });
+    server.agentRunner = async (config) => {
+      markEntered();
+      await released;
+      config.onToken?.('completed');
+      return {
+        content: 'completed',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    const turn = injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Hold this turn open.',
+        workspace: workspaceId,
+        session: activeSessionId,
+      },
+    });
+
+    try {
+      await entered;
+      const activeDelete = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(activeDelete.statusCode).toBe(409);
+      expect(JSON.parse(activeDelete.body)).toMatchObject({
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+
+      releaseTurn();
+      expect((await turn).statusCode).toBe(200);
+      const completedDelete = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(completedDelete.statusCode).toBe(200);
+    } finally {
+      releaseTurn();
+      await turn.catch(() => undefined);
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('returns 404 when deleting non-existent session', async () => {
+    const staleSessionId = 'nonexistent-session';
+    const stateKey = chatSessionStateKey(workspaceId, staleSessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'stale-missing-file-sentinel',
+    }]);
     const res = await injectWithAuth(server, {
       method: 'DELETE',
-      url: `/api/sessions/nonexistent-session?workspace=${workspaceId}`,
+      url: `/api/sessions/${staleSessionId}?workspace=${workspaceId}`,
     });
     expect(res.statusCode).toBe(404);
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${workspaceId}&session=${staleSessionId}`,
+    });
+    expect(JSON.parse(historyRes.body).messages).toEqual([]);
   });
 
   it('returns empty array for sessions of non-existent workspace (graceful degradation)', async () => {
@@ -749,9 +1048,42 @@ describe('Workspace & Session API', () => {
     };
   }
 
+  function configureCompatibleProbeModel(model: string, models = [model]): () => void {
+    const configPath = path.join(dataDir, 'config.json');
+    const originalConfig = fs.readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(originalConfig) as Record<string, unknown>;
+    const providers = config.providers && typeof config.providers === 'object'
+      ? config.providers as Record<string, unknown>
+      : {};
+    config.defaultModel = model;
+    config.providers = {
+      ...providers,
+      'openai-compatible': {
+        apiKey: '',
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        models,
+      },
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'openai-compatible endpoint verified',
+      checkedAt: new Date().toISOString(),
+    };
+    return () => {
+      server.agentState.llmProvider = priorProvider;
+      fs.writeFileSync(configPath, originalConfig, 'utf-8');
+    };
+  }
+
   it('probe-model reports verified when the model endpoint answers 200', async () => {
     const restoreModel = configureExactProbeModel();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
     try {
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -761,8 +1093,174 @@ describe('Workspace & Session API', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body).toMatchObject({ model: exactProbeModel, configured: true, verified: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/v1\/chat\/completions$/),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${server.agentState.wsSessionToken}`,
+          }),
+        }),
+      );
     } finally {
       restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('uses a bounded non-thinking Qwen probe and requires a real assistant response', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const restoreModel = configureCompatibleProbeModel(model);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: '' } }],
+      }), { status: 200 }));
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model,
+        configured: true,
+        verified: true,
+      });
+      expect(timeoutSpy.mock.calls.some(([, milliseconds]) => milliseconds === 15_000)).toBe(true);
+      const completionCall = fetchMock.mock.calls.find(([input]) => (
+        String(input).endsWith('/v1/chat/completions')
+      ));
+      expect(JSON.parse(String(completionCall?.[1]?.body))).toMatchObject({
+        model,
+        max_tokens: 32,
+        chat_template_kwargs: { enable_thinking: false },
+      });
+
+      for (const expected of ['malformed', 'empty']) {
+        const failed = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/probe-model',
+          payload: { model },
+        });
+        expect(failed.statusCode, expected).toBe(200);
+        expect(failed.json(), expected).toMatchObject({
+          model,
+          configured: true,
+          verified: false,
+        });
+      }
+    } finally {
+      timeoutSpy.mockRestore();
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps a compatible Qwen request alive before the deadline and aborts at the deadline', async () => {
+    vi.useFakeTimers();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const restoreModel = configureCompatibleProbeModel(model);
+    let observedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => (
+      new Promise<Response>((_resolve, reject) => {
+        observedSignal = init?.signal as AbortSignal | undefined;
+        observedSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const pending = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model },
+      });
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(observedSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const res = await pending;
+      expect(observedSignal?.aborted).toBe(true);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ model, configured: true, verified: false });
+    } finally {
+      vi.useRealTimers();
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not send the compatible-only thinking extension to external Qwen', async () => {
+    const restoreModel = configureExactProbeModel();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'openrouter/qwen/qwen3.8-flash-next' },
+      });
+      expect(res.json()).toMatchObject({ configured: true, verified: true });
+      const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+      expect(request).not.toHaveProperty('chat_template_kwargs');
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('never sends the Waggle session bearer to an Ollama probe endpoint', async () => {
+    const priorOllamaHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://ollama.example.test';
+    const fetchMock = vi.fn(async (
+      input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'qwen-test' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'ollama/qwen-test' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model: 'ollama/qwen-test',
+        configured: true,
+        verified: true,
+      });
+      const completionCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith('/v1/chat/completions'));
+      expect(completionCall).toBeDefined();
+      expect(String(completionCall?.[0])).toBe(
+        'http://ollama.example.test/v1/chat/completions',
+      );
+      const completionHeaders = new Headers(completionCall?.[1]?.headers);
+      expect(completionHeaders.has('authorization')).toBe(false);
+      expect(JSON.parse(String(completionCall?.[1]?.body))).not.toHaveProperty('chat_template_kwargs');
+    } finally {
+      if (priorOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+      else process.env.OLLAMA_HOST = priorOllamaHost;
       vi.unstubAllGlobals();
     }
   });
@@ -799,6 +1297,526 @@ describe('Workspace & Session API', () => {
       expect(body).toMatchObject({ configured: true, verified: false });
       expect(body.rejected).toBeUndefined();
     } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('atomically rejects a multi-lane save when any exact model fails verification', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('model_not_found', { status: 404 })));
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: primary,
+          fallbackModel: fallback,
+          verifyModelSettings: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_VERIFICATION_FAILED',
+        model: fallback,
+      });
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not let a routable fallback make a broken saved default look verified', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const originalConfig = fs.readFileSync(configPath, 'utf-8');
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    const priorAnthropicVault = server.vault.get('anthropic');
+    const brokenDefault = 'anthropic/claude-default-unavailable';
+    const restoreProbe = configureExactProbeModel();
+    delete process.env.ANTHROPIC_API_KEY;
+    server.vault.delete('anthropic');
+    server.agentState.currentModel = exactProbeModel;
+    const config = JSON.parse(originalConfig) as Record<string, unknown>;
+    config.defaultModel = brokenDefault;
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model: brokenDefault,
+        configured: true,
+        verified: false,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fs.writeFileSync(configPath, originalConfig, 'utf-8');
+      server.agentState.currentModel = priorCurrentModel;
+      restoreProbe();
+      if (priorAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = priorAnthropicKey;
+      if (priorAnthropicVault) {
+        server.vault.set('anthropic', priorAnthropicVault.value, priorAnthropicVault.metadata);
+      } else {
+        server.vault.delete('anthropic');
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails closed on an explicitly blank Primary without touching config', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { defaultModel: '', verifyModelSettings: true },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'PRIMARY_MODEL_REQUIRED' });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    { fallbackModel: '   ' },
+    { budgetModel: ' openai-compatible/qwen-budget ' },
+    { defaultModel: ' openrouter/openai/test-model ' },
+  ])('rejects non-canonical model lane values without probing or mutation: %j', async (payload) => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'MODEL_ID_INVALID' });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('uses a settings revision so a slower stale save cannot overwrite a newer session', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveSlow!: (response: Response) => void;
+    const slowResponse = new Promise<Response>((resolve) => { resolveSlow = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => slowResponse)
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const staleSave = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      const latestSave = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      expect((await latestSave).statusCode).toBe(200);
+
+      resolveSlow(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await staleSave).statusCode).toBe(409);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8'));
+      expect(saved.fallbackModel).toBe(fallbackB);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('always lets the newer verified request win when the older probe finishes first', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveA!: (response: Response) => void;
+    let resolveB!: (response: Response) => void;
+    const responseA = new Promise<Response>((resolve) => { resolveA = resolve; });
+    const responseB = new Promise<Response>((resolve) => { resolveB = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => responseA)
+      .mockImplementationOnce(() => responseB);
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const older = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const newer = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      resolveA(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await older).statusCode).toBe(409);
+      resolveB(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await newer).statusCode).toBe(200);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8'));
+      expect(saved.fallbackModel).toBe(fallbackB);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not revive an older verified request after the newer request is rejected', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveA!: (response: Response) => void;
+    let resolveB!: (response: Response) => void;
+    const responseA = new Promise<Response>((resolve) => { resolveA = resolve; });
+    const responseB = new Promise<Response>((resolve) => { resolveB = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => responseA)
+      .mockImplementationOnce(() => responseB);
+    vi.stubGlobal('fetch', fetchMock);
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+
+    try {
+      const older = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const newer = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      resolveB(new Response('model_not_found', { status: 404 }));
+      expect((await newer).statusCode).toBe(422);
+      resolveA(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await older).statusCode).toBe(409);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects protected keys through PATCH without touching settings', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+
+    const response = await injectWithAuth(server, {
+      method: 'PATCH',
+      url: '/api/settings',
+      payload: { defaultModel: 'openai-compatible/unverified' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    expect(server.agentState.currentModel).toBe(runtimeBefore);
+  });
+
+  it('derives verification for an unflagged model write and rolls back rejection', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const restoreModel = configureExactProbeModel();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('model_not_found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { defaultModel: exactProbeModel },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_VERIFICATION_FAILED',
+        model: exactProbeModel,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects an unverified compatible provider tuple before config, Vault, or runtime mutation', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const priorVault = server.vault.get('openai-compatible');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('model_not_found', { status: 404 }),
+    ));
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: 'openai-compatible/qwen-new',
+          providers: {
+            'openai-compatible': {
+              baseUrl: 'http://127.0.0.1:4010/v1',
+              apiKey: 'candidate-secret',
+              models: ['openai-compatible/qwen-new'],
+            },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ code: 'MODEL_VERIFICATION_FAILED' });
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+      expect(server.vault.get('openai-compatible')).toEqual(priorVault);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rolls back earlier Vault writes when a later provider write fails', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const priorOpenAi = server.vault.get('openai');
+    const priorAnthropic = server.vault.get('anthropic');
+    server.vault.set('openai', 'old-openai-key', {
+      models: ['old-openai-model'],
+      baseUrl: 'https://old-openai.example.test/v1',
+    });
+    server.vault.set('anthropic', 'old-anthropic-key', {
+      models: ['old-anthropic-model'],
+      baseUrl: 'https://old-anthropic.example.test/v1',
+    });
+    const set = server.vault.set.bind(server.vault);
+    const setSpy = vi.spyOn(server.vault, 'set').mockImplementation((name, value, metadata) => {
+      if (name === 'anthropic' && value === 'new-anthropic-key') {
+        throw new Error('simulated later Vault failure');
+      }
+      return set(name, value, metadata);
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            openai: { apiKey: 'new-openai-key', models: ['new-openai-model'] },
+            anthropic: { apiKey: 'new-anthropic-key', models: ['new-anthropic-model'] },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.vault.get('openai')).toMatchObject({
+        value: 'old-openai-key',
+        metadata: {
+          models: ['old-openai-model'],
+          baseUrl: 'https://old-openai.example.test/v1',
+        },
+      });
+      expect(server.vault.get('anthropic')).toMatchObject({
+        value: 'old-anthropic-key',
+        metadata: {
+          models: ['old-anthropic-model'],
+          baseUrl: 'https://old-anthropic.example.test/v1',
+        },
+      });
+    } finally {
+      setSpy.mockRestore();
+      fs.writeFileSync(configPath, before, 'utf-8');
+      if (priorOpenAi) server.vault.set('openai', priorOpenAi.value, priorOpenAi.metadata);
+      else server.vault.delete('openai');
+      if (priorAnthropic) server.vault.set('anthropic', priorAnthropic.value, priorAnthropic.metadata);
+      else server.vault.delete('anthropic');
+    }
+  });
+
+  it('restores Vault state when the final atomic config commit fails', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const provider = 'transaction-new-provider';
+    const priorProvider = server.vault.get(provider);
+    server.vault.delete(provider);
+    const setSpy = vi.spyOn(server.vault, 'set');
+    const deleteSpy = vi.spyOn(server.vault, 'delete');
+    const { WaggleConfig } = await import('@waggle/core');
+    const saveSpy = vi.spyOn(WaggleConfig.prototype, 'save').mockImplementation(() => {
+      throw new Error('simulated config publication failure');
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            [provider]: { apiKey: 'new-provider-key', models: ['new-provider-model'] },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.vault.get(provider)).toBeNull();
+      expect(setSpy.mock.calls.map(([name, value]) => [name, value])).toEqual([
+        [provider, 'new-provider-key'],
+      ]);
+      expect(deleteSpy).toHaveBeenCalledWith(provider);
+    } finally {
+      saveSpy.mockRestore();
+      setSpy.mockRestore();
+      deleteSpy.mockRestore();
+      if (priorProvider) server.vault.set(provider, priorProvider.value, priorProvider.metadata);
+      else server.vault.delete(provider);
+    }
+  });
+
+  it('holds a settings reload until an in-flight verified save reaches a terminal state', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    let resolveProbe!: (response: Response) => void;
+    const probe = new Promise<Response>((resolve) => { resolveProbe = resolve; });
+    const fetchMock = vi.fn().mockImplementationOnce(() => probe);
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const save = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallback, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      let reloadSettled = false;
+      const reload = injectWithAuth(server, { method: 'GET', url: '/api/settings' })
+        .then((response) => { reloadSettled = true; return response; });
+      await new Promise<void>((resolve) => { setImmediate(resolve); });
+      expect(reloadSettled).toBe(false);
+
+      resolveProbe(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await save).statusCode).toBe(200);
+      const reloaded = await reload;
+      expect(reloaded.statusCode).toBe(200);
+      expect(reloaded.json()).toMatchObject({ fallbackModel: fallback });
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks generic Vault credential replacement during an in-flight verified model save', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    server.vault.set('openai-compatible', 'verified-key-one', {
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [primary, fallback],
+    });
+    let resolveProbe!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      resolveProbe = resolve;
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const save = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallback },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      const replacement = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/vault',
+        payload: { name: 'openai-compatible', value: 'unverified-key-two' },
+      });
+      expect(replacement.statusCode).toBe(409);
+      expect(server.vault.get('openai-compatible')?.value).toBe('verified-key-one');
+
+      resolveProbe(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await save).statusCode).toBe(200);
+      expect(server.vault.get('openai-compatible')?.value).toBe('verified-key-one');
+    } finally {
+      server.vault.delete('openai-compatible');
       restoreModel();
       vi.unstubAllGlobals();
     }

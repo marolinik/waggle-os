@@ -24,9 +24,10 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
-use crate::service::ServiceState;
+use crate::service::{ServiceEndpoint, ServiceState};
 
 const STREAM_TIMEOUT_SECS: u64 = 300;
+const SESSION_TOKEN_RESPONSE_MAX_BYTES: usize = 4096;
 
 /// Start an agent query. Returns a request_id; chunks arrive via the
 /// `agent-stream-{request_id}` Tauri event, end via `agent-stream-{request_id}-end`.
@@ -42,14 +43,14 @@ pub async fn run_agent_query(
     session: Option<String>,
 ) -> Result<String, String> {
     let request_id = format!("agent-{}", Uuid::new_v4());
-    let port = state.verified_port()?;
+    let endpoint = crate::service::ensure_service(state).await?;
     let app_clone = app.clone();
     let req_id_clone = request_id.clone();
 
     tokio::spawn(async move {
         if let Err(e) = stream_chat(
             app_clone,
-            port,
+            endpoint,
             req_id_clone,
             query,
             shape,
@@ -69,10 +70,72 @@ pub async fn run_agent_query(
     Ok(request_id)
 }
 
+pub(crate) fn with_desktop_bootstrap(
+    request: reqwest::RequestBuilder,
+    bootstrap_token: &str,
+) -> reqwest::RequestBuilder {
+    request.header("x-waggle-desktop-bootstrap", bootstrap_token)
+}
+
+pub(crate) fn with_session_bearer(
+    request: reqwest::RequestBuilder,
+    session_token: &str,
+) -> reqwest::RequestBuilder {
+    request.bearer_auth(session_token)
+}
+
+pub(crate) fn build_loopback_client(
+    builder: reqwest::ClientBuilder,
+) -> Result<reqwest::Client, String> {
+    builder
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(STREAM_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) async fn bootstrap_session_token(
+    client: &reqwest::Client,
+    endpoint: &ServiceEndpoint,
+) -> Result<String, String> {
+    let url = format!("http://127.0.0.1:{}/api/auth/session-token", endpoint.port);
+    let response = with_desktop_bootstrap(client.get(url), &endpoint.bootstrap_token)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .map_err(|error| format!("Session bootstrap failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Session bootstrap returned {}", response.status()));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > SESSION_TOKEN_RESPONSE_MAX_BYTES as u64)
+    {
+        return Err("Session bootstrap response is too large".to_string());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Session bootstrap response failed: {error}"))?;
+    if bytes.len() > SESSION_TOKEN_RESPONSE_MAX_BYTES {
+        return Err("Session bootstrap response is too large".to_string());
+    }
+    let payload: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "Session bootstrap returned invalid JSON".to_string())?;
+    let token = payload
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 1024)
+        .ok_or_else(|| "Session bootstrap returned an invalid token".to_string())?;
+    Ok(token.to_string())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn stream_chat(
     app: AppHandle,
-    port: u16,
+    endpoint: ServiceEndpoint,
     request_id: String,
     query: String,
     shape: Option<String>,
@@ -92,7 +155,7 @@ async fn stream_chat(
     // /api/agent/run is one-shot (no persistent session), so passing
     // session through would just be dead weight. Binding signature stays
     // stable so callers don't break.
-    let url = format!("http://127.0.0.1:{}/api/agent/run", port);
+    let url = format!("http://127.0.0.1:{}/api/agent/run", endpoint.port);
     let mut body = json!({ "question": query });
     if let Some(ws) = workspace_id {
         body["workspace"] = json!(ws);
@@ -113,10 +176,7 @@ async fn stream_chat(
     let event_name = format!("agent-stream-{}", request_id);
     let end_event = format!("agent-stream-{}-end", request_id);
 
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(STREAM_TIMEOUT_SECS))
-        .build()
-    {
+    let client = match build_loopback_client(reqwest::Client::builder()) {
         Ok(c) => c,
         Err(e) => {
             let _ = app.emit(
@@ -127,7 +187,19 @@ async fn stream_chat(
         }
     };
 
-    let mut resp = match client.post(&url).json(&body).send().await {
+    let session_token = match bootstrap_session_token(&client, &endpoint).await {
+        Ok(token) => token,
+        Err(error) => {
+            let _ = app.emit(&end_event, json!({ "error": error }));
+            return Err(error);
+        }
+    };
+
+    let mut resp = match with_session_bearer(client.post(&url), &session_token)
+        .json(&body)
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             let _ = app.emit(
@@ -156,6 +228,8 @@ async fn stream_chat(
     // `data:` lines. We accumulate bytes into a String buffer, then drain
     // complete blocks one at a time.
     let mut buffer = String::new();
+    let mut terminal_error: Option<String> = None;
+    let mut saw_successful_done = false;
     loop {
         match resp.chunk().await {
             Ok(Some(bytes)) => {
@@ -165,6 +239,10 @@ async fn stream_chat(
                 while let Some(idx) = buffer.find("\n\n") {
                     let block: String = buffer.drain(..idx + 2).collect();
                     if let Some(parsed) = parse_sse_event(&block) {
+                        if terminal_error.is_none() {
+                            terminal_error = terminal_failure(&parsed);
+                        }
+                        saw_successful_done |= successful_done(&parsed);
                         let _ = app.emit(&event_name, parsed);
                     }
                 }
@@ -185,8 +263,17 @@ async fn stream_chat(
     let tail = buffer.trim();
     if !tail.is_empty() {
         if let Some(parsed) = parse_sse_event(tail) {
+            if terminal_error.is_none() {
+                terminal_error = terminal_failure(&parsed);
+            }
+            saw_successful_done |= successful_done(&parsed);
             let _ = app.emit(&event_name, parsed);
         }
+    }
+
+    if let Err(error) = stream_outcome(terminal_error, saw_successful_done) {
+        let _ = app.emit(&end_event, json!({ "error": error }));
+        return Err(error);
     }
 
     let _ = app.emit(&end_event, json!({ "ok": true }));
@@ -224,6 +311,51 @@ fn parse_sse_event(block: &str) -> Option<Value> {
         "event": event_name,
         "data": data_value,
     }))
+}
+
+fn terminal_failure(event: &Value) -> Option<String> {
+    match event.get("event").and_then(Value::as_str) {
+        Some("error") => {
+            let data = event.get("data").unwrap_or(&Value::Null);
+            let detail = data
+                .get("error")
+                .or_else(|| data.get("message"))
+                .or_else(|| data.get("code"))
+                .and_then(Value::as_str)
+                .or_else(|| data.as_str())
+                .unwrap_or("agent run reported an error");
+            Some(detail.to_string())
+        }
+        Some("done")
+            if event
+                .get("data")
+                .and_then(|data| data.get("ok"))
+                .and_then(Value::as_bool)
+                == Some(false) =>
+        {
+            Some("agent run reported done.ok=false".to_string())
+        }
+        _ => None,
+    }
+}
+
+fn successful_done(event: &Value) -> bool {
+    event.get("event").and_then(Value::as_str) == Some("done")
+        && event
+            .get("data")
+            .and_then(|data| data.get("ok"))
+            .and_then(Value::as_bool)
+            == Some(true)
+}
+
+fn stream_outcome(terminal_error: Option<String>, saw_successful_done: bool) -> Result<(), String> {
+    if let Some(error) = terminal_error {
+        return Err(error);
+    }
+    if !saw_successful_done {
+        return Err("agent run ended before done.ok=true".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -264,5 +396,111 @@ mod tests {
         let block = "data: foo\n\n";
         let parsed = parse_sse_event(block).expect("should parse");
         assert_eq!(parsed["data"], "foo");
+    }
+
+    #[test]
+    fn failed_done_event_is_a_terminal_failure() {
+        let parsed =
+            parse_sse_event("event: done\ndata: {\"ok\":false}\n\n").expect("should parse");
+        assert_eq!(
+            terminal_failure(&parsed).as_deref(),
+            Some("agent run reported done.ok=false")
+        );
+    }
+
+    #[test]
+    fn agent_request_uses_the_bootstrapped_bearer_token() {
+        let client = reqwest::Client::new();
+        let request = with_session_bearer(
+            client.post("http://127.0.0.1:3333/api/agent/run"),
+            "desktop-session-token",
+        )
+        .build()
+        .expect("request should build");
+        assert_eq!(
+            request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer desktop-session-token")
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_uses_the_owned_launch_credential() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener should bind");
+        let port = listener.local_addr().expect("listener address").port();
+        let proxy_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("proxy trap should bind");
+        let proxy_port = proxy_listener
+            .local_addr()
+            .expect("proxy trap address")
+            .port();
+        let upstream = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("request should arrive");
+            let mut request = Vec::with_capacity(4096);
+            let mut chunk = [0_u8; 512];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = socket.read(&mut chunk).await.expect("request should read");
+                assert!(read > 0, "request ended before headers completed");
+                request.extend_from_slice(&chunk[..read]);
+                assert!(request.len() <= 4096, "request headers exceeded bound");
+            }
+            let request = String::from_utf8_lossy(&request);
+            assert!(request.starts_with("GET /api/auth/session-token HTTP/1.1"));
+            assert!(request
+                .to_ascii_lowercase()
+                .contains("x-waggle-desktop-bootstrap: owned-bootstrap-token"));
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 33\r\nconnection: close\r\n\r\n{\"token\":\"desktop-session-token\"}",
+                )
+                .await
+                .expect("response should write");
+        });
+        let endpoint = crate::service::ServiceEndpoint {
+            port,
+            instance_id: "owned-instance".to_string(),
+            bootstrap_token: "owned-bootstrap-token".to_string(),
+        };
+        let client = build_loopback_client(
+            reqwest::Client::builder().proxy(
+                reqwest::Proxy::all(format!("http://127.0.0.1:{proxy_port}"))
+                    .expect("proxy should parse"),
+            ),
+        )
+        .expect("client should build");
+
+        let token = bootstrap_session_token(&client, &endpoint)
+            .await
+            .expect("bootstrap should succeed");
+
+        assert_eq!(token, "desktop-session-token");
+        upstream.await.expect("upstream should finish");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), proxy_listener.accept())
+                .await
+                .is_err(),
+            "owned loopback request must bypass every configured proxy"
+        );
+    }
+
+    #[test]
+    fn stream_outcome_requires_explicit_successful_done_event() {
+        assert_eq!(
+            stream_outcome(None, false).expect_err("missing done must fail"),
+            "agent run ended before done.ok=true"
+        );
+        assert_eq!(stream_outcome(None, true), Ok(()));
+        assert_eq!(
+            stream_outcome(Some("upstream failed".to_string()), true)
+                .expect_err("terminal error must win"),
+            "upstream failed"
+        );
     }
 }

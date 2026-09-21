@@ -25,9 +25,9 @@ describe('TemplateStep', () => {
     expect(screen.getByRole('button', { name: /blank workspace/i })).toHaveAttribute('aria-busy', 'true');
   });
 
-  it('shows a soft create error', () => {
-    render(<TemplateStep templates={templates} onSelect={vi.fn()} creating={false} creatingId={null} createError="created locally" />);
-    expect(screen.getByText(/created locally/i)).toBeInTheDocument();
+  it('announces an actionable create error', () => {
+    render(<TemplateStep templates={templates} onSelect={vi.fn()} creating={false} creatingId={null} createError="Could not create workspace. Try again." />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not create workspace.*try again/i);
   });
 
   it('shows no Recommended badge and keeps input order when recommendedId is null', () => {

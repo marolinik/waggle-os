@@ -42,6 +42,7 @@ const DOCUMENT_TOOLS = new Set([
   'generate_docx',
   'generate_pdf',
   'generate_pptx',
+  'generate_xlsx',
   'write_file',
   'multi_edit',
 ]);
@@ -71,7 +72,7 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
 
   if (RESEARCH_SHAPES.has(input.taskShape)) {
     return {
-      maxTurns: 5,
+      maxTurns: 7,
       maxToolRounds: 4,
       maxTokenBudget: 56_000,
       synthesisReserveTokens: 13_000,
@@ -99,6 +100,20 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
         maxSingleResultChars: 12_000,
         recentResultCount: 3,
         historicalResultChars: 1_200,
+      },
+    };
+  }
+
+  if (input.complexity === 'simple') {
+    return {
+      maxTurns: 5,
+      maxToolRounds: 4,
+      maxTokenBudget: 48_000,
+      synthesisReserveTokens: 10_000,
+      toolContextBudget: {
+        maxSingleResultChars: 4_000,
+        recentResultCount: 2,
+        historicalResultChars: 600,
       },
     };
   }
@@ -139,10 +154,15 @@ export function capToolResultForModel(content: string, maxChars: number): string
  * Build the request-only message view. Conversation structure and tool-call IDs
  * are retained; recent results and all errors stay intact (within the hard cap),
  * while older successful results become bounded head/tail source excerpts.
+ *
+ * `sealedUpTo` is the count of leading messages already sent to the model earlier in
+ * this run. They are returned byte-identical, so each request keeps a stable prefix
+ * and the server-side KV cache stays valid across tool rounds.
  */
 export function compactToolContextForModel<T extends ToolContextMessage>(
   messages: readonly T[],
   budget: ToolContextBudget,
+  sealedUpTo = 0,
 ): T[] {
   const toolIndexes = messages
     .map((message, index) => message.role === 'tool' ? index : -1)
@@ -151,6 +171,10 @@ export function compactToolContextForModel<T extends ToolContextMessage>(
 
   return messages.map((message, index) => {
     if (message.role !== 'tool' || typeof message.content !== 'string') return { ...message };
+    // A message already sent earlier in this run is SEALED. Re-excerpting it would
+    // change bytes the server has already cached and invalidate the KV prefix from
+    // that point onward on every tool round.
+    if (index < sealedUpTo) return { ...message };
     const capped = capToolResultForModel(message.content, budget.maxSingleResultChars);
     if (recentIndexes.has(index) || isErrorResult(capped)) {
       return { ...message, content: capped };

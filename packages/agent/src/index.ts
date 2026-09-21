@@ -8,7 +8,13 @@ export {
   type TurnEventRecord,
 } from './turn-context.js';
 export { createMindTools, createToolUtilizationTracker, formatCombinedResult, type ToolDefinition, type MindToolDeps, type ToolUtilizationTracker, type ConfidenceLevel } from './tools.js';
-export { createSystemTools, type FileBackend, type SystemToolDeps } from './system-tools.js';
+export {
+  createSystemTools,
+  executeToolWithStatus,
+  type FileBackend,
+  type SystemToolDeps,
+  type ToolExecutionOutcome,
+} from './system-tools.js';
 export { resolveModelForClass, LIGHTWEIGHT_MODEL, type ModelClass, type ModelClassOpts } from './model-class-router.js';
 export {
   ModelRouter,
@@ -27,6 +33,14 @@ export {
   type IncompleteCompletionError,
   type ParsedOpenAiTextCompletion,
 } from './providers/openai-compat.js';
+export {
+  CircuitBreaker,
+  countsAsBreakerFailure,
+  breakerEndpointKey,
+  wrapFetchWithBreaker,
+  type BreakerState,
+  type CircuitBreakerOptions,
+} from './circuit-breaker.js';
 export {
   classifyRateLimitError,
   planRateLimitResume,
@@ -329,6 +343,7 @@ export {
   filterAvailableTools,
   filterOfflineTools,
   getOfflineCapableToolNames,
+  isBoundedSingleFileRoundTrip,
   measureOpenAiToolSchemaChars,
   selectToolsForTurn,
   type ToolContext,

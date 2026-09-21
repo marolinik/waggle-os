@@ -52,6 +52,21 @@ describe('Agent Personas', () => {
     }
   });
 
+  it('keeps high-variance response contracts in the canonical persona rails', () => {
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/named production bug[\s\S]*active[\s\S]*explicitly supplies containment[\s\S]*rank its investigation first/i);
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/Basis:[\s\S]*standalone[\s\S]*unconditional/i);
+    expect(getPersona('general-purpose')!.systemPrompt)
+      .toMatch(/do not separate[\s\S]*order[\s\S]*rationale[\s\S]*immediately[\s\S]*Basis:/i);
+    expect(getPersona('researcher')!.systemPrompt)
+      .toMatch(/## Sourced facts[\s\S]*## Inferences/i);
+    expect(getPersona('executive-assistant')!.systemPrompt)
+      .toMatch(/Pre-read checklist[\s\S]*Desired decisions[\s\S]*Participants/i);
+    expect(getPersona('coder')!.systemPrompt)
+      .toMatch(/No files were found in the current workspace/i);
+  });
+
   it('covers the 8 original roles', () => {
     const ids = PERSONAS.map(p => p.id);
     expect(ids).toContain('researcher');
@@ -138,6 +153,36 @@ describe('Prompt composition', () => {
     expect(result).toContain('raw.githubusercontent.com');
     expect(result).toContain('before declaring an evidence gap');
     expect(result).toContain('every compared item');
+  });
+
+  it('keeps an empty-workspace Coder answer brief and grounded in tool evidence', () => {
+    const result = composePersonaPrompt(corePrompt, getPersona('coder')!);
+
+    expect(result).toContain('under 200 words');
+    expect(result).toContain('successful tool evidence');
+    expect(result).toContain('Do not infer project details from path or workspace names');
+  });
+
+  it('preserves literal wrapper tags in an exclusive Verifier response contract', () => {
+    const result = composePersonaPrompt(corePrompt, getPersona('verifier')!);
+
+    expect(result).toContain('emit requested tags literally');
+    expect(result).toContain('raw means no Markdown fence, not no wrapper');
+  });
+
+  it('keeps closed-world, runway, and transactional persona rules explicit', () => {
+    const writer = composePersonaPrompt(corePrompt, getPersona('writer')!);
+    expect(writer).toMatch(/compare every factual clause/i);
+    expect(writer).toMatch(/remove any new risk, assurance, consequence/i);
+    expect(writer).toMatch(/do not append a benefit, risk, stability, or assurance sentence/i);
+
+    const finance = composePersonaPrompt(corePrompt, getPersona('finance-owner')!);
+    expect(finance).toMatch(/one-time cash receipt/i);
+    expect(finance).toMatch(/only recurring monthly revenue reduces net monthly burn/i);
+
+    const dataEngineer = composePersonaPrompt(corePrompt, getPersona('data-engineer')!);
+    expect(dataEngineer).toMatch(/BEGIN\/COMMIT\/ROLLBACK/i);
+    expect(dataEngineer).toMatch(/rollback the entire batch before retrying/i);
   });
 
   it('combined prompt stays under 32000 chars', () => {

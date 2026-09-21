@@ -177,6 +177,8 @@ try {
     // their package root so esbuild never appends a subpath to index.ts.
     alias: {
       '@waggle/agent/external-process-env': path.join(root, 'packages', 'agent', 'src', 'external-process-env.ts'),
+      '@waggle/agent/permissions': path.join(root, 'packages', 'agent', 'src', 'permissions.ts'),
+      '@waggle/agent/tool-filter': path.join(root, 'packages', 'agent', 'src', 'tool-filter.ts'),
       '@waggle/agent': path.join(root, 'packages', 'agent', 'src', 'index.ts'),
       '@waggle/core': path.join(root, 'packages', 'core', 'src', 'index.ts'),
       '@waggle/marketplace': path.join(root, 'packages', 'marketplace', 'src', 'index.ts'),

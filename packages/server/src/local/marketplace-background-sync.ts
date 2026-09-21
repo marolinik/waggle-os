@@ -7,7 +7,8 @@ type LogLike = { info(message: string): void };
 
 export function isMarketplaceBackgroundSyncDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.WAGGLE_DISABLE_MARKETPLACE_SYNC === '1'
-    || env.WAGGLE_SKIP_MARKETPLACE_SYNC === '1';
+    || env.WAGGLE_SKIP_MARKETPLACE_SYNC === '1'
+    || env.WAGGLE_ENABLE_MARKETPLACE_SYNC !== '1';
 }
 
 export function scheduleMarketplaceBackgroundSync({

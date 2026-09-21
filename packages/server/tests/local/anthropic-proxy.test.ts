@@ -13,8 +13,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { CostTracker, runAgentLoop } from '@waggle/agent';
 import { ExecutionTraceStore, MindDB } from '@waggle/core';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
@@ -41,12 +43,14 @@ function createTestServer(options: {
 
   // Mock vault
   if (options.vaultApiKey || options.vaultProviders || options.vaultGet) {
+    const getVaultValue = (name: string) => {
+      if (options.vaultGet) return options.vaultGet(name);
+      if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
+      return options.vaultProviders?.[name] ?? null;
+    };
     server.decorate('vault', {
-      get: (name: string) => {
-        if (options.vaultGet) return options.vaultGet(name);
-        if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
-        return options.vaultProviders?.[name] ?? null;
-      },
+      get: getVaultValue,
+      has: (name: string) => getVaultValue(name) !== null,
     });
   } else {
     server.decorate('vault', null);
@@ -434,6 +438,751 @@ describe('Anthropic Proxy Routes', () => {
       expect(refreshed.statusCode).toBe(200);
       expect(tagsCalls).toBe(2);
     });
+  });
+
+  describe('provider-local readiness cooldown', () => {
+  const requestBody = {
+    model: 'openai/gpt-5.4',
+    messages: [{ role: 'user' as const, content: 'test' }],
+    stream: false,
+  };
+
+  function clearProviderEnvironment(): void {
+    for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+      vi.stubEnv(envName, '');
+    }
+  }
+
+  function writeKeylessCompatibleConfig(
+    baseUrl: string,
+    models = ['qwen3.8-flash-next'],
+  ): string {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-cooldown-'));
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: `openai-compatible/${models[0]}`,
+      providers: {
+        'openai-compatible': {
+          apiKey: '',
+          baseUrl,
+          models,
+        },
+      },
+    }), 'utf8');
+    return dataDir;
+  }
+
+  it.each([429, 503])(
+    'marks the only configured provider unavailable immediately after upstream %s',
+    async (upstreamStatus) => {
+      clearProviderEnvironment();
+      server = createTestServer({
+        vaultProviders: { openai: { value: 'openai-cooldown-key' } },
+      });
+      globalThis.fetch = vi.fn(async () => new Response(
+        JSON.stringify({ error: { message: 'transient upstream failure' } }),
+        {
+          status: upstreamStatus,
+          headers: { 'content-type': 'application/json' },
+        },
+      )) as unknown as typeof globalThis.fetch;
+
+      const completion = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: requestBody,
+      });
+      const readiness = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(completion.statusCode, completion.body).toBe(upstreamStatus);
+      expect(readiness.statusCode, readiness.body).toBe(503);
+      expect(readiness.json()).toMatchObject({ status: 'unavailable' });
+    },
+  );
+
+  it('marks the only configured provider unavailable after a network failure', async () => {
+    clearProviderEnvironment();
+    server = createTestServer({
+      vaultProviders: { openai: { value: 'openai-network-key' } },
+    });
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('provider connection failed');
+    }) as unknown as typeof globalThis.fetch;
+
+    const completion = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const readiness = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(completion.statusCode, completion.body).toBe(502);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+    expect(readiness.json()).toMatchObject({ status: 'unavailable' });
+  });
+
+  it('preserves an environment-backed provider response when the vault is unreadable', async () => {
+    clearProviderEnvironment();
+    vi.stubEnv('OPENAI_API_KEY', 'openai-environment-key');
+    server = createTestServer({
+      vaultGet: () => {
+        throw new Error('vault temporarily unavailable');
+      },
+    });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response('temporarily unavailable', { status: 503 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const completion = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+    expect(completion.statusCode, completion.body).toBe(503);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+  });
+
+  it('clears provider cooldown immediately after a successful explicit completion', async () => {
+    clearProviderEnvironment();
+    server = createTestServer({
+      vaultProviders: { openai: { value: 'openai-recovery-key' } },
+    });
+    let providerCalls = 0;
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      providerCalls++;
+      if (providerCalls === 1) {
+        return new Response(JSON.stringify({ error: { message: 'temporarily unavailable' } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'recovered' }, finish_reason: 'stop' }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const unavailable = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+    const recovered = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const ready = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(failed.statusCode, failed.body).toBe(503);
+    expect(unavailable.statusCode, unavailable.body).toBe(503);
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(ready.statusCode, ready.body).toBe(200);
+    expect(providerCalls).toBe(2);
+  });
+
+  it('restores readiness after the bounded cooldown expires', async () => {
+    clearProviderEnvironment();
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    server = createTestServer({
+      vaultProviders: { openai: { value: 'openai-expiry-key' } },
+    });
+    let providerCalls = 0;
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      providerCalls++;
+      return new Response(JSON.stringify({ error: { message: 'temporarily unavailable' } }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const unavailable = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+    now += 60_001;
+    const recovered = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(failed.statusCode, failed.body).toBe(503);
+    expect(unavailable.statusCode, unavailable.body).toBe(503);
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(providerCalls).toBe(1);
+  });
+
+  it.each([
+    { retryAfter: '2', expectedHeader: '2' },
+    { retryAfter: '3600', expectedHeader: '60' },
+  ])('honors a bounded Retry-After of $expectedHeader seconds', async ({ retryAfter, expectedHeader }) => {
+    clearProviderEnvironment();
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    server = createTestServer({
+      vaultProviders: { openai: { value: 'openai-retry-after-key' } },
+    });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response('rate limited', {
+        status: 429,
+        headers: { 'retry-after': retryAfter },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const readiness = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(failed.statusCode).toBe(429);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+    expect(readiness.headers['retry-after']).toBe(expectedHeader);
+  });
+
+  it.each([
+    { status: 401, expectedReadiness: 200, expectedRetryAfter: undefined },
+    { status: 429, expectedReadiness: 503, expectedRetryAfter: '60' },
+  ])(
+    'classifies streaming HTTP $status before applying terminal-frame cooldown rules',
+    async ({ status, expectedReadiness, expectedRetryAfter }) => {
+      clearProviderEnvironment();
+      vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      server = createTestServer({
+        vaultProviders: { openai: { value: 'openai-stream-status-key' } },
+      });
+      globalThis.fetch = vi.fn(async (input) => {
+        if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+        return new Response('upstream rejected before streaming', {
+          status,
+          headers: status === 429 ? { 'retry-after': '60' } : undefined,
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      const completion = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: { ...requestBody, stream: true },
+      });
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(completion.statusCode).toBe(status);
+      expect(readiness.statusCode, readiness.body).toBe(expectedReadiness);
+      expect(readiness.headers['retry-after']).toBe(expectedRetryAfter);
+    },
+  );
+
+  it.each([
+    {
+      label: 'OpenAI-compatible',
+      model: 'openai/gpt-5.4',
+      options: { vaultProviders: { openai: { value: 'openai-empty-stream-key' } } },
+    },
+    {
+      label: 'native Anthropic',
+      model: 'anthropic/claude-sonnet-4-6',
+      options: { vaultApiKey: 'anthropic-empty-stream-key' },
+    },
+  ])('rejects a successful-status empty $label stream and degrades readiness', async ({
+    model,
+    options,
+  }) => {
+    clearProviderEnvironment();
+    server = createTestServer(options);
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const completion = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: {
+        model,
+        messages: [{ role: 'user', content: 'test' }],
+        stream: true,
+      },
+    });
+    const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+    expect(completion.statusCode, completion.body).toBe(502);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+  });
+
+  it('degrades keyless Qwen readiness when an accepted stream fails before completion', async () => {
+    clearProviderEnvironment();
+    const dataDir = writeKeylessCompatibleConfig('http://127.0.0.1:48991/v1');
+    server = createTestServer({ dataDir, vaultProviders: {} });
+    const encoder = new TextEncoder();
+    let pullCount = 0;
+    const failingStream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pullCount++ === 0) {
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"Partial Qwen answer"}}]}\n\n',
+          ));
+          return;
+        }
+        controller.error(new Error('Qwen upstream socket closed'));
+      },
+    });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response(failingStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const completion = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/qwen3.8-flash-next',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: true,
+        },
+      });
+      const readiness = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(completion.statusCode).toBe(200);
+      expect(completion.body).toContain('Partial Qwen answer');
+      expect(completion.body).not.toContain('data: [DONE]');
+      expect(readiness.statusCode, readiness.body).toBe(503);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('degrades keyless Qwen readiness when a stream ends cleanly before DONE', async () => {
+    clearProviderEnvironment();
+    const dataDir = writeKeylessCompatibleConfig('http://127.0.0.1:48994/v1');
+    server = createTestServer({ dataDir, vaultProviders: {} });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response(
+        'data: {"choices":[{"delta":{"content":"Gracefully truncated"}}]}\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const completion = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/qwen3.8-flash-next',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: true,
+        },
+      });
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(completion.statusCode).toBe(200);
+      expect(completion.body).toContain('Gracefully truncated');
+      expect(completion.body).not.toContain('data: [DONE]');
+      expect(readiness.statusCode, readiness.body).toBe(503);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('stops keyless Qwen immediately after a terminal DONE split across chunks', async () => {
+    clearProviderEnvironment();
+    const dataDir = writeKeylessCompatibleConfig('http://127.0.0.1:48995/v1');
+    server = createTestServer({ dataDir, vaultProviders: {} });
+    const encoder = new TextEncoder();
+    let pullCount = 0;
+    const terminalStream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pullCount++ === 0) {
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"Complete"}}]}\n\ndata: [DO',
+          ));
+          return;
+        }
+        if (pullCount === 2) {
+          controller.enqueue(encoder.encode('NE]\n\n'));
+          return;
+        }
+        controller.error(new Error('transport failed after terminal frame'));
+      },
+    });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response(terminalStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const completion = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/qwen3.8-flash-next',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: true,
+        },
+      });
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(completion.body).toContain('data: [DONE]');
+      expect(readiness.statusCode, readiness.body).toBe(200);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('invalidates a keyless Qwen cooldown when its persisted endpoint changes', async () => {
+    clearProviderEnvironment();
+    const dataDir = writeKeylessCompatibleConfig('http://127.0.0.1:48992/v1');
+    server = createTestServer({ dataDir, vaultProviders: {} });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response('temporarily unavailable', {
+        status: 503,
+        headers: { 'retry-after': '60' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const failed = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/qwen3.8-flash-next',
+          messages: [{ role: 'user', content: 'test' }],
+        },
+      });
+      const unavailable = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+      fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+        defaultModel: 'openai-compatible/qwen3.8-flash-next',
+        providers: {
+          'openai-compatible': {
+            apiKey: '',
+            baseUrl: 'http://127.0.0.1:48993/v1',
+            models: ['qwen3.8-flash-next'],
+          },
+        },
+      }), 'utf8');
+      const ready = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(failed.statusCode).toBe(503);
+      expect(unavailable.statusCode, unavailable.body).toBe(503);
+      expect(ready.statusCode, ready.body).toBe(200);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ignores a stale in-flight failure after the keyless Qwen endpoint changes', async () => {
+    clearProviderEnvironment();
+    const dataDir = writeKeylessCompatibleConfig('http://127.0.0.1:48996/v1');
+    server = createTestServer({ dataDir, vaultProviders: {} });
+    let resolveOldRequest!: (response: Response) => void;
+    let markOldRequestStarted!: () => void;
+    const oldRequestStarted = new Promise<void>((resolve) => { markOldRequestStarted = resolve; });
+    globalThis.fetch = vi.fn((input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return Promise.resolve(new Response(null, { status: 503 }));
+      }
+      markOldRequestStarted();
+      return new Promise<Response>((resolve) => { resolveOldRequest = resolve; });
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const oldCompletion = server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/qwen3.8-flash-next',
+          messages: [{ role: 'user', content: 'test' }],
+        },
+      });
+      await oldRequestStarted;
+      fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+        defaultModel: 'openai-compatible/qwen3.8-flash-next',
+        providers: {
+          'openai-compatible': {
+            apiKey: '',
+            baseUrl: 'http://127.0.0.1:48997/v1',
+            models: ['qwen3.8-flash-next'],
+          },
+        },
+      }), 'utf8');
+      resolveOldRequest(new Response('old endpoint unavailable', {
+        status: 503,
+        headers: { 'retry-after': '60' },
+      }));
+      expect((await oldCompletion).statusCode).toBe(503);
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(readiness.statusCode, readiness.body).toBe(200);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let a stale in-flight success clear the new endpoint cooldown', async () => {
+    clearProviderEnvironment();
+    const oldBaseUrl = 'http://127.0.0.1:48998/v1';
+    const newBaseUrl = 'http://127.0.0.1:48999/v1';
+    const dataDir = writeKeylessCompatibleConfig(oldBaseUrl);
+    server = createTestServer({ dataDir, vaultProviders: {}, costTracker: new CostTracker() });
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'initial state',
+      checkedAt: new Date().toISOString(),
+    };
+    let resolveOldRequest!: (response: Response) => void;
+    let markOldRequestStarted!: () => void;
+    const oldRequestStarted = new Promise<void>((resolve) => { markOldRequestStarted = resolve; });
+    globalThis.fetch = vi.fn((input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) return Promise.resolve(new Response(null, { status: 503 }));
+      if (url.startsWith(oldBaseUrl)) {
+        markOldRequestStarted();
+        return new Promise<Response>((resolve) => { resolveOldRequest = resolve; });
+      }
+      return Promise.resolve(new Response('new endpoint unavailable', {
+        status: 503,
+        headers: { 'retry-after': '60' },
+      }));
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      const payload = {
+        model: 'openai-compatible/qwen3.8-flash-next',
+        messages: [{ role: 'user', content: 'test' }],
+      };
+      const oldCompletion = server.inject({ method: 'POST', url: '/v1/chat/completions', payload });
+      await oldRequestStarted;
+      fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+        defaultModel: 'openai-compatible/qwen3.8-flash-next',
+        providers: {
+          'openai-compatible': {
+            apiKey: '',
+            baseUrl: newBaseUrl,
+            models: ['qwen3.8-flash-next'],
+          },
+        },
+      }), 'utf8');
+      expect((await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload,
+      })).statusCode).toBe(503);
+      resolveOldRequest(new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'stale success' }, finish_reason: 'stop' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      expect((await oldCompletion).statusCode).toBe(200);
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+      expect(readiness.statusCode, readiness.body).toBe(503);
+      expect(server.agentState.llmProvider.health).toBe('degraded');
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let a stale keyed success restore a rotated credential or healthy state', async () => {
+    clearProviderEnvironment();
+    let vaultKey = 'openai-old-key';
+    server = createTestServer({
+      vaultGet: (name) => name === 'openai' ? { value: vaultKey } : null,
+      costTracker: new CostTracker(),
+    });
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'initial state',
+      checkedAt: new Date().toISOString(),
+    };
+    let resolveOldRequest!: (response: Response) => void;
+    let markOldRequestStarted!: () => void;
+    const oldRequestStarted = new Promise<void>((resolve) => { markOldRequestStarted = resolve; });
+    globalThis.fetch = vi.fn((input, init) => {
+      if (String(input).endsWith('/api/tags')) {
+        return Promise.resolve(new Response(null, { status: 503 }));
+      }
+      const authorization = new Headers(init?.headers).get('authorization');
+      if (authorization === 'Bearer openai-old-key') {
+        markOldRequestStarted();
+        return new Promise<Response>((resolve) => { resolveOldRequest = resolve; });
+      }
+      return Promise.resolve(new Response('rotated credential endpoint unavailable', {
+        status: 503,
+        headers: { 'retry-after': '60' },
+      }));
+    }) as unknown as typeof globalThis.fetch;
+
+    const oldCompletion = server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    await oldRequestStarted;
+    vaultKey = 'openai-new-key';
+    expect((await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    })).statusCode).toBe(503);
+    resolveOldRequest(new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: 'stale success' }, finish_reason: 'stop' }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    expect((await oldCompletion).statusCode).toBe(200);
+    const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+    expect(readiness.statusCode, readiness.body).toBe(503);
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+    expect(process.env.OPENAI_API_KEY).not.toBe('openai-old-key');
+  });
+
+  it('reports the shortest remaining cooldown when every configured provider is cooling', async () => {
+    clearProviderEnvironment();
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    server = createTestServer({
+      vaultProviders: {
+        openai: { value: 'openai-cooling-key' },
+        openrouter: { value: 'openrouter-cooling-key' },
+      },
+    });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      const isOpenRouter = String(input).includes('openrouter.ai');
+      return new Response('temporarily unavailable', {
+        status: 429,
+        headers: { 'retry-after': isOpenRouter ? '2' : '30' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const openAi = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const openRouter = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: {
+        ...requestBody,
+        model: 'openrouter/qwen/qwen3.8-flash',
+      },
+    });
+    const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+
+    expect(openAi.statusCode).toBe(429);
+    expect(openRouter.statusCode).toBe(429);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+    expect(readiness.headers['retry-after']).toBe('2');
+  });
+
+  it('does not cooldown a configured provider after a non-transient rejection', async () => {
+    clearProviderEnvironment();
+    server = createTestServer({
+      vaultProviders: { openai: { value: 'openai-rejected-key' } },
+    });
+    globalThis.fetch = vi.fn(async () => new Response('unauthorized', { status: 401 })) as unknown as typeof globalThis.fetch;
+
+    const rejected = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const readiness = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(rejected.statusCode).toBe(401);
+    expect(readiness.statusCode, readiness.body).toBe(200);
+  });
+
+  it('keeps aggregate readiness when another configured provider is not cooling', async () => {
+    clearProviderEnvironment();
+    server = createTestServer({
+      vaultProviders: {
+        openai: { value: 'openai-failing-key' },
+        openrouter: { value: 'openrouter-healthy-key' },
+      },
+    });
+    globalThis.fetch = vi.fn(async () => new Response('temporarily unavailable', { status: 503 })) as unknown as typeof globalThis.fetch;
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: requestBody,
+    });
+    const readiness = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(failed.statusCode).toBe(503);
+    expect(readiness.statusCode, readiness.body).toBe(200);
+  });
+
+  it('applies the same transient cooldown to native Anthropic', async () => {
+    clearProviderEnvironment();
+    server = createTestServer({ vaultApiKey: 'anthropic-cooldown-key' });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+      return new Response('temporarily unavailable', { status: 503 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: {
+        model: 'anthropic/claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'test' }],
+      },
+    });
+    const readiness = await server.inject({
+      method: 'GET',
+      url: '/v1/health/readiness',
+    });
+
+    expect(failed.statusCode).toBe(503);
+    expect(readiness.statusCode, readiness.body).toBe(503);
+  });
   });
 
   // ── POST /v1/chat/completions ─────────────────────────────────
@@ -2029,6 +2778,9 @@ describe('Anthropic Proxy Routes', () => {
     });
 
     it('does not synthesize DONE when the upstream stream ends before message_stop', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
       process.env.ANTHROPIC_API_KEY = 'test-key-stream-premature-eof';
       const costTracker = new CostTracker();
       server = createTestServer({ costTracker });
@@ -2037,10 +2789,13 @@ describe('Anthropic Proxy Routes', () => {
         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Partial answer"}}',
         'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":20}}',
       ].join('\n\n') + '\n\n';
-      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      })) as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn(async (input) => {
+        if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+        return new Response(anthropicStream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -2057,6 +2812,8 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.body).not.toContain('finish_reason');
       expect(res.body).not.toContain('data: [DONE]');
       expect(costTracker.getDailyTotal()).toBeGreaterThan(0.05);
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+      expect(readiness.statusCode, readiness.body).toBe(503);
     });
 
     it('fails closed when message_stop arrives without a stop reason', async () => {
@@ -2127,6 +2884,9 @@ describe('Anthropic Proxy Routes', () => {
     }, 2_000);
 
     it('does not synthesize DONE when the upstream stream reader fails', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
       process.env.ANTHROPIC_API_KEY = 'test-key-stream-read-failure';
       server = createTestServer();
       const encoder = new TextEncoder();
@@ -2142,10 +2902,13 @@ describe('Anthropic Proxy Routes', () => {
           }
         },
       });
-      globalThis.fetch = vi.fn(async () => new Response(failingStream, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      })) as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn(async (input) => {
+        if (String(input).endsWith('/api/tags')) return new Response(null, { status: 503 });
+        return new Response(failingStream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -2160,6 +2923,8 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body).toContain('Partial answer');
       expect(res.body).not.toContain('data: [DONE]');
+      const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+      expect(readiness.statusCode, readiness.body).toBe(503);
     });
   });
 
@@ -2484,11 +3249,18 @@ describe('Anthropic Proxy Routes', () => {
     ])('bounds a stalled $label cloud request with a 504', async ({ model, options }) => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       try {
+        for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+          vi.stubEnv(envName, '');
+        }
         server = createTestServer(options);
         let upstreamSignal: AbortSignal | undefined;
         let markFetchStarted!: () => void;
         const fetchStarted = new Promise<void>((resolve) => { markFetchStarted = resolve; });
-        globalThis.fetch = vi.fn((_url, init) => new Promise<Response>((_resolve, reject) => {
+        globalThis.fetch = vi.fn((url, init) => {
+          if (String(url).endsWith('/api/tags')) {
+            return Promise.resolve(new Response(null, { status: 503 }));
+          }
+          return new Promise<Response>((_resolve, reject) => {
           upstreamSignal = init?.signal as AbortSignal | undefined;
           markFetchStarted();
           const fallback = setTimeout(
@@ -2499,7 +3271,8 @@ describe('Anthropic Proxy Routes', () => {
             clearTimeout(fallback);
             reject(upstreamSignal?.reason ?? new Error('cloud request aborted'));
           }, { once: true });
-        })) as unknown as typeof globalThis.fetch;
+          });
+        }) as unknown as typeof globalThis.fetch;
 
         const responsePromise = server.inject({
           method: 'POST',
@@ -2517,6 +3290,11 @@ describe('Anthropic Proxy Routes', () => {
         expect(upstreamSignal?.aborted).toBe(true);
         expect(response.statusCode).toBe(504);
         expect(response.json().error.message).toContain('timed out after 120000ms');
+        const readiness = await server.inject({
+          method: 'GET',
+          url: '/v1/health/readiness',
+        });
+        expect(readiness.statusCode, readiness.body).toBe(503);
       } finally {
         vi.useRealTimers();
       }
@@ -2593,9 +3371,13 @@ describe('Anthropic Proxy Routes', () => {
       options,
       firstChunk,
     }) => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
       server = createTestServer(options);
       let upstreamSignal: AbortSignal | undefined;
-      globalThis.fetch = vi.fn(async (_url, init) => {
+      globalThis.fetch = vi.fn(async (url, init) => {
+        if (String(url).endsWith('/api/tags')) return new Response(null, { status: 503 });
         upstreamSignal = init?.signal as AbortSignal | undefined;
         return new Response(new ReadableStream<Uint8Array>({
           start(controller) {
@@ -2637,6 +3419,11 @@ describe('Anthropic Proxy Routes', () => {
       await vi.waitFor(() => {
         expect(upstreamSignal?.aborted).toBe(true);
       }, { timeout: 1_000 });
+      const readiness = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+      expect(readiness.statusCode, readiness.body).toBe(200);
     });
 
     it('rejects a non-loopback Ollama endpoint before making an outbound request', async () => {
@@ -2738,6 +3525,7 @@ describe('Anthropic Proxy Routes', () => {
       const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
       expect(String(url)).toBe('https://api.openai.com/v1/chat/completions');
       expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer openai-vault-key');
+      expect(init?.redirect).toBe('error');
       const outbound = JSON.parse(String(init?.body));
       expect(outbound.model).toBe('gpt-5.4');
       expect(outbound.tools[0].function.name).toBe('read_file');
@@ -2770,6 +3558,289 @@ describe('Anthropic Proxy Routes', () => {
       const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
       expect(String(url)).toBe('https://router.example.test/api/v1/chat/completions');
       expect(JSON.parse(String(init?.body)).model).toBe('anthropic/claude-opus-4.8');
+    });
+
+    it('routes a persisted keyless OpenAI-compatible model and preserves explicit Qwen thinking', async () => {
+      const compatibleFetch = vi.fn<typeof fetch>((input, init) => originalFetch(input, init));
+      globalThis.fetch = compatibleFetch;
+      const captures: Array<{
+        authorization: string | undefined;
+        body: {
+          model: string;
+          stream?: boolean;
+          chat_template_kwargs?: { enable_thinking?: boolean };
+          extra_body?: Record<string, unknown>;
+        };
+        path: string | undefined;
+      }> = [];
+      const upstreamSse = 'data: {"choices":[{"delta":{"content":"Local stream"}}]}\n\ndata: [DONE]\n\n';
+      const upstream = http.createServer(async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+          model: string;
+          stream?: boolean;
+          chat_template_kwargs?: { enable_thinking?: boolean };
+          extra_body?: Record<string, unknown>;
+        };
+        captures.push({
+          authorization: request.headers.authorization,
+          body,
+          path: request.url,
+        });
+        if (body.stream) {
+          response.writeHead(200, { 'content-type': 'text/event-stream' });
+          response.end(upstreamSse);
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'Local response' }, finish_reason: 'stop' }],
+          model: body.model,
+        }));
+      });
+      await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+      const { port } = upstream.address() as AddressInfo;
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-proxy-'));
+      fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+        defaultModel: 'openai-compatible/acme/local-qwen:Q4_K_M',
+        providers: {
+          'openai-compatible': {
+            apiKey: '',
+            models: ['acme/local-qwen:Q4_K_M', 'acme/local-llama:Q4_K_M'],
+            baseUrl: `http://127.0.0.1:${port}/v1`,
+          },
+        },
+      }), 'utf8');
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.000001, 'hard');
+      const vaultProviders: Record<string, { value: string; metadata?: Record<string, unknown> }> = {};
+      server = createTestServer({ dataDir, costTracker, vaultProviders });
+
+      try {
+        const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+        expect(readiness.statusCode).toBe(200);
+
+        const nonStreamBody = {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user' as const, content: 'test' }],
+          stream: false,
+        };
+        const callerReservation = costTracker.reserveModelSpend({
+          model: nonStreamBody.model,
+          inputTokens: 1,
+          maxOutputTokens: 16,
+          billingClass: 'free',
+        });
+        const targetUrl = 'http://127.0.0.1:3333/v1';
+        costTracker.registerModelSpendReservationTarget(targetUrl);
+        const callerHandoff = costTracker.issueModelSpendReservationHandoff(
+          callerReservation,
+          JSON.stringify(nonStreamBody),
+          targetUrl,
+        );
+        expect(callerHandoff).toBeDefined();
+
+        const nonStream = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { [MODEL_SPEND_RESERVATION_HEADER]: callerHandoff!.token },
+          payload: nonStreamBody,
+        });
+        expect(nonStream.statusCode).toBe(200);
+        expect(nonStream.json().choices[0].message.content).toBe('Local response');
+        expect(costTracker.takeModelSpendReservationHandoffDisposition(callerHandoff!.token))
+          .toBeUndefined();
+        expect(costTracker.claimModelSpendReservationHandoff(
+          callerHandoff!.token,
+          JSON.stringify(nonStreamBody),
+        )?.reservation).toEqual(callerReservation);
+        costTracker.discardModelSpendReservationHandoff(callerHandoff!.token);
+        expect(costTracker.reconcileModelSpend(callerReservation, {
+          inputTokens: 1,
+          outputTokens: 1,
+        })).toBe(true);
+
+        const racedReservation = costTracker.reserveModelSpend({
+          model: nonStreamBody.model,
+          inputTokens: 1,
+          maxOutputTokens: 16,
+          billingClass: 'free',
+        });
+        const racedHandoff = costTracker.issueModelSpendReservationHandoff(
+          racedReservation,
+          JSON.stringify(nonStreamBody),
+          targetUrl,
+        );
+        expect(racedHandoff).toBeDefined();
+        vaultProviders['openai-compatible'] = { value: 'sk-compatible-now-priced' };
+        const racedResponse = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { [MODEL_SPEND_RESERVATION_HEADER]: racedHandoff!.token },
+          payload: nonStreamBody,
+        });
+        expect(racedResponse.statusCode).toBe(429);
+        expect(racedResponse.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+        expect(captures).toHaveLength(1);
+        expect(costTracker.takeModelSpendReservationHandoffDisposition(racedHandoff!.token))
+          .toBe('release');
+        costTracker.discardModelSpendReservationHandoff(racedHandoff!.token);
+        expect(costTracker.releaseReservedModelSpend(racedReservation)).toBe(true);
+        delete vaultProviders['openai-compatible'];
+
+        const streaming = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: true,
+          },
+        });
+        expect(streaming.statusCode).toBe(200);
+      expect(streaming.headers['content-type']).toContain('text/event-stream');
+      expect(streaming.body).toBe(upstreamSse);
+
+      const thinking = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+          chat_template_kwargs: { enable_thinking: true },
+        },
+      });
+      expect(thinking.statusCode).toBe(200);
+
+      const explicitFalse = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+          chat_template_kwargs: { enable_thinking: false },
+          extra_body: { enable_thinking: true, preserve_me: 'yes' },
+        },
+      });
+      expect(explicitFalse.statusCode).toBe(200);
+
+      const nonQwen = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-llama:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+      expect(nonQwen.statusCode).toBe(200);
+
+      const unlisted = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/unlisted-model',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+      expect(unlisted.statusCode).toBe(429);
+      expect(unlisted.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+
+      expect(captures).toEqual([
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: false },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: true,
+            chat_template_kwargs: { enable_thinking: false },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: true },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: false },
+            extra_body: { preserve_me: 'yes' },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({ model: 'acme/local-llama:Q4_K_M', stream: false }),
+          path: '/v1/chat/completions',
+        },
+      ]);
+      expect(captures[4].body).not.toHaveProperty('chat_template_kwargs');
+      expect(captures[4].body).not.toHaveProperty('extra_body');
+      expect(compatibleFetch).toHaveBeenCalledTimes(5);
+      expect(compatibleFetch.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBe(0);
+      } finally {
+        await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
+    it('keeps a configured compatible model priced when the vault is unavailable', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-vault-unavailable-'));
+      try {
+        fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+          defaultModel: 'openai-compatible/acme/local-qwen',
+          providers: {
+            'openai-compatible': {
+              apiKey: '',
+              models: ['acme/local-qwen'],
+              baseUrl: 'http://127.0.0.1:43218/v1',
+            },
+          },
+        }), 'utf8');
+        const costTracker = new CostTracker();
+        costTracker.setBudget(0.000001, 'hard');
+        server = createTestServer({ dataDir, costTracker });
+        const upstreamFetch = vi.fn();
+        globalThis.fetch = upstreamFetch as unknown as typeof globalThis.fetch;
+
+        const response = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai-compatible/acme/local-qwen',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+
+        expect(response.statusCode).toBe(429);
+        expect(response.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+        expect(upstreamFetch).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
     });
 
     it('uses the Gemini OpenAI-compatibility endpoint with bearer auth', async () => {
@@ -2866,7 +3937,9 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.body).toBe(upstream);
     });
 
-    it('rejects unknown providers before making an outbound request', async () => {
+    it.each(['unknown-provider', 'constructor', '__proto__'])(
+      'rejects unknown provider prefix %s before making an outbound request',
+      async (providerPrefix) => {
       server = createTestServer();
       globalThis.fetch = vi.fn();
 
@@ -2874,16 +3947,17 @@ describe('Anthropic Proxy Routes', () => {
         method: 'POST',
         url: '/v1/chat/completions',
         payload: {
-          model: 'unknown-provider/new-model',
+          model: `${providerPrefix}/new-model`,
           messages: [{ role: 'user', content: 'test' }],
           stream: false,
         },
       });
 
       expect(res.statusCode).toBe(400);
-      expect(res.json().error.message).toContain('unknown-provider/new-model');
+      expect(res.json().error.message).toContain(`${providerPrefix}/new-model`);
       expect(globalThis.fetch).not.toHaveBeenCalled();
-    });
+      },
+    );
 
     it('still forwards Claude models (with and without provider prefix)', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key-model-guard-pass';

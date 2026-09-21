@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -24,6 +24,8 @@ import {
   PROVIDER_ENV_NAMES,
 } from './provider-env.js';
 import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
+import { probeConfiguredModel } from './routes/settings.js';
+import { providerConfigurationFingerprint } from './routes/anthropic-proxy.js';
 
 const log = createLogger('service');
 
@@ -66,6 +68,20 @@ function errorCode(error: unknown): string | undefined {
   return typeof error === 'object' && error !== null && 'code' in error
     ? String((error as { code?: unknown }).code)
     : undefined;
+}
+
+function secretMatches(raw: unknown, expected: string): boolean {
+  if (typeof raw !== 'string') return false;
+  const actualBytes = Buffer.from(raw);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length
+    && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+function bearerMatches(raw: unknown, expected: string): boolean {
+  if (typeof raw !== 'string') return false;
+  const match = raw.match(/^Bearer\s+(.+)$/i);
+  return secretMatches(match?.[1]?.trim(), expected);
 }
 
 function publishDesktopReadyFile(filePath: string, record: DesktopReadyRecord): void {
@@ -160,10 +176,12 @@ function getConfiguredProviderIds(dataDir: string, server?: FastifyInstance): st
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
-        providers?: Record<string, { apiKey?: string }>;
+        providers?: Record<string, { apiKey?: string; baseUrl?: string }>;
       };
       for (const [providerId, provider] of Object.entries(config.providers ?? {})) {
-        if (PROVIDER_ENV_NAMES[providerId] && provider.apiKey) configured.add(providerId);
+        const hasKnownProviderKey = Boolean(PROVIDER_ENV_NAMES[providerId] && provider.apiKey?.trim());
+        const hasCompatibleEndpoint = providerId === 'openai-compatible' && Boolean(provider.baseUrl?.trim());
+        if (hasKnownProviderKey || hasCompatibleEndpoint) configured.add(providerId);
       }
     }
   } catch { /* ignore */ }
@@ -192,6 +210,12 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   const allowDesktopPortFallback = process.env.WAGGLE_DESKTOP_PORT_FALLBACK === '1';
   const desktopInstanceId = process.env.WAGGLE_INSTANCE_ID?.trim();
   const desktopReadyFile = process.env.WAGGLE_READY_FILE?.trim();
+  const rawDesktopBootstrapToken = process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN?.trim();
+  const desktopBootstrapToken = rawDesktopBootstrapToken
+    && rawDesktopBootstrapToken.length >= 32
+    && rawDesktopBootstrapToken.length <= 200
+    ? rawDesktopBootstrapToken
+    : null;
   const desktopStartedAt = new Date().toISOString();
 
   if (allowDesktopPortFallback && (!desktopInstanceId || !desktopReadyFile || !path.isAbsolute(desktopReadyFile))) {
@@ -302,14 +326,55 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
-  const shutdown = async (): Promise<void> => {
-    process.off('SIGTERM', shutdown);
-    process.off('SIGINT', shutdown);
-    await server.close();
-    if (!skipLiteLLM) {
-      await stopLiteLLM();
-    }
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= (async () => {
+      process.off('SIGTERM', shutdown);
+      process.off('SIGINT', shutdown);
+      await server.close();
+      if (!skipLiteLLM) {
+        await stopLiteLLM();
+      }
+    })();
+    return shutdownPromise;
   };
+
+  if (allowDesktopPortFallback && desktopInstanceId && desktopBootstrapToken) {
+    server.post('/api/auth/desktop-shutdown', async (request, reply) => {
+      const host = request.headers.host?.toLowerCase();
+      const expectedHost = `127.0.0.1:${server.localConfig.port}`;
+      const isLoopback = request.ip === '127.0.0.1'
+        || request.ip === '::1'
+        || request.ip === '::ffff:127.0.0.1';
+      if (!isLoopback || host !== expectedHost) {
+        return reply.code(403).send({
+          error: 'Desktop shutdown is available only to the owned loopback launch.',
+          code: 'DESKTOP_SHUTDOWN_LOOPBACK_ONLY',
+        });
+      }
+      if (!bearerMatches(request.headers.authorization, server.agentState.wsSessionToken)) {
+        return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+      }
+      if (!secretMatches(
+        request.headers['x-waggle-desktop-bootstrap'],
+        desktopBootstrapToken,
+      )) {
+        return reply.code(403).send({
+          error: 'Desktop shutdown requires the owned launch credential.',
+          code: 'DESKTOP_BOOTSTRAP_REQUIRED',
+        });
+      }
+
+      reply.raw.once('finish', () => {
+        setImmediate(() => {
+          void shutdown().catch(error => {
+            log.error('Managed desktop shutdown failed', error);
+          });
+        });
+      });
+      return reply.code(202).send({ accepted: true });
+    });
+  }
 
   // Deregister signal handlers when server closes normally (e.g. in tests)
   server.addHook('onClose', async () => {
@@ -390,7 +455,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       providerHealth = 'degraded';
       providerDetail = configuredProviders.length === 1 && configuredProviders[0] === 'anthropic'
         ? 'Built-in Anthropic proxy (API key configured; verification pending)'
-        : `Built-in provider proxy (credentials configured: ${configuredProviders.join(', ')}; verification pending)`;
+        : `Built-in provider proxy (provider configured: ${configuredProviders.join(', ')}; verification pending)`;
     } else {
       const localModels = await listOllamaChatModelIds();
       if (localModels.length > 0) {
@@ -419,6 +484,48 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     detail: providerDetail,
     checkedAt: new Date().toISOString(),
   };
+
+  // A persisted provider is only ready when its exact saved default model
+  // answers. Probe after listen so the in-process proxy is routable, and keep
+  // the degraded state on rejection, timeout, or malformed responses.
+  const startupModel = server.agentState.currentModel.trim();
+  if (
+    providerName === 'anthropic-proxy'
+    && providerHealth === 'degraded'
+    && startupModel.startsWith('openai-compatible/')
+  ) {
+    const providerBeforeProbe = server.agentState.llmProvider;
+    const configurationBeforeProbe = providerConfigurationFingerprint(
+      server,
+      'openai-compatible',
+    );
+    const probe = await probeConfiguredModel(server, startupModel, true, { passive: true });
+    const targetStillCurrent = server.agentState.currentModel.trim() === startupModel
+      && server.agentState.llmProvider === providerBeforeProbe
+      && providerConfigurationFingerprint(server, 'openai-compatible')
+        === configurationBeforeProbe;
+    if (targetStillCurrent && probe.verified && probe.model === startupModel) {
+      const providerId = probe.model.split('/')[0] ?? 'configured';
+      const verificationKind = providerId === 'openai-compatible' ? 'endpoint' : 'credential';
+      providerDetail = `Built-in provider proxy (${providerId} ${verificationKind} verified)`;
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: providerDetail,
+        checkedAt: new Date().toISOString(),
+        verifiedModel: startupModel,
+      };
+    } else if (targetStillCurrent) {
+      providerDetail = 'Built-in provider proxy (openai-compatible verification failed)';
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: providerDetail,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+    providerDetail = server.agentState.llmProvider.detail;
+  }
   server.offlineManager.start();
 
   emit({ phase: 'ready', message: `LLM: ${providerDetail}`, progress: 0.9 });

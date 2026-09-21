@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 import { ensureManagedLiteLLMModel } from './litellm-runtime-config.js';
 import { getProviderApiKey } from './provider-env.js';
 import {
@@ -56,6 +57,7 @@ function providerForModel(model: string): string | null {
     const provider = normalized.slice(0, slash);
     if (provider === 'anthropic') return 'anthropic';
     if (provider === 'openai') return 'openai';
+    if (provider === 'openai-compatible') return 'openai-compatible';
     if (provider === 'google') return 'google';
     if (provider === 'deepseek') return 'deepseek';
     if (provider === 'xai') return 'xai';
@@ -87,6 +89,15 @@ function providerForModel(model: string): string | null {
 function providerIsReady(server: FastifyInstance, provider: string | null): boolean {
   if (!provider) return false;
   if (provider === 'ollama') return true;
+  if (provider === 'openai-compatible') {
+    const vaultBaseUrl = server.vault?.get(provider)?.metadata?.baseUrl;
+    if (typeof vaultBaseUrl === 'string' && vaultBaseUrl.trim()) return true;
+    try {
+      return Boolean(new WaggleConfig(server.localConfig.dataDir).getProviders()[provider]?.baseUrl?.trim());
+    } catch {
+      return false;
+    }
+  }
   return Boolean(getProviderApiKey(provider, server.vault));
 }
 
@@ -113,11 +124,8 @@ async function modelIsRoutable(
   // request is the authority; managed LiteLLM catalog state may be stale or
   // absent after the service has fallen back from a failed LiteLLM launch.
   const activeProvider = server.agentState?.llmProvider;
-  if (
-    activeProvider?.provider === 'anthropic-proxy'
-    && activeProvider.health !== 'unavailable'
-  ) {
-    return true;
+  if (activeProvider?.provider === 'anthropic-proxy') {
+    return activeProvider.health !== 'unavailable';
   }
   return ensureManagedLiteLLMModel(server, model);
 }
@@ -200,6 +208,43 @@ export async function listOllamaChatModelIds(signal?: AbortSignal): Promise<stri
   return models
     .filter((m) => m.source === 'local' && !isEmbeddingModel(m.id))
     .map((m) => m.id);
+}
+
+/**
+ * A compatible endpoint is unmetered only when the exact model was persisted
+ * for a keyless user-owned endpoint. Do not infer this from the provider prefix
+ * alone: OpenAI-compatible endpoints can also be paid gateways.
+ */
+export function isExactConfiguredKeylessCompatibleModel(
+  server: FastifyInstance,
+  model: string,
+): boolean {
+  const selectedModel = model.trim();
+  if (!selectedModel.startsWith('openai-compatible/')) return false;
+
+  if (!server.vault) return false;
+  try {
+    if (server.vault.has('openai-compatible')) return false;
+  } catch {
+    // A locked or unavailable vault cannot prove that the endpoint is keyless.
+    return false;
+  }
+
+  try {
+    const configured = new WaggleConfig(server.localConfig.dataDir)
+      .getProviders()['openai-compatible'];
+    if (!configured?.baseUrl?.trim() || configured.apiKey?.trim()) return false;
+    return configured.models.some((configuredModel) => {
+      const trimmed = configuredModel.trim();
+      if (!trimmed) return false;
+      const canonical = trimmed.startsWith('openai-compatible/')
+        ? trimmed
+        : `openai-compatible/${trimmed}`;
+      return canonical === selectedModel;
+    });
+  } catch {
+    return false;
+  }
 }
 
 /**

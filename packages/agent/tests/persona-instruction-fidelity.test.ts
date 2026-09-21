@@ -50,6 +50,10 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/exact source selected from search results/i);
     expect(prompt).toMatch(/never transfer features between compared products/i);
     expect(prompt).toMatch(/distinguish facts from inference.*label both explicitly/i);
+    expect(prompt).toMatch(/once one qualifying primary source per compared item has been fetched.*stop searching and synthesize/i);
+    expect(prompt).toMatch(/raw README.*unusable.*stop using that repository.*different qualifying primary source/i);
+    expect(prompt).toMatch(/never cite.*fetch.*unusable/i);
+    expect(prompt).toMatch(/final source list.*only qualifying primary sources.*never list (?:a )?secondary/i);
     expect(prompt).not.toMatch(/always triangulate across at least 3 sources/i);
   });
 
@@ -57,25 +61,49 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('writer');
     expect(prompt).toMatch(/closed-world rewrite/i);
     expect(prompt).toMatch(/do not add.*claims/i);
+    expect(prompt).toMatch(/preserve the meaning.*retained.*requested selection or summary/i);
+    expect(prompt).toMatch(/do not invent or strengthen.*urgency.*risks.*consequences.*rationale.*certainty/i);
     expect(prompt).toMatch(/follow-up.*file/i);
   });
 
-  it('Project Manager labels unsupplied dates, deadlines, and requirements', () => {
+  it('Project Manager maps directed dependencies without inventing release requirements', () => {
     const prompt = personaPrompt('project-manager');
     expect(prompt).toMatch(/dates, deadlines, or requirements/i);
     expect(prompt).toMatch(/supplied.*labeled assumptions/i);
+    expect(prompt).toMatch(/milestone-plan requests.*directed milestone dependency edges/i);
+    expect(prompt).toMatch(/task, approval, resource, and external dependencies.*explicit/i);
+    expect(prompt).toMatch(/do not invent.*platforms.*metrics.*requirements/i);
+    expect(prompt).toMatch(/target criteria.*not established current behavior/i);
+    expect(prompt).toMatch(/do not add.*operating systems.*quantified thresholds.*soak periods/i);
+    expect(prompt).toMatch(/bounded milestone-plan requests.*at most four milestones.*under 500 words/i);
   });
 
-  it('Executive Assistant suppresses prohibited follow-ups and artifacts', () => {
+  it('Executive Assistant completes timed agendas and suppresses prohibited follow-ups', () => {
     const prompt = personaPrompt('executive-assistant');
+    expect(prompt).toMatch(/before concluding.*each requested element.*time block.*desired decision.*pre-read checklist/i);
     expect(prompt).toMatch(/no follow-up/i);
     expect(prompt).toMatch(/calendar events.*files/i);
+    expect(prompt).toMatch(/pre-read checklist items.*requested materials.*not assertions.*already exist.*completed/i);
   });
 
-  it('Business Finance checks units and does not append prohibited actions', () => {
+  it('Business Finance makes runway calculations and actions explicit', () => {
     const prompt = personaPrompt('finance-owner');
     expect(prompt).toMatch(/unit semantics/i);
+    expect(prompt).toMatch(/cash\s*\/\s*net monthly burn/i);
+    expect(prompt).toMatch(/when the user asks for recommendations.*distinct actions.*cost reduction.*cash inflow/i);
     expect(prompt).toMatch(/files or schedules/i);
+  });
+
+  it('Coder inventories the bounded workspace before trying named files', () => {
+    const prompt = personaPrompt('coder');
+    expect(prompt).toMatch(/report exactly what files exist.*search_files.*\*\*\/\*.*before.*read_file/i);
+    expect(prompt).toMatch(/successful search result.*inventory evidence/i);
+  });
+
+  it('General Purpose keeps operational recommendations evidence-bounded', () => {
+    const prompt = personaPrompt('general-purpose');
+    expect(prompt).toMatch(/operational recommendations.*supplied or verified tool-derived evidence/i);
+    expect(prompt).toMatch(/do not invent absolute instructions or urgency/i);
   });
 
   it('Data Engineer self-checks and scopes compact examples before presenting them', () => {
@@ -85,6 +113,8 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/compact example or compact design.*whole answer.*900 words/i);
     expect(prompt).toMatch(/each requested dimension once.*one minimal complete example/i);
     expect(prompt).toMatch(/omit optional extensions.*unless.*requested/i);
+    expect(prompt).toMatch(/retry behavior.*executable bounded retry.*(?:backoff|busy_timeout)/i);
+    expect(prompt).toMatch(/place the retry loop inside try.*attach finally to try.*never attach finally to (?:a )?(?:for|while)/i);
   });
 
   it('Verifier never upgrades an attributed claim into verified evidence', () => {
@@ -99,7 +129,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/schema, field set, or tagged envelope alone is not exclusive/i);
     expect(prompt).toMatch(/one requested payload and nothing else/i);
     expect(prompt).toMatch(/add no headings, commentary, offers, extra fields, or second VERDICT line/i);
-    expect(prompt).toMatch(/never wrap.*Markdown code fence/i);
+    expect(prompt).toMatch(/raw means no Markdown fence, not no wrapper/i);
     expect(prompt).toMatch(/preserve.*JSON value types.*numeric literals.*unquoted/is);
     expect(prompt).toMatch(/syntax\/shape override never relaxes read-only, evidence, attribution, anti-fabrication/is);
     expect(prompt).toMatch(/Never emit a fixed result contrary to evidence/i);
@@ -118,5 +148,6 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('coordinator');
     expect(prompt).toMatch(/forbids agent launches/i);
     expect(prompt).toMatch(/specify.*lanes.*without spawning/i);
+    expect(prompt).toMatch(/use only.*supplied.*requirements.*do not invent.*compliance regimes.*deployment targets/i);
   });
 });

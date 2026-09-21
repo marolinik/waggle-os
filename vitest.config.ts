@@ -20,6 +20,9 @@ export default defineConfig({
     // diagnostics. Use `--silent=false` when investigating a failing case.
     silent: true,
     testTimeout: 30_000,
+    // Fastify setup/teardown can exceed Vitest's 10s hook default when the
+    // complete 700+ file gate shares a two-worker CI runner.
+    hookTimeout: 30_000,
     setupFiles: ['./vitest.setup.ts'],
     pool: 'forks',
     maxWorkers: 4,
@@ -47,6 +50,9 @@ export default defineConfig({
       // Wall-clock budgets run in a dedicated lane so filesystem/process
       // contention cannot make the deterministic correctness gate flaky.
       'packages/server/tests/performance/**',
+      // R-6: writes a multi-tens-of-thousands-frame .mind to disk and takes
+      // minutes. `npm run test:soak` runs it.
+      'packages/hive-mind-core/tests/soak/**',
     ],
     coverage: {
       provider: 'v8',

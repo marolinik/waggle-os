@@ -114,4 +114,83 @@ describe('LocalAdapter.spawnAgent', () => {
       'Agent started without a canonical Room identity',
     );
   });
+
+  it.each([
+    [
+      'a missing Room identity',
+      {
+        runId: 'run-1', sessionId: 'session-1', workspaceId: 'ws-1',
+        status: 'queued', statusUrl: '/api/agent-runs/run-1', resumable: false, task: 'test',
+      },
+      {},
+    ],
+    [
+      'an untrusted status URL',
+      {
+        runId: 'run-1', roomId: 'room-1', sessionId: 'session-1', workspaceId: 'ws-1',
+        status: 'queued', statusUrl: 'https://example.invalid/steal', resumable: false, task: 'test',
+      },
+      {},
+    ],
+    [
+      'a different workspace than the requested workspace',
+      {
+        runId: 'run-1', roomId: 'room-1', sessionId: 'session-1', workspaceId: 'ws-other',
+        status: 'queued', statusUrl: '/api/agent-runs/run-1', resumable: false, task: 'test',
+      },
+      { workspaceId: 'ws-1' },
+    ],
+  ])('rejects a successful saved-agent run with %s', async (_case, payload, opts) => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(payload), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = new LocalAdapter('http://test-server:9999');
+
+    await expect(adapter.runAgent('agent-1', opts)).rejects.toThrow(
+      'Agent run returned an invalid navigation handoff',
+    );
+  });
+
+  it('accepts a canonical saved-agent navigation handoff', async () => {
+    const adapter = new LocalAdapter('http://test-server:9999');
+
+    await expect(adapter.runAgent('agent-1', { workspaceId: 'ws-1' })).resolves.toMatchObject({
+      runId: 'run-1',
+      roomId: 'room-1',
+      sessionId: 'spawn-run-1',
+      workspaceId: 'ws-1',
+      statusUrl: '/api/agent-runs/run-1',
+    });
+  });
+
+  it.each([
+    ['runId', { runId: '../run-1' }],
+    ['sessionId', { sessionId: 'session/1' }],
+    ['workspaceId', { workspaceId: '' }],
+    ['status', { status: 'finished' }],
+    ['resumable', { resumable: 'false' }],
+    ['task', { task: null }],
+    ['canonical status path', { statusUrl: '/api/agent-runs/a-different-run' }],
+  ])('rejects a handoff with an invalid %s', async (_field, patch) => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({
+      runId: 'run-1',
+      roomId: 'room-1',
+      sessionId: 'session-1',
+      workspaceId: 'ws-1',
+      status: 'queued',
+      statusUrl: '/api/agent-runs/run-1',
+      resumable: false,
+      task: 'test',
+      ...patch,
+    }), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = new LocalAdapter('http://test-server:9999');
+
+    await expect(adapter.runAgent('agent-1')).rejects.toThrow(
+      'Agent run returned an invalid navigation handoff',
+    );
+  });
 });

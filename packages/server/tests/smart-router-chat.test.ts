@@ -7,7 +7,10 @@ import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/age
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
-import { isExplicitGatedToolRequest } from '../src/local/routes/chat.js';
+import {
+  isExplicitGatedToolRequest,
+  shouldRequireCapabilityAcquisitionTools,
+} from '../src/local/routes/chat.js';
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
@@ -111,6 +114,148 @@ describe('chat smart-router integration', () => {
     expect(response.body).not.toContain('event: model_switch');
   });
 
+  it('indexes nothing when the turn has no active workspace', async () => {
+    // TD-CHAT-34 / F7: a no-active-workspace turn resolves `executionScopeId`
+    // to the `personal::default` sentinel, which is a scope id, not a path
+    // segment -- and the artifact index joins it straight into
+    // `dataDir/workspaces/<id>/artifacts.json`.
+    //
+    // PLATFORM ASYMMETRY, deliberate: on POSIX (this repo's CI is
+    // ubuntu-latest) the write SUCCEEDS and leaves an index no reader can ever
+    // reach, because `/api/artifacts` rejects the sentinel through
+    // `assertSafeSegment` and `workspaceIds()` enumerates real workspaces only.
+    // On Windows `mkdirSync` throws ENOENT on the `:` and the catch swallows
+    // it. So this assertion is the behavior change on CI and a regression
+    // guard on a developer's Windows box.
+    const restoreWorkspace = server.agentState.activeWorkspaceId;
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'Unscoped-Brief.docx', title: 'Unscoped Brief' },
+        'Successfully generated Unscoped-Brief.docx (9.1 KB)',
+      );
+      return {
+        content: 'Created the brief.',
+        toolsUsed: ['generate_docx'],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    let response;
+    try {
+      server.agentState.activeWorkspaceId = null;
+      response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Create a Word launch brief.',
+          session: 'unscoped-artifact-index',
+        },
+      });
+    } finally {
+      server.agentState.activeWorkspaceId = restoreWorkspace;
+    }
+
+    expect(response.statusCode).toBe(200);
+    // The sentinel never reaches the path-joining interface, so no scope
+    // directory is minted for it.
+    expect(fs.existsSync(path.join(tmpDir, 'workspaces', 'personal::default'))).toBe(false);
+  });
+
+  it('indexes successful Office and PDF outputs in the workspace Library', async () => {
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief' },
+        'Successfully generated PM-Launch-Brief.docx (11.9 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pdf',
+        { filePath: 'PM-Launch-Brief.pdf', title: 'PM Launch Brief PDF' },
+        'Successfully generated PM-Launch-Brief.pdf (8.2 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_xlsx',
+        { filePath: 'PM-Launch-Tracker.xlsx', title: 'PM Launch Tracker' },
+        'Successfully generated PM-Launch-Tracker.xlsx (6.4 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pptx',
+        { filePath: 'PM-Launch-Deck.pptx', title: 'PM Launch Deck' },
+        'Successfully generated PM-Launch-Deck.pptx (21.0 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief Refreshed' },
+        'Successfully regenerated PM-Launch-Brief.docx (12.1 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pdf',
+        { filePath: 'failed.pdf', title: 'Failed PDF' },
+        'Error generating PDF: renderer unavailable',
+      );
+      return {
+        content: 'Created the requested launch artifacts.',
+        toolsUsed: ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx'],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Create polished Word, PDF, Excel, and PowerPoint launch artifacts.',
+        session: 'generated-artifact-library-index',
+      },
+    });
+    const library = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/artifacts?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(library.statusCode).toBe(200);
+    expect(library.json()).toMatchObject({
+      count: 4,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          title: 'PM Launch Brief Refreshed',
+          kind: 'document',
+          workspaceId: activeWorkspaceId,
+          source: 'agent',
+          status: 'draft',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          storagePath: 'PM-Launch-Brief.docx',
+          relatedSessionIds: ['generated-artifact-library-index'],
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Brief PDF',
+          kind: 'document',
+          storagePath: 'PM-Launch-Brief.pdf',
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Tracker',
+          kind: 'spreadsheet',
+          storagePath: 'PM-Launch-Tracker.xlsx',
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Deck',
+          kind: 'presentation',
+          storagePath: 'PM-Launch-Deck.pptx',
+        }),
+      ]),
+    });
+    expect(library.body).not.toContain('failed.pdf');
+    for (const fileName of [
+      'PM-Launch-Brief.docx',
+      'PM-Launch-Brief.pdf',
+      'PM-Launch-Tracker.xlsx',
+      'PM-Launch-Deck.pptx',
+    ]) {
+      expect(response.body).toContain(fileName);
+    }
+  });
+
   it('does not retry or fall back after terminal hard-budget rejection', async () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
@@ -199,7 +344,6 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(0.8);
-    vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(4);
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -216,7 +360,7 @@ describe('chat smart-router integration', () => {
       sessionId: 'over-budget-trivial-route',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(4);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 1, output: 1 });
   });
 
@@ -506,7 +650,7 @@ describe('chat smart-router integration', () => {
     const attempts: string[] = [];
     let simulatedMutations = 0;
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
-    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(2);
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addTokens = vi.spyOn(server.sessionManager, 'addTokens');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);
@@ -538,20 +682,26 @@ describe('chat smart-router integration', () => {
       13_500,
       500,
       activeWorkspaceId,
+      { billingClass: 'free' },
     );
     expect(addTokens).toHaveBeenCalledOnce();
     expect(addTokens).toHaveBeenCalledWith(activeWorkspaceId, 14_000);
-    expect(calculateCost).toHaveBeenCalledWith(13_500, 500, 'ollama/budget-test-model');
+    expect(calculateUsageCost).toHaveBeenCalledWith({
+      model: 'ollama/budget-test-model',
+      input: 13_500,
+      output: 500,
+      billingClass: 'free',
+    });
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'incomplete-budget-no-replay',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(2);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 13_500, output: 500 });
   });
 
   it('persists returned usage before completing a client-cancelled run', async () => {
-    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(3);
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       Object.defineProperty(agentConfig.signal!, 'aborted', {
@@ -574,18 +724,24 @@ describe('chat smart-router integration', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain('event: error');
     expect(response.body).not.toContain('event: done');
-    expect(calculateCost).toHaveBeenCalledWith(20_000, 1_000, 'ollama/primary-test-model');
+    expect(calculateUsageCost).toHaveBeenCalledWith({
+      model: 'ollama/primary-test-model',
+      input: 20_000,
+      output: 1_000,
+      billingClass: 'free',
+    });
     expect(addUsage).toHaveBeenCalledWith(
       'ollama/primary-test-model',
       20_000,
       1_000,
       activeWorkspaceId,
+      { billingClass: 'free' },
     );
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'cancelled-run-usage',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(3);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 20_000, output: 1_000 });
     expect(persistedTrace.outcome).toBe('abandoned');
   });
@@ -814,6 +970,20 @@ describe('chat smart-router integration', () => {
     expect(isExplicitGatedToolRequest('Run no more than 2 tests.')).toBe(true);
   });
 
+  it('preserves an explicit artifact regeneration request', () => {
+    expect(isExplicitGatedToolRequest('Regenerate PM-Launch-Brief.docx.')).toBe(true);
+    expect(isExplicitGatedToolRequest(
+      'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content so it is refreshed in the workspace Library. Do not create any other file.',
+    )).toBe(true);
+  });
+
+  it('uses an available built-in artifact generator before capability acquisition', () => {
+    const message = 'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content.';
+
+    expect(shouldRequireCapabilityAcquisitionTools(message, [{ name: 'generate_docx' }])).toBe(false);
+    expect(shouldRequireCapabilityAcquisitionTools(message, [])).toBe(true);
+  });
+
   it.each([
     'Fix no tools serialized error in the repo',
     'Debug no output from the server',
@@ -858,6 +1028,7 @@ describe('chat smart-router integration', () => {
     const providerRequests: Array<{
       model?: string;
       tools?: Array<{ function?: { name?: string } }>;
+      messages?: Array<{ role?: string; content?: string }>;
     }> = [];
     server.agentRunner = undefined;
     vi.restoreAllMocks();
@@ -919,6 +1090,16 @@ describe('chat smart-router integration', () => {
         'search_skills',
         'create_skill',
       ]));
+      const transmittedSystemPrompt = providerRequests[0]?.messages
+        ?.find(message => message.role === 'system')?.content ?? '';
+      const selfAwarenessSection = transmittedSystemPrompt.match(
+        /# Self-Awareness[\s\S]*?## Groundedness/,
+      )?.[0] ?? '';
+      expect(selfAwarenessSection).toContain(
+        `${transmittedNames.length} tools available: ${transmittedNames.join(', ')}.`,
+      );
+      const omittedNames = candidateNames.filter(name => !transmittedNames.includes(name));
+      expect(omittedNames.some(name => selfAwarenessSection.includes(name))).toBe(false);
       const serializedSchemaChars = JSON.stringify(transmittedTools).length;
       expect(serializedSchemaChars).toBeLessThanOrEqual(8_000);
 
@@ -980,6 +1161,10 @@ describe('chat smart-router integration', () => {
       ]));
       const discoverySchemaChars = JSON.stringify(discoveryTools).length;
       expect(discoverySchemaChars).toBeLessThanOrEqual(8_000);
+      const discoverySystemPrompt = providerRequests[1]?.messages
+        ?.find(message => message.role === 'system')?.content ?? '';
+      expect(discoverySystemPrompt).toContain('# READ-ONLY OPERATING CONTRACT');
+      expect(discoverySystemPrompt.length).toBeLessThan(18_000);
       const discoveryDoneMatches = [
         ...discoveryResponse.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g),
       ];
@@ -1204,6 +1389,7 @@ describe('chat smart-router integration', () => {
         'test-mid-model',
         'test-mid-model',
         'test-mid-model',
+        'test-mid-model',
         'gemma-4-31b',
       ]);
       const primaryPrompt = requests[0]?.messages?.[0]?.content ?? '';
@@ -1281,7 +1467,88 @@ describe('chat smart-router integration', () => {
     ]);
   });
 
-  it('never rotates credentials or models after an incomplete completion', async () => {
+  it('retries one interrupted no-tool answer on the same model and credential', async () => {
+    const attempts: Array<{
+      model: string;
+      apiKey: string;
+      toolCount: number;
+      maxTokenBudget?: number;
+      modelOperationTimeoutMs?: number;
+    }> = [];
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push({
+        model: agentConfig.model,
+        apiKey: agentConfig.litellmApiKey,
+        toolCount: agentConfig.tools.length,
+        maxTokenBudget: agentConfig.maxTokenBudget,
+        modelOperationTimeoutMs: agentConfig.modelOperationTimeoutMs,
+      });
+      if (attempts.length === 1) {
+        throw Object.assign(
+          new Error('LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.'),
+          {
+            code: 'INCOMPLETE_COMPLETION',
+            status: 502,
+            usage: { inputTokens: 100, outputTokens: 20 },
+          },
+        );
+      }
+      return {
+        content: 'Recovered on the same model.',
+        toolsUsed: [],
+        usage: { inputTokens: 100, outputTokens: 25 },
+      };
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-safe-retry' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toMatchObject({
+      model: attempts[0]?.model,
+      apiKey: attempts[0]?.apiKey,
+      toolCount: 0,
+      maxTokenBudget: (attempts[0]?.maxTokenBudget ?? 0) - 120,
+    });
+    expect(attempts[1]?.modelOperationTimeoutMs).toBeLessThan(attempts[0]?.modelOperationTimeoutMs ?? 0);
+    expect(response.body).toContain('Recovered on the same model.');
+    expect(response.body).toContain('retrying once');
+    expect(response.body).not.toContain('event: model_switch');
+  });
+
+  it.each([
+    ['assistant refusal', 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
+    ['content filter', 'LLM returned an incomplete completion (unsupported finish_reason=content_filter); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
+    ['malformed response', 'LLM returned an incomplete completion (invalid response body); partial content was not accepted.', { inputTokens: 0, outputTokens: 0 }],
+    ['exhausted token budget', 'LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.', { inputTokens: 100_000, outputTokens: 20 }],
+  ])('does not retry an incomplete completion caused by %s', async (_label, message, usage) => {
+    let attempts = 0;
+    server.agentRunner = async (): Promise<AgentResponse> => {
+      attempts++;
+      throw Object.assign(new Error(message), {
+        code: 'INCOMPLETE_COMPLETION',
+        status: 502,
+        usage,
+      });
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-no-retry' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toBe(1);
+    expect(response.body).toContain('incomplete completion');
+    expect(response.body).not.toContain('retrying once');
+  });
+
+  it('never replays an incomplete completion after a non-replayable tool started', async () => {
     const firstKey = 'sk-openrouter-incomplete-first';
     const secondKey = 'sk-openrouter-incomplete-second';
     server.vault.set('openrouter', firstKey);
@@ -1302,6 +1569,7 @@ describe('chat smart-router integration', () => {
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
       simulatedMutations++;
+      agentConfig.onToolUse?.('write_file', { path: 'release.txt' });
       throw Object.assign(
         new Error('LLM returned an incomplete completion; partial content was not accepted.'),
         { code: 'INCOMPLETE_COMPLETION', status: 502 },

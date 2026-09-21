@@ -177,18 +177,32 @@ function normalizeFrame(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 export const memoryRoutes: FastifyPluginAsync = async (server) => {
+  function parseOptionalWorkspaceId(
+    workspace: unknown,
+    workspaceId: unknown,
+  ): { ok: true; value?: string } | { ok: false } {
+    const supplied = [workspace, workspaceId].filter((value) => value !== undefined);
+    if (supplied.length === 0) return { ok: true };
+    if (supplied.some((value) => typeof value !== 'string' || value.trim().length === 0)) {
+      return { ok: false };
+    }
+    if (supplied.length === 2 && supplied[0] !== supplied[1]) return { ok: false };
+    return { ok: true, value: supplied[0] as string };
+  }
+
   /**
    * Ensure multiMind has the correct workspace mind loaded before searching.
    * Uses the server's workspace mind cache to avoid closing/reopening DBs.
    */
-  function ensureWorkspaceMind(workspaceId: string): void {
+  function ensureWorkspaceMind(workspaceId: string): boolean {
     const wsDb = server.agentState.getWorkspaceMindDb(workspaceId);
-    if (!wsDb) return;
+    if (!wsDb) return false;
     // Use setWorkspace (not switchWorkspace) to avoid opening duplicate connections.
     // The cache owns DB lifecycle — multiMind just borrows the reference.
     if (server.multiMind.workspace !== wsDb) {
       server.multiMind.setWorkspace(wsDb);
     }
+    return true;
   }
 
   function searchAllWorkspaces(srv: typeof server, query: string, limit: number): Array<Omit<MemoryFrame, 'source'> & { source?: string; _mind?: string; _workspace_name?: string }> {
@@ -251,7 +265,11 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
   }>('/api/memory/search', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId'
     const { q, scope, limit, workspace: ws, workspaceId: wsId, since, until } = request.query;
-    const workspace = ws ?? wsId;
+    const parsedWorkspace = parseOptionalWorkspaceId(ws, wsId);
+    if (!parsedWorkspace.ok) {
+      return reply.status(400).send({ error: 'workspace must be a non-empty string' });
+    }
+    const workspace = parsedWorkspace.value;
     if (!q) {
       return reply.status(400).send({ error: 'q (query) parameter is required' });
     }
@@ -262,7 +280,9 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
     // Ensure workspace mind is loaded for workspace/all scope searches
     if (workspace && (searchScope === 'workspace' || searchScope === 'all')) {
-      ensureWorkspaceMind(workspace);
+      if (!ensureWorkspaceMind(workspace)) {
+        return reply.status(404).send({ error: 'Workspace not found' });
+      }
     }
 
     const maxResults = limit ? parseInt(limit, 10) : 20;
@@ -382,7 +402,11 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
   }>('/api/memory/frames', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId'
     const { content: rawContent, workspace: ws, workspaceId: wsId, importance, source } = request.body ?? {};
-    const workspace = ws ?? wsId;
+    const parsedWorkspace = parseOptionalWorkspaceId(ws, wsId);
+    if (!parsedWorkspace.ok) {
+      return reply.status(400).send({ error: 'workspace must be a non-empty string' });
+    }
+    const workspace = parsedWorkspace.value;
     if (typeof rawContent !== 'string' || !rawContent) {
       return reply.status(400).send({ error: 'content is required' });
     }
@@ -418,6 +442,9 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     let mindLabel: string = 'personal';
     if (workspace) {
       targetDb = server.agentState.getWorkspaceMindDb(workspace);
+      if (!targetDb) {
+        return reply.status(404).send({ error: 'Workspace not found' });
+      }
       mindLabel = 'workspace';
     }
     if (!targetDb) {
@@ -755,6 +782,11 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     Body: { kind?: string; content?: string; workspaceId?: string };
   }>('/api/quick-capture', async (request, reply) => {
     const { kind: rawKind, content: rawContent, workspaceId } = request.body ?? {};
+    const parsedWorkspace = parseOptionalWorkspaceId(undefined, workspaceId);
+    if (!parsedWorkspace.ok) {
+      return reply.status(400).send({ error: 'workspace must be a non-empty string' });
+    }
+    const workspace = parsedWorkspace.value;
     if (typeof rawContent !== 'string' || !rawContent.trim()) {
       return reply.status(400).send({ error: 'content is required' });
     }
@@ -768,12 +800,15 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'Memory content could not be saved.' });
     }
 
-    // Resolve the target mind — workspace when provided + open, else personal.
+    // Resolve the target mind — an explicit workspace must exist; omission is personal.
     let targetDb;
     let mindLabel: string = 'personal';
-    if (workspaceId) {
-      targetDb = server.agentState.getWorkspaceMindDb(workspaceId);
-      if (targetDb) mindLabel = 'workspace';
+    if (workspace) {
+      targetDb = server.agentState.getWorkspaceMindDb(workspace);
+      if (!targetDb) {
+        return reply.status(404).send({ error: 'Workspace not found' });
+      }
+      mindLabel = 'workspace';
     }
     if (!targetDb) {
       targetDb = server.multiMind.personal;
@@ -806,7 +841,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
 
     emitAuditEvent(server, {
-      workspaceId: workspaceId ?? 'personal',
+      workspaceId: workspace ?? 'personal',
       eventType: 'memory_write',
       input: JSON.stringify({ kind, content: content.slice(0, 500), source: 'quick-capture' }),
       output: JSON.stringify({ frameId: frame.id, mind: mindLabel }),

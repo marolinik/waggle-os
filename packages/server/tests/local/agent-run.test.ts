@@ -11,6 +11,9 @@
 // embeddingProvider + LiteLLM) are deferred to Phase 5 e2e validation —
 // current critical-path coverage is module + side-effect validation.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import Fastify from 'fastify';
 import { describe, it, expect, vi } from 'vitest';
 
@@ -109,11 +112,16 @@ describe('agent-run.ts route module', () => {
   it('does not replay a malformed HTTP-200 completion and reports done.ok=false', async () => {
     const fetchImpl = vi.fn(async () => new Response('{', { status: 200 }));
     vi.stubGlobal('fetch', fetchImpl);
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-run-model-'));
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      providers: {},
+    }));
     const server = Fastify({ logger: false });
     server.decorate('multiMind', { personal: {} } as never);
     server.decorate('embeddingProvider', { dimensions: 3 } as never);
     server.decorate('agentState', { litellmApiKey: 'test-key' } as never);
-    server.decorate('localConfig', { litellmUrl: 'http://127.0.0.1:43123/v1' } as never);
+    server.decorate('localConfig', { dataDir, litellmUrl: 'http://127.0.0.1:43123/v1' } as never);
 
     try {
       const { agentRunRoutes } = await import('../../src/local/routes/agent-run.js');
@@ -121,17 +129,89 @@ describe('agent-run.ts route module', () => {
       const response = await server.inject({
         method: 'POST',
         url: '/api/agent/run',
-        payload: { question: 'Give me a complete answer.' },
+        payload: {
+          question: 'Give me a complete answer.',
+          shape: 'qwen-thinking-gen1-v1',
+        },
       });
 
       expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(response.body).toContain(
+        'event: started\ndata: {"shape":"qwen-thinking-gen1-v1","shapeRequested":"qwen-thinking-gen1-v1","shapeRecognized":true,"model":"openai-compatible/qwen3.8-flash-next"}',
+      );
+      const outbound = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body));
+      expect(outbound).toMatchObject({
+        model: 'openai-compatible/qwen3.8-flash-next',
+        chat_template_kwargs: { enable_thinking: true },
+      });
+      expect(outbound).not.toHaveProperty('extra_body');
       expect(response.body).toContain('event: error');
       expect(response.body).toContain('INCOMPLETE_COMPLETION');
       expect(response.body).toContain('data: {"ok":false}');
       expect(response.body).not.toContain('event: finalized');
+
+      fetchImpl.mockClear();
+      const explicitResponse = await server.inject({
+        method: 'POST',
+        url: '/api/agent/run',
+        payload: {
+          question: 'Use the explicitly requested model.',
+          model: 'openai/gpt-5.4',
+        },
+      });
+
+      expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(explicitResponse.body).toContain(
+        'event: started\ndata: {"shape":"(model-default)","shapeRequested":null,"shapeRecognized":true,"model":"openai/gpt-5.4"}',
+      );
+      const explicitOutbound = JSON.parse(String(
+        vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body,
+      ));
+      expect(explicitOutbound.model).toBe('openai/gpt-5.4');
+      expect(explicitOutbound).not.toHaveProperty('chat_template_kwargs');
+      expect(explicitOutbound).not.toHaveProperty('extra_body');
+
+      fetchImpl.mockClear();
+      await server.inject({
+        method: 'POST',
+        url: '/api/agent/run',
+        payload: {
+          question: 'Use the external Qwen transport.',
+          model: 'openrouter/qwen/qwen3.8-flash-next',
+          shape: 'qwen-thinking-gen1-v1',
+        },
+      });
+      const externalQwenOutbound = JSON.parse(String(
+        vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body,
+      ));
+      expect(externalQwenOutbound).toMatchObject({
+        model: 'openrouter/qwen/qwen3.8-flash-next',
+        extra_body: { enable_thinking: true },
+      });
+      expect(externalQwenOutbound).not.toHaveProperty('chat_template_kwargs');
+
+      fetchImpl.mockClear();
+      await server.inject({
+        method: 'POST',
+        url: '/api/agent/run',
+        payload: {
+          question: 'Preserve a mixed-case compatible Qwen model ID.',
+          model: 'openai-compatible/Qwen/Qwen3.8-Flash-Next',
+          shape: 'qwen-thinking-gen1-v1',
+        },
+      });
+      const mixedCaseQwenOutbound = JSON.parse(String(
+        vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body,
+      ));
+      expect(mixedCaseQwenOutbound).toMatchObject({
+        model: 'openai-compatible/Qwen/Qwen3.8-Flash-Next',
+        chat_template_kwargs: { enable_thinking: true },
+      });
+      expect(mixedCaseQwenOutbound).not.toHaveProperty('extra_body');
     } finally {
       vi.unstubAllGlobals();
       await server.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
     }
   });
 });

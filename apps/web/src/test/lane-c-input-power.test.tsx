@@ -15,7 +15,10 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { useLayoutEffect, useRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { MemoryRouter } from 'react-router-dom';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import type { ChatMessage } from '@/lib/types';
 import {
   chatThreadCacheKey,
@@ -92,6 +95,54 @@ describe('useChat — send queue (never locks, never drops)', () => {
     await act(async () => { await Promise.resolve(); });
     return hook;
   }
+
+  it('fails closed without a resolved session and never creates an optimistic turn', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: null }));
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('Do not send into a null session');
+    });
+
+    expect(accepted).toBe(false);
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it('signals admission exactly once for an immediate and an in-flight queued send', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        await gate.promise;
+        yield { type: 'done', data: { content: 'first reply' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'second reply' } };
+      });
+    const { result } = await mountChat('sess-admission');
+    const firstAccepted = vi.fn();
+    const secondAccepted = vi.fn();
+    let firstPromise!: Promise<boolean>;
+
+    await act(async () => {
+      firstPromise = result.current.sendMessage('first', { onAccepted: firstAccepted });
+      await Promise.resolve();
+      await result.current.sendMessage('second', { onAccepted: secondAccepted });
+    });
+
+    expect(firstAccepted).toHaveBeenCalledOnce();
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      gate.resolve();
+      await firstPromise;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(firstAccepted).toHaveBeenCalledOnce();
+    expect(secondAccepted).toHaveBeenCalledOnce();
+  });
 
   it('a send fired while the reply streams is QUEUED, then dispatched on ready', async () => {
     const gate = deferred<void>();
@@ -269,7 +320,10 @@ describe('useChat — thread session cache (2.6-chat)', () => {
   it('keeps the cached paint when the history refresh fails (no wipe)', async () => {
     const key = chatThreadCacheKey('ws-1', 'sess-fail');
     writeChatThreadCache(key, [{ id: 'c1', role: 'user', content: 'cached', timestamp: 'now' }]);
-    mocks.adapter.getHistory.mockRejectedValueOnce(new Error('offline'));
+    const retryLoad = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockReturnValueOnce(retryLoad.promise);
 
     const { useChat } = await import('@/hooks/useChat');
     const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: 'sess-fail' }));
@@ -277,6 +331,95 @@ describe('useChat — thread session cache (2.6-chat)', () => {
 
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].content).toBe('cached');
+    expect(result.current.historyLoaded).toBe(true);
+    expect(result.current.historyReady).toBe(true);
+    expect(result.current.historyStatus).toBe('error');
+    expect(result.current.historyError).toBe("We couldn't load this conversation. Check your connection and try again.");
+
+    act(() => { result.current.retryHistory(); });
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.messages.map(message => message.content)).toEqual(['cached']);
+
+    await act(async () => {
+      retryLoad.resolve([{ id: 's1', role: 'assistant', content: 'server truth', timestamp: 'now' }]);
+      await Promise.resolve();
+    });
+    expect(result.current.historyStatus).toBe('ready');
+    expect(result.current.messages.map(message => message.content)).toEqual(['server truth']);
+  });
+
+  it('reports cold history loading and supports a truthful error → retry → ready transition', async () => {
+    const firstLoad = deferred<ChatMessage[]>();
+    const retryLoad = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockReturnValueOnce(retryLoad.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-history-status',
+      sessionId: 'sess-history-status',
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyError).toBeNull();
+    expect(result.current.historyLoaded).toBe(false);
+    expect(result.current.historyReady).toBe(false);
+
+    await act(async () => {
+      firstLoad.reject(new Error('secret upstream detail'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.historyStatus).toBe('error');
+    expect(result.current.historyError).toBe("We couldn't load this conversation. Check your connection and try again.");
+    expect(result.current.historyError).not.toContain('secret upstream detail');
+    expect(result.current.historyLoaded).toBe(true);
+    expect(result.current.historyReady).toBe(true);
+
+    act(() => { result.current.retryHistory(); });
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyError).toBeNull();
+    expect(result.current.historyReady).toBe(false);
+    expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      retryLoad.resolve([]);
+      await Promise.resolve();
+    });
+    expect(result.current.historyStatus).toBe('ready');
+    expect(result.current.historyError).toBeNull();
+    expect(result.current.historyReady).toBe(true);
+  });
+
+  it('does not inherit a previous thread history error after switching sessions', async () => {
+    const nextHistory = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockRejectedValueOnce(new Error('session A offline'))
+      .mockReturnValueOnce(nextHistory.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ activeSession }: { activeSession: string }) => useChat({
+        workspaceId: 'ws-history-owner',
+        sessionId: activeSession,
+      }),
+      { initialProps: { activeSession: 'sess-a' } },
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(hook.result.current.historyStatus).toBe('error');
+
+    act(() => { hook.rerender({ activeSession: 'sess-b' }); });
+    expect(hook.result.current.historyStatus).toBe('loading');
+    expect(hook.result.current.historyError).toBeNull();
+
+    await act(async () => {
+      nextHistory.resolve([]);
+      await Promise.resolve();
+    });
+    expect(hook.result.current.historyStatus).toBe('ready');
   });
 
   it('never lets delayed history from the previous session overwrite the active session', async () => {
@@ -299,6 +442,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       hook.rerender({ activeSession: 'sess-b' });
       await Promise.resolve();
     });
+    expect(hook.result.current.historyReady).toBe(false);
 
     await act(async () => {
       historyB.resolve([{ id: 'b', role: 'assistant', content: 'session B', timestamp: 'now' }]);
@@ -306,6 +450,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     });
     expect(hook.result.current.messages.map(message => message.content)).toEqual(['session B']);
     expect(hook.result.current.historyLoaded).toBe(true);
+    expect(hook.result.current.historyReady).toBe(true);
 
     await act(async () => {
       historyA.resolve([{ id: 'a', role: 'assistant', content: 'stale session A', timestamp: 'now' }]);
@@ -313,6 +458,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     });
     expect(hook.result.current.messages.map(message => message.content)).toEqual(['session B']);
     expect(hook.result.current.historyLoaded).toBe(true);
+    expect(hook.result.current.historyReady).toBe(true);
   });
 
   it('clears an uncached session immediately without displaying or caching the previous session', async () => {
@@ -342,6 +488,213 @@ describe('useChat — thread session cache (2.6-chat)', () => {
 
     historyB.resolve([]);
     await act(async () => { await Promise.resolve(); });
+  });
+
+  it.each([
+    {
+      label: 'session switch',
+      initial: { workspaceId: 'ws-paint', sessionId: 'sess-a' },
+      destination: { workspaceId: 'ws-paint', sessionId: 'sess-b' },
+    },
+    {
+      label: 'workspace switch',
+      initial: { workspaceId: 'ws-paint-a', sessionId: 'sess-shared' },
+      destination: { workspaceId: 'ws-paint-b', sessionId: 'sess-shared' },
+    },
+  ])('never paints the previous thread during an uncached $label', async ({ initial, destination }) => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const snapshots: Array<{ workspaceId: string; sessionId: string; contents: string[] }> = [];
+    const hook = renderHook(
+      ({ workspaceId, sessionId }: { workspaceId: string; sessionId: string }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        snapshots.push({
+          workspaceId,
+          sessionId,
+          contents: chat.messages.map(message => message.content),
+        });
+        return chat;
+      },
+      { initialProps: initial },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(hook.result.current.messages.map(message => message.content)).toEqual(['previous thread']);
+
+    const firstDestinationSnapshot = snapshots.length;
+    act(() => { hook.rerender(destination); });
+
+    const destinationSnapshots = snapshots.slice(firstDestinationSnapshot)
+      .filter(snapshot => (
+        snapshot.workspaceId === destination.workspaceId
+        && snapshot.sessionId === destination.sessionId
+      ));
+    expect(destinationSnapshots[0]?.contents).toEqual([]);
+    expect(destinationSnapshots.every(snapshot => !snapshot.contents.includes('previous thread'))).toBe(true);
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('paints a cached destination thread immediately without exposing the previous thread', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    const destination = { workspaceId: 'ws-cache-paint', sessionId: 'sess-b' };
+    writeChatThreadCache(chatThreadCacheKey(destination.workspaceId, destination.sessionId), [
+      { id: 'b', role: 'assistant', content: 'cached destination', timestamp: 'now' },
+    ]);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const snapshots: Array<{ workspaceId: string; sessionId: string; contents: string[] }> = [];
+    const hook = renderHook(
+      ({ workspaceId, sessionId }: { workspaceId: string; sessionId: string }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        snapshots.push({
+          workspaceId,
+          sessionId,
+          contents: chat.messages.map(message => message.content),
+        });
+        return chat;
+      },
+      { initialProps: { workspaceId: 'ws-cache-paint', sessionId: 'sess-a' } },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(hook.result.current.messages.map(message => message.content)).toEqual(['previous thread']);
+
+    const firstDestinationSnapshot = snapshots.length;
+    act(() => { hook.rerender(destination); });
+
+    const destinationSnapshots = snapshots.slice(firstDestinationSnapshot)
+      .filter(snapshot => snapshot.sessionId === destination.sessionId);
+    expect(destinationSnapshots[0]?.contents).toEqual(['cached destination']);
+    expect(destinationSnapshots.every(snapshot => !snapshot.contents.includes('previous thread'))).toBe(true);
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('rejects a send fired before the destination thread owns message state', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+    mocks.adapter.sendMessage.mockImplementation(async function* () {
+      yield { type: 'done', data: { content: 'should not run' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ workspaceId, sessionId, attemptSend }: {
+        workspaceId: string;
+        sessionId: string;
+        attemptSend: boolean;
+      }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        const attemptedRef = useRef(false);
+        useLayoutEffect(() => {
+          if (attemptSend && !attemptedRef.current) {
+            attemptedRef.current = true;
+            void chat.sendMessage('destination message');
+          }
+        }, [attemptSend, chat]);
+        return chat;
+      },
+      {
+        initialProps: {
+          workspaceId: 'ws-action-a',
+          sessionId: 'sess-a',
+          attemptSend: false,
+        },
+      },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      hook.rerender({
+        workspaceId: 'ws-action-b',
+        sessionId: 'sess-b',
+        attemptSend: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('never retries the previous thread into a newly visible cached destination', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    const destinationFailedPair: ChatMessage[] = [
+      { id: 'b-user', role: 'user', content: 'destination retry', timestamp: 'now' },
+      { id: 'b-assistant', role: 'assistant', content: 'Generation failed: destination', timestamp: 'now' },
+    ];
+    writeChatThreadCache(chatThreadCacheKey('ws-retry-b', 'sess-b'), destinationFailedPair);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([
+        { id: 'a-user', role: 'user', content: 'previous private prompt', timestamp: 'now' },
+        { id: 'a-assistant', role: 'assistant', content: 'Generation failed: previous', timestamp: 'now' },
+      ])
+      .mockReturnValueOnce(destinationHistory.promise);
+    mocks.adapter.sendMessage.mockImplementation(async function* () {
+      yield { type: 'done', data: { content: 'recovered' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ workspaceId, sessionId, attemptRetry }: {
+        workspaceId: string;
+        sessionId: string;
+        attemptRetry: boolean;
+      }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        const attemptedRef = useRef(false);
+        useLayoutEffect(() => {
+          if (attemptRetry && !attemptedRef.current) {
+            attemptedRef.current = true;
+            chat.retryLastFailed();
+          }
+        }, [attemptRetry, chat]);
+        return chat;
+      },
+      {
+        initialProps: {
+          workspaceId: 'ws-retry-a',
+          sessionId: 'sess-a',
+          attemptRetry: false,
+        },
+      },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      hook.rerender({
+        workspaceId: 'ws-retry-b',
+        sessionId: 'sess-b',
+        attemptRetry: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    destinationHistory.resolve(destinationFailedPair);
+    await act(async () => { await Promise.resolve(); });
+    act(() => { hook.result.current.retryLastFailed(); });
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage.mock.calls[0]?.slice(0, 3)).toEqual([
+      'ws-retry-b',
+      'destination retry',
+      'sess-b',
+    ]);
   });
 
   it('never lets a delayed same-session history refresh erase a turn that already started', async () => {
@@ -426,9 +779,9 @@ describe('useChat — thread session cache (2.6-chat)', () => {
   it('does not restore a persisted failed pair while its retry waits for history', async () => {
     const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-retry');
     const failedPair: ChatMessage[] = [
-      { id: 'hist-user', role: 'user', content: 'retry me', timestamp: 'old' },
+      { id: 'client-user', role: 'user', content: 'retry me', timestamp: 'old' },
       {
-        id: 'hist-assistant',
+        id: 'client-assistant',
         role: 'assistant',
         content: 'Generation failed: original failure',
         timestamp: 'old',
@@ -448,19 +801,234 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     }));
     await act(async () => { await Promise.resolve(); });
     expect(result.current.messages.map(message => message.id))
-      .toEqual(['hist-user', 'hist-assistant']);
+      .toEqual(['client-user', 'client-assistant']);
 
     act(() => { result.current.retryLastFailed(); });
     expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
 
-    history.resolve(failedPair);
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'retry me', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: 'Generation failed: original failure',
+        timestamp: 'server-assistant',
+      },
+    ]);
     await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.messages.map(message => [message.role, message.content])).toEqual([
+    const expectedRecoveredPair = [
       ['user', 'retry me'],
       ['assistant', 'recovered answer'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(result.current.messages.some(message => message.content.startsWith('Generation failed:')))
+      .toBe(false);
+  });
+
+  it('does not restore an error-block failed pair while its retry waits for history', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-error-block-retry');
+    const failedPair: ChatMessage[] = [
+      { id: 'client-user', role: 'user', content: 'retry typed error', timestamp: 'old' },
+      {
+        id: 'client-assistant',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}Provider failed`,
+        blocks: [{ type: 'error', blockId: 'client-error', message: 'Provider failed' }],
+        timestamp: 'old',
+      },
+    ];
+    writeChatThreadCache(cacheKey, failedPair);
+    const history = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory.mockReturnValueOnce(history.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'typed error recovered' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-pending-error-block-retry',
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.retryLastFailed(); });
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'retry typed error', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}Provider failed`,
+        blocks: [{ type: 'error', blockId: 'server-error', message: 'Provider failed' }],
+        timestamp: 'server-assistant',
+      },
     ]);
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledWith(
+      'ws-1',
+      'retry typed error',
+      'sess-pending-error-block-retry',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      {
+        kind: 'assistant-pair',
+        expectedMessageCount: 2,
+        expectedAssistantContent: `${GENERATION_FAILED_PREFIX}Provider failed`,
+      },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const expectedRecoveredPair = [
+      ['user', 'retry typed error'],
+      ['assistant', 'typed error recovered'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+  });
+
+  it('discards a stale optimistic retry, restores cached truth, and forces authoritative reload', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-stale-retry-target');
+    const cachedFailedPair: ChatMessage[] = [
+      { id: 'cached-user', role: 'user', content: 'retry stale turn', timestamp: 'cached-user' },
+      {
+        id: 'cached-assistant',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}cached provider failure`,
+        timestamp: 'cached-assistant',
+      },
+    ];
+    const authoritativeReload = deferred<ChatMessage[]>();
+    writeChatThreadCache(cacheKey, cachedFailedPair);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce(cachedFailedPair)
+      .mockReturnValueOnce(authoritativeReload.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'error',
+        data: {
+          code: 'RETRY_TARGET_STALE',
+          message: 'This conversation changed before Retry could replace it.',
+        },
+      };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-stale-retry-target',
+    }));
+    await waitFor(() => expect(result.current.historyStatus).toBe('ready'));
+
+    act(() => { result.current.retryLastFailed(); });
+
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledWith(
+      'ws-1',
+      'retry stale turn',
+      'sess-stale-retry-target',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      {
+        kind: 'assistant-pair',
+        expectedMessageCount: 2,
+        expectedAssistantContent: `${GENERATION_FAILED_PREFIX}cached provider failure`,
+      },
+    );
+    await waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(result.current.messages.map(message => message.id))
+        .toEqual(['cached-user', 'cached-assistant']);
+    });
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyLoaded).toBe(false);
+    expect(result.current.historyReady).toBe(false);
+    expect(result.current.messages.some(message =>
+      message.content.includes('This conversation changed before Retry could replace it.')
+    )).toBe(false);
+
+    const authoritativeTruth: ChatMessage[] = [
+      { id: 'server-user', role: 'user', content: 'retry stale turn', timestamp: 'server-user' },
+      {
+        id: 'server-assistant',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}newer authoritative failure`,
+        timestamp: 'server-assistant',
+      },
+    ];
+    await act(async () => {
+      authoritativeReload.resolve(authoritativeTruth);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.historyStatus).toBe('ready'));
+    expect(result.current.messages.map(message => [message.id, message.content])).toEqual([
+      ['server-user', 'retry stale turn'],
+      ['server-assistant', `${GENERATION_FAILED_PREFIX}newer authoritative failure`],
+    ]);
+    expect(result.current.messages.some(message =>
+      !['server-user', 'server-assistant'].includes(message.id)
+    )).toBe(false);
+  });
+
+  it('preserves a distinct failed history tail for the same retry prompt', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-distinct-failure');
+    writeChatThreadCache(cacheKey, [
+      { id: 'client-user', role: 'user', content: 'same prompt', timestamp: 'old' },
+      {
+        id: 'client-assistant',
+        role: 'assistant',
+        content: 'Generation failed: cached timeout',
+        timestamp: 'old',
+      },
+    ]);
+    const history = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory.mockReturnValueOnce(history.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'recovered after timeout' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-pending-distinct-failure',
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.retryLastFailed(); });
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'same prompt', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: 'Generation failed: newer quota failure',
+        timestamp: 'server-assistant',
+      },
+    ]);
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const expectedHistoryAndRecoveredPair = [
+      ['user', 'same prompt'],
+      ['assistant', 'Generation failed: newer quota failure'],
+      ['user', 'same prompt'],
+      ['assistant', 'recovered after timeout'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedHistoryAndRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedHistoryAndRecoveredPair);
   });
 
   it('waits for initial history before dispatch and preserves a legitimate repeated exchange', async () => {
@@ -543,6 +1111,8 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       'ws-clear',
       'sess-clear',
     );
+    expect(result.current.historyStatus).toBe('ready');
+    expect(result.current.historyError).toBeNull();
   });
 
   it('invalidates the exact thread cache and ignores history that resolves after clear', async () => {
@@ -604,7 +1174,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     );
     await act(async () => { await Promise.resolve(); });
 
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = hook.result.current.clearHistory();
       await Promise.resolve();
@@ -716,13 +1286,15 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     await act(async () => { await Promise.resolve(); });
 
     let sendPromise: Promise<boolean> | undefined;
+    const onAccepted = vi.fn();
     await act(async () => {
       await result.current.clearHistory();
-      sendPromise = result.current.sendMessage('wait for recovery');
+      sendPromise = result.current.sendMessage('wait for recovery', { onAccepted });
       await Promise.resolve();
     });
 
     expect(await sendPromise).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
     expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
     expect(result.current.messages.some(message => message.content === 'wait for recovery')).toBe(false);
 
@@ -839,13 +1411,15 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     expect(result.current.messages.map(message => message.content)).toContain('local preinstall turn');
   });
 
-  it('retries recovery once and stays fail-closed when history remains offline', async () => {
+  it('retries recovery once, exposes terminal failure, and keeps manual retry fail-closed', async () => {
     const abandonedHistory = deferred<ChatMessage[]>();
     const terminalRecovery = deferred<ChatMessage[]>();
+    const manualRecovery = deferred<ChatMessage[]>();
     mocks.adapter.getHistory
       .mockReturnValueOnce(abandonedHistory.promise)
       .mockRejectedValueOnce(new Error('recovery offline'))
-      .mockReturnValueOnce(terminalRecovery.promise);
+      .mockReturnValueOnce(terminalRecovery.promise)
+      .mockReturnValueOnce(manualRecovery.promise);
     mocks.adapter.clearHistory.mockRejectedValueOnce(new Error('clear offline'));
 
     const { useChat } = await import('@/hooks/useChat');
@@ -863,6 +1437,8 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     await act(async () => { await result.current.clearHistory(); });
     await act(async () => { await localSend; });
     await waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(3));
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyError).toBeNull();
 
     let blockedDuringRetry: Promise<boolean> | undefined;
     await act(async () => {
@@ -882,7 +1458,31 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     expect(await blockedAfterRetry).toBe(false);
     expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(3);
     expect(result.current.historyLoaded).toBe(false);
+    expect(result.current.historyReady).toBe(false);
+    expect(result.current.historyStatus).toBe('error');
+    expect(result.current.historyError).toBe("We couldn't load this conversation. Check your connection and try again.");
     expect(result.current.messages.map(message => message.content)).toContain('local offline turn');
+
+    act(() => { result.current.retryHistory(); });
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyLoaded).toBe(false);
+    expect(result.current.historyReady).toBe(false);
+    expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(4);
+
+    let blockedDuringManualRetry: Promise<boolean> | undefined;
+    await act(async () => {
+      blockedDuringManualRetry = result.current.sendMessage('blocked during manual recovery');
+    });
+    expect(await blockedDuringManualRetry).toBe(false);
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      manualRecovery.resolve([]);
+      await Promise.resolve();
+    });
+    expect(result.current.historyStatus).toBe('ready');
+    expect(result.current.historyLoaded).toBe(true);
+    expect(result.current.historyReady).toBe(true);
   });
 
   it('treats malformed resolved recovery history as failed and stays fail-closed', async () => {
@@ -995,9 +1595,17 @@ describe('ChatApp — composer input primacy', () => {
     workspaceId: null as string | null,
     availableModels: [] as string[],
     activeSessionId: null as string | null,
+    sessionCreating: false,
+    sessionLoading: false,
+    sessionReady: true,
+    sessionError: null as string | null,
     historyLoaded: false,
+    historyStatus: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
+    historyError: null as string | null,
+    onRetryHistory: undefined as (() => void) | undefined,
     initialMessage: undefined as string | undefined,
     autoSendInitial: false,
+    onRetry: undefined as (() => void) | undefined,
   };
   const renderChat = (props: Partial<typeof baseProps> & { messages: ChatMessage[] }) =>
     render(<TooltipProvider><ChatAppEl {...baseProps} {...props} /></TooltipProvider>);
@@ -1007,6 +1615,110 @@ describe('ChatApp — composer input primacy', () => {
   beforeEach(async () => { ChatAppEl = (await import('@/components/os/apps/ChatApp')).default; });
 
   const assistantMsg: ChatMessage = { id: 'm1', role: 'assistant', content: 'Answer.', timestamp: 'now' };
+
+  it('shows a cold history status instead of a premature WorkspaceBriefing', () => {
+    renderChat({
+      messages: [],
+      workspaceId: 'ws-history-loading',
+      activeSessionId: 'sess-history-loading',
+      historyStatus: 'loading',
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading conversation');
+    expect(mocks.adapter.getWorkspaceContext).not.toHaveBeenCalled();
+  });
+
+  it('shows a cold history error with Retry and no WorkspaceBriefing', () => {
+    const onRetryHistory = vi.fn();
+    renderChat({
+      messages: [],
+      workspaceId: 'ws-history-error',
+      activeSessionId: 'sess-history-error',
+      historyStatus: 'error',
+      historyError: 'Safe retry copy',
+      onRetryHistory,
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this conversation");
+    expect(screen.getByRole('alert')).toHaveTextContent('Safe retry copy');
+    fireEvent.click(screen.getByRole('button', { name: /retry loading conversation/i }));
+    expect(onRetryHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.getWorkspaceContext).not.toHaveBeenCalled();
+  });
+
+  it('shows WorkspaceBriefing only after an empty history is ready', async () => {
+    renderChat({
+      messages: [],
+      workspaceId: 'ws-history-ready',
+      activeSessionId: 'sess-history-ready',
+      historyStatus: 'ready',
+    });
+
+    await waitFor(() => expect(mocks.adapter.getWorkspaceContext).toHaveBeenCalledWith('ws-history-ready'));
+    expect(screen.queryByText("Couldn't load this conversation")).not.toBeInTheDocument();
+  });
+
+  it('keeps cached messages visible with a compact refresh warning and Retry', () => {
+    const onRetryHistory = vi.fn();
+    renderChat({
+      messages: [assistantMsg],
+      workspaceId: 'ws-cached-warning',
+      activeSessionId: 'sess-cached-warning',
+      historyStatus: 'error',
+      historyError: 'Safe retry copy',
+      onRetryHistory,
+    });
+
+    expect(screen.getByText('Answer.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't refresh this conversation");
+    fireEvent.click(screen.getByRole('button', { name: /retry loading conversation/i }));
+    expect(onRetryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps cached messages visible through error → refreshing → ready UI states', () => {
+    const onRetryHistory = vi.fn();
+    const { rerender } = renderChat({
+      messages: [assistantMsg],
+      workspaceId: 'ws-cached-transition',
+      activeSessionId: 'sess-cached-transition',
+      historyStatus: 'error',
+      historyError: 'Safe retry copy',
+      onRetryHistory,
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't refresh this conversation");
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[assistantMsg]}
+          workspaceId="ws-cached-transition"
+          activeSessionId="sess-cached-transition"
+          historyStatus="loading"
+          onRetryHistory={onRetryHistory}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Answer.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing conversation');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[assistantMsg]}
+          workspaceId="ws-cached-transition"
+          activeSessionId="sess-cached-transition"
+          historyStatus="ready"
+          onRetryHistory={onRetryHistory}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Answer.')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 
   it('the composer textarea is ENABLED at paint (not gated behind loading)', () => {
     renderChat({ messages: [] });
@@ -1031,6 +1743,61 @@ describe('ChatApp — composer input primacy', () => {
     renderChat({ messages: [assistantMsg], isLoading: true });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'next message' } });
     expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+  });
+
+  it.each([
+    {
+      label: 'a new session is being created',
+      props: { activeSessionId: 'session-old', sessionCreating: true },
+      status: /creating a new session/i,
+    },
+    {
+      label: 'the session list is still loading',
+      props: { activeSessionId: null, sessionLoading: true, sessionReady: false },
+      status: /loading sessions/i,
+    },
+    {
+      label: 'no usable session was loaded',
+      props: { activeSessionId: null, sessionReady: false, sessionError: 'Could not load sessions' },
+      status: /could not load sessions/i,
+    },
+  ])('keeps the draft and blocks Send plus Enter while $label', ({ props, status }) => {
+    const onSendMessage = vi.fn();
+    renderChat({ messages: [], onSendMessage, ...props });
+    const composer = screen.getByRole('textbox', { name: /message composer/i });
+    fireEvent.change(composer, { target: { value: 'Keep this in the right session' } });
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.click(send);
+    fireEvent.keyDown(composer, { key: 'Enter' });
+
+    expect(send).toBeDisabled();
+    expect(composer).toHaveValue('Keep this in the right session');
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(status)).toBeInTheDocument();
+  });
+
+  it('hides every retry path while a session transition is pending', () => {
+    const onRetry = vi.fn();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ChatAppEl
+            {...baseProps}
+            messages={[{
+              ...assistantMsg,
+              blocks: [{ type: 'error', blockId: 'e1', message: 'Provider failed' }],
+            }]}
+            activeSessionId="session-old"
+            sessionCreating
+            onRetry={onRetry}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
   it('renders the truthful "waiting to send" state on a queued optimistic turn', () => {
@@ -1214,6 +1981,51 @@ describe('ChatApp — composer input primacy', () => {
       });
 
       expect(onSendMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a delayed WorkspaceBriefing starter as a draft when session creation begins', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.adapter.getWorkspaceContext.mockResolvedValue({
+        greeting: 'Welcome',
+        suggestedPrompts: ['Inspect this workspace'],
+      });
+      const onSendMessage = vi.fn().mockResolvedValue(true);
+      const view = renderChat({
+        messages: [],
+        workspaceId: 'ws-starter-transition',
+        activeSessionId: 'session-old',
+        onSendMessage,
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect this workspace' }));
+
+      view.rerender(
+        <TooltipProvider>
+          <ChatAppEl
+            {...baseProps}
+            messages={[]}
+            workspaceId="ws-starter-transition"
+            activeSessionId="session-old"
+            sessionCreating
+            onSendMessage={onSendMessage}
+          />
+        </TooltipProvider>,
+      );
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: /message composer/i }))
+        .toHaveValue('Inspect this workspace');
     } finally {
       vi.useRealTimers();
     }

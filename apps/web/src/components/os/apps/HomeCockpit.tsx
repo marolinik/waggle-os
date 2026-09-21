@@ -14,7 +14,8 @@
  * Honesty (PR3-BUILD-PLAN §5): the overnight story sentence + run chips are
  * COMPOSED client-side from the real OvernightSummary counts (no narrative
  * producer); the 🔥 streak has no backend field yet (SHOW_STREAK gate, below);
- * "Continue" lands at chat root because the server omits continueSessionId.
+ * Continue carries the latest real conversation when one exists and falls
+ * back to the workspace chat root for a workspace without conversation history.
  */
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
@@ -38,7 +39,7 @@ import {
 } from '../warm';
 import { RecallCard } from '../overlays/RecallCard';
 import DreamDiaryCard from '../home/DreamDiaryCard';
-import { readHomeCache, writeHomeCache } from '@/lib/home-cache';
+import { clearHomeCache, readHomeCache, writeHomeCache } from '@/lib/home-cache';
 import { takeBriefingData, type MemoryHighlight } from '@/lib/briefing-source';
 import { timeAgo } from '@/lib/login-briefing-brag';
 import type {
@@ -59,6 +60,17 @@ import type {
 const SHOW_STREAK = false;
 const STREAK_DAYS = 0;
 
+function isAuthorizationDenial(err: unknown): boolean {
+  const status = typeof err === 'object' && err !== null && 'status' in err
+    ? Number((err as { status?: unknown }).status)
+    : undefined;
+  const message = err instanceof Error ? err.message.toLowerCase() : '';
+  return status === 401 || status === 403
+    || message.includes('401') || message.includes('403')
+    || message.includes('unauthor') || message.includes('forbid')
+    || message.includes('denied');
+}
+
 const UP_NEXT_ICON: Record<UpNextItem['kind'], typeof Calendar> = {
   event: Calendar,
   task: ListTodo,
@@ -72,6 +84,7 @@ interface StartHereMove {
   primaryLabel: string;
   workspaceId: string;
   sessionId?: string;
+  initialMessage?: string;
   mode: 'continue' | 'open';
 }
 
@@ -197,6 +210,7 @@ function buildStartHereMove(briefing: HomeBriefing, wsById: Map<string, RecentWo
       primaryLabel: 'Resume',
       workspaceId: suggested.workspaceId,
       sessionId: suggested.sessionId,
+      ...(!suggested.sessionId ? { initialMessage: suggested.label } : {}),
       mode: 'continue',
     };
   }
@@ -357,7 +371,7 @@ function StartHereCard({
   move, onContinue, onOpenWorkspaceDesktop,
 }: {
   move: StartHereMove | null;
-  onContinue: (id: string, sessionId?: string) => void;
+  onContinue: (id: string, sessionId?: string, initialMessage?: string) => void;
   onOpenWorkspaceDesktop: (id: string) => void;
 }) {
   if (!move) return null;
@@ -366,7 +380,8 @@ function StartHereCard({
       onOpenWorkspaceDesktop(move.workspaceId);
       return;
     }
-    onContinue(move.workspaceId, move.sessionId);
+    if (move.initialMessage) onContinue(move.workspaceId, move.sessionId, move.initialMessage);
+    else onContinue(move.workspaceId, move.sessionId);
   };
 
   return (
@@ -434,7 +449,7 @@ function RecentWorkspacesPanel({
   cards, onContinue, onOpenDesktop, onWorkspaceChanged,
 }: {
   cards: RecentWorkspaceCard[];
-  onContinue: (id: string, sessionId?: string) => void;
+  onContinue: (id: string, sessionId?: string, initialMessage?: string) => void;
   onOpenDesktop: (id: string) => void;
   onWorkspaceChanged: () => void;
 }) {
@@ -615,11 +630,11 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
-const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, userName, totalWorkspaceCount }: HomeCockpitProps) => {
+const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, onAskChat, userName, totalWorkspaceCount, profileId }: HomeCockpitProps) => {
   // Cache-first paint (Pillar 2.1): seed from the disk-persisted last-good Home
   // payload so a returning / cold-start launch paints real content BEFORE the
   // sidecar answers, then refreshes silently. Day-0 (no cache) keeps the skeleton.
-  const [cached] = useState(() => readHomeCache());
+  const [cached] = useState(() => readHomeCache(profileId));
   const [briefing, setBriefing] = useState<HomeBriefing | null>(cached?.briefing ?? null);
   const [overnight, setOvernight] = useState<OvernightSummary | null>(cached?.overnight ?? null);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>(cached?.highlights ?? []);
@@ -633,18 +648,22 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // and yields malformed data. Defer load() until the attempt has settled.
   const { connecting } = useService();
   const cancelled = useRef(false);
+  const loadIdRef = useRef(0);
   // Paintable content already onscreen ⇒ a refresh must NOT re-skeleton, and a
   // refresh FAILURE must NOT blow good content away (keep last-good, retry silently).
   const hasContentRef = useRef(!!cached);
   // Latest recall highlights for the cache write — avoids a stale closure when
   // the recall fetch fails and we still want to persist the ones we already have.
   const highlightsRef = useRef<MemoryHighlight[]>(cached?.highlights ?? []);
+  const overnightRef = useRef<OvernightSummary | null>(cached?.overnight ?? null);
   const applyHighlights = useCallback((h: MemoryHighlight[]) => {
     highlightsRef.current = h;
     setHighlights(h);
   }, []);
 
   const load = useCallback(async () => {
+    const loadId = ++loadIdRef.current;
+    const isCurrent = () => !cancelled.current && loadIdRef.current === loadId;
     // Silent refresh over a cache-first paint keeps content up; only a cold miss
     // (nothing to show) shows the skeleton.
     if (!hasContentRef.current) setLoading(true);
@@ -652,65 +671,90 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     setPermissionDenied(false);
     try {
       const b = await adapter.getHomeBriefing();
-      if (cancelled.current) return;
+      if (!isCurrent()) return;
       setBriefing(b);
-      // First-run has no real payload to keep/cache; any other briefing is
-      // paintable content the next refresh/error must preserve.
-      hasContentRef.current = !b.isFirstRun;
+      // A successful live first-run response is authoritative: the last
+      // workspace may just have been deleted. Evict only this profile's cache
+      // so its old workspace and memories cannot ghost back on the next mount.
+      if (b.isFirstRun) {
+        clearHomeCache(profileId);
+        hasContentRef.current = false;
+        overnightRef.current = null;
+        setOvernight(null);
+        applyHighlights([]);
+        return;
+      }
+      hasContentRef.current = true;
 
       // Overnight is a secondary, best-effort tile — its failure must never
       // blank the whole cockpit (offline/local-only degrades it gracefully).
-      let o: OvernightSummary | null = null;
+      let o = overnightRef.current;
       try {
         o = await adapter.getHomeOvernight();
-        if (!cancelled.current) setOvernight(o);
-      } catch {
-        if (!cancelled.current) setOvernight(null);
+        if (!isCurrent()) return;
+        overnightRef.current = o;
+        setOvernight(o);
+      } catch (err: unknown) {
+        if (!isCurrent()) return;
+        if (isAuthorizationDenial(err)) throw err;
+        // Keep the last-good secondary story. A transient overnight failure
+        // must not erase or persist over a still-valid cached summary.
       }
 
       // Recall highlights for the hero strip (Pillar 2.4) — shared with the
       // ≥7-day modal via briefing-source, best-effort: a failure just keeps the
       // highlights we already have.
       try {
-        const data = await takeBriefingData();
-        if (!cancelled.current) applyHighlights(data.highlights);
-      } catch {
+        const data = await takeBriefingData(profileId);
+        if (!isCurrent()) return;
+        applyHighlights(data.highlights);
+      } catch (err: unknown) {
+        if (!isCurrent()) return;
+        if (isAuthorizationDenial(err)) throw err;
         /* keep prior highlights */
       }
 
       // Persist the last-good payload for the next cache-first paint (never a
       // first-run payload — nothing real to show).
-      if (!cancelled.current && !b.isFirstRun) {
-        writeHomeCache({ briefing: b, overnight: o, highlights: highlightsRef.current });
+      if (isCurrent() && !b.isFirstRun) {
+        writeHomeCache({ briefing: b, overnight: o, highlights: highlightsRef.current }, profileId);
       }
     } catch (err: unknown) {
-      if (cancelled.current) return;
+      if (!isCurrent()) return;
+      // Authentication/authorization failures revoke the right to paint the
+      // last-good payload. Keeping it visible would present another identity's
+      // workspace and memory metadata as current after a token/profile change.
+      if (isAuthorizationDenial(err)) {
+        clearHomeCache(profileId);
+        hasContentRef.current = false;
+        setBriefing(null);
+        overnightRef.current = null;
+        setOvernight(null);
+        applyHighlights([]);
+        setPermissionDenied(true);
+        return;
+      }
       // Silent-refresh failure over a cache-first paint: keep the last-good
       // content (wrong-then-corrected / blank is worse than slightly stale).
       // Only surface the error / permission state on a COLD miss.
       if (hasContentRef.current) return;
       setBriefing(null);
-      // PERMISSION-DENIED (PRD §12.1): a 403 gets a dedicated message rather
-      // than the generic "couldn't load" / offline framing.
-      const msg = err instanceof Error ? err.message.toLowerCase() : '';
-      if (msg.includes('403') || msg.includes('forbid') || msg.includes('denied')) {
-        setPermissionDenied(true);
-      } else {
-        setLoadError(true);
-      }
+      setLoadError(true);
     } finally {
-      if (!cancelled.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [applyHighlights]);
+  }, [applyHighlights, profileId]);
 
   useEffect(() => {
     // Defer until the adapter's initial connect attempt has settled. Gates on
     // `connecting` (settled), NOT `connected`, so a failed connect still runs
     // load() → the existing offline/retry UI rather than a permanent skeleton.
-    if (connecting) return;
     cancelled.current = false;
-    void load();
-    return () => { cancelled.current = true; };
+    if (!connecting) void load();
+    return () => {
+      cancelled.current = true;
+      loadIdRef.current += 1;
+    };
   }, [load, connecting]);
 
   // Ask bar "+" with no typed text → open the command palette (⌘K) rather than
@@ -721,18 +765,32 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
   }, []);
 
-  // Ask bar → quick-capture the typed intent (the real backend the old
-  // QuickCapture panel used). Send = a task to pick up; "+" = a quick note.
-  // NOTE: a future "start a chat from this prompt" flow could replace the task
-  // capture once Home can seed a workspace-less chat.
+  // "+" remains quick note capture. Send starts a real chat when the route
+  // supplies a workspace-bound dispatch handler; isolated renders retain the
+  // legacy task-capture fallback.
   const captureAsk = useCallback(async (text: string, kind: QuickCaptureInput['kind']) => {
     try {
       await adapter.quickCapture({ kind, content: text });
       toast({ description: kind === 'task' ? 'Added to your hive — a task to pick up.' : 'Noted — saved to your hive.' });
+      return true;
     } catch {
       toast({ variant: 'destructive', description: "Couldn't save that — try again." });
+      return false;
     }
   }, [toast]);
+
+  const submitAsk = useCallback(async (text: string): Promise<boolean> => {
+    if (!onAskChat) return captureAsk(text, 'task');
+    try {
+      return await onAskChat(text);
+    } catch {
+      toast({
+        variant: 'destructive',
+        description: "Couldn't start chat — your draft is still here. Try again.",
+      });
+      return false;
+    }
+  }, [captureAsk, onAskChat, toast]);
 
   if (loading) return <CockpitSkeleton />;
 
@@ -790,7 +848,10 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   }
 
   const recentWorkspaces = briefing.recentWorkspaces ?? [];
-  const onOpenFromAction = (a: SuggestedAction) => onContinue(a.workspaceId, a.sessionId);
+  const onOpenFromAction = (a: SuggestedAction) => {
+    if (a.sessionId) onContinue(a.workspaceId, a.sessionId);
+    else onContinue(a.workspaceId, undefined, a.label);
+  };
 
   // Suggestion sub-line, composed from the linked workspace (label-only server
   // payload has no sub — derive an honest one from the workspace + recency).
@@ -977,20 +1038,25 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <AskBar
-        onSubmit={(text) => void captureAsk(text, 'task')}
-        onPlus={(text) => { if (text) void captureAsk(text, 'note'); else openCommandPalette(); }}
+        onSubmit={submitAsk}
+        onPlus={(text) => text ? captureAsk(text, 'note') : openCommandPalette()}
+        transientDraftKey="home-quick-capture"
       />
     </div>
   );
 };
 
 interface HomeCockpitProps {
+  /** Server-issued logical profile used to isolate disk and prefetch state. */
+  profileId?: string;
   /** Continue a workspace → open its chat runtime (founder A-flow: continue→openChat). */
-  onContinue: (workspaceId: string, sessionId?: string) => void;
+  onContinue: (workspaceId: string, sessionId?: string, initialMessage?: string) => void;
   /** Open the full Workspace Desktop for a workspace (S02). */
   onOpenWorkspaceDesktop: (workspaceId: string) => void;
   /** Start the new-workspace flow (first-run + empty-state CTA). */
   onCreateWorkspace: () => void;
+  /** Queue a prompt for an explicit workspace chat. False keeps the draft. */
+  onAskChat?: (text: string) => boolean | Promise<boolean>;
   /**
    * Fallback display name when the briefing has no userName yet (e.g. before
    * onboarding seeds identity — founder B8). Optional; the greeting from the

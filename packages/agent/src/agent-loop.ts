@@ -21,6 +21,7 @@ import type {
   ModelSpendReservation,
 } from './cost-tracker.js';
 import { MODEL_SPEND_RESERVATION_HEADER } from './cost-tracker.js';
+import { normalizeReasoningOutput } from './output-normalize.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
@@ -67,6 +68,12 @@ export interface AgentLoopConfig {
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
   onToken?: (token: string) => void;
+  /** Reports a bounded, user-safe retry notice without mixing it into answer tokens. */
+  onRetry?: (notice: string) => void;
+  /** Signals the first valid provider stream activity without exposing its contents. */
+  onModelActivity?: () => void;
+  /** Signals provider reasoning activity without exposing private reasoning text. */
+  onReasoningActivity?: () => void;
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
   onToolResult?: (name: string, input: Record<string, unknown>, result: string) => void;
   /**
@@ -93,11 +100,22 @@ export interface AgentLoopConfig {
   maxTokenBudget?: number;
   /** Maximum completion tokens requested from the provider on any one dispatch. */
   maxOutputTokens?: number;
+  /**
+   * Absolute deadline for one logical model operation, including retries and
+   * backoff. It resets after an accepted response, before any tool executes.
+   */
+  modelOperationTimeoutMs?: number;
+  /** One-shot deadline for first provider activity on the first model request. */
+  initialModelActivityTimeoutMs?: number;
   /** Optional provider-native reasoning policy. Omitted to preserve provider defaults. */
   reasoning?: {
     enabled: boolean;
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   };
+  /** Force one already-authorized tool on the first model turn only. */
+  toolChoice?: string;
+  /** Force an authorized ordered tool sequence, then reserve one synthesis turn. */
+  requiredToolSequence?: readonly string[];
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
@@ -236,16 +254,56 @@ function safeFetchedCitationUrl(value: unknown): string | null {
   }
 }
 
+function fetchedUrlRedactionVariants(value: unknown): string[] {
+  if (typeof value !== 'string' || value.trim().length === 0) return [];
+  const raw = value.trim();
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return [];
+    const normalized = parsed.toString();
+    parsed.hash = '';
+    return [...new Set([raw, normalized, parsed.toString()])];
+  } catch {
+    return [];
+  }
+}
+
+function fetchedUrlIdentity(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function appendFetchedSourceFooter(
   content: string,
   citationIntent: boolean,
   fetchedUrls: ReadonlySet<string>,
+  unusableUrls: ReadonlySet<string>,
 ): { content: string; suffix: string } {
-  if (!citationIntent || fetchedUrls.size === 0) return { content, suffix: '' };
-  const missing = [...fetchedUrls].filter(url => !content.includes(url));
-  if (missing.length === 0) return { content, suffix: '' };
-  const suffix = `${content.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
-  return { content: `${content}${suffix}`, suffix };
+  let safeContent = content;
+  const successfulIdentities = new Set(
+    [...fetchedUrls]
+      .map(fetchedUrlIdentity)
+      .filter((identity): identity is string => identity !== null),
+  );
+  for (const url of [...unusableUrls].sort((left, right) => right.length - left.length)) {
+    const identity = fetchedUrlIdentity(url);
+    if (!fetchedUrls.has(url) && (!identity || !successfulIdentities.has(identity))) {
+      safeContent = safeContent.split(url).join('[unavailable source removed]');
+    }
+  }
+  if (!citationIntent) return { content: safeContent, suffix: '' };
+  if (fetchedUrls.size === 0) return { content: safeContent, suffix: '' };
+  const missing = [...fetchedUrls].filter(url => !safeContent.includes(url));
+  if (missing.length === 0) return { content: safeContent, suffix: '' };
+  const suffix = `${safeContent.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
+  return { content: `${safeContent}${suffix}`, suffix };
 }
 
 const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
@@ -254,6 +312,13 @@ type IncompleteCompletionError = Error & {
   code: 'INCOMPLETE_COMPLETION';
   usage?: AgentResponse['usage'];
   partialToolCalls?: unknown;
+};
+
+type EmptyModelResponseError = Error & {
+  code: 'EMPTY_MODEL_RESPONSE';
+  status: 502;
+  usage: AgentResponse['usage'];
+  toolsUsed: string[];
 };
 
 function isIncompleteCompletionError(error: unknown): error is IncompleteCompletionError {
@@ -275,6 +340,43 @@ function incompleteCompletionError(
   return error;
 }
 
+function isQwenModelId(modelId: string): boolean {
+  return /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(modelId);
+}
+
+function isEmptyModelPlaceholder(content: string): boolean {
+  return /^(?:empty (?:message|response)|no response generated)[.!]?$/i.test(content.trim());
+}
+
+function explicitlyRequestsExactContent(userRequest: string, content: string): boolean {
+  const quotedLiterals = userRequest.matchAll(/(["'`])([^"'`]+)\1/g);
+  for (const match of quotedLiterals) {
+    if (match[2].trim() !== content.trim()) continue;
+    const suffix = userRequest.slice(match.index + match[0].length);
+    if (!/^\s*(?:[.!?]\s*)?(?:and\s+nothing\s+else[.!?]?\s*)?$/i.test(suffix)) continue;
+    const prefix = userRequest.slice(0, match.index).trimEnd();
+    const allowedLeadIn = (value: string): boolean => /^(?:(?:for\s+(?:this|the)\s+(?:test|check),\s*)?(?:please(?:\s+just)?|kindly|(?:can|could|would|will)\s+you(?:\s+please)?|i\s+(?:want|need|would\s+like)\s+you\s+to)?)?\s*$/i.test(value);
+    const direct = /(?:reply|respond|answer|say|write|output|return)\s+(?:(?:exactly|only)(?:\s+with)?|with\s+(?:exactly|only))\s*$/i.exec(prefix);
+    if (direct && allowedLeadIn(prefix.slice(0, direct.index))) return true;
+    const wholeResponse = /(?:your\s+)?(?:entire|whole)\s+(?:response|answer|output)\s+(?:must|should)\s+(?:be|contain(?:\s+only)?)\s*$/i.exec(prefix);
+    if (wholeResponse && allowedLeadIn(prefix.slice(0, wholeResponse.index))) return true;
+  }
+  return false;
+}
+
+function emptyModelResponseError(
+  usage: AgentResponse['usage'],
+  toolsUsed: readonly string[],
+): EmptyModelResponseError {
+  const error = new Error('LLM returned an empty assistant response with no tool calls') as EmptyModelResponseError;
+  error.name = 'EmptyModelResponseError';
+  error.code = 'EMPTY_MODEL_RESPONSE';
+  error.status = 502;
+  error.usage = usage;
+  error.toolsUsed = [...toolsUsed];
+  return error;
+}
+
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
   const {
     litellmUrl,
@@ -284,6 +386,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     tools: configTools,
     messages: inputMessages,
     onToken,
+    onModelActivity,
+    onReasoningActivity,
     onToolUse: userOnToolUse,
     onToolResult: userOnToolResult,
     maxTurns = 10,
@@ -305,6 +409,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     onSkillDistillationFire,
   } = config;
 
+  const isQwenModel = isQwenModelId(config.billingModel ?? model);
+  let modelActivityObserved = false;
+
   if (
     config.maxTokenBudget !== undefined
     && (!Number.isFinite(config.maxTokenBudget) || config.maxTokenBudget < 1)
@@ -317,6 +424,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   ) {
     throw new RangeError('maxOutputTokens must be a positive finite number');
   }
+  if (
+    config.modelOperationTimeoutMs !== undefined
+    && (!Number.isFinite(config.modelOperationTimeoutMs) || config.modelOperationTimeoutMs < 1)
+  ) {
+    throw new RangeError('modelOperationTimeoutMs must be a positive finite number');
+  }
+  if (
+    config.initialModelActivityTimeoutMs !== undefined
+    && (!Number.isFinite(config.initialModelActivityTimeoutMs) || config.initialModelActivityTimeoutMs < 1)
+  ) {
+    throw new RangeError('initialModelActivityTimeoutMs must be a positive finite number');
+  }
 
   const userRequest = [...inputMessages]
     .reverse()
@@ -324,9 +443,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   const citationIntent = EXPLICIT_CITATION_INTENT.test(userRequest)
     && !NEGATED_CITATION_INTENT.test(userRequest);
   const successfullyFetchedCitationUrls = new Set<string>();
+  const unusableFetchedCitationUrls = new Set<string>();
   let lastToolObservation: {
     name: string;
     citationUrl: string | null;
+    redactionUrls: string[];
     usableResult: boolean;
   } | undefined;
 
@@ -378,6 +499,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     lastToolObservation = {
       name,
       citationUrl: safeFetchedCitationUrl(input.url),
+      redactionUrls: fetchedUrlRedactionVariants(input.url),
       usableResult: trimmedResult.length > 0 && !UNUSABLE_FETCH_RESULT.test(trimmedResult),
     };
     traceCallbacks?.onToolResult(name, input, result);
@@ -394,6 +516,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         })),
       ]
     : configTools;
+  // Literal Qwen reasoning and source URLs cannot be retracted after a streamed
+  // token is displayed. Any turn that can call web_fetch must therefore remain
+  // atomic until its tool outcome is known; streams without web_fetch stay live.
+  const bufferAtomicStream = stream && (
+    isQwenModel || tools.some(tool => tool.name === 'web_fetch')
+  );
 
   // Build messages array with system prompt + input messages
   const messages: AgentMessage[] = [
@@ -425,24 +553,328 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     toolMap.set(t.name, t);
   }
 
+  if (config.toolChoice) {
+    if (config.toolChoice.trim() !== config.toolChoice || config.toolChoice.length === 0) {
+      throw new Error('Forced tool choice contains an invalid tool name');
+    }
+    const matchingForcedTools = tools.filter(tool => tool.name === config.toolChoice);
+    if (matchingForcedTools.length === 0) {
+      throw new Error(`Forced tool choice ${config.toolChoice} is unavailable`);
+    }
+    if (matchingForcedTools.length > 1) {
+      throw new Error(`Forced tool choice ${config.toolChoice} is ambiguous`);
+    }
+  }
+
+  const requiredToolSequence = config.requiredToolSequence
+    ? [...config.requiredToolSequence]
+    : [];
+  if (requiredToolSequence.length > 0 && config.toolChoice) {
+    throw new Error('toolChoice and requiredToolSequence cannot be used together');
+  }
+  if (config.toolChoice && maxTurns < 2) {
+    throw new Error('Forced tool choice does not fit within maxTurns');
+  }
+  if (config.toolChoice && maxToolRounds !== undefined && maxToolRounds < 1) {
+    throw new Error('Forced tool choice does not fit within maxToolRounds');
+  }
+  for (const requiredToolName of requiredToolSequence) {
+    if (
+      typeof requiredToolName !== 'string'
+      || requiredToolName.trim() !== requiredToolName
+      || requiredToolName.length === 0
+    ) {
+      throw new Error('Required tool sequence contains an invalid tool name');
+    }
+    const matchingTools = tools.filter((tool) => tool.name === requiredToolName);
+    if (matchingTools.length === 0) {
+      throw new Error(`Required tool ${requiredToolName} is unavailable`);
+    }
+    if (matchingTools.length > 1) {
+      throw new Error(`Required tool ${requiredToolName} is ambiguous`);
+    }
+  }
+  if (requiredToolSequence.length > 0 && maxTurns < requiredToolSequence.length + 1) {
+    throw new Error('Required tool sequence does not fit within maxTurns');
+  }
+  if (
+    requiredToolSequence.length > 0
+    && maxToolRounds !== undefined
+    && maxToolRounds < requiredToolSequence.length
+  ) {
+    throw new Error('Required tool sequence does not fit within maxToolRounds');
+  }
+
   const toolsUsed: string[] = [];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
   let rawToolMarkupCorrectionUsed = false;
+  let emptyPlaceholderCorrectionUsed = false;
   // 429 / 5xx / network retry counters — see `./retry-policy.ts` for the protocol.
   let retryState = initialRetryState();
   // Per-request LLM timeout, merged with the client-disconnect signal below, so a
   // hung connection can't wedge a turn forever. Generous default for long
   // streaming generations; override via WAGGLE_LLM_TIMEOUT_MS.
   const llmTimeoutMs = parseInt(process.env.WAGGLE_LLM_TIMEOUT_MS ?? '', 10) || 300_000;
+  const modelOperationTimeoutMs = config.modelOperationTimeoutMs === undefined
+    ? undefined
+    : Math.floor(config.modelOperationTimeoutMs);
+  let modelOperationDeadlineAt: number | undefined;
+  const initialModelActivityTimeoutMs = config.initialModelActivityTimeoutMs === undefined
+    ? undefined
+    : Math.floor(config.initialModelActivityTimeoutMs);
+  let initialModelActivityArmed = initialModelActivityTimeoutMs !== undefined;
+  let initialModelActivityDeadlineAt: number | undefined;
+  let initialModelActivityTimer: ReturnType<typeof setTimeout> | undefined;
+  const initialModelActivityController = new AbortController();
+  let activeRequestEstimatedInputTokens = 0;
+  let activeRequestEstimatedInputCommitted = false;
+  let initialActivityCommittedEstimatedInputTokens = 0;
+  const modelOperationTimeoutError = (): Error & {
+    code: 'MODEL_OPERATION_TIMEOUT';
+    usage: { inputTokens: number; outputTokens: number };
+    toolsUsed: string[];
+  } => {
+    const seconds = (modelOperationTimeoutMs ?? 0) / 1_000;
+    const guidance = toolsUsed.length > 0
+      ? 'Review completed activity before retrying to avoid duplicate actions.'
+      : 'The provider may be unavailable; retry this turn.';
+    const error = new Error(
+      `Model operation timed out after ${seconds} seconds. ${guidance}`,
+    ) as Error & {
+      code: 'MODEL_OPERATION_TIMEOUT';
+      usage: { inputTokens: number; outputTokens: number };
+      toolsUsed: string[];
+    };
+    error.name = 'ModelOperationTimeoutError';
+    error.code = 'MODEL_OPERATION_TIMEOUT';
+    error.usage = { inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
+    error.toolsUsed = [...toolsUsed];
+    return error;
+  };
+  const initialModelActivityTimeoutError = (): Error & {
+    code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+    retryable: true;
+    usageEstimated: true;
+    usage: { inputTokens: number; outputTokens: number };
+    toolsUsed: string[];
+  } => {
+    const seconds = (initialModelActivityTimeoutMs ?? 0) / 1_000;
+    const error = new Error(
+      `Initial model activity timed out after ${seconds} seconds. The provider may be unavailable; retry this turn.`,
+    ) as Error & {
+      code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+      retryable: true;
+      usageEstimated: true;
+      usage: { inputTokens: number; outputTokens: number };
+      toolsUsed: string[];
+    };
+    error.name = 'InitialModelActivityTimeoutError';
+    error.code = 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+    error.retryable = true;
+    error.usageEstimated = true;
+    error.usage = {
+      inputTokens: totalInputTokens
+        + initialActivityCommittedEstimatedInputTokens
+        + (activeRequestEstimatedInputCommitted ? 0 : activeRequestEstimatedInputTokens),
+      outputTokens: totalOutputTokens,
+    };
+    error.toolsUsed = [...toolsUsed];
+    return error;
+  };
+  const disarmInitialModelActivityTimeout = (): void => {
+    if (!initialModelActivityArmed) return;
+    initialModelActivityArmed = false;
+    initialModelActivityDeadlineAt = undefined;
+    if (initialModelActivityTimer !== undefined) clearTimeout(initialModelActivityTimer);
+    initialModelActivityTimer = undefined;
+    activeRequestEstimatedInputTokens = 0;
+    activeRequestEstimatedInputCommitted = false;
+    initialActivityCommittedEstimatedInputTokens = 0;
+  };
+  const commitReservedModelSpend = (reservation: ModelSpendReservation): void => {
+    if (initialModelActivityArmed && !activeRequestEstimatedInputCommitted) {
+      initialActivityCommittedEstimatedInputTokens += activeRequestEstimatedInputTokens;
+      activeRequestEstimatedInputCommitted = true;
+    }
+    config.modelSpendBudget?.commitReservedModelSpend(reservation);
+  };
+  const ensureInitialModelActivityDeadline = (): AbortSignal | undefined => {
+    if (!initialModelActivityArmed || initialModelActivityTimeoutMs === undefined) return undefined;
+    if (initialModelActivityDeadlineAt === undefined) {
+      initialModelActivityDeadlineAt = Date.now() + initialModelActivityTimeoutMs;
+      initialModelActivityTimer = setTimeout(() => {
+        if (initialModelActivityArmed) {
+          initialModelActivityController.abort(initialModelActivityTimeoutError());
+        }
+      }, initialModelActivityTimeoutMs);
+    }
+    return initialModelActivityController.signal;
+  };
+  const initialModelActivityExpired = (deadlineSignal?: AbortSignal): boolean => (
+    initialModelActivityArmed
+    && initialModelActivityDeadlineAt !== undefined
+    && (deadlineSignal?.aborted === true || Date.now() >= initialModelActivityDeadlineAt)
+  );
+  const throwIfInitialModelActivityExpired = (deadlineSignal?: AbortSignal): void => {
+    if (initialModelActivityExpired(deadlineSignal)) throw initialModelActivityTimeoutError();
+  };
+  const clientAbortError = (usage = {
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+  }): Error & {
+    code: 'AGENT_LOOP_ABORTED';
+    usage: { inputTokens: number; outputTokens: number };
+    toolsUsed: string[];
+  } => {
+    const error = new Error('Agent loop aborted (client disconnected).') as Error & {
+      code: 'AGENT_LOOP_ABORTED';
+      usage: { inputTokens: number; outputTokens: number };
+      toolsUsed: string[];
+    };
+    error.name = 'AgentLoopAbortError';
+    error.code = 'AGENT_LOOP_ABORTED';
+    error.usage = usage;
+    error.toolsUsed = [...toolsUsed];
+    return error;
+  };
+  const ensureModelOperationDeadline = (): number | undefined => {
+    if (modelOperationTimeoutMs === undefined) return undefined;
+    modelOperationDeadlineAt ??= Date.now() + modelOperationTimeoutMs;
+    return modelOperationDeadlineAt;
+  };
+  const modelOperationExpired = (deadlineSignal?: AbortSignal): boolean => (
+    modelOperationDeadlineAt !== undefined
+    && (deadlineSignal?.aborted === true || Date.now() >= modelOperationDeadlineAt)
+  );
+  const throwIfModelOperationExpired = (deadlineSignal?: AbortSignal): void => {
+    if (modelOperationExpired(deadlineSignal)) throw modelOperationTimeoutError();
+  };
+  const waitForRequestStage = <T>(
+    startOperation: () => Promise<T>,
+    requestSignal: AbortSignal,
+    deadlineSignal?: AbortSignal,
+    cancelOperation?: (reason: unknown) => void,
+  ): Promise<T> => {
+    if (config.signal?.aborted) {
+      return Promise.reject(clientAbortError());
+    }
+    if (modelOperationExpired(deadlineSignal)) {
+      return Promise.reject(modelOperationTimeoutError());
+    }
+    if (requestSignal.aborted) {
+      return Promise.reject(requestSignal.reason ?? new Error('LLM request aborted.'));
+    }
+
+    const deadlineAt = modelOperationDeadlineAt;
+    const remainingMs = deadlineAt === undefined ? undefined : deadlineAt - Date.now();
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      let cancelled = false;
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = () => {
+        requestSignal.removeEventListener('abort', onAbort);
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+      };
+      const settle = (action: () => void) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        action();
+      };
+      const cancel = (reason: unknown) => {
+        if (cancelled) return;
+        cancelled = true;
+        try { cancelOperation?.(reason); } catch { /* best effort */ }
+      };
+      const onAbort = () => {
+        const reason = config.signal?.aborted
+          ? clientAbortError()
+          : initialModelActivityExpired(initialModelActivityController.signal)
+            ? initialModelActivityTimeoutError()
+          : modelOperationExpired(deadlineSignal)
+            ? modelOperationTimeoutError()
+            : requestSignal.reason ?? new Error('LLM request aborted.');
+        cancel(reason);
+        settle(() => reject(reason));
+      };
+
+      requestSignal.addEventListener('abort', onAbort, { once: true });
+      if (requestSignal.aborted) {
+        onAbort();
+        return;
+      }
+      if (remainingMs !== undefined) {
+        deadlineTimer = setTimeout(
+          () => {
+            const error = modelOperationTimeoutError();
+            cancel(error);
+            settle(() => reject(error));
+          },
+          Math.max(0, remainingMs),
+        );
+      }
+      let operation: Promise<T>;
+      try {
+        operation = startOperation();
+      } catch (error) {
+        settle(() => reject(error));
+        return;
+      }
+      operation.then(
+        value => settle(() => resolve(value)),
+        error => settle(() => reject(error)),
+      );
+    });
+  };
+  const waitForRetry = async (waitMs: number): Promise<void> => {
+    if (config.signal?.aborted) {
+      throw clientAbortError();
+    }
+    const deadlineAt = modelOperationDeadlineAt;
+    const remainingMs = deadlineAt === undefined ? undefined : deadlineAt - Date.now();
+    if (remainingMs !== undefined && remainingMs <= 0) throw modelOperationTimeoutError();
+    const initialRemainingMs = initialModelActivityArmed && initialModelActivityDeadlineAt !== undefined
+      ? initialModelActivityDeadlineAt - Date.now()
+      : undefined;
+    if (initialRemainingMs !== undefined && initialRemainingMs <= 0) throw initialModelActivityTimeoutError();
+    const boundedWaitMs = Math.min(waitMs, remainingMs ?? waitMs, initialRemainingMs ?? waitMs);
+
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(clientAbortError());
+      };
+      const onInitialActivityTimeout = () => {
+        clearTimeout(timer);
+        config.signal?.removeEventListener('abort', onAbort);
+        reject(initialModelActivityTimeoutError());
+      };
+      const timer = setTimeout(() => {
+        config.signal?.removeEventListener('abort', onAbort);
+        initialModelActivityController.signal.removeEventListener('abort', onInitialActivityTimeout);
+        resolve();
+      }, boundedWaitMs);
+      config.signal?.addEventListener('abort', onAbort, { once: true });
+      if (initialModelActivityArmed) {
+        initialModelActivityController.signal.addEventListener('abort', onInitialActivityTimeout, { once: true });
+      }
+    });
+
+    throwIfInitialModelActivityExpired(initialModelActivityController.signal);
+    throwIfModelOperationExpired();
+  };
   // One-shot completion gates (D3 verification, D1 skill distillation) +
   // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
   let gateState = initialGateState();
   let toolRoundCount = 0;
+  let failedFetchRecoveryTriggered = false;
+  let requiredToolIndex = 0;
   let synthesisForced = false;
   let lastRequestInputTokens = 0;
+  let bufferCurrentStream = bufferAtomicStream;
   const maxTokenBudget = typeof config.maxTokenBudget === 'number'
     && Number.isFinite(config.maxTokenBudget)
     && config.maxTokenBudget > 0
@@ -467,9 +899,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       baseContent,
       citationIntent,
       successfullyFetchedCitationUrls,
+      unusableFetchedCitationUrls,
     );
-    if (stream && onToken) {
-      if (preservedContent || usableContentWasStreamed) {
+    if (onToken) {
+      if (!stream || bufferCurrentStream) {
+        onToken(finalized.content);
+      } else if (preservedContent || usableContentWasStreamed) {
         if (finalized.suffix) onToken(finalized.suffix);
       } else {
         onToken(finalized.content);
@@ -491,7 +926,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     };
   };
 
-  const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve'): void => {
+  const forceSynthesis = (
+    reason: 'tool-round-limit' | 'token-reserve' | 'required-tool-sequence',
+  ): void => {
+    if (requiredToolIndex < requiredToolSequence.length) {
+      throw new Error('Required tool sequence could not complete before synthesis');
+    }
     if (synthesisForced) return;
     synthesisForced = true;
     messages.push({
@@ -514,21 +954,34 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     });
   };
 
+  // Prefix hygiene: how many leading messages the model has already seen this run.
+  // Sealing them keeps the request prefix byte-stable across tool rounds, but it also
+  // keeps older tool results at their fuller size, so a run reaches maxTokenBudget
+  // after fewer tool rounds. That is a product tradeoff (more tool rounds vs richer
+  // context per round), so it is OFF by default and opt-in per deployment.
+  const sealToolContext = process.env.WAGGLE_SEAL_TOOL_CONTEXT === '1';
+  let sealedMessageCount = 0;
+  try {
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
     if (config.signal?.aborted) {
-      return {
-        content: 'Agent loop aborted (client disconnected).',
-        toolsUsed,
-        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-      };
+      throw clientAbortError();
     }
 
-    if (!synthesisForced && maxToolRounds !== undefined && toolRoundCount >= maxToolRounds) {
+    const pendingRequiredTool = requiredToolSequence[requiredToolIndex];
+    bufferCurrentStream = bufferAtomicStream || unusableFetchedCitationUrls.size > 0;
+    const failedFetchRecoveryRounds = failedFetchRecoveryTriggered && maxToolRounds !== undefined
+      ? Math.min(2, Math.max(0, maxTurns - maxToolRounds - 1))
+      : 0;
+    if (
+      !synthesisForced
+      && maxToolRounds !== undefined
+      && toolRoundCount >= maxToolRounds + failedFetchRecoveryRounds
+    ) {
       forceSynthesis('tool-round-limit');
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
-    let requestMessages = compactToolContextForModel(messages, toolContextBudget);
+    let requestMessages = compactToolContextForModel(messages, toolContextBudget, sealToolContext ? sealedMessageCount : 0);
     const turnOpenAiTools = gateState.verificationCorrectionUsed
       ? openaiTools.filter(tool => tool.function.name !== 'save_memory')
       : openaiTools;
@@ -555,8 +1008,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       && synthesisReserveTokens
       && usedBeforeRequest + estimatedNextRequestTokens + futureSynthesisReserve >= maxTokenBudget
     ) {
+      const requiredTool = pendingRequiredTool ?? (turn === 0 ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not start within the token budget`);
+      }
       forceSynthesis('token-reserve');
-      requestMessages = compactToolContextForModel(messages, toolContextBudget);
+      requestMessages = compactToolContextForModel(messages, toolContextBudget, sealToolContext ? sealedMessageCount : 0);
       estimatedNextRequestTokens = estimateNextRequestTokens();
       futureSynthesisReserve = 0;
     }
@@ -567,13 +1024,26 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           outputTokenCeiling,
           Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens - futureSynthesisReserve),
         );
-    if (outputTokenLimit < 1) return budgetStopResponse();
+    if (outputTokenLimit < 1) {
+      const requiredTool = pendingRequiredTool ?? (turn === 0 ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not start within the token budget`);
+      }
+      return budgetStopResponse();
+    }
+    activeRequestEstimatedInputTokens = estimatedNextRequestTokens;
+    activeRequestEstimatedInputCommitted = false;
 
     const body: Record<string, unknown> = {
       model,
       messages: requestMessages,
       max_tokens: outputTokenLimit,
     };
+    if (/^openai-compatible\/qwen(?:$|[/_.:-]|\d)/i.test(config.billingModel ?? model)) {
+      // Keep keyless/local Qwen chat interactive even when the loop talks to
+      // the compatible endpoint directly instead of through Waggle's proxy.
+      body.chat_template_kwargs = { enable_thinking: false };
+    }
     if (config.reasoning) {
       body.reasoning = { ...config.reasoning };
     }
@@ -583,10 +1053,28 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     if (currentRequestToolNames.length > 0) {
       body.tools = turnOpenAiTools;
     }
+    if (pendingRequiredTool && !currentRequestToolNames.includes(pendingRequiredTool)) {
+      throw new Error(`Required tool ${pendingRequiredTool} is unavailable for this turn`);
+    }
+    const legacyForcedToolChoiceActive = (
+      turn === 0
+      && config.toolChoice
+      && currentRequestToolNames.includes(config.toolChoice)
+    );
+    const forcedToolName = pendingRequiredTool
+      ?? (legacyForcedToolChoiceActive ? config.toolChoice : undefined);
+    const forcedToolChoiceActive = Boolean(forcedToolName);
+    if (forcedToolChoiceActive) {
+      body.tool_choice = {
+        type: 'function',
+        function: { name: forcedToolName },
+      };
+      body.parallel_tool_calls = false;
+    }
     // A forced synthesis is the only request in the turn that cannot execute
     // tools. Make it atomic so an upstream SSE truncation cannot discard an
     // otherwise complete evidence-backed answer after all tool work finished.
-    const requestUsesStream = stream && !synthesisForced;
+    const requestUsesStream = stream && !synthesisForced && !forcedToolChoiceActive;
     if (requestUsesStream) {
       body.stream = true;
       body.stream_options = { include_usage: true };
@@ -596,10 +1084,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     // the connection (and, on the streaming path, the body reader rejects)
     // instead of consuming the stream to completion. Merged with a per-request
     // timeout so a hung connection can't wedge the turn forever.
+    const deadlineAt = ensureModelOperationDeadline();
+    const initialModelActivitySignal = ensureInitialModelActivityDeadline();
+    const remainingModelOperationMs = deadlineAt === undefined ? undefined : deadlineAt - Date.now();
+    if (remainingModelOperationMs !== undefined && remainingModelOperationMs <= 0) {
+      throw modelOperationTimeoutError();
+    }
     const timeoutSignal = AbortSignal.timeout(llmTimeoutMs);
-    const requestSignal = config.signal
-      ? AbortSignal.any([config.signal, timeoutSignal])
-      : timeoutSignal;
+    const modelOperationSignal = remainingModelOperationMs === undefined
+      ? undefined
+      : AbortSignal.timeout(Math.max(1, remainingModelOperationMs));
+    const requestSignals = [config.signal, timeoutSignal, modelOperationSignal, initialModelActivitySignal]
+      .filter((signal): signal is AbortSignal => signal !== undefined);
+    const requestSignal = requestSignals.length === 1
+      ? requestSignals[0]
+      : AbortSignal.any(requestSignals);
 
     let response: Response;
     let spendReservation: ModelSpendReservation | undefined = config.modelSpendBudget?.reserveModelSpend({
@@ -617,19 +1116,32 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           config.modelSpendTraceId ?? config.traceRecording?.handle.id,
         )
       : undefined;
+    // Everything in this request now belongs to the model's seen prefix. Keep
+    // the compacted bytes in the backing history: a later pass must not revive
+    // the original full tool result and silently invalidate that prefix.
+    if (sealToolContext) {
+      for (let index = 0; index < requestMessages.length; index++) {
+        messages[index] = requestMessages[index];
+      }
+      sealedMessageCount = requestMessages.length;
+    }
     try {
-      response = await fetchFn(`${litellmUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${litellmApiKey}`,
-          ...(reservationHandoff
-            ? { [MODEL_SPEND_RESERVATION_HEADER]: reservationHandoff.token }
-            : {}),
-        },
-        body: JSON.stringify(body),
-        signal: requestSignal,
-      });
+      response = await waitForRequestStage(
+        () => fetchFn(`${litellmUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${litellmApiKey}`,
+            ...(reservationHandoff
+              ? { [MODEL_SPEND_RESERVATION_HEADER]: reservationHandoff.token }
+              : {}),
+          },
+          body: JSON.stringify(body),
+          signal: requestSignal,
+        }),
+        requestSignal,
+        modelOperationSignal,
+      );
     } catch (netErr) {
       if (reservationHandoff) {
         const handoffDisposition = config.modelSpendBudget?.takeModelSpendReservationHandoffDisposition?.(
@@ -642,20 +1154,26 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         }
       }
       if (spendReservation) {
-        config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        commitReservedModelSpend(spendReservation);
         spendReservation = undefined;
       }
       // The fetch promise itself rejected — a network-level failure (endpoint
       // down / restarting, socket hang-up, "fetch failed") or our timeout fired.
-      // A genuine client disconnect re-throws (caught by the between-turn guard
-      // above and the post-read guard below). Everything else is a transient
+      // A genuine client disconnect propagates as a cancellation, never as a
+      // successful assistant response.
+      // Everything else is a transient
       // outage that must NOT kill the turn: retry with backoff, same protocol as
       // a 5xx, capped at 3 attempts before surfacing a clean fatal error.
-      if (config.signal?.aborted) throw netErr;
+      if (config.signal?.aborted) {
+        throw clientAbortError();
+      }
+      if (initialModelActivityExpired(initialModelActivitySignal)) throw initialModelActivityTimeoutError();
+      if (modelOperationExpired(modelOperationSignal)) throw modelOperationTimeoutError();
       const action = handleNetworkError(netErr, retryState);
       if (action.kind === 'fatal') throw action.error;
-      if (onToken) onToken(action.notice);
-      await new Promise(r => setTimeout(r, action.waitMs));
+      if (config.onRetry) config.onRetry(action.notice);
+      else if (onToken) onToken(action.notice);
+      await waitForRetry(action.waitMs);
       retryState = action.state;
       turn--; // retry this turn without consuming a turn
       continue;
@@ -671,25 +1189,51 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         spendReservation = undefined;
       }
     }
-    if (!response.ok) {
-      const action = await handleNonOkResponse(response, retryState);
+    try {
+      throwIfInitialModelActivityExpired(initialModelActivitySignal);
+      throwIfModelOperationExpired(modelOperationSignal);
+    } catch (error) {
       if (spendReservation) {
-        const definitelyRejectedBeforeInference = response.status === 429
-          || [400, 401, 403, 404, 405, 413, 415, 422].includes(response.status);
-        if (definitelyRejectedBeforeInference) {
-          config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
-        } else {
-          // Server-side failures can be ambiguous about inference/token use.
-          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
-        }
+        commitReservedModelSpend(spendReservation);
         spendReservation = undefined;
       }
-      if (action.kind === 'fatal') throw action.error;
-      if (onToken) onToken(action.notice);
-      await new Promise(r => setTimeout(r, action.waitMs));
-      retryState = action.state;
-      turn--; // retry this turn without consuming a turn
-      continue;
+      throw error;
+    }
+    if (!response.ok) {
+      try {
+        const action = await waitForRequestStage(
+          () => handleNonOkResponse(response, retryState),
+          requestSignal,
+          modelOperationSignal,
+        );
+        if (spendReservation) {
+          const definitelyRejectedBeforeInference = response.status === 429
+            || [400, 401, 403, 404, 405, 413, 415, 422].includes(response.status);
+          if (definitelyRejectedBeforeInference) {
+            config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+          } else {
+            // Server-side failures can be ambiguous about inference/token use.
+            commitReservedModelSpend(spendReservation);
+          }
+          spendReservation = undefined;
+        }
+        if (action.kind === 'fatal') throw action.error;
+        if (config.onRetry) config.onRetry(action.notice);
+        else if (onToken) onToken(action.notice);
+        await waitForRetry(action.waitMs);
+        retryState = action.state;
+        turn--; // retry this turn without consuming a turn
+        continue;
+      } catch (error) {
+        if (spendReservation) {
+          commitReservedModelSpend(spendReservation);
+          spendReservation = undefined;
+        }
+        if (config.signal?.aborted) {
+          throw clientAbortError();
+        }
+        throw error;
+      }
     }
 
     let assistantMessage: {
@@ -704,24 +1248,79 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     if (requestUsesStream) {
       let parsed: Awaited<ReturnType<typeof parseChatCompletionStream>>;
+      let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      let streamStageActive = true;
       try {
-        parsed = await parseChatCompletionStream(response.body!, {
-          onToken: (token) => {
-            currentTurnStreamedContent += token;
-            allStreamedContent += token;
-            if (onToken) onToken(token);
-          },
-        });
+        try {
+          parsed = await waitForRequestStage(
+            () => {
+              upstreamReader = response.body!.getReader();
+              const cancellableBody = new ReadableStream<Uint8Array>({
+                async pull(controller) {
+                  const chunk = await upstreamReader!.read();
+                  if (chunk.done) controller.close();
+                  else controller.enqueue(chunk.value);
+                },
+                cancel(reason) {
+                  return upstreamReader?.cancel(reason);
+                },
+              });
+              return parseChatCompletionStream(cancellableBody, {
+                onActivity: () => {
+                  if (!streamStageActive || requestSignal.aborted) return;
+                  disarmInitialModelActivityTimeout();
+                  if (!modelActivityObserved) {
+                    modelActivityObserved = true;
+                    onModelActivity?.();
+                  }
+                },
+                onToken: (token) => {
+                  if (!streamStageActive || requestSignal.aborted || modelOperationExpired(modelOperationSignal)) {
+                    return;
+                  }
+                  currentTurnStreamedContent += token;
+                  allStreamedContent += token;
+                  if (onToken && !bufferCurrentStream) onToken(token);
+                },
+                onReasoningActivity: () => {
+                  if (!streamStageActive || requestSignal.aborted || modelOperationExpired(modelOperationSignal)) {
+                    return;
+                  }
+                  onReasoningActivity?.();
+                },
+              });
+            },
+            requestSignal,
+            modelOperationSignal,
+            reason => { void upstreamReader?.cancel(reason).catch(() => undefined); },
+          );
+          throwIfInitialModelActivityExpired(initialModelActivitySignal);
+          throwIfModelOperationExpired(modelOperationSignal);
+        } finally {
+          streamStageActive = false;
+        }
       } catch (error) {
-        if (!isIncompleteCompletionError(error)) {
+        if (config.signal?.aborted) {
           if (spendReservation) {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
             spendReservation = undefined;
           }
-          throw error;
+          throw clientAbortError();
         }
-        const observedInput = error.usage?.inputTokens ?? 0;
-        const observedOutput = error.usage?.outputTokens ?? 0;
+        const bodyReadError = initialModelActivityExpired(initialModelActivitySignal)
+          ? initialModelActivityTimeoutError()
+          : modelOperationExpired(modelOperationSignal)
+            ? modelOperationTimeoutError()
+            : error;
+        if (!isIncompleteCompletionError(bodyReadError)) {
+          if (spendReservation) {
+            commitReservedModelSpend(spendReservation);
+            spendReservation = undefined;
+          }
+          throw bodyReadError;
+        }
+        const observedInput = bodyReadError.usage?.inputTokens ?? 0;
+        const observedOutput = bodyReadError.usage?.outputTokens ?? 0;
         const failedInputTokens = observedInput > 0
           ? observedInput
           : estimatedNextRequestTokens;
@@ -729,9 +1328,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           ? observedOutput
           : Math.max(1, estimateTextTokens(JSON.stringify({
             content: currentTurnStreamedContent,
-            tool_calls: error.partialToolCalls ?? [],
+            tool_calls: bodyReadError.partialToolCalls ?? [],
           })));
-        error.usage = {
+        bodyReadError.usage = {
           inputTokens: totalInputTokens + failedInputTokens,
           outputTokens: totalOutputTokens + failedOutputTokens,
         };
@@ -742,11 +1341,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
               outputTokens: failedOutputTokens,
             });
           } else {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
           }
           spendReservation = undefined;
         }
-        throw error;
+        throw bodyReadError;
       }
       turnInputTokens = parsed.usage.inputTokens;
       turnOutputTokens = parsed.usage.outputTokens;
@@ -761,16 +1360,20 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     } else {
       // Non-streaming path: parse the single chat completion response.
       try {
-      const data = await response.json() as {
-        choices?: Array<{
-          finish_reason?: string | null;
-          message: {
-            content: string | null;
-            tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
-          };
-        }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
+        const data = await waitForRequestStage(
+          () => response.json() as Promise<{
+            choices?: Array<{
+              finish_reason?: string | null;
+              message: {
+                content: string | null;
+                tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+              };
+            }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          }>,
+          requestSignal,
+          modelOperationSignal,
+        );
         if (!data.choices || data.choices.length === 0) {
           throw new Error(
             `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
@@ -783,15 +1386,48 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           );
         }
         assistantMessage = choice.message;
+        if ((assistantMessage.content ?? '').length > 0 || assistantMessage.tool_calls?.length) {
+          disarmInitialModelActivityTimeout();
+        }
         completionFinishReason = choice.finish_reason ?? null;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
+      throwIfInitialModelActivityExpired(initialModelActivitySignal);
+      throwIfModelOperationExpired(modelOperationSignal);
       } catch (error) {
+        if (config.signal?.aborted) {
+          if (spendReservation) {
+            commitReservedModelSpend(spendReservation);
+            spendReservation = undefined;
+          }
+          throw clientAbortError();
+        }
+        const bodyReadError = initialModelActivityExpired(initialModelActivitySignal)
+          ? initialModelActivityTimeoutError()
+          : modelOperationExpired(modelOperationSignal)
+            ? modelOperationTimeoutError()
+            : error;
         if (spendReservation) {
-          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          commitReservedModelSpend(spendReservation);
           spendReservation = undefined;
         }
-        throw error;
+        throw bodyReadError;
+      }
+    }
+
+    // Preserve the raw response only for fallback usage/spend accounting.
+    // It must never flow into gates, messages, persistence, traces, or output.
+    const rawAssistantMessageForUsage = JSON.stringify(assistantMessage);
+
+    // Qwen-compatible engines can emit private reasoning as literal ordinary
+    // content even when thinking is disabled. Normalize before budgets, gates,
+    // tool-message insertion, trace/autosave, or final return can consume it.
+    if (isQwenModel) {
+      if (assistantMessage.content !== null) {
+        assistantMessage.content = normalizeReasoningOutput(assistantMessage.content).normalized;
+      }
+      if (allStreamedContent) {
+        allStreamedContent = normalizeReasoningOutput(allStreamedContent).normalized;
       }
     }
 
@@ -801,7 +1437,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       turnInputTokens = estimatedNextRequestTokens;
     }
     if (!Number.isFinite(turnOutputTokens) || turnOutputTokens <= 0) {
-      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+      turnOutputTokens = estimateTextTokens(rawAssistantMessageForUsage);
     }
 
     if (spendReservation) {
@@ -813,16 +1449,15 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
 
     // R3-008: if the run was aborted while the in-flight response was being
-    // read, return promptly rather than executing tool calls or issuing
+    // read, reject promptly rather than executing tool calls or issuing
     // another request. (The forwarded fetch signal tears down the connection;
     // this guard short-circuits the post-read work that survives that tear-down
     // on mocked/non-signal-honoring fetches.)
     if (config.signal?.aborted) {
-      return {
-        content: 'Agent loop aborted (client disconnected).',
-        toolsUsed,
-        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-      };
+      throw clientAbortError({
+        inputTokens: totalInputTokens + turnInputTokens,
+        outputTokens: totalOutputTokens + turnOutputTokens,
+      });
     }
 
     totalInputTokens += turnInputTokens;
@@ -852,16 +1487,51 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       });
     }
 
+    disarmInitialModelActivityTimeout();
     lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
+    const completedModelOperationDeadlineAt = modelOperationDeadlineAt;
+    modelOperationDeadlineAt = undefined;
 
     // Provider usage is authoritative and known only after the response. Once
-    // the hard budget is exhausted, do not execute pending tools, completion
-    // gates, or a second synthesis request.
+    // the hard budget is exhausted, do not execute pending tools or issue a
+    // second request. Still reject a structurally incomplete candidate before
+    // the budget-stop path can expose it.
     if (maxTokenBudget !== undefined && (totalInputTokens + totalOutputTokens) >= maxTokenBudget) {
+      const requiredTool = pendingRequiredTool ?? (legacyForcedToolChoiceActive ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not complete within the token budget`);
+      }
+      const candidateContent = ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+      const candidateIsEmptyPlaceholder = candidateContent !== undefined
+        && isQwenModel
+        && isEmptyModelPlaceholder(candidateContent)
+        && !explicitlyRequestsExactContent(userRequest, candidateContent);
       const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
         ? undefined
-        : ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+        : (candidateContent && !candidateIsEmptyPlaceholder
+          ? candidateContent
+          : undefined);
+      if (usableContent && (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0)) {
+        const integrityGate = await maybeFireCompletionGate({
+          content: usableContent,
+          toolsUsed,
+          messages,
+          userRequest,
+          finishReason: completionFinishReason,
+          atomicRepairAvailable: false,
+          state: gateState,
+          enableVerification: false,
+          enableSkillDistillation: false,
+          turnId,
+        });
+        if (integrityGate.rejectIncompleteReason) {
+          throw incompleteCompletionError(
+            integrityGate.rejectIncompleteReason,
+            { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          );
+        }
+      }
       const result = budgetStopResponse(
         usableContent
           ?? (synthesisReserveTokens
@@ -869,19 +1539,93 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
             : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
         Boolean(requestUsesStream && usableContent),
       );
-      if (!stream && onToken && result.content) onToken(result.content);
       return result;
+    }
+
+    if ((!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0)
+      && legacyForcedToolChoiceActive) {
+      const forcedTool = turnOpenAiTools.find(tool => tool.function.name === forcedToolName);
+      const parameters = forcedTool?.function.parameters as {
+        type?: unknown;
+        properties?: unknown;
+        required?: unknown;
+        additionalProperties?: unknown;
+      } | undefined;
+      const strictZeroArgumentTool = parameters?.type === 'object'
+        && parameters.properties !== null
+        && typeof parameters.properties === 'object'
+        && Object.keys(parameters.properties).length === 0
+        && Array.isArray(parameters.required)
+        && parameters.required.length === 0
+        && parameters.additionalProperties === false;
+      if (!strictZeroArgumentTool || !forcedToolName) {
+        throw new Error(`Forced tool choice ${config.toolChoice} was not called`);
+      }
+      allStreamedContent = '';
+      assistantMessage = {
+        content: '',
+        tool_calls: [{
+          id: `waggle-forced-${turn + 1}`,
+          type: 'function',
+          function: { name: forcedToolName, arguments: '{}' },
+        }],
+      };
     }
 
     // No tool calls — return the final response
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      if (pendingRequiredTool) {
+        throw new Error(`Required tool ${pendingRequiredTool} was not called`);
+      }
       // Use this turn's content, or fall back to all accumulated streamed content
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
-      if (content.trim().length === 0) {
-        const err = new Error('LLM returned an empty assistant response with no tool calls');
-        (err as Error & { status?: number }).status = 502;
-        throw err;
+      const emptyPlaceholder = isQwenModel
+        && isEmptyModelPlaceholder(content)
+        && !explicitlyRequestsExactContent(userRequest, content);
+      if (content.trim().length === 0 || (emptyPlaceholder && emptyPlaceholderCorrectionUsed)) {
+        const preservedAnswer = gateState.preservedAnswerForDistillation;
+        if (preservedAnswer) {
+          const finalized = appendFetchedSourceFooter(
+            preservedAnswer,
+            citationIntent,
+            successfullyFetchedCitationUrls,
+            unusableFetchedCitationUrls,
+          );
+          if ((!requestUsesStream || bufferCurrentStream) && onToken && finalized.content) {
+            onToken(finalized.content);
+          } else if (requestUsesStream && onToken && finalized.suffix) {
+            onToken(finalized.suffix);
+          }
+          logTurnEvent(turnId, {
+            stage: 'agent-loop.exit',
+            reason: 'empty-distillation-response-preserved-answer',
+            contentChars: finalized.content.length,
+            toolsUsed,
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+          });
+          return {
+            content: finalized.content,
+            toolsUsed,
+            usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          };
+        }
+        throw emptyModelResponseError(
+          { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          toolsUsed,
+        );
+      }
+      if (emptyPlaceholder) {
+        emptyPlaceholderCorrectionUsed = true;
+        modelOperationDeadlineAt = completedModelOperationDeadlineAt;
+        config.onRetry?.('The model returned an empty response. Retrying once…');
+        messages.push({
+          role: 'user',
+          content: 'Your previous response contained only an empty-response placeholder. Answer the original request now with a substantive final response based on the available evidence.',
+        });
+        turn--;
+        continue;
       }
       if (containsRawToolCallMarkup(content) && !rawToolMarkupCorrectionUsed) {
         rawToolMarkupCorrectionUsed = true;
@@ -901,30 +1645,46 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         availableToolNames: currentRequestToolNames,
         messages,
         userRequest,
+        finishReason: completionFinishReason,
+        atomicRepairAvailable: !requestUsesStream || bufferCurrentStream,
         state: gateState,
         enableVerification: verificationGate,
         enableSkillDistillation: skillDistillationGate,
         onSkillDistillationFire,
         turnId,
       });
+      if (config.signal?.aborted) throw clientAbortError();
       gateState = gate.state;
+      if (gate.rejectIncompleteReason) {
+        throw incompleteCompletionError(
+          gate.rejectIncompleteReason,
+          { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+        );
+      }
       if (gate.fired) {
-        if (stream && onToken && gate.contentSuffix) onToken(gate.contentSuffix);
+        if (gate.atomicRepair) {
+          synthesisForced = true;
+          turn--;
+        }
+        if (stream && !bufferCurrentStream && onToken && gate.contentSuffix) {
+          onToken(gate.contentSuffix);
+        }
         continue;
       }
 
-      const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
+      const acceptedContent = gate.contentReplacement ?? `${content}${gate.contentSuffix ?? ''}`;
       // Once D1 has fired, surface the preserved user answer instead of the
       // internal skill-distillation summary produced by the current turn.
       const finalized = appendFetchedSourceFooter(
         gateState.preservedAnswerForDistillation ?? acceptedContent,
         citationIntent,
         successfullyFetchedCitationUrls,
+        unusableFetchedCitationUrls,
       );
       const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
-      if (!requestUsesStream && onToken && finalContent) {
+      if ((!requestUsesStream || bufferCurrentStream) && onToken && finalContent) {
         onToken(finalContent);
       } else if (requestUsesStream && onToken) {
         if (gate.contentSuffix) onToken(gate.contentSuffix);
@@ -955,8 +1715,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         gateState.preservedAnswerForDistillation ?? synthesis,
         citationIntent,
         successfullyFetchedCitationUrls,
+        unusableFetchedCitationUrls,
       );
-      if (!requestUsesStream && onToken && finalized.content) {
+      if ((!requestUsesStream || bufferCurrentStream) && onToken && finalized.content) {
         onToken(finalized.content);
       } else if (requestUsesStream && onToken && finalized.suffix) {
         onToken(finalized.suffix);
@@ -969,6 +1730,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
 
     // Has tool calls — execute them and continue the loop
+    if (forcedToolChoiceActive && assistantMessage.tool_calls.length > 1) {
+      throw new Error(
+        `Forced tool choice ${forcedToolName} returned multiple tool calls; refusing to execute any`,
+      );
+    }
+    if (
+      pendingRequiredTool
+      && assistantMessage.tool_calls[0]?.function.name !== pendingRequiredTool
+    ) {
+      throw new Error(`Required tool ${pendingRequiredTool} was not called in sequence`);
+    }
+    if (forcedToolChoiceActive
+      && assistantMessage.tool_calls[0]?.function.name !== forcedToolName) {
+      throw new Error(`Forced tool choice ${forcedToolName} returned a different tool call`);
+    }
+
     toolRoundCount++;
     // Ensure content is never null when tool_calls are present (LiteLLM→Anthropic compat)
     messages.push({
@@ -984,6 +1761,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       : toolMap;
     for (const toolCall of assistantMessage.tool_calls) {
       lastToolObservation = undefined;
+      if (toolCall.function.name === 'web_fetch') {
+        try {
+          const attemptedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+          lastToolObservation = {
+            name: 'web_fetch',
+            citationUrl: safeFetchedCitationUrl(attemptedArgs.url),
+            redactionUrls: fetchedUrlRedactionVariants(attemptedArgs.url),
+            usableResult: false,
+          };
+        } catch {
+          // Invalid arguments are rejected by executeToolCall; there is no URL to retain.
+        }
+      }
       const r = await executeToolCall(toolCall, {
         toolMap: turnToolMap,
         guard,
@@ -997,24 +1787,59 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const observation = lastToolObservation as {
         name: string;
         citationUrl: string | null;
+        redactionUrls: string[];
         usableResult: boolean;
       } | undefined;
       if (
-        citationIntent
-        && r.countedAsUsed
-        && r.toolName === 'web_fetch'
+        r.toolName === 'web_fetch'
         && observation?.name === 'web_fetch'
-        && observation.usableResult
-        && observation.citationUrl
       ) {
-        successfullyFetchedCitationUrls.add(observation.citationUrl);
+        if (r.countedAsUsed && r.succeeded && observation.usableResult && observation.citationUrl) {
+          successfullyFetchedCitationUrls.add(observation.citationUrl);
+          for (const url of unusableFetchedCitationUrls) {
+            if (fetchedUrlIdentity(url) === observation.citationUrl) {
+              unusableFetchedCitationUrls.delete(url);
+            }
+          }
+        } else if (observation.redactionUrls.length > 0) {
+          failedFetchRecoveryTriggered = true;
+          const successfulIdentities = new Set(
+            [...successfullyFetchedCitationUrls]
+              .map(fetchedUrlIdentity)
+              .filter((identity): identity is string => identity !== null),
+          );
+          for (const url of observation.redactionUrls) {
+            const identity = fetchedUrlIdentity(url);
+            if (!identity || !successfulIdentities.has(identity)) {
+              unusableFetchedCitationUrls.add(url);
+            }
+          }
+        }
       }
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
+      if (config.signal?.aborted) throw clientAbortError();
       messages.push({
         role: 'tool',
         content: capToolResultForModel(r.content, toolContextBudget.maxSingleResultChars),
         tool_call_id: r.toolCallId,
       });
+      if (pendingRequiredTool) {
+        const requiredToolSucceeded = r.countedAsUsed
+          && r.succeeded
+          && !r.abort
+          && r.toolName === pendingRequiredTool
+          && observation?.name === pendingRequiredTool
+          && observation.usableResult;
+        if (!requiredToolSucceeded) {
+          throw new Error(`Required tool ${pendingRequiredTool} failed`);
+        }
+        requiredToolIndex++;
+        if (requiredToolIndex === requiredToolSequence.length) {
+          forceSynthesis('required-tool-sequence');
+        }
+      } else if (legacyForcedToolChoiceActive) {
+        forceSynthesis('tool-round-limit');
+      }
 
       // Steal #9 T3 — a critical failure streak: give up rather than burn more
       // turns retrying a tool that keeps failing. Surface the give-up copy and
@@ -1037,6 +1862,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
   }
 
+  if (config.signal?.aborted) throw clientAbortError();
+
   // maxTurns reached — bounded runs must never expose an internal max-turn
   // message. Normally the reserved synthesis turn returns above; this fallback
   // is only for a malformed provider response during that final request.
@@ -1050,9 +1877,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         : `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`)),
     citationIntent,
     successfullyFetchedCitationUrls,
+    unusableFetchedCitationUrls,
   );
   if (stream && onToken) {
-    if (fallbackBaseWasStreamed) {
+    if (bufferCurrentStream) {
+      onToken(finalized.content);
+    } else if (fallbackBaseWasStreamed) {
       if (finalized.suffix) onToken(finalized.suffix);
     } else {
       onToken(finalized.content);
@@ -1063,4 +1893,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };
+  } finally {
+    disarmInitialModelActivityTimeout();
+  }
 }

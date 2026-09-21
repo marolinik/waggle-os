@@ -54,6 +54,7 @@ describe('provider environment hydration', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-provider-migrate-'));
     const configPath = path.join(dataDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
+      defaultModel: 'test/model',
       providers: {
         openai: { apiKey: 'legacy-secret', models: ['old-static-entry'] },
       },

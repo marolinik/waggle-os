@@ -305,3 +305,88 @@ describe('Workflow Commands', () => {
     expect(names).toContain('pr');
   });
 });
+
+describe('sentinel string contract (characterization)', () => {
+  // Three commands decide whether to show a section by comparing the helper's
+  // return value against three exact sentences. The sentences are produced in
+  // `packages/server` and compared in `packages/agent`, so they are a wire
+  // contract wearing prose - founder ruling F10 ratified that framing and gave
+  // `@waggle/agent` as their home.
+  //
+  // The default stub in this file returns 'Memory result' and 'Workspace state
+  // data', which match no sentinel, so every one of these six comparisons was
+  // untaken-false and a typo in any sentence would have changed nothing here.
+  const NO_STATE = 'No workspace state available.';
+  const NO_MEMORIES = 'No relevant memories found.';
+  const UNAVAILABLE = 'Memory search unavailable.';
+
+  function registryWith(overrides: Partial<CommandContext>) {
+    const registry = new CommandRegistry();
+    registerWorkflowCommands(registry);
+    return { registry, ctx: mockContext(overrides) };
+  }
+
+  it.each([NO_MEMORIES, UNAVAILABLE])(
+    'catchup falls through to its empty briefing when memory answers %s',
+    async (sentinel) => {
+      const { registry, ctx } = registryWith({
+        getWorkspaceState: vi.fn().mockResolvedValue(NO_STATE),
+        searchMemory: vi.fn().mockResolvedValue(sentinel),
+      });
+      const result = await registry.execute('/catchup', ctx);
+      expect(result).toContain('This workspace is fresh');
+      // The sentinel is a signal, never content: it must not be rendered.
+      expect(result).not.toContain(sentinel);
+    },
+  );
+
+  it('catchup shows the memory section when the answer is real', async () => {
+    const { registry, ctx } = registryWith({
+      getWorkspaceState: vi.fn().mockResolvedValue(NO_STATE),
+      searchMemory: vi.fn().mockResolvedValue('1. the installer ships Windows first'),
+    });
+    const result = await registry.execute('/catchup', ctx);
+    expect(result).toContain('1. the installer ships Windows first');
+    expect(result).not.toContain('This workspace is fresh');
+  });
+
+  it('catchup prefers workspace state over memory when state is real', async () => {
+    const { registry, ctx } = registryWith({
+      getWorkspaceState: vi.fn().mockResolvedValue('Open tasks: 2'),
+      searchMemory: vi.fn().mockResolvedValue('should not be reached'),
+    });
+    const result = await registry.execute('/catchup', ctx);
+    expect(result).toContain('Open tasks: 2');
+    expect(ctx.searchMemory).not.toHaveBeenCalled();
+  });
+
+  it.each([NO_MEMORIES, UNAVAILABLE])(
+    'status omits the memory section when memory answers %s',
+    async (sentinel) => {
+      // `listSkills` has to be ABSENT, not empty: the handler pushes a
+      // "Skills loaded: 0" section whenever the helper exists, which keeps the
+      // section count above one and makes the memory fallback unreachable.
+      // That is the only way into the branch these sentinels guard.
+      const { registry, ctx } = registryWith({
+        getWorkspaceState: vi.fn().mockResolvedValue(NO_STATE),
+        listSkills: undefined,
+        searchMemory: vi.fn().mockResolvedValue(sentinel),
+      });
+      const result = await registry.execute('/status', ctx);
+      expect(result).not.toContain(sentinel);
+      expect(result).toContain('No workspace data available yet.');
+    },
+  );
+
+  it.each([NO_MEMORIES, UNAVAILABLE])(
+    'now omits the memory section when memory answers %s',
+    async (sentinel) => {
+      const { registry, ctx } = registryWith({
+        getWorkspaceState: vi.fn().mockResolvedValue(NO_STATE),
+        searchMemory: vi.fn().mockResolvedValue(sentinel),
+      });
+      const result = await registry.execute('/now', ctx);
+      expect(result).not.toContain(sentinel);
+    },
+  );
+});

@@ -90,6 +90,7 @@ export function createSearchTools(
               model,
               messages: [{ role: 'user', content: query }],
             }),
+            signal: AbortSignal.timeout(30_000),
           });
 
           if (!response.ok) {
@@ -163,6 +164,7 @@ export function createSearchTools(
               search_depth: searchDepth,
               max_results: maxResults,
             }),
+            signal: AbortSignal.timeout(30_000),
           });
 
           if (!response.ok) {
@@ -248,6 +250,7 @@ export function createSearchTools(
                 'Accept-Encoding': 'gzip',
                 'X-Subscription-Token': apiKey,
               },
+              signal: AbortSignal.timeout(30_000),
             },
           );
 

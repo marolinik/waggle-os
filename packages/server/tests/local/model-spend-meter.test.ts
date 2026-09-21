@@ -20,6 +20,7 @@ describe('ModelSpendMeter durable handoff ownership', () => {
       'workspace-a',
       async () => ['ollama/qwen2.5:0.5b'],
       () => 77,
+      (model) => model === 'openai-compatible/qwen3.8-flash-next',
     );
     const baseConfig = {
       litellmUrl: 'http://llm.test',
@@ -36,8 +37,10 @@ describe('ModelSpendMeter durable handoff ownership', () => {
     });
     await runner({ ...baseConfig, model: 'ollama/qwen2.5:0.5b' });
     await runner({ ...baseConfig, model: 'ollama/unverified:latest' });
+    await runner({ ...baseConfig, model: 'openai-compatible/qwen3.8-flash-next' });
+    await runner({ ...baseConfig, model: 'openai-compatible/wrapped/paid-model' });
 
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(5);
     for (const call of calls) {
       expect(call.modelSpendBudget).toBe(shared);
       expect(call.modelSpendTraceId).toBe(77);
@@ -47,7 +50,42 @@ describe('ModelSpendMeter durable handoff ownership', () => {
       'priced',
       'free',
       'priced',
+      'free',
+      'priced',
     ]);
+  });
+
+  it('fails closed without Ollama discovery when the additional classifier throws', async () => {
+    const shared = new CostTracker();
+    const listVerifiedLocalModels = vi.fn(async () => ['ollama/qwen2.5:0.5b']);
+    const underlyingRunner = vi.fn(async (config) => ({
+      content: String(config.modelSpendBillingClass),
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    const runner = bindModelSpendBudget(
+      underlyingRunner,
+      shared,
+      'workspace-a',
+      listVerifiedLocalModels,
+      undefined,
+      () => {
+        throw new Error('classifier unavailable');
+      },
+    );
+
+    await expect(runner({
+      litellmUrl: 'http://llm.test',
+      litellmApiKey: 'test-key',
+      model: 'openai-compatible/qwen3.8-flash-next',
+      systemPrompt: 'test',
+      tools: [],
+      messages: [{ role: 'user', content: 'test' }],
+    })).resolves.toMatchObject({ content: 'priced' });
+
+    expect(underlyingRunner).toHaveBeenCalledOnce();
+    expect(underlyingRunner.mock.calls[0][0].modelSpendBillingClass).toBe('priced');
+    expect(listVerifiedLocalModels).not.toHaveBeenCalled();
   });
 
   it('updates live usage without writing a second durable charge', () => {

@@ -26,6 +26,7 @@ interface RouteProposal {
   id: string;
   createdAt: number;
   workspaceId: string;
+  sessionId: string;
   prompt: string;
   task: RouteTask;
   decision: RouteDecision;
@@ -43,6 +44,7 @@ declare module 'fastify' {
 const categorySchema = z.enum(['coding', 'writing', 'research', 'analysis', 'ops', 'general']);
 const proposeSchema = z.object({
   workspaceId: z.string().min(1).max(200),
+  sessionId: z.string().min(1).max(200).optional(),
   prompt: z.string().min(1).max(20_000),
   category: categorySchema.optional(),
   privacy: z.enum(['normal', 'private']).optional(),
@@ -91,6 +93,7 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
       id: randomUUID(),
       createdAt: nowMs,
       workspaceId: body.workspaceId,
+      sessionId: body.sessionId ?? body.workspaceId,
       prompt: body.prompt,
       task,
       decision,
@@ -229,7 +232,7 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
           sessionToken: server.agentState.wsSessionToken,
           message: proposal.prompt,
           workspace: proposal.workspaceId,
-          session: proposal.workspaceId,
+          session: proposal.sessionId,
           persona: candidate.id.slice('persona:'.length),
           proposeHeld: true,
           origin: 'router',

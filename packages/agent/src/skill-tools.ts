@@ -35,9 +35,11 @@ import {
   SKILL_SCOPE_ORDER,
   type SkillScope,
 } from './skill-frontmatter.js';
-import type { ImprovementSignalStore } from '@waggle/core';
 import { autoExtractAndCreateSkill, type AutoExtractMessage } from './skill-autoextract.js';
 import { retireStaleSkills } from './skill-retirement.js';
+import type {
+  ImprovementSignalPort,
+} from './memory-ports.js';
 
 export interface SkillToolsDeps {
   /** Path to ~/.waggle directory */
@@ -64,7 +66,7 @@ export interface SkillToolsDeps {
   getTeamId?: () => string | null;
   hasTeamSkillLibrary?: () => boolean;
   isEnterprise?: () => boolean;
-  improvementSignals?: ImprovementSignalStore;
+  improvementSignals?: ImprovementSignalPort;
   /**
    * Skills 2.0 gap A: session-message accessor for auto-extracting skills
    * from repeated workflow patterns. When provided, enables the

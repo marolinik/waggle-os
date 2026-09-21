@@ -11,10 +11,10 @@
  *      composer returns to send (Stop only shows while streaming).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { renderHook, act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { ChatMessage } from '@/lib/types';
+import type { ChatMessage, ToolContextContentBlock } from '@/lib/types';
 import {
   chatThreadCacheKey,
   clearChatThreadCache,
@@ -55,6 +55,24 @@ function deferred<T = unknown>() {
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
+
+const validToolContextMetrics = {
+  toolCatalogCount: 29,
+  toolEligibleCount: 29,
+  toolSelectedCount: 4,
+  toolOmittedCount: 25,
+  transmittedToolSchemaChars: 3200,
+  estimatedToolSchemaTokens: 800,
+  finalSystemPromptChars: 4800,
+  estimatedSystemPromptTokens: 1200,
+  packageMode: 'compact',
+  selectorLatencyMs: 3,
+  timeToFirstTokenMs: 140,
+  agentLatencyMs: 420,
+  totalServerLatencyMs: 450,
+  providerInputTokens: 1500,
+  providerOutputTokens: 120,
+} as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -151,6 +169,30 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(assistant?.content).not.toContain('unsafe partial');
     expect(assistant?.draft).toBeUndefined();
     expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(true);
+  });
+
+  it('cancels the exact server-side stream when chat unmounts before the first token', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      await gate.promise;
+      yield { type: 'done', data: { content: 'late answer' } };
+    });
+
+    const hook = await mountChat('sess-unmount');
+    let sendPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      sendPromise = hook.result.current.sendMessage('question');
+      await flush();
+    });
+
+    hook.unmount();
+
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-unmount');
+    expect(mocks.adapter.abortAgent).not.toHaveBeenCalledWith('ws-1', 'sess-other');
+
+    gate.resolve();
+    await sendPromise;
   });
 
   it('stops consuming immediately after done even when the producer would stay open', async () => {
@@ -272,8 +314,10 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-legacy');
-    await act(async () => { await result.current.sendMessage('question'); });
+    let succeeded = false;
+    await act(async () => { succeeded = await result.current.sendMessage('question'); });
 
+    expect(succeeded).toBe(true);
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content).toBe('legacy answer');
     expect(assistant?.draft).toBeUndefined();
@@ -290,11 +334,160 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-legacy-tool');
-    await act(async () => { await result.current.sendMessage('question'); });
+    let succeeded = false;
+    await act(async () => { succeeded = await result.current.sendMessage('question'); });
 
+    expect(succeeded).toBe(true);
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content).toBe('Before tool. After tool.');
     expect(assistant?.draft).toBeUndefined();
+  });
+
+  it('retains a valid compact tool-context receipt without inventing tool executions', async () => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'done',
+        data: {
+          content: 'Direct answer.',
+          toolsUsed: ['web_search'],
+          contextMetrics: validToolContextMetrics,
+        },
+      };
+    });
+
+    const { result } = await mountChat('sess-tool-context');
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const receipt = assistant?.blocks?.find(
+      (block): block is ToolContextContentBlock => block.type === 'tool_context',
+    );
+    expect(receipt?.metrics).toMatchObject({
+      toolCatalogCount: 29,
+      toolEligibleCount: 29,
+      toolSelectedCount: 4,
+      toolOmittedCount: 25,
+      packageMode: 'compact',
+    });
+    expect(assistant?.blocks?.some(block => block.type === 'tool_use')).toBe(false);
+    expect(assistant?.tools).toEqual([]);
+    const cached = readChatThreadCache(chatThreadCacheKey('ws-1', 'sess-tool-context'));
+    expect(cached?.flatMap(message => message.blocks ?? []).some(block => block.type === 'tool_context')).toBe(false);
+  });
+
+  it.each([
+    ['catalog below eligible', { toolCatalogCount: 28 }],
+    ['selected above eligible', { toolEligibleCount: 3 }],
+    ['omitted mismatch', { toolOmittedCount: 24 }],
+    ['schema estimate mismatch', { estimatedToolSchemaTokens: 799 }],
+    ['prompt estimate mismatch', { estimatedSystemPromptTokens: 1199 }],
+    ['selector above total latency', { selectorLatencyMs: 451 }],
+    ['non-finite value', { totalServerLatencyMs: Number.NaN }],
+    ['zero selected with nonzero schema', {
+      toolSelectedCount: 0,
+      toolOmittedCount: 29,
+      transmittedToolSchemaChars: 4,
+      estimatedToolSchemaTokens: 1,
+    }],
+  ])('fails closed on malformed tool-context metrics: %s', async (_case, overrides) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'done',
+        data: {
+          content: 'Direct answer.',
+          contextMetrics: {
+            ...validToolContextMetrics,
+            ...overrides,
+          },
+        },
+      };
+    });
+
+    const { result } = await mountChat(`sess-bad-tool-context-${_case}`);
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.blocks?.some(block => block.type === 'tool_context')).toBe(false);
+  });
+
+  it('renders a failed tool result as an error and matches the latest repeated call', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(12345);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'tool_start', data: { name: 'read_file', input: { path: 'first.md' } } };
+      yield { type: 'tool_start', data: { name: 'read_file', input: { path: 'second.md' } } };
+      yield { type: 'tool_end', data: { name: 'read_file', result: 'Error: denied', isError: true, duration: 8 } };
+      yield { type: 'tool_end', data: { name: 'read_file', result: 'first contents', isError: false, duration: 11 } };
+      yield { type: 'done', data: { content: 'Could not read the second file.' } };
+    });
+
+    const { result } = await mountChat('sess-tool-error');
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const tools = assistant?.blocks?.filter(block => block.type === 'tool_use');
+    expect(tools).toHaveLength(2);
+    expect(new Set(tools?.map(tool => tool.id)).size).toBe(2);
+    expect(tools?.[0]).toMatchObject({ input: { path: 'first.md' }, status: 'done', result: 'first contents' });
+    expect(tools?.[1]).toMatchObject({ input: { path: 'second.md' }, status: 'error', result: 'Error: denied' });
+    expect(assistant?.tools?.[0]).toMatchObject({ input: { path: 'first.md' }, status: 'done' });
+    expect(assistant?.tools?.[1]).toMatchObject({ input: { path: 'second.md' }, status: 'error' });
+    expect(new Set(assistant?.tools?.map(tool => tool.id)).size).toBe(2);
+    now.mockRestore();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', 'false'],
+  ])('fails closed when a tool result has a %s error flag', async (_case, isError) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'tool_start', data: { name: 'web_search', input: { query: 'Waggle' } } };
+      yield { type: 'tool_end', data: { name: 'web_search', result: 'ambiguous output', isError } };
+      yield { type: 'done', data: { content: 'Answer.' } };
+    });
+
+    const { result } = await mountChat(`sess-tool-status-${_case}`);
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const tool = assistant?.blocks?.find(block => block.type === 'tool_use');
+    expect(tool).toMatchObject({
+      status: 'error',
+      result: expect.stringContaining('Tool completion status was not reported'),
+    });
+  });
+
+  it.each([
+    ['empty', '', ''],
+    ['whitespace-only', ' \n\t', ''],
+    ['explicitly blank after provisional tokens', '', 'unsafe partial'],
+  ])('rejects %s canonical done content', async (_label, doneContent, provisionalContent) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      if (provisionalContent) {
+        yield { type: 'token', data: { content: provisionalContent } };
+      }
+      yield { type: 'done', data: { content: doneContent } };
+    });
+
+    const sessionId = `sess-blank-${_label.replace(/ /g, '-')}`;
+    const { result } = await mountChat(sessionId);
+    let succeeded = true;
+    await act(async () => {
+      succeeded = await result.current.sendMessage('question');
+      await flush();
+    });
+
+    expect(succeeded).toBe(false);
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.content).toBe('The model returned an empty response. Please retry.');
+    expect(assistant?.content).not.toContain('unsafe partial');
+    expect(assistant?.draft).toBeUndefined();
+    expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(true);
+
+    const cachedAssistant = readChatThreadCache(chatThreadCacheKey('ws-1', sessionId))
+      ?.find(message => message.role === 'assistant');
+    expect(cachedAssistant?.content).toBe('The model returned an empty response. Please retry.');
+    expect(cachedAssistant?.content).not.toContain('unsafe partial');
+    expect(cachedAssistant?.draft).toBeUndefined();
   });
 
   it.each([
@@ -459,7 +652,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       content: message.content,
     }));
 
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = result.current.clearHistory();
       await flush();
@@ -482,7 +675,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     mocks.adapter.clearHistory.mockReturnValueOnce(clearGate.promise);
 
     const { result } = await mountChat('sess-clear-pending');
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = result.current.clearHistory();
       await flush();
@@ -512,8 +705,8 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-overlapping-clear');
-    let firstPromise: Promise<void> | undefined;
-    let secondPromise: Promise<void> | undefined;
+    let firstPromise: Promise<boolean> | undefined;
+    let secondPromise: Promise<boolean> | undefined;
     await act(async () => {
       firstPromise = result.current.clearHistory();
       await flush();
@@ -555,7 +748,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     );
     await act(async () => { await Promise.resolve(); });
 
-    let clearAPromise: Promise<void> | undefined;
+    let clearAPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearAPromise = hook.result.current.clearHistory();
       await flush();
@@ -566,7 +759,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
     await act(async () => { await hook.result.current.sendMessage('allowed in B'); });
 
-    let clearBPromise: Promise<void> | undefined;
+    let clearBPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearBPromise = hook.result.current.clearHistory();
       await flush();
@@ -751,15 +944,233 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     // The adapter targets only this exact workspace/session stream.
     expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-1');
 
-    // Send is re-enabled: a fresh send dispatches a new stream (not queued).
+    // Send is re-enabled in the UI, but stays FIFO behind the server-owned turn.
     mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
       yield { type: 'done', data: { content: 'second' } };
     });
     await act(async () => { await result.current.sendMessage('again'); await flush(); });
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.some(message => message.queued)).toBe(true);
 
     gate.resolve(); // let the abandoned first generator settle
     await act(async () => { await firstPromise?.catch(() => {}); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('again');
+  });
+
+  it('awaits exact cancellation, isolates queued work, and restores it when session creation fails', async () => {
+    const streamGate = deferred<void>();
+    const abortGate = deferred<void>();
+    const secondQueuedGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'approval_required',
+          data: { requestId: 'approval-new-session', toolName: 'read_file', sourceWorkspaceId: 'ws-1' },
+        };
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'second started' } };
+        await secondQueuedGate.promise;
+        yield { type: 'done', data: { content: 'second restored' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'third restored' } };
+      });
+    mocks.adapter.abortAgent.mockReturnValueOnce(abortGate.promise);
+
+    const { result } = await mountChat('sess-new-session');
+    const secondAccepted = vi.fn();
+    const thirdAccepted = vi.fn();
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = result.current.sendMessage('first');
+      await flush();
+      await result.current.sendMessage('queued second', { onAccepted: secondAccepted });
+      await result.current.sendMessage('queued third', { onAccepted: thirdAccepted });
+    });
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(thirdAccepted).toHaveBeenCalledOnce();
+    expect(result.current.messages.some(message => message.queued)).toBe(true);
+    expect(result.current.pendingApproval?.requestId).toBe('approval-new-session');
+
+    let cancellationSettled = false;
+    let releaseStoppedSession: (() => void) | undefined;
+    let cancellation!: Promise<void>;
+    await act(async () => {
+      cancellation = result.current.stopStreaming({ discardQueued: true })
+        .then((release) => {
+          if (release) releaseStoppedSession = release;
+          cancellationSettled = true;
+        });
+      await flush();
+    });
+
+    expect(cancellationSettled).toBe(false);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.pendingApproval).toBeNull();
+    expect(result.current.messages.some(message => message.queued)).toBe(false);
+    expect(result.current.messages.some(message => message.content === 'queued second')).toBe(false);
+    expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+      .toMatchObject({ content: 'partial answer', status: 'stopped' });
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-new-session');
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    const onAccepted = vi.fn();
+    let blockedDuringCancel = true;
+    await act(async () => {
+      blockedDuringCancel = await result.current.sendMessage('external pending dispatch', { onAccepted });
+    });
+    expect(blockedDuringCancel).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      abortGate.resolve();
+      await cancellation;
+    });
+    expect(cancellationSettled).toBe(true);
+
+    let blockedBeforeSessionChanges = true;
+    await act(async () => {
+      blockedBeforeSessionChanges = await result.current.sendMessage(
+        'external dispatch after cancel',
+        { onAccepted },
+      );
+    });
+    expect(blockedBeforeSessionChanges).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    streamGate.resolve();
+    await act(async () => { await activeTurn; });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.some(message => message.content === 'late answer')).toBe(false);
+
+    await act(async () => {
+      releaseStoppedSession?.();
+      await flush();
+    });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('queued second');
+    expect(result.current.messages.filter(message => message.content === 'queued second')).toHaveLength(1);
+    expect(result.current.messages.filter(message => message.content === 'queued third')).toHaveLength(1);
+
+    await act(async () => {
+      secondQueuedGate.resolve();
+      await flush();
+      await flush();
+    });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3));
+    expect(mocks.adapter.sendMessage.mock.calls[2]?.[1]).toBe('queued third');
+    await vi.waitFor(() => {
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.some(message => message.content === 'second restored')).toBe(true);
+      expect(result.current.messages.some(message => message.content === 'third restored')).toBe(true);
+    });
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(thirdAccepted).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      releaseStoppedSession?.();
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it('never restores discarded queued work after the chat unmounts', async () => {
+    const streamGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'must not dispatch' } };
+      });
+
+    const hook = await mountChat('sess-unmounted-transition');
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = hook.result.current.sendMessage('first');
+      await flush();
+      await hook.result.current.sendMessage('queued second');
+    });
+
+    let releaseStoppedSession: (() => void) | undefined;
+    await act(async () => {
+      const release = await hook.result.current.stopStreaming({ discardQueued: true });
+      if (release) releaseStoppedSession = release;
+    });
+
+    hook.unmount();
+    releaseStoppedSession?.();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    streamGate.resolve();
+    await activeTurn;
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates discarded queue restoration after leaving and returning to the session', async () => {
+    const streamGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'fresh answer' } };
+      });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ activeSession }: { activeSession: string }) => (
+        useChat({ workspaceId: 'ws-1', sessionId: activeSession })
+      ),
+      { initialProps: { activeSession: 'sess-a' } },
+    );
+    await act(async () => { await flush(); });
+
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = hook.result.current.sendMessage('first');
+      await flush();
+      await hook.result.current.sendMessage('queued second');
+    });
+
+    let releaseStoppedSession: (() => void) | undefined;
+    await act(async () => {
+      const release = await hook.result.current.stopStreaming({ discardQueued: true });
+      if (release) releaseStoppedSession = release;
+      streamGate.resolve();
+      await activeTurn;
+    });
+
+    await act(async () => {
+      hook.rerender({ activeSession: 'sess-b' });
+      await flush();
+    });
+    await act(async () => {
+      hook.rerender({ activeSession: 'sess-a' });
+      await flush();
+    });
+    await act(async () => {
+      releaseStoppedSession?.();
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await hook.result.current.sendMessage('fresh A turn');
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('fresh A turn');
   });
 
   it('does not report a user-aborted stream as a backend outage', async () => {
@@ -791,7 +1202,76 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(false);
   });
 
-  it('preserves queued FIFO when a stopped stream is replaced and settles late', async () => {
+  it('retries a stopped partial from the same prompt as one canonical replacement turn', async () => {
+    const firstGate = deferred<void>();
+    const pendingHistory = deferred<ChatMessage[]>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await firstGate.promise;
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'recovered answer' } };
+      });
+
+    const { result } = await mountChat('sess-stopped-retry');
+    let firstPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      firstPromise = result.current.sendMessage('question');
+      await flush();
+    });
+    await act(async () => { result.current.stopStreaming(); await flush(); });
+    expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+      .toMatchObject({ content: 'partial answer', status: 'stopped' });
+
+    mocks.adapter.getHistory.mockReturnValueOnce(pendingHistory.promise);
+    await act(async () => { result.current.retryHistory(); await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      result.current.retryLastFailed();
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    pendingHistory.resolve([{
+      id: 'persisted-question',
+      role: 'user',
+      content: 'question',
+      timestamp: 'now',
+    }]);
+    await act(async () => { await pendingHistory.promise; await flush(); });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    firstGate.resolve();
+    await act(async () => { await firstPromise; });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+
+    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith(
+      'ws-1',
+      'question',
+      'sess-stopped-retry',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      { kind: 'lone-user', expectedMessageCount: 1 },
+    );
+    const canonicalReplacement = [
+      ['user', 'question'],
+      ['assistant', 'recovered answer'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(canonicalReplacement);
+    expect(
+      readChatThreadCache(chatThreadCacheKey('ws-1', 'sess-stopped-retry'))
+        ?.map(message => [message.role, message.content]),
+    ).toEqual(canonicalReplacement);
+
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(canonicalReplacement);
+  });
+
+  it('waits for stopped stream ownership to settle before flushing queued FIFO', async () => {
     const firstGate = deferred<void>();
     const secondGate = deferred<void>();
     mocks.adapter.sendMessage
@@ -821,22 +1301,164 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       result.current.stopStreaming();
       await flush();
     });
-    expect(result.current.isLoading).toBe(true);
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
-    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('second');
+    expect(result.current.isLoading).toBe(false);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
 
     await act(async () => { await result.current.sendMessage('third'); await flush(); });
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
 
     firstGate.resolve();
     await act(async () => { await firstPromise; await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
     expect(result.current.isLoading).toBe(true);
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('second');
 
     secondGate.resolve();
     await act(async () => { await flush(); });
     await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3));
     expect(mocks.adapter.sendMessage.mock.calls[2]?.[1]).toBe('third');
+  });
+
+  it('retries a transient same-session server lock without duplicating the turn', async () => {
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+      })
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'recovered after stop' } };
+      });
+
+    const { result } = await mountChat('sess-conflict-retry');
+    const onAccepted = vi.fn();
+    await act(async () => {
+      await result.current.sendMessage('continue safely', { onAccepted });
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3);
+    expect(result.current.isLoading).toBe(false);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.map(message => [
+      message.role,
+      message.content,
+      Boolean(message.queued),
+    ])).toEqual([
+      ['user', 'continue safely', false],
+      ['assistant', 'recovered after stop', false],
+    ]);
+    expect(result.current.messages.some(message =>
+      message.blocks?.some(block => block.type === 'error')
+    )).toBe(false);
+  });
+
+  it('does not resend a conflicted turn when Stop is clicked during retry backoff', async () => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'error',
+        data: {
+          code: 'SESSION_TURN_IN_PROGRESS',
+          message: 'Another turn is already running for this session.',
+        },
+      };
+    });
+
+    const { result } = await mountChat('sess-conflict-stop');
+    vi.useFakeTimers();
+    try {
+      let sendPromise: Promise<boolean> | undefined;
+      await act(async () => {
+        sendPromise = result.current.sendMessage('do not resend');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+      expect(result.current.messages.find(message => message.role === 'assistant')?.retrying)
+        .toBe(true);
+
+      await act(async () => {
+        await result.current.stopStreaming();
+        await vi.runAllTimersAsync();
+        await sendPromise;
+      });
+
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+        .toMatchObject({ status: 'stopped' });
+      expect(result.current.messages.find(message => message.role === 'assistant')?.retrying)
+        .toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds session-lock retries and keeps a queued follower FIFO after exhaustion', async () => {
+    mocks.adapter.sendMessage.mockImplementation(async function* (
+      _workspaceId: string,
+      message: string,
+    ) {
+      if (message === 'blocked turn') {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+        return;
+      }
+      yield { type: 'done', data: { content: 'follower completed' } };
+    });
+
+    const { result } = await mountChat('sess-conflict-exhausted');
+    vi.useFakeTimers();
+    try {
+      const firstAccepted = vi.fn();
+      const followerAccepted = vi.fn();
+      await act(async () => {
+        void result.current.sendMessage('blocked turn', { onAccepted: firstAccepted });
+        await Promise.resolve();
+        await result.current.sendMessage('queued follower', { onAccepted: followerAccepted });
+        await vi.runAllTimersAsync();
+      });
+
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(8);
+      expect(mocks.adapter.sendMessage.mock.calls.slice(0, 7)
+        .every(call => call[1] === 'blocked turn')).toBe(true);
+      expect(mocks.adapter.sendMessage.mock.calls[7]?.[1]).toBe('queued follower');
+      expect(firstAccepted).toHaveBeenCalledTimes(1);
+      expect(followerAccepted).toHaveBeenCalledTimes(1);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.map(message => message.role)).toEqual([
+        'user',
+        'assistant',
+        'user',
+        'assistant',
+      ]);
+      expect(result.current.messages[1]?.content)
+        .toContain('previous response is still stopping');
+      expect(result.current.messages[3]?.content).toBe('follower completed');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops the originating session after the hook switches to another session', async () => {
@@ -1032,6 +1654,8 @@ describe('ChatApp — streaming interaction contract', () => {
     workspaceId: 'ws-1',
     activeSessionId: null as string | null,
     onStopStreaming: noop as () => void,
+    onRetry: undefined as (() => void) | undefined,
+    sessionCreating: false,
   };
 
   let ChatAppEl: typeof import('@/components/os/apps/ChatApp').default;
@@ -1057,7 +1681,103 @@ describe('ChatApp — streaming interaction contract', () => {
     return { getTop: () => top };
   }
 
-  it('renders a draft visibly while keeping canonical message actions disabled', async () => {
+  it('announces the active pre-token wait and removes it on first visible response activity', async () => {
+    const userMessage: ChatMessage = {
+      id: 'waiting-user', role: 'user', content: 'Explain this', timestamp: 'now',
+    };
+    const emptyAssistant: ChatMessage = {
+      id: 'waiting-assistant', role: 'assistant', content: '', timestamp: 'now',
+    };
+    const onStopStreaming = vi.fn();
+    const { container, rerender } = await renderChat({
+      messages: [userMessage, emptyAssistant],
+      isLoading: true,
+      onStopStreaming,
+    });
+
+    const waitingIndicator = screen.getByTestId('chat-first-response-indicator');
+    const waitingStatus = within(waitingIndicator)
+      .getByRole('status', { name: 'Model response status' });
+    expect(waitingStatus).toHaveTextContent('Waiting for the model to respond.');
+    const waitingDots = waitingIndicator.querySelectorAll('.animate-bounce');
+    expect(waitingDots).toHaveLength(3);
+    for (const dot of waitingDots) {
+      expect(dot).toHaveClass('motion-reduce:animate-none');
+    }
+    expect(screen.getByTestId('chat-stop-stream')).toBeInTheDocument();
+
+    const firstToken: ChatMessage = {
+      ...emptyAssistant,
+      draft: {
+        turnId: 'waiting-turn',
+        revision: 1,
+        content: 'First visible token',
+        status: 'streaming',
+      },
+    };
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl {...baseProps} messages={[userMessage, firstToken]} isLoading />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+    expect(screen.getByText('First visible token')).toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl {...baseProps} messages={[emptyAssistant, a1]} isLoading />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+  });
+
+  it('shows a truthful retry wait instead of claiming the model is responding', async () => {
+    const retryingAssistant: ChatMessage = {
+      id: 'retrying-assistant',
+      role: 'assistant',
+      content: '',
+      timestamp: 'now',
+      retrying: true,
+      draft: {
+        turnId: 'retrying-turn',
+        revision: 0,
+        content: '',
+        status: 'streaming',
+      },
+    };
+
+    const { container } = await renderChat({
+      messages: [
+        { id: 'retrying-user', role: 'user', content: 'First turn', timestamp: 'now' },
+        retryingAssistant,
+        {
+          id: 'queued-follower',
+          role: 'user',
+          content: 'Follow-up',
+          timestamp: 'now',
+          queued: true,
+        },
+      ],
+      isLoading: true,
+      onStopStreaming: vi.fn(),
+    });
+
+    expect(screen.getByTestId('chat-retry-wait-indicator'))
+      .toHaveTextContent('Waiting to retry…');
+    expect(screen.getByTestId('chat-draft-status')).toHaveTextContent('Retry queued');
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+  });
+
+  it('renders a stopped draft with one latest-turn recovery action and no canonical actions', async () => {
+    const userMessage: ChatMessage = {
+      id: 'draft-user', role: 'user', content: 'Draft this', timestamp: 'now',
+    };
     const draftMessage: ChatMessage = {
       id: 'draft-1',
       role: 'assistant',
@@ -1070,11 +1790,45 @@ describe('ChatApp — streaming interaction contract', () => {
         status: 'stopped',
       },
     };
-    await renderChat({ messages: [draftMessage], isLoading: false });
+    const onRetry = vi.fn();
+    const { rerender } = await renderChat({
+      messages: [userMessage, draftMessage],
+      isLoading: false,
+      onRetry,
+    });
 
     expect(screen.getByText('Visible provisional answer')).toBeInTheDocument();
     expect(screen.getByTestId('chat-draft-status')).toHaveTextContent('Stopped draft · not saved');
     expect(screen.queryByLabelText('Pin message')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Good response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Poor response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry response' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry stopped response' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[userMessage, draftMessage, a1]}
+          onRetry={onRetry}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Retry stopped response' })).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[userMessage, draftMessage]}
+          onRetry={onRetry}
+          sessionCreating
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Retry stopped response' })).toBeNull();
   });
 
   it('renders capability markers in drafts inertly without exposing install actions', async () => {
@@ -1195,6 +1949,18 @@ describe('ChatApp — streaming interaction contract', () => {
     // Lane C: Send is NOT replaced — it stays for queueing a follow-up.
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
     fireEvent.click(stop);
+    expect(onStopStreaming).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains a rejected async Stop callback without an unhandled UI failure', async () => {
+    const onStopStreaming = vi.fn().mockRejectedValue(new Error('cancel transport failed'));
+    await renderChat({ messages: [a1], isLoading: true, onStopStreaming });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('chat-stop-stream'));
+      await Promise.resolve();
+    });
+
     expect(onStopStreaming).toHaveBeenCalledTimes(1);
   });
 

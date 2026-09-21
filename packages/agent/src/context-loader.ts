@@ -20,11 +20,13 @@
 import {
   type MindDB,
   type MemoryFrame,
-  type AwarenessLayer,
   createCoreLogger,
 } from '@waggle/core';
 import { scanForInjection } from './injection-scanner.js';
 import { CONTEXT_PREVIEW_LENGTH } from './content-constants.js';
+import type {
+  AwarenessPort,
+} from './memory-ports.js';
 
 const logger = createCoreLogger('context-loader');
 
@@ -38,7 +40,7 @@ export interface ContextLoaderDeps {
   /** Workspace mind DB if active (else null) */
   workspaceDb: MindDB | null;
   /** Awareness layer (always personal) */
-  awareness: AwarenessLayer;
+  awareness: AwarenessPort;
 }
 
 /**

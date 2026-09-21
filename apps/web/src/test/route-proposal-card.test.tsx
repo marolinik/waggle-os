@@ -134,6 +134,28 @@ describe('RouteProposalCard (router arc B2)', () => {
     expect(onDispatched).toHaveBeenCalledWith({ status: 'dispatched', mode: 'internal' });
   });
 
+  it('renders an internal model result as safe chat markdown instead of raw syntax', async () => {
+    mocks.routeProposals.confirm.mockResolvedValue({
+      status: 'dispatched',
+      mode: 'internal',
+      resultText: [
+        '**Recommendation:** Choose concierge.',
+        '',
+        '| Criterion | Choice |',
+        '| --- | --- |',
+        '| Safety | Concierge |',
+      ].join('\n'),
+    });
+    render(<RouteProposalCard proposal={basePayload} />);
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+
+    const result = await screen.findByTestId('route-proposal-result-text');
+    expect(result.querySelector('strong')?.textContent).toBe('Recommendation:');
+    expect(result.querySelector('table')).not.toBeNull();
+    expect(result.textContent).not.toContain('**');
+    expect(result.textContent).not.toContain('| --- |');
+  });
+
   it('blocked brief (egress null + briefBlocked) renders run-without-memory only', async () => {
     const blocked: RouteProposalPayload = {
       ...basePayload,

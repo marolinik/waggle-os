@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-22)
+### Current Release Qualification Contract (updated 2026-09-09)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -72,6 +72,8 @@ WaggleDance, governance) is the upgrade trigger.
   same carry-forward rule. GO also requires zero unresolved Critical/High findings.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
+- A green private draft PR and a controlled-pilot installer are not public GO. Publicly trusted
+  Authenticode and a sealed managed Deep Security report remain binary release gates.
 
 ### Evidence authority
 
@@ -82,6 +84,12 @@ candidate table here or infer that an ancestor's installer certifies a later HEA
 repository remains private until an explicit open-source and licensing decision is made.
 Public GO remains blocked until a publicly trusted Authenticode artifact and an exact-candidate
 sealed managed Deep Security report close with no unresolved Critical/High findings.
+
+The current controlled-internal-test candidate is private readiness-branch commit
+`c4e6a5157310876215d20c5e5f059f26ea1f4ba4`. Its internal-pilot installer passed 64/64
+clean-profile lifecycle and managed-model checks, and its exact artifact and receipt hashes
+are recorded in the launch recommendation. This is PM-qualified internal-pilot evidence,
+not a claim that the branch is merged, publicly trusted, or approved for public release.
 
 ### Key Technology Facts (Verified August 2026)
 

@@ -579,7 +579,11 @@ describe('Backup & Restore (PM-5)', () => {
   it('backup without vault key produces unencrypted archive', async () => {
     // Create a separate temp dir without a vault key
     const noKeyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-nokey-test-'));
-    fs.writeFileSync(path.join(noKeyDir, 'config.json'), '{"test": true}', 'utf-8');
+    fs.writeFileSync(path.join(noKeyDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+      test: true,
+    }), 'utf-8');
 
     // Create a separate server instance
     const personalPath = path.join(noKeyDir, 'personal.mind');

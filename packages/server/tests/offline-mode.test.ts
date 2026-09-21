@@ -114,7 +114,7 @@ describe('OfflineManager', () => {
   it('emits notification when transitioning to offline', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-emit-'));
     const bus = new EventEmitter();
-    const notifications: Array<{ title: string }> = [];
+    const notifications: Array<{ title: string; body: string }> = [];
     bus.on('notification', (data) => notifications.push(data));
 
     // Mock fetch to always fail
@@ -134,6 +134,11 @@ describe('OfflineManager', () => {
     expect(mgr.state.since).not.toBeNull();
     expect(notifications).toHaveLength(1);
     expect(notifications[0].title).toBe('Offline');
+    expect(notifications[0]).toEqual(expect.objectContaining({
+      title: 'Offline',
+      body: 'Model connection lost. Local tools still work. Review failed chat turns after it reconnects; retry only if needed.',
+    }));
+    expect(notifications[0].body).not.toMatch(/\bqueued\b|sent when|automatically/i);
 
     globalThis.fetch = originalFetch;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -190,7 +195,7 @@ describe('OfflineManager', () => {
   it('emits back_online notification when recovering', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-recov-'));
     const bus = new EventEmitter();
-    const notifications: Array<{ title: string }> = [];
+    const notifications: Array<{ title: string; body: string }> = [];
     bus.on('notification', (data) => notifications.push(data));
     const stateChanges: Array<{ offline: boolean }> = [];
     bus.on('offline_state_change', (data) => stateChanges.push(data));
@@ -207,6 +212,7 @@ describe('OfflineManager', () => {
     });
     await mgr.checkHealth();
     expect(mgr.isOffline).toBe(true);
+    mgr.queueMessage('ws-recovery', 'Explicit legacy queue entry');
 
     // Then: make it come back online
     globalThis.fetch = vi.fn().mockResolvedValue({ status: 200 });
@@ -214,8 +220,14 @@ describe('OfflineManager', () => {
     expect(mgr.isOffline).toBe(false);
     expect(notifications).toHaveLength(2);
     expect(notifications[1].title).toBe('Back online');
+    expect(notifications[1]).toEqual(expect.objectContaining({
+      title: 'Back online',
+      body: 'Model connection restored. Review any failed chat turn and retry only if needed.',
+    }));
+    expect(notifications[1].body).not.toMatch(/\bqueued\b|sent automatically|auto.?retry/i);
+    expect(mgr.getQueue()).toHaveLength(1);
     expect(stateChanges).toHaveLength(2);
-    expect(stateChanges[1].offline).toBe(false);
+    expect(stateChanges[1]).toEqual({ offline: false, queuedMessages: 1 });
 
     globalThis.fetch = originalFetch;
     fs.rmSync(dir, { recursive: true, force: true });

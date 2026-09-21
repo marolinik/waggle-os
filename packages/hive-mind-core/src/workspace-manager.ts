@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { WorkspaceType } from '@waggle/shared';
 type AIActRiskLevel = 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
 
@@ -124,6 +125,8 @@ interface WorkspacesMeta {
 }
 
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
+const DELETION_TOMBSTONE_PREFIX = '.waggle-deleting-';
+const DELETION_TOMBSTONE = /^\.waggle-deleting-[A-Za-z0-9][A-Za-z0-9_-]{0,199}-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function isContained(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
@@ -161,6 +164,7 @@ export class WorkspaceManager {
       throw new Error('Workspace root must be a regular directory inside the data directory');
     }
     this.canonicalWorkspacesDir = canonicalRoot;
+    this.cleanupDeletionTombstones();
   }
 
   /**
@@ -186,7 +190,10 @@ export class WorkspaceManager {
   ensure(id: string, options: Partial<CreateWorkspaceOptions> = {}): WorkspaceConfig {
     this.assertWorkspaceId(id);
     const existing = this.get(id);
-    if (existing) return existing;
+    if (existing) {
+      this.ensureManagedFilesDirectory(existing);
+      return existing;
+    }
     const workspacePath = path.join(this.resolveWorkspaceRoot(), id);
     const workspaceStat = fs.lstatSync(workspacePath, { throwIfNoEntry: false });
     if (workspaceStat) {
@@ -219,6 +226,9 @@ export class WorkspaceManager {
       throw new Error(`Workspace path escapes workspace root: ${id}`);
     }
     fs.mkdirSync(path.join(canonicalWorkspace, 'sessions'));
+    if (options.directory === undefined) {
+      fs.mkdirSync(path.join(canonicalWorkspace, 'files'));
+    }
 
     // Touch workspace.mind — MindDB will init schema when first opened
     fs.writeFileSync(path.join(canonicalWorkspace, 'workspace.mind'), '', { flag: 'wx' });
@@ -341,7 +351,42 @@ export class WorkspaceManager {
     if (!this.get(id)) return;
     const workspaceDir = this.resolveWorkspaceDir(id);
     if (!workspaceDir) return;
-    fs.rmSync(workspaceDir, { recursive: true, force: true });
+    const tombstone = path.join(
+      this.resolveWorkspaceRoot(),
+      `${DELETION_TOMBSTONE_PREFIX}${id}-${randomUUID()}`,
+    );
+
+    // The same-volume rename is the commit boundary. If it fails, the active
+    // workspace is untouched and the caller can roll runtime state back. Once
+    // it succeeds, recursive cleanup is best-effort: a Windows AV/indexer lock
+    // may leave a hidden tombstone, but can never half-delete an active workspace.
+    fs.renameSync(workspaceDir, tombstone);
+    try {
+      fs.rmSync(tombstone, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Retried at next WorkspaceManager startup.
+    }
+  }
+
+  private cleanupDeletionTombstones(): void {
+    for (const entry of fs.readdirSync(this.canonicalWorkspacesDir, { withFileTypes: true })) {
+      if (!DELETION_TOMBSTONE.test(entry.name)) continue;
+      try {
+        const tombstonePath = path.join(this.canonicalWorkspacesDir, entry.name);
+        const tombstoneStat = fs.lstatSync(tombstonePath, { throwIfNoEntry: false });
+        if (!tombstoneStat?.isDirectory() || tombstoneStat.isSymbolicLink()) continue;
+        const canonicalTombstone = fs.realpathSync.native(tombstonePath);
+        if (!isContained(this.canonicalWorkspacesDir, canonicalTombstone)) continue;
+        fs.rmSync(canonicalTombstone, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        });
+      } catch {
+        // A still-locked tombstone remains hidden and will be retried later.
+      }
+    }
   }
 
   /**
@@ -432,6 +477,25 @@ export class WorkspaceManager {
     return canonicalWorkspace;
   }
 
+  private ensureManagedFilesDirectory(workspace: WorkspaceConfig): void {
+    if (workspace.directory !== undefined) return;
+    const workspaceDir = this.resolveWorkspaceDir(workspace.id);
+    if (!workspaceDir) throw new Error(`Workspace not found: ${workspace.id}`);
+
+    const filesDir = path.join(workspaceDir, 'files');
+    const existing = fs.lstatSync(filesDir, { throwIfNoEntry: false });
+    if (!existing) fs.mkdirSync(filesDir);
+
+    const filesStat = fs.lstatSync(filesDir);
+    if (filesStat.isSymbolicLink() || !filesStat.isDirectory()) {
+      throw new Error(`Workspace files path is not a regular directory: ${workspace.id}`);
+    }
+    const canonicalFiles = fs.realpathSync.native(filesDir);
+    if (!isContained(workspaceDir, canonicalFiles)) {
+      throw new Error(`Workspace files path escapes workspace directory: ${workspace.id}`);
+    }
+  }
+
   private resolveWorkspaceRoot(): string {
     const rootStat = fs.lstatSync(this.workspacesDir, { throwIfNoEntry: false });
     if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) {
@@ -471,7 +535,9 @@ export class WorkspaceManager {
     if (existing.length > 0) {
       const defaultId = this.getDefault();
       const found = defaultId ? this.get(defaultId) : null;
-      return found ?? existing[0];
+      const selected = found ?? existing[0];
+      this.ensureManagedFilesDirectory(selected);
+      return selected;
     }
 
     const ws = this.create({

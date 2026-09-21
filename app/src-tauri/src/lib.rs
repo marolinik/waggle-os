@@ -6,7 +6,68 @@ mod service;
 mod tray;
 
 use service::ServiceState;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::{Duration, Instant};
 use tauri::Manager;
+
+const EXIT_IDLE: u8 = 0;
+const EXIT_DRAINING: u8 = 1;
+const EXIT_READY: u8 = 2;
+static EXIT_STATE: AtomicU8 = AtomicU8::new(EXIT_IDLE);
+
+#[derive(Debug, PartialEq, Eq)]
+enum ExitRequestDecision {
+    StartDrain,
+    WaitForDrain,
+    ExitNow,
+}
+
+fn decide_exit_request(state: &AtomicU8) -> ExitRequestDecision {
+    match state.compare_exchange(
+        EXIT_IDLE,
+        EXIT_DRAINING,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Ok(_) => ExitRequestDecision::StartDrain,
+        Err(EXIT_DRAINING) => ExitRequestDecision::WaitForDrain,
+        Err(EXIT_READY) => ExitRequestDecision::ExitNow,
+        Err(_) => ExitRequestDecision::WaitForDrain,
+    }
+}
+
+fn is_restart_request(code: Option<i32>) -> bool {
+    code == Some(tauri::RESTART_EXIT_CODE)
+}
+
+fn drain_before_unpreventable_restart(app_handle: &tauri::AppHandle) {
+    match decide_exit_request(&EXIT_STATE) {
+        ExitRequestDecision::StartDrain => {
+            if let Some(state) = app_handle.try_state::<ServiceState>() {
+                if let Err(error) =
+                    tauri::async_runtime::block_on(service::stop_service_bounded(&state))
+                {
+                    eprintln!("[waggle] Restart drain failed: {error}");
+                    let _ = service::stop_service_sync(&state);
+                }
+            }
+            EXIT_STATE.store(EXIT_READY, Ordering::Release);
+        }
+        ExitRequestDecision::WaitForDrain => {
+            let deadline = Instant::now() + Duration::from_secs(13);
+            while EXIT_STATE.load(Ordering::Acquire) == EXIT_DRAINING && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if EXIT_STATE.load(Ordering::Acquire) == EXIT_DRAINING {
+                if let Some(state) = app_handle.try_state::<ServiceState>() {
+                    let _ = service::stop_service_sync(&state);
+                }
+                EXIT_STATE.store(EXIT_READY, Ordering::Release);
+            }
+        }
+        ExitRequestDecision::ExitNow => {}
+    }
+}
 
 #[tauri::command]
 async fn show_notification(
@@ -55,7 +116,6 @@ pub fn run() {
             commands::wiki::compile_wiki_section,
             commands::agent::run_agent_query,
             commands::onboarding::is_first_launch,
-            commands::onboarding::mark_first_launch_complete,
             commands::onboarding::reset_first_launch,
         ])
         .setup(|app| {
@@ -159,12 +219,59 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            // R7-002: kill only the owned sidecar launch on app exit.
-            if let tauri::RunEvent::Exit = event {
+        .run(|app_handle, event| match event {
+            // Tauri deliberately ignores prevent_exit() for its restart exit
+            // code. Drain synchronously inside this bounded callback so the
+            // original restart cannot overtake sidecar cleanup.
+            tauri::RunEvent::ExitRequested { code, .. } if is_restart_request(code) => {
+                drain_before_unpreventable_restart(app_handle);
+            }
+            tauri::RunEvent::ExitRequested { code, api, .. } => {
+                match decide_exit_request(&EXIT_STATE) {
+                    ExitRequestDecision::StartDrain => {
+                        api.prevent_exit();
+                        let app_handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Some(state) = app_handle.try_state::<ServiceState>() {
+                                if let Err(error) = service::stop_service_bounded(&state).await {
+                                    eprintln!("[waggle] Graceful service shutdown failed: {error}");
+                                }
+                            }
+                            EXIT_STATE.store(EXIT_READY, Ordering::Release);
+                            app_handle.exit(code.unwrap_or(0));
+                        });
+                    }
+                    ExitRequestDecision::WaitForDrain => api.prevent_exit(),
+                    ExitRequestDecision::ExitNow => {}
+                }
+            }
+            // Terminal fallback for OS/crash-edge exits. The normal tray and
+            // programmatic paths have already completed the bounded drain.
+            tauri::RunEvent::Exit => {
                 if let Some(state) = app_handle.try_state::<ServiceState>() {
                     let _ = service::stop_service_sync(&state);
                 }
             }
+            _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_requests_start_one_drain_then_wait_until_exit_is_ready() {
+        let state = AtomicU8::new(EXIT_IDLE);
+        assert_eq!(decide_exit_request(&state), ExitRequestDecision::StartDrain);
+        assert_eq!(
+            decide_exit_request(&state),
+            ExitRequestDecision::WaitForDrain
+        );
+        state.store(EXIT_READY, Ordering::Release);
+        assert_eq!(decide_exit_request(&state), ExitRequestDecision::ExitNow);
+        assert!(is_restart_request(Some(tauri::RESTART_EXIT_CODE)));
+        assert!(!is_restart_request(Some(0)));
+        assert!(!is_restart_request(None));
+    }
 }

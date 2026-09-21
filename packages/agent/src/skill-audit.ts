@@ -72,6 +72,12 @@ export interface SkillAuditOptions {
 
 export interface SkillAuditHooks {
   /**
+   * Optional executable runner for the skill-under-test. The local server uses
+   * this to provide a tightly scoped set of deterministic tools; library callers
+   * keep the existing toolless fallback.
+   */
+  runUnderTest?: (skill: SkillForAudit, task: string) => Promise<string>;
+  /**
    * Persist a VERIFIED rewrite. The route wires this to back up the original
    * SKILL.md then writeSkill + skill-hash invalidation (the single sanctioned
    * write path). Never called unless autoRewrite produced a rewrite that passed.
@@ -327,7 +333,9 @@ export async function auditSkill(
 
     let actual: string;
     try {
-      actual = await runSkillUnderTest(llmCall, content, task.task);
+      actual = hooks.runUnderTest
+        ? await hooks.runUnderTest({ ...skill, content }, task.task)
+        : await runSkillUnderTest(llmCall, content, task.task);
     } catch (err) {
       out.inconclusive = true;
       out.error = err instanceof Error ? err.message : String(err);

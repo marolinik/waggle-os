@@ -1,14 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { adapter } from '@/lib/adapter';
+import { adapter, type ChatRetryTarget } from '@/lib/adapter';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import {
   chatThreadCacheKey,
   readChatThreadCache,
   writeChatThreadCache,
 } from '@/hooks/chat-thread-cache';
+import {
+  normalizeMemoryContextReceipt,
+  stripLiveMemoryReceipts,
+} from '@/lib/memory-recall-toast';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
-  ContentBlock, TextContentBlock, ToolExecution,
+  ContentBlock, TextContentBlock, ToolContextMetrics, ToolExecution,
 } from '@/lib/types';
 
 let blockCounter = 0;
@@ -134,8 +138,62 @@ interface PendingHistoryLoad {
   localMessageIds: Set<string>;
   localMessages: Map<string, ChatMessage>;
   suppressedMessageIds: Set<string>;
+  suppressedRetryTail: {
+    userContent: string;
+    target: ChatRetryTarget;
+  } | null;
   ready: Promise<void>;
   release: () => void;
+}
+
+function assistantFailureDetail(message: ChatMessage): string | null {
+  if (message.role !== 'assistant') return null;
+  if (message.content.startsWith(GENERATION_FAILED_PREFIX)) {
+    return message.content.slice(GENERATION_FAILED_PREFIX.length);
+  }
+  for (let i = (message.blocks?.length ?? 0) - 1; i >= 0; i--) {
+    const block = message.blocks?.[i];
+    if (block?.type === 'error') return block.message;
+  }
+  return null;
+}
+
+function persistedAssistantRetryContent(message: ChatMessage): string {
+  const failure = assistantFailureDetail(message);
+  return failure === null
+    ? message.content
+    : `${GENERATION_FAILED_PREFIX}${failure}`;
+}
+
+function persistedRetryMessageCount(messages: readonly ChatMessage[]): number {
+  return messages.reduce((count, message) => (
+    message.role === 'assistant' && message.draft?.status === 'stopped'
+      ? count
+      : count + 1
+  ), 0);
+}
+
+function suppressRetriedHistoryTail(
+  history: ChatMessage[],
+  retriedTail: PendingHistoryLoad['suppressedRetryTail'],
+): ChatMessage[] {
+  if (!retriedTail || history.length !== retriedTail.target.expectedMessageCount) {
+    return history;
+  }
+  if (retriedTail.target.kind === 'lone-user') {
+    const user = history.at(-1);
+    return user?.role === 'user' && user.content === retriedTail.userContent
+      ? history.slice(0, -1)
+      : history;
+  }
+  const user = history.at(-2);
+  const assistant = history.at(-1);
+  return user?.role === 'user'
+    && user.content === retriedTail.userContent
+    && assistant?.role === 'assistant'
+    && assistant.content === retriedTail.target.expectedAssistantContent
+    ? history.slice(0, -2)
+    : history;
 }
 
 function isActiveTurnClearConflict(error: unknown): boolean {
@@ -163,6 +221,107 @@ export interface AutonomyState {
   expiresAt: number | null;
 }
 
+const CHAT_TURN_CONFLICT_MAX_RETRIES = 6;
+
+/**
+ * Tool-context metrics are live transport diagnostics, not conversation data.
+ * Keep them on the active response, but never let the module cache replay them
+ * after a session return as though they were durable history.
+ */
+function stripLiveToolContextReceipts(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map(message => {
+    if (!message.blocks?.some(block => block.type === 'tool_context')) return message;
+    return {
+      ...message,
+      blocks: message.blocks.filter(block => block.type !== 'tool_context'),
+    };
+  });
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/** Fail closed: malformed or internally inconsistent server telemetry is hidden. */
+function normalizeToolContextMetrics(value: unknown): ToolContextMetrics | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const toolCatalogCount = nonNegativeInteger(raw.toolCatalogCount);
+  const toolEligibleCount = nonNegativeInteger(raw.toolEligibleCount);
+  const toolSelectedCount = nonNegativeInteger(raw.toolSelectedCount);
+  const toolOmittedCount = nonNegativeInteger(raw.toolOmittedCount);
+  const transmittedToolSchemaChars = nonNegativeInteger(raw.transmittedToolSchemaChars);
+  const estimatedToolSchemaTokens = nonNegativeInteger(raw.estimatedToolSchemaTokens);
+  const finalSystemPromptChars = nonNegativeInteger(raw.finalSystemPromptChars);
+  const estimatedSystemPromptTokens = nonNegativeInteger(raw.estimatedSystemPromptTokens);
+  const selectorLatencyMs = nonNegativeInteger(raw.selectorLatencyMs);
+  const agentLatencyMs = nonNegativeInteger(raw.agentLatencyMs);
+  const totalServerLatencyMs = nonNegativeInteger(raw.totalServerLatencyMs);
+  const providerInputTokens = nonNegativeInteger(raw.providerInputTokens);
+  const providerOutputTokens = nonNegativeInteger(raw.providerOutputTokens);
+  const packageMode = raw.packageMode;
+  const timeToFirstTokenMs = raw.timeToFirstTokenMs === null
+    ? null
+    : nonNegativeInteger(raw.timeToFirstTokenMs);
+
+  if (
+    toolCatalogCount === null
+    || toolEligibleCount === null
+    || toolSelectedCount === null
+    || toolOmittedCount === null
+    || transmittedToolSchemaChars === null
+    || estimatedToolSchemaTokens === null
+    || finalSystemPromptChars === null
+    || estimatedSystemPromptTokens === null
+    || selectorLatencyMs === null
+    || (timeToFirstTokenMs === null && raw.timeToFirstTokenMs !== null)
+    || agentLatencyMs === null
+    || totalServerLatencyMs === null
+    || providerInputTokens === null
+    || providerOutputTokens === null
+    || (packageMode !== 'compact' && packageMode !== 'full' && packageMode !== 'custom')
+    || toolEligibleCount > toolCatalogCount
+    || toolSelectedCount > toolEligibleCount
+    || toolOmittedCount !== toolEligibleCount - toolSelectedCount
+    || estimatedToolSchemaTokens !== Math.ceil(transmittedToolSchemaChars / 4)
+    || ((toolSelectedCount === 0) !== (transmittedToolSchemaChars === 0))
+    || estimatedSystemPromptTokens !== Math.ceil(finalSystemPromptChars / 4)
+    || selectorLatencyMs > totalServerLatencyMs
+    || agentLatencyMs > totalServerLatencyMs
+    || (timeToFirstTokenMs !== null && timeToFirstTokenMs > totalServerLatencyMs)
+  ) return null;
+
+  return {
+    toolCatalogCount,
+    toolEligibleCount,
+    toolSelectedCount,
+    toolOmittedCount,
+    transmittedToolSchemaChars,
+    estimatedToolSchemaTokens,
+    finalSystemPromptChars,
+    estimatedSystemPromptTokens,
+    packageMode,
+    selectorLatencyMs,
+    timeToFirstTokenMs,
+    agentLatencyMs,
+    totalServerLatencyMs,
+    providerInputTokens,
+    providerOutputTokens,
+  };
+}
+
+export type ChatHistoryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+const HISTORY_LOAD_ERROR = "We couldn't load this conversation. Check your connection and try again.";
+
+interface ChatHistoryState {
+  threadKey: string | null;
+  status: ChatHistoryStatus;
+  error: string | null;
+}
+
 interface UseChatOptions {
   workspaceId: string | null;
   sessionId: string | null;
@@ -175,10 +334,26 @@ interface UseChatOptions {
    * tool set. The server owns the final check — client state is advisory.
    */
   autonomy?: AutonomyState;
+  onTurnSettled?: (owner: { workspaceId: string; sessionId: string }) => void;
 }
 
-export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: UseChatOptions) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export const useChat = ({
+  workspaceId,
+  sessionId,
+  persona,
+  model,
+  autonomy,
+  onTurnSettled,
+}: UseChatOptions) => {
+  const currentThreadKey = workspaceId && sessionId
+    ? chatThreadCacheKey(workspaceId, sessionId)
+    : null;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => (
+    currentThreadKey ? (readChatThreadCache(currentThreadKey) ?? []) : []
+  ));
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const messagesThreadKeyRef = useRef<string | null>(currentThreadKey);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [historyReloadRevision, setHistoryReloadRevision] = useState(0);
@@ -193,11 +368,19 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   const historyRecoveryLocalMessagesRef = useRef<Map<string, Map<string, ChatMessage>>>(new Map());
   const historyRecoveryRetryCountsRef = useRef<Map<string, number>>(new Map());
   const currentThreadRef = useRef({ workspaceId, sessionId });
+  const onTurnSettledRef = useRef(onTurnSettled);
   currentThreadRef.current = { workspaceId, sessionId };
+  onTurnSettledRef.current = onTurnSettled;
   // F2: true only after a real session's history fetch has landed. The wizard
   // auto-send waits on this so its optimistic turn isn't clobbered by the
   // history-replace that fires when the session id resolves.
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyState, setHistoryState] = useState<ChatHistoryState>({
+    threadKey: null,
+    status: 'idle',
+    error: null,
+  });
+  const historyReadyThreadRef = useRef<string | null>(null);
   const activeDispatchRef = useRef<{
     controller: AbortController;
     workspaceId: string;
@@ -210,13 +393,16 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   // QUEUE behind the in-flight one — the optimistic user turn renders at once
   // with a truthful `queued` marker and dispatches when the current reply ends.
   const inFlightRef = useRef(false);
+  const sessionTransitionBlockRef = useRef<{ cacheKey: string } | null>(null);
   const queueRef = useRef<Array<{
     id: string;
     content: string;
     retry?: boolean;
+    retryTarget?: ChatRetryTarget;
     model?: string;
     persona?: string;
     autonomy?: AutonomyState;
+    turnConflictAttempts?: number;
     workspaceId: string;
     sessionId: string;
   }>>([]);
@@ -224,11 +410,12 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   const runDispatchRef = useRef<
     (
       content: string,
-      opts: { retry?: boolean } | undefined,
+      opts: { retry?: boolean; retryTarget?: ChatRetryTarget } | undefined,
       optimisticId?: string,
       turnModel?: string,
       turnPersona?: string,
       turnAutonomy?: AutonomyState,
+      turnConflictAttempts?: number,
     ) => Promise<boolean>
   >(async () => false);
 
@@ -249,11 +436,12 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     if (next) {
       void runDispatchRef.current(
         next.content,
-        { retry: next.retry },
+        { retry: next.retry, retryTarget: next.retryTarget },
         next.id,
         next.model,
         next.persona,
         next.autonomy,
+        next.turnConflictAttempts,
       );
     }
   }, []);
@@ -283,7 +471,19 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
 
   // Cancel any in-flight stream on unmount
   useEffect(() => {
-    return () => { activeDispatchRef.current?.controller.abort(); };
+    return () => {
+      sessionTransitionBlockRef.current = null;
+      const activeDispatch = activeDispatchRef.current;
+      if (!activeDispatch) return;
+      activeDispatchRef.current = null;
+      activeDispatch.controller.abort();
+      try {
+        void Promise.resolve(adapter.abortAgent(
+          activeDispatch.workspaceId,
+          activeDispatch.sessionId,
+        )).catch(() => { /* best-effort */ });
+      } catch { /* adapter unavailable */ }
+    };
   }, []);
 
   // Load history when session changes
@@ -294,6 +494,12 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     const historyRecoveryLocalMessages = historyRecoveryLocalMessagesRef.current;
     const historyRecoveryRetryCounts = historyRecoveryRetryCountsRef.current;
     let effectPendingHistory: PendingHistoryLoad | null = null;
+    if (
+      sessionTransitionBlockRef.current
+      && sessionTransitionBlockRef.current.cacheKey !== currentThreadKey
+    ) {
+      sessionTransitionBlockRef.current = null;
+    }
     const activeDispatch = activeDispatchRef.current;
     if (
       activeDispatch
@@ -315,6 +521,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     let isHistoryRecovery = false;
     if (workspaceId && sessionId) {
       const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+      setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
       recoveryLocalIds = historyRecoveryLocalIds.get(cacheKey);
       recoveryLocalMessages = historyRecoveryLocalMessages.get(cacheKey);
       isHistoryRecovery = (
@@ -328,6 +535,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         localMessageIds: new Set(recoveryLocalIds ?? []),
         localMessages: new Map(recoveryLocalMessages ?? []),
         suppressedMessageIds: new Set(),
+        suppressedRetryTail: null,
         ready,
         release: releaseHistory,
       };
@@ -336,6 +544,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       // Lane C (2.6-chat) cache-first paint: seed from the last-known thread so a
       // return to a visited session renders instantly, then refresh silently.
       const cached = readChatThreadCache(cacheKey);
+      messagesThreadKeyRef.current = cacheKey;
       setMessages(isHistoryRecovery
         ? Array.from(pendingHistory.localMessages.values())
         : (cached ?? []));
@@ -347,10 +556,14 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             || historyGenerationRef.current !== generation
             || pendingHistoryRef.current !== pendingHistory
           ) return;
-          const shaped = history.map(ensureBlocks);
+          const shaped = suppressRetriedHistoryTail(
+            history.map(ensureBlocks),
+            pendingHistory.suppressedRetryTail,
+          );
           const visibleHistory = pendingHistory.suppressedMessageIds.size === 0
             ? shaped
             : shaped.filter(message => !pendingHistory.suppressedMessageIds.has(message.id));
+          messagesThreadKeyRef.current = cacheKey;
           setMessages(prev => {
             if (pendingHistory.localMessageIds.size === 0) return visibleHistory;
             const localTurns = new Map(pendingHistory.localMessages);
@@ -362,6 +575,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             return mergeAuthoritativeHistory(visibleHistory, Array.from(localTurns.values()));
           });
           writeChatThreadCache(cacheKey, visibleHistory);
+          historyReadyThreadRef.current = cacheKey;
           historyFetchSucceeded = true;
         })
         .catch((err) => {
@@ -369,7 +583,10 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
           console.error('[useChat] history fetch failed:', err);
           // Keep a good cached paint on a transient refresh failure; only clear
           // when there was nothing to show.
-          if (!cached && pendingHistory.localMessageIds.size === 0) setMessages([]);
+          if (!cached && pendingHistory.localMessageIds.size === 0) {
+            messagesThreadKeyRef.current = cacheKey;
+            setMessages([]);
+          }
         })
         .finally(() => {
           pendingHistory.release();
@@ -385,10 +602,26 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               const retryCount = historyRecoveryRetryCounts.get(cacheKey) ?? 0;
               if (retryCount < 1) {
                 historyRecoveryRetryCounts.set(cacheKey, retryCount + 1);
+                setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
                 setHistoryReloadRevision(revision => revision + 1);
+              } else {
+                setHistoryState({
+                  threadKey: cacheKey,
+                  status: 'error',
+                  error: HISTORY_LOAD_ERROR,
+                });
               }
             } else {
+              // Ordinary history loads are considered settled for this exact
+              // thread even when a transient refresh fails. Cached/local chat
+              // remains usable; failed-clear recovery stays fail-closed above.
+              historyReadyThreadRef.current = cacheKey;
               setHistoryLoaded(true);
+              setHistoryState({
+                threadKey: cacheKey,
+                status: historyFetchSucceeded ? 'ready' : 'error',
+                error: historyFetchSucceeded ? null : HISTORY_LOAD_ERROR,
+              });
             }
           }
           if (
@@ -407,13 +640,15 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       pendingHistoryRef.current = null;
       // No session yet — leave historyLoaded false so an auto-send waits for a
       // real session's history to land (never race the replace below).
+      messagesThreadKeyRef.current = null;
       setMessages([]);
+      setHistoryState({ threadKey: null, status: 'idle', error: null });
     }
     return () => {
       cancelled = true;
       effectPendingHistory?.release();
     };
-  }, [workspaceId, sessionId, historyReloadRevision, cancelActiveDispatch]);
+  }, [workspaceId, sessionId, currentThreadKey, historyReloadRevision, cancelActiveDispatch]);
 
   // Lane C: persist the SETTLED thread (never mid-stream partials or queued
   // turns) so a remount/return paints instantly from the cache above.
@@ -434,19 +669,23 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     if (messages.some((m) => m.queued)) return;
     const settledMessages = messages.filter(message => !message.draft);
     if (settledMessages.length === 0) return;
-    writeChatThreadCache(cacheKey, settledMessages);
+    writeChatThreadCache(
+      cacheKey,
+      stripLiveToolContextReceipts(stripLiveMemoryReceipts(settledMessages)),
+    );
   }, [messages, workspaceId, sessionId, isLoading]);
 
   const runDispatch = useCallback(async (
     content: string,
-    opts?: { retry?: boolean },
+    opts?: { retry?: boolean; retryTarget?: ChatRetryTarget },
     optimisticId?: string,
     turnModel?: string,
     turnPersona?: string,
     turnAutonomy?: AutonomyState,
+    turnConflictAttempts = 0,
   ): Promise<boolean> => {
-    if (!workspaceId || !content.trim()) return false;
-    if (sessionId) setHistoryLoaded(true);
+    if (!workspaceId || !sessionId || !content.trim()) return false;
+    setHistoryLoaded(true);
     setPendingApproval(null);
     inFlightRef.current = true;
     // F2: report send success so the wizard auto-send knows whether to clear
@@ -546,29 +785,55 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       const autonomyPayload = turnAutonomy && turnAutonomy.level !== 'normal'
         ? { level: turnAutonomy.level, expiresAt: turnAutonomy.expiresAt ?? undefined }
         : undefined;
-      const eventStream = turnModel
+      const eventStream = opts?.retryTarget
         ? adapter.sendMessage(
           workspaceId,
           content,
           sessionId || undefined,
           turnPersona,
           autonomyPayload,
-          opts?.retry,
+          opts.retry,
           turnModel,
+          opts.retryTarget,
         )
-        : adapter.sendMessage(
-          workspaceId,
-          content,
-          sessionId || undefined,
-          turnPersona,
-          autonomyPayload,
-          opts?.retry,
-        );
+        : turnModel
+          ? adapter.sendMessage(
+            workspaceId,
+            content,
+            sessionId || undefined,
+            turnPersona,
+            autonomyPayload,
+            opts?.retry,
+            turnModel,
+          )
+          : adapter.sendMessage(
+            workspaceId,
+            content,
+            sessionId || undefined,
+            turnPersona,
+            autonomyPayload,
+            opts?.retry,
+          );
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
         if (terminalEventSeen) continue;
+        if (evt.type === 'error' && data?.code === 'SESSION_TURN_IN_PROGRESS') {
+          const conflict = new Error('The previous response is still stopping.');
+          conflict.name = 'ChatSessionTurnInProgressError';
+          throw conflict;
+        }
+        if (evt.type === 'done') {
+          const canonicalContent = typeof data?.content === 'string'
+            ? data.content
+            : legacyCanonicalContent;
+          if (!canonicalContent.trim()) {
+            const emptyResponse = new Error('The model returned an empty response. Please retry.');
+            emptyResponse.name = 'ChatStreamIncompleteError';
+            throw emptyResponse;
+          }
+        }
         const isTerminalEvent = evt.type === 'done' || evt.type === 'error';
         const legacyTokenContent = evt.type === 'token'
           ? typeof data === 'string' ? data : (data?.content as string ?? '')
@@ -576,6 +841,8 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         if (evt.type === 'token') legacyCanonicalContent += legacyTokenContent;
         if (evt.type === 'error') failed = true;
         if (isTerminalEvent) terminalEventSeen = true;
+        const retryTargetStale = evt.type === 'error'
+          && data?.code === 'RETRY_TARGET_STALE';
         if (evt.type === 'approval_request' || evt.type === 'approval_required') {
           const currentThread = currentThreadRef.current;
           if (
@@ -589,7 +856,30 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
           setPendingApproval(null);
         }
 
+        if (retryTargetStale) {
+          const cacheKey = chatThreadCacheKey(
+            activeDispatch.workspaceId,
+            activeDispatch.sessionId,
+          );
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory?.cacheKey === cacheKey) {
+            historyGenerationRef.current += 1;
+            pendingHistory.release();
+            pendingHistoryRef.current = null;
+          }
+          historyReadyThreadRef.current = null;
+          setHistoryLoaded(false);
+          setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
+          setHistoryReloadRevision(revision => revision + 1);
+        }
+
         setMessages(prev => {
+          if (retryTargetStale) {
+            return readChatThreadCache(chatThreadCacheKey(
+              activeDispatch.workspaceId,
+              activeDispatch.sessionId,
+            )) ?? [];
+          }
           const msgs = [...prev];
           const targetIdx = msgs.findIndex(m => m.id === assistantId);
           const last = targetIdx >= 0 ? msgs[targetIdx] : undefined;
@@ -600,6 +890,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
           const blocks = [...(last.blocks || [])];
           let toolsUpdate: ToolExecution[] | null = null;
           let modelUpdate: string | null = null;
+          let memoryContextUpdate: ChatMessage['memoryContext'];
           let draftUpdate: ChatMessage['draft'] | null | undefined;
 
           switch (evt.type) {
@@ -659,7 +950,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             case 'tool_start': {
               draftUpdate = clearDraftPreview(last.draft, legacyTurnId);
               const toolName = (data?.name as string) ?? 'unknown';
-              const toolId = toolName + '-' + Date.now();
+              const toolId = `${toolName}-${nextBlockId('tool')}`;
               blocks.push({
                 type: 'tool_use',
                 id: toolId,
@@ -675,12 +966,17 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
 
             case 'tool_end': {
               const toolName = data?.name as string;
-              const result = data?.result as string;
+              const reportedResult = typeof data?.result === 'string' ? data.result : '';
               const duration = data?.duration as number | undefined;
+              const statusReported = typeof data?.isError === 'boolean';
+              const status = data?.isError === false ? 'done' as const : 'error' as const;
+              const result = statusReported
+                ? reportedResult
+                : `Tool completion status was not reported${reportedResult ? `\n${reportedResult}` : ''}`;
               for (let i = blocks.length - 1; i >= 0; i--) {
                 const b = blocks[i];
                 if (b.type === 'tool_use' && b.name === toolName && b.status === 'running') {
-                  blocks[i] = { ...b, status: 'done', result, duration };
+                  blocks[i] = { ...b, status, result, duration };
                   break;
                 }
               }
@@ -694,10 +990,16 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               }
               // Legacy tools[] — immutable update
               if (last.tools && toolName) {
-                const idx = last.tools.findIndex(t => t.name === toolName && t.status === 'running');
+                let idx = -1;
+                for (let i = last.tools.length - 1; i >= 0; i--) {
+                  if (last.tools[i]?.name === toolName && last.tools[i]?.status === 'running') {
+                    idx = i;
+                    break;
+                  }
+                }
                 if (idx >= 0) {
                   toolsUpdate = last.tools.map((t, ti) =>
-                    ti === idx ? { ...t, status: 'done' as const, output: result, duration } : t
+                    ti === idx ? { ...t, status, output: result, duration } : t
                   );
                 }
               }
@@ -731,16 +1033,18 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             case 'done': {
               draftUpdate = null;
               setPendingApproval(null);
-              // Mark all running blocks as done — type-narrowed, no unsafe cast
+              const missingToolResult = 'Tool completion was not reported';
+              // Thinking may settle at terminal done. A tool cannot truthfully
+              // settle as successful unless its own tool_result arrived.
               for (let i = 0; i < blocks.length; i++) {
                 const b = blocks[i];
                 if (b.type === 'step' && b.status === 'running') {
                   blocks[i] = { ...b, status: 'done' };
                 } else if (b.type === 'tool_use' && b.status === 'running') {
-                  blocks[i] = { ...b, status: 'done' };
+                  blocks[i] = { ...b, status: 'error', result: missingToolResult };
                 }
               }
-              if (last.tools) toolsUpdate = settleRunningTools(last.tools);
+              if (last.tools) toolsUpdate = settleRunningTools(last.tools, missingToolResult);
               const doneContent = typeof data?.content === 'string'
                 ? data.content
                 : last.draft?.turnId === legacyTurnId
@@ -749,6 +1053,18 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               blocks.splice(0, blocks.length, ...replaceTextBlocks(blocks, doneContent));
               const resolvedModel = data?.model;
               if (typeof resolvedModel === 'string' && resolvedModel) modelUpdate = resolvedModel;
+              memoryContextUpdate = normalizeMemoryContextReceipt(
+                data?.memoryContext,
+                `${activeDispatch.workspaceId}\u0000${activeDispatch.sessionId}\u0000${assistantId}`,
+              );
+              const contextMetrics = normalizeToolContextMetrics(data?.contextMetrics);
+              if (contextMetrics) {
+                blocks.push({
+                  type: 'tool_context',
+                  blockId: nextBlockId('tool-context'),
+                  metrics: contextMetrics,
+                });
+              }
               break;
             }
 
@@ -769,12 +1085,30 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
                 content,
                 ...(toolsUpdate && { tools: toolsUpdate }),
                 ...(modelUpdate && { model: modelUpdate }),
+                ...(memoryContextUpdate && { memoryContext: memoryContextUpdate }),
                 ...(draftUpdate !== undefined && { draft: draftUpdate ?? undefined }),
               }
               : m
           );
         });
-        if (isTerminalEvent) break;
+        if (isTerminalEvent) {
+          const currentThread = currentThreadRef.current;
+          if (
+            activeDispatchRef.current === activeDispatch
+            && currentThread.workspaceId === activeDispatch.workspaceId
+            && (currentThread.sessionId ?? '') === activeDispatch.sessionId
+          ) {
+            try {
+              onTurnSettledRef.current?.({
+                workspaceId: activeDispatch.workspaceId,
+                sessionId: activeDispatch.sessionId,
+              });
+            } catch {
+              // Session metadata refresh is best-effort and must not fail the turn.
+            }
+          }
+          break;
+        }
       }
       if (!terminalEventSeen && !controller.signal.aborted) {
         const incomplete = new Error('The response ended before completion. Please retry.');
@@ -786,6 +1120,53 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         // User Stop is a successful cancellation, not a backend outage. Preserve
         // the partial answer and let finally release the composer/queue.
         return true;
+      }
+      const isTurnConflict = e instanceof Error
+        && e.name === 'ChatSessionTurnInProgressError';
+      if (isTurnConflict && turnConflictAttempts < CHAT_TURN_CONFLICT_MAX_RETRIES) {
+        setMessages(prev => prev.map(message => message.id === assistantId
+          ? { ...message, retrying: true }
+          : message));
+        await new Promise(resolve => setTimeout(
+          resolve,
+          25 * (2 ** turnConflictAttempts),
+        ));
+        if (controller.signal.aborted) return true;
+        const queuedId = optimisticId ?? immediateUserId;
+        const currentThread = currentThreadRef.current;
+        if (
+          queuedId
+          && activeDispatchRef.current === activeDispatch
+          && currentThread.workspaceId === activeDispatch.workspaceId
+          && (currentThread.sessionId ?? '') === activeDispatch.sessionId
+        ) {
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory?.cacheKey === chatThreadCacheKey(
+            activeDispatch.workspaceId,
+            activeDispatch.sessionId,
+          )) {
+            pendingHistory.localMessageIds.delete(assistantId);
+          }
+          setPendingApproval(null);
+          setMessages(prev => prev
+            .filter(message => message.id !== assistantId)
+            .map(message => message.id === queuedId
+              ? { ...message, queued: true }
+              : message));
+          queueRef.current.unshift({
+            id: queuedId,
+            content: trimmed,
+            retry: opts?.retry,
+            retryTarget: opts?.retryTarget,
+            model: turnModel,
+            persona: turnPersona,
+            autonomy: turnAutonomy ? { ...turnAutonomy } : undefined,
+            turnConflictAttempts: turnConflictAttempts + 1,
+            workspaceId: activeDispatch.workspaceId,
+            sessionId: activeDispatch.sessionId,
+          });
+          return true;
+        }
       }
       failed = true;
       setPendingApproval(null);
@@ -802,7 +1183,9 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       const isTier403 = (httpErr?.body as { error?: string } | undefined)?.error === 'TIER_INSUFFICIENT';
       const isIncompleteStream = e instanceof Error && e.name === 'ChatStreamIncompleteError';
       const isUnexpectedAbort = e instanceof Error && e.name === 'AbortError';
-      const message = isIncompleteStream
+      const message = isTurnConflict
+        ? 'The previous response is still stopping. Please retry in a moment.'
+        : isIncompleteStream
         ? e.message
         : isUnexpectedAbort
         ? 'The response was interrupted before completion. Please retry.'
@@ -850,9 +1233,14 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   }, [workspaceId, sessionId, flushNextQueuedFor]);
   runDispatchRef.current = runDispatch;
 
-  const sendMessage = useCallback(async (content: string, opts?: { retry?: boolean }): Promise<boolean> => {
-    if (!workspaceId || !content.trim()) return false;
+  const sendMessage = useCallback(async (
+    content: string,
+    opts?: { retry?: boolean; retryTarget?: ChatRetryTarget; onAccepted?: () => void },
+  ): Promise<boolean> => {
+    if (!workspaceId || !sessionId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
+    if (messagesThreadKeyRef.current !== cacheKey) return false;
+    if (sessionTransitionBlockRef.current?.cacheKey === cacheKey) return false;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
       || recoveringHistoryThreadsRef.current.has(cacheKey)
@@ -867,6 +1255,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         id,
         content: trimmed,
         retry: opts?.retry,
+        retryTarget: opts?.retryTarget,
         model: model || undefined,
         persona,
         autonomy: autonomy ? { ...autonomy } : undefined,
@@ -887,9 +1276,10 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         timestamp: new Date().toISOString(),
         queued: true,
       }]);
+      opts?.onAccepted?.();
       return true;
     }
-    return runDispatch(
+    const dispatch = runDispatch(
       content,
       opts,
       undefined,
@@ -897,6 +1287,8 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       persona,
       autonomy ? { ...autonomy } : undefined,
     );
+    opts?.onAccepted?.();
+    return dispatch;
   }, [workspaceId, sessionId, model, persona, autonomy, runDispatch]);
 
   // F4: re-issue the last user turn after a failure. Drops the failed
@@ -907,6 +1299,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     const cacheKey = workspaceId && sessionId
       ? chatThreadCacheKey(workspaceId, sessionId)
       : null;
+    if (!cacheKey || messagesThreadKeyRef.current !== cacheKey) return;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
       || recoveringHistoryThreadsRef.current.has(cacheKey)
@@ -917,54 +1310,144 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     }
     if (idx === -1) return;
     const content = messages[idx].content;
+    const retryTail = messages.slice(idx);
+    const expectedMessageCount = persistedRetryMessageCount(messages);
+    let retryTarget: ChatRetryTarget;
+    if (retryTail.length === 1 && retryTail[0].role === 'user') {
+      retryTarget = {
+        kind: 'lone-user',
+        expectedMessageCount,
+      };
+    } else if (
+      retryTail.length === 2
+      && retryTail[0].role === 'user'
+      && retryTail[1].role === 'assistant'
+    ) {
+      retryTarget = retryTail[1].draft?.status === 'stopped'
+          ? {
+              kind: 'lone-user',
+              expectedMessageCount,
+            }
+          : {
+              kind: 'assistant-pair',
+              expectedMessageCount,
+              expectedAssistantContent: persistedAssistantRetryContent(retryTail[1]),
+            };
+    } else {
+      return;
+    }
     if (cacheKey) {
       const pendingHistory = pendingHistoryRef.current;
       if (pendingHistory?.cacheKey === cacheKey) {
-        for (const message of messages.slice(idx)) {
+        for (const message of retryTail) {
           pendingHistory.suppressedMessageIds.add(message.id);
         }
+        pendingHistory.suppressedRetryTail = { userContent: content, target: retryTarget };
       }
     }
     setMessages(prev => prev.slice(0, idx));
-    void sendMessage(content, { retry: true });
+    void sendMessage(content, { retry: true, retryTarget });
   }, [messages, isLoading, workspaceId, sessionId, sendMessage]);
 
-  // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. Aborts THIS
-  // stream's controller (the for-await breaks before appending the next event),
-  // flips the composer back to send at once, and best-effort tells the server
-  // agent loop to stop. The partial answer already rendered stays untouched — no
-  // rollback. Idempotent: the stream's own `finally` also clears these.
-  const stopStreaming = useCallback(() => {
+  // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. The
+  // default Stop action preserves queued FIFO. A session transition instead
+  // discards queued work and revokes this dispatch's ownership before awaiting
+  // the exact server cancellation, so a late generator cannot flush into the
+  // old thread while the new session is being created.
+  const stopStreaming = useCallback(async (
+    options?: { discardQueued?: boolean },
+  ): Promise<void | (() => void)> => {
     const activeDispatch = activeDispatchRef.current;
     if (!inFlightRef.current || !activeDispatch) return;
+    const discardQueued = options?.discardQueued === true;
+    const discardedQueue = discardQueued ? [...queueRef.current] : [];
+    const discardedIds = new Set(discardedQueue.map(entry => entry.id));
+    const discardedMessages = new Map(messagesRef.current
+      .filter(message => message.queued && discardedIds.has(message.id))
+      .map(message => [message.id, message]));
+    let transitionBlock: { cacheKey: string } | null = null;
+    if (discardQueued) {
+      transitionBlock = {
+        cacheKey: chatThreadCacheKey(
+          activeDispatch.workspaceId,
+          activeDispatch.sessionId,
+        ),
+      };
+      sessionTransitionBlockRef.current = transitionBlock;
+      activeDispatchRef.current = null;
+      queueRef.current = [];
+      inFlightRef.current = false;
+    }
     activeDispatch.controller.abort();
     setPendingApproval(null);
-    setMessages(prev => prev.map(message => {
-      if (message.id !== activeDispatch.assistantId || !message.draft) return message;
-      const failure = 'Stopped by user';
-      return {
-        ...message,
-        blocks: settleRunningBlocks(message.blocks || [], failure),
-        draft: { ...message.draft, status: 'stopped' as const },
-        ...(message.tools && { tools: settleRunningTools(message.tools, failure) }),
-      };
-    }));
-    inFlightRef.current = false;
+    setMessages(prev => prev
+      .filter(message => !discardQueued || !message.queued)
+      .map(message => {
+        if (message.id !== activeDispatch.assistantId || !message.draft) return message;
+        const failure = 'Stopped by user';
+        return {
+          ...message,
+          retrying: false,
+          blocks: settleRunningBlocks(message.blocks || [], failure),
+          draft: { ...message.draft, status: 'stopped' as const },
+          ...(message.tools && { tools: settleRunningTools(message.tools, failure) }),
+        };
+      }));
     setIsLoading(false);
+    let cancellation: Promise<unknown>;
     try {
-      void Promise.resolve(adapter.abortAgent(
+      cancellation = Promise.resolve(adapter.abortAgent(
         activeDispatch.workspaceId,
         activeDispatch.sessionId,
-      )).catch(() => { /* best-effort */ });
-    } catch { /* adapter unavailable */ }
-    // Preserve user-entered order: if a turn was already queued, promote it
-    // before a newly typed send can bypass the queue after Stop releases input.
-    flushNextQueuedFor(activeDispatch.workspaceId, activeDispatch.sessionId);
+      )).catch(() => undefined);
+    } catch {
+      cancellation = Promise.resolve();
+    }
+    // Manual Stop leaves internal ownership intact until runDispatch.finally.
+    // A new send can still be accepted into FIFO, but cannot overlap the old
+    // server transaction. The discard path has revoked ownership above.
+    await cancellation;
+    if (transitionBlock) {
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        if (sessionTransitionBlockRef.current !== transitionBlock) return;
+        sessionTransitionBlockRef.current = null;
+
+        const currentThread = currentThreadRef.current;
+        if (
+          currentThread.workspaceId !== activeDispatch.workspaceId
+          || (currentThread.sessionId ?? '') !== activeDispatch.sessionId
+        ) return;
+
+        const queuedIds = new Set(queueRef.current.map(entry => entry.id));
+        const restorable = discardedQueue.filter(entry => !queuedIds.has(entry.id));
+        if (restorable.length === 0) return;
+        queueRef.current.push(...restorable);
+        setMessages(prev => {
+          const visibleIds = new Set(prev.map(message => message.id));
+          const restored = restorable
+            .filter(entry => !visibleIds.has(entry.id))
+            .map(entry => discardedMessages.get(entry.id) ?? {
+              id: entry.id,
+              role: 'user' as const,
+              content: entry.content,
+              blocks: [{ type: 'text' as const, blockId: nextBlockId('text'), content: entry.content }],
+              timestamp: new Date().toISOString(),
+              queued: true,
+            });
+          return restored.length > 0 ? [...prev, ...restored] : prev;
+        });
+        flushNextQueuedFor(activeDispatch.workspaceId, activeDispatch.sessionId);
+      };
+    }
   }, [flushNextQueuedFor]);
 
   const clearHistory = useCallback(async () => {
     if (sessionId && workspaceId) {
       const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+      if (messagesThreadKeyRef.current !== cacheKey) return false;
       const clearCounts = clearingThreadCountsRef.current;
       const previousClearCount = clearCounts.get(cacheKey) ?? 0;
       if (previousClearCount === 0) {
@@ -1018,12 +1501,19 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         historyRecoveryLocalMessagesRef.current.set(cacheKey, recoveryLocalMessages);
         historyRecoveryRetryCountsRef.current.set(cacheKey, 0);
       }
+      const clearGeneration = historyGenerationRef.current;
       const cancellation = cancelActiveDispatch();
       setHistoryLoaded(true);
       await cancellation;
       try {
         await clearHistoryAfterAbort(workspaceId, sessionId);
         clearSucceededThreadsRef.current.add(cacheKey);
+        const clearOwner = currentThreadRef.current;
+        const remainsCurrent = (
+          clearOwner.workspaceId === workspaceId
+          && clearOwner.sessionId === sessionId
+          && historyGenerationRef.current === clearGeneration
+        );
         // The user may have switched A -> B -> A while DELETE A was pending,
         // starting a fresh GET A after the invalidation above. Invalidate that
         // exact thread's newer snapshot without disturbing an active B fetch.
@@ -1040,8 +1530,11 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         ) {
           setMessages([]);
           setHistoryLoaded(true);
+          historyReadyThreadRef.current = cacheKey;
+          setHistoryState({ threadKey: cacheKey, status: 'ready', error: null });
         }
         writeChatThreadCache(cacheKey, []);
+        return remainsCurrent;
       } catch (err) {
         console.error('[useChat] clear history failed:', err);
         if (activeDispatch) {
@@ -1049,6 +1542,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             message.id === activeDispatch.assistantId && message.draft
               ? {
                 ...message,
+                retrying: false,
                 blocks: settleRunningBlocks(message.blocks || [], 'Clear failed'),
                 draft: { ...message.draft, status: 'stopped' as const },
                 ...(message.tools && { tools: settleRunningTools(message.tools, 'Clear failed') }),
@@ -1069,6 +1563,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             historyRecoveryLocalMessagesRef.current.set(cacheKey, nextRecoveryLocalMessages);
           }
         }
+        return false;
       } finally {
         const remaining = (clearCounts.get(cacheKey) ?? 1) - 1;
         if (remaining <= 0) {
@@ -1096,6 +1591,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               && currentThread.sessionId === sessionId
             ) {
               setHistoryLoaded(false);
+              setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
               setHistoryReloadRevision(revision => revision + 1);
             }
           } else {
@@ -1109,13 +1605,28 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         }
       }
     }
+    return false;
   }, [sessionId, workspaceId, messages, cancelActiveDispatch]);
+
+  const retryHistory = useCallback(() => {
+    if (!workspaceId || !sessionId) return;
+    const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+    if (pendingHistoryRef.current?.cacheKey === cacheKey) return;
+
+    setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
+    // A manual retry is a fresh authoritative read. Failed-clear recovery must
+    // remain fail-closed; ordinary refresh failures become usable again when
+    // the retry settles, matching the existing exact-thread readiness rule.
+    setHistoryLoaded(false);
+    setHistoryReloadRevision(revision => revision + 1);
+  }, [sessionId, workspaceId]);
 
   const approveAction = useCallback(async (
     requestId: string,
     approved: boolean,
     opts: { always?: boolean } = {},
   ) => {
+    if (messagesThreadKeyRef.current !== currentThreadKey) return;
     const approval = pendingApproval;
     if (!approval || approval.requestId !== requestId) return;
     try {
@@ -1132,7 +1643,47 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     setPendingApproval(current =>
       current?.requestId === requestId ? null : current
     );
-  }, [pendingApproval]);
+  }, [currentThreadKey, pendingApproval]);
 
-  return { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction };
+  const historyReady = Boolean(
+    historyLoaded
+    && workspaceId
+    && sessionId
+    && historyReadyThreadRef.current === chatThreadCacheKey(workspaceId, sessionId),
+  );
+
+  const currentHistoryThreadKey = currentThreadKey;
+  const historyStatus: ChatHistoryStatus = currentHistoryThreadKey === null
+    ? 'idle'
+    : historyState.threadKey === currentHistoryThreadKey
+      ? historyState.status
+      : 'loading';
+  const historyError = (
+    currentHistoryThreadKey !== null
+    && historyState.threadKey === currentHistoryThreadKey
+  ) ? historyState.error : null;
+  const threadStateOwned = messagesThreadKeyRef.current === currentThreadKey;
+  const visibleMessages = threadStateOwned
+    ? messages
+    : currentThreadKey && recoveringHistoryThreadsRef.current.has(currentThreadKey)
+      ? Array.from(historyRecoveryLocalMessagesRef.current.get(currentThreadKey)?.values() ?? [])
+      : currentThreadKey
+        ? (readChatThreadCache(currentThreadKey) ?? [])
+        : [];
+
+  return {
+    messages: visibleMessages,
+    isLoading: threadStateOwned ? isLoading : false,
+    historyLoaded,
+    historyReady,
+    historyStatus,
+    historyError,
+    retryHistory,
+    sendMessage,
+    retryLastFailed,
+    stopStreaming,
+    clearHistory,
+    pendingApproval: threadStateOwned ? pendingApproval : null,
+    approveAction,
+  };
 };

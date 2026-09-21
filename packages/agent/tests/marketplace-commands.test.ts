@@ -89,6 +89,7 @@ describe('Marketplace Commands', () => {
     expect(result).toContain('2 total');
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/api/marketplace/search?query=research'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -133,6 +134,7 @@ describe('Marketplace Commands', () => {
     expect(result).toContain('2 total');
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/api/marketplace/packs'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -235,6 +237,7 @@ describe('Marketplace Commands', () => {
     expect(result).toContain('1)');
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/api/marketplace/installed'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 

@@ -44,6 +44,8 @@ const ImportStep = ({
   importItems,
   importDone,
   importing,
+  importError,
+  importSuccessMessage,
   onFileImport,
   onImportCommit,
   claudeCodeDetected,
@@ -65,6 +67,16 @@ const ImportStep = ({
         Bring your existing conversations — Waggle extracts decisions, preferences, and knowledge into your persistent memory.
       </p>
     </div>
+
+    {importError && (
+      <p
+        role="alert"
+        aria-live="assertive"
+        className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      >
+        {importError}
+      </p>
+    )}
 
     {/* Claude Code auto-detect banner — only when the sidecar found local files. */}
     {!importDone && claudeCodeDetected?.found && (
@@ -124,7 +136,7 @@ const ImportStep = ({
         {SOURCE_TILES.map((src) => (
           <label
             key={src.id}
-            className="glass-strong rounded-xl p-3.5 cursor-pointer hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary transition-colors text-left group flex flex-col gap-1"
+            className={`glass-strong rounded-xl p-3.5 hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary transition-colors text-left group flex flex-col gap-1 ${importing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
           >
             <span
               aria-hidden="true"
@@ -143,8 +155,10 @@ const ImportStep = ({
               accept=".json,.txt,.md,.csv"
               aria-label={`Import ${src.name} export file`}
               className="sr-only"
+              disabled={importing}
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                e.currentTarget.value = '';
                 if (file) onFileImport(file, src.id);
               }}
             />
@@ -197,7 +211,9 @@ const ImportStep = ({
     {importDone && (
       <div className="glass-strong rounded-xl p-4 mb-4 text-center">
         <Check className="w-6 h-6 text-honey mx-auto mb-2" />
-        <p className="text-sm text-foreground font-display">Memories imported!</p>
+        <p className="text-sm text-foreground font-display">
+          {importSuccessMessage ?? 'Memories imported!'}
+        </p>
         <p className="text-[11px] text-muted-foreground mt-1">
           Find them under Memory → Needs review to curate.
         </p>
@@ -216,7 +232,8 @@ const ImportStep = ({
     <div className="flex items-center justify-end gap-4">
       <button
         onClick={onContinue}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md px-1 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        disabled={importing}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md px-1 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {importDone ? 'Continue →' : 'Skip this step →'}
       </button>
