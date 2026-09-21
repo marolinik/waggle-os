@@ -54,6 +54,13 @@ const CONTEXT_TABLES: Record<string, readonly string[]> = {
     'raw_archive',
     'procedures',
     'meta',
+    // Derived infrastructure rather than domain data, assigned here beside
+    // `meta` for the same reason. Worth being honest about: `row_counts` holds
+    // a row for `knowledge_entities` too, so it is the one table whose CONTENT
+    // spans two contexts. It is a count, not a model of anything, so it does
+    // not move the boundary — but a reader comparing this map to the schema
+    // should see the exception named rather than discover it.
+    'row_counts',
   ],
   /** Entities and relations distilled FROM memory; a different model of it. */
   knowledge: ['knowledge_entities', 'knowledge_relations', 'kg_entity_frames'],

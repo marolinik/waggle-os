@@ -1,23 +1,25 @@
 import type {
   MindDB,
-  IdentityLayer,
-  AwarenessLayer,
-  FrameStore,
-  SessionStore,
-  HybridSearch,
-  KnowledgeGraph,
   Embedder,
   Importance,
   FrameSource,
 } from '@waggle/core';
 import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
-import type { ImprovementSignalStore } from '@waggle/core';
 import type { RiskLevel } from '@waggle/shared';
 import { createCoreLogger } from '@waggle/core';
 import { detectContradiction } from './contradiction-detector.js';
 import { scanForInjection } from './injection-scanner.js';
 import { normalizeForDedup, cosineSimilarity, detectDramaticClaims, deriveConfidence, type ConfidenceLevel } from './text-analysis.js';
+import type {
+  AwarenessPort,
+  FrameStorePort,
+  IdentityPort,
+  ImprovementSignalPort,
+  KnowledgeGraphPort,
+  MemorySearchPort,
+  SessionStorePort,
+} from './memory-ports.js';
 export type { ConfidenceLevel } from './text-analysis.js';
 export { formatCombinedResult } from './result-formatter.js';
 
@@ -47,10 +49,10 @@ export interface ToolDefinition {
 /** Workspace-specific layers for dual-mind routing */
 interface WorkspaceLayers {
   db: MindDB;
-  frames: FrameStore;
-  sessions: SessionStore;
-  search: HybridSearch;
-  knowledge: KnowledgeGraph;
+  frames: FrameStorePort;
+  sessions: SessionStorePort;
+  search: MemorySearchPort;
+  knowledge: KnowledgeGraphPort;
   cognify: CognifyPipeline;
 }
 
@@ -86,12 +88,12 @@ export function createToolUtilizationTracker(totalAvailable: number): ToolUtiliz
 
 export interface MindToolDeps {
   db: MindDB;
-  identity: IdentityLayer;
-  awareness: AwarenessLayer;
-  frames: FrameStore;
-  sessions: SessionStore;
-  search: HybridSearch;
-  knowledge: KnowledgeGraph;
+  identity: IdentityPort;
+  awareness: AwarenessPort;
+  frames: FrameStorePort;
+  sessions: SessionStorePort;
+  search: MemorySearchPort;
+  knowledge: KnowledgeGraphPort;
   cognify?: CognifyPipeline;
   feedback?: FeedbackHandler;
   /** F16: Optional embedder for semantic dedup (cosine similarity) */
@@ -102,11 +104,11 @@ export interface MindToolDeps {
    * detectContradiction fires and we emit a "correction" signal so the
    * evolution / improvement loops can surface the conflict.
    */
-  improvementSignals?: ImprovementSignalStore;
+  improvementSignals?: ImprovementSignalPort;
   /** Dynamic accessor for workspace layers — checked at call time */
   getWorkspaceLayers?: () => WorkspaceLayers | null;
   /** W5.7: Accessor for ALL workspace search instances (for cross-workspace search) */
-  getAllWorkspaceSearches?: () => Array<{ workspaceId: string; workspaceName: string; search: HybridSearch }>;
+  getAllWorkspaceSearches?: () => Array<{ workspaceId: string; workspaceName: string; search: MemorySearchPort }>;
   /** Optional tool utilization tracker for session-level stats */
   toolUtilizationTracker?: ToolUtilizationTracker;
   /**

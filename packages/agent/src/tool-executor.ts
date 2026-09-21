@@ -9,10 +9,10 @@
  *   1. JSON.parse args (early return on parse error — no sanitize, no post-hooks)
  *   2. onToolUse callback
  *   3. Governance.blockedTools — early return on block (fires onToolResult)
- *   4. pre:tool hook — early return on cancel
+ *   4. pre:tool hook — early return on cancel (fires onToolResult)
  *  4b. state-change approval floor — deny confirmation-required ops that reach
  *      here without explicit authorization (defense-in-depth; independent of hooks)
- *   5. pre:memory-write hook (save_memory only) — early return on cancel
+ *   5. pre:memory-write hook (save_memory only) — early return on cancel (fires onToolResult)
  *   6. LoopGuard.check — produces error result if duplicate
  *   7. Execute (or capability-router fallback or unknown-tool error)
  *   8. evaluateExternalMemoryIngress — REVIEW C2: BEFORE onToolResult / post-hooks
@@ -220,8 +220,15 @@ export async function executeToolCall(
       memoryType: fnArgs.type as string | undefined,
     });
     if (memoryHookResult.cancelled) {
+      const blockedMsg = `[BLOCKED] Memory write blocked: ${memoryHookResult.reason ?? 'No reason given'}`;
+      // Same disclosure as the `pre:tool` refusal above and the execution floor
+      // below. This branch was missed when that one was fixed: `onToolUse` has
+      // already fired for this call, so without it a blocked memory write is an
+      // announced tool that never resolves. Reports the decision, does not
+      // change it.
+      if (onToolResult) onToolResult(fnName, fnArgs, blockedMsg);
       return {
-        content: `[BLOCKED] Memory write blocked: ${memoryHookResult.reason ?? 'No reason given'}`,
+        content: blockedMsg,
         toolCallId: toolCall.id,
         countedAsUsed: false,
         succeeded: false,

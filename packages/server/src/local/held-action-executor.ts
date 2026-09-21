@@ -175,6 +175,26 @@ export async function executeHeldAction(server: FastifyInstance, row: PendingAct
     return { ok: false, status: 'failed', error: 'corrupt args_json' };
   }
 
+  // Re-check the allowlist against the STORED tool name, not just at enqueue.
+  //
+  // `enqueueHeldAction` refuses a non-proposable tool before anything else, so
+  // in a single run of one version this is redundant. It is not redundant
+  // across versions: rows outlive the code that wrote them, and the allowlist
+  // is the kind of list that gets tightened. A row written when a tool was
+  // proposable would otherwise still execute after it stopped being one.
+  //
+  // It also carries a load-bearing invariant that nothing else states. The
+  // `isCriticalNeverAutopass` call below coerces model-supplied arguments
+  // (`String(args?.command)`) for exactly two tools, `bash` and `git_push`, and
+  // is safe here only because `isProposableTool` admits neither. That safety
+  // lives in two functions in two files with no link between them; this check
+  // is where the link is enforced, and `held-action-executor.test.ts` fails if
+  // either end moves. See TD-CHAT-47.
+  if (!isProposableTool(row.tool_name)) {
+    store.updatePendingActionResult(row.id, { status: 'failed', error: 'tool is no longer proposable', executedAt: nowIso() });
+    return { ok: false, status: 'failed', error: 'tool is no longer proposable' };
+  }
+
   // Re-validate at execute — the args came from an LLM proposal, and time has
   // passed since enqueue. A critical action or injection-tripping args must not
   // run even though a human clicked approve.

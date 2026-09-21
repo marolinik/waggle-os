@@ -284,9 +284,15 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
  *
  * The lookup is not gated by the injected-runner flag, so the object seam still
  * runs it and the resolved policies arrive on the config the runner receives —
- * which is the sensing point these pins use. A lookup that throws is swallowed
- * and the turn runs with no policy at all (QUIRK TD-CHAT-23); a payload that
- * cannot be read is cached before it is validated (QUIRK TD-CHAT-30).
+ * which is the sensing point these pins use.
+ *
+ * This comment used to say a lookup that throws is swallowed (QUIRK TD-CHAT-23)
+ * and that an unreadable payload is cached before validation (QUIRK TD-CHAT-30).
+ * Both were closed in Phase 4 and the two tests directly below now assert the
+ * opposite: the lookup returns a discriminated outcome rather than throwing, an
+ * unreadable payload refuses the turn, and it is validated before it is cached.
+ * What remains of TD-CHAT-23 is only the soft-failure branch ('unavailable'),
+ * which warns and then runs the turn ungoverned — not pinned here.
  */
 describe('POST /api/chat team governance lookup (characterization)', () => {
   let server: FastifyInstance;
@@ -418,6 +424,59 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
       expect(policyCallCount(fetchSpy)).toBe(2);
     } finally {
       fetchSpy.mockRestore();
+    }
+  });
+
+  it('refuses the turn when the team server cannot be reached and nothing is cached', async () => {
+    // TD-CHAT-23's last open half, now closed. This pin was written against the
+    // OLD behavior first (the turn completed with `governancePolicies`
+    // undefined) and then inverted, so the diff between the two commits is the
+    // behavior change itself.
+    //
+    // `unavailable` is narrower than it sounds: `chat-governance.ts:119` serves
+    // a stale cached policy when the call fails, so this branch is reached only
+    // when no policy has ever been fetched for this workspace in this process.
+    // The workspace id is unique per test, so the cache is genuinely cold.
+    //
+    // WHAT THIS CAN AND CANNOT SEE. The branch decides one value -
+    // `governancePolicies` - with three downstream readers: the parent tool
+    // filter (`chat.ts:3492-3496`), the spawn list beside it, and
+    // `securityContext.blockedTools` for children (`:3639`). None is reachable
+    // from here: the first two sit inside `if (!hasCustomRunner)`, which the
+    // injected `agentRunner` seam skips wholesale (docs/TESTING.md "Seam
+    // caveat", TD-CHAT-16), and the third is captured by the spawn closure
+    // rather than exposed on `AgentLoopConfig`. `captured.tools` is empty here
+    // for that reason, so an assertion about a tool being present or absent
+    // would be vacuous. Refusing the turn is observable, which is precisely why
+    // the fixed behavior pins more tightly than the bug did.
+    const workspaceId = createTeamWorkspace('unreachable');
+    const downSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
+      String(input).endsWith(POLICY_PATH)
+        ? new Response('gateway down', { status: 502 })
+        : new Response('', { status: 503 })
+    ));
+    try {
+      const res = await postTurn(workspaceId, 'unreachable governance turn', 'gov-unreachable');
+      expect(res.statusCode).toBe(200);
+
+      const events = parseSSE(res.body);
+      expect(events.some(e => e.event === 'done')).toBe(false);
+      const error = events.find(e => e.event === 'error');
+      expect(error).toBeDefined();
+      // Distinct from the unreadable-payload message above: that one is a fault
+      // to report to an admin, this one is worth retrying.
+      expect(JSON.parse(error!.data).message).toBe(
+        'Team governance policies could not be reached for this workspace. Check your connection and try again.',
+      );
+
+      // The runner is never reached, so no ungoverned turn can have run.
+      expect(captured).toHaveLength(0);
+
+      // The lookup really was attempted - without this the assertions above
+      // would also pass for a workspace with no team server at all.
+      expect(policyCallCount(downSpy)).toBe(1);
+    } finally {
+      downSpy.mockRestore();
     }
   });
 

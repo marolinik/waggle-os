@@ -25,7 +25,7 @@ The other six rows transfer unchanged and are scored honestly.
 
 ## Scorecard
 
-**3/8 at `bda6c191` (entry), 5/8 after this phase's fixes.**
+**3/8 at `bda6c191` (entry), 5/8 after this phase's fixes, 6/8 once R-6 landed (2026-09-19).**
 
 | # | Diagnostic | Entry | Now | Evidence |
 |---|---|---|---|---|
@@ -35,7 +35,7 @@ The other six rows transfer unchanged and are scored honestly.
 | 4 | Deploy without downtime | ✗ | ✗ | No Tauri updater configured; a fix requires a manual reinstall. **R-5**, release-engineering arc |
 | 5 | Health checks verify dependencies | ✓ | ✓ | Local `/health` validates the Anthropic key live, checks the DB, and degrades honestly instead of reporting `ok`. Server-mode `/health` is shallow — **R-4** |
 | 6 | Logs, metrics and traces correlated | ✓ | ✓ | `logTurnEvent` stamps `turnId` on every line; `execution_traces` carries outcome, model, tokens and cost per turn |
-| 7 | Load-tested beyond peak | ✗ | ✗ | Does not transfer as written; the real form is **R-6**, a soak against a grown memory DB |
+| 7 | Load-tested beyond peak | ✗ | **✓** | Does not transfer as written; its real form is a soak against a grown `.mind`, and R-6 built it — `npm run test:soak`, measured at 20k/100k/500k frames. Findings under Query & Resource Findings |
 | 8 | Failure injection practised | ✓ | ✓ | Systematic fault-injection suites: runtime failure, retry chain, post-commit, approval timeout, viewer rejection |
 
 ## Integration-Point Audit
@@ -112,6 +112,63 @@ Note for whoever takes R-3: `packages/hive-mind-core` is the OSS-mirrored substr
 follow the curated forward-port discipline in `CLAUDE.md` §7.5, and each changed query needs a pin
 first.
 
+### What R-6 measured, and how it narrows R-3 (2026-09-19)
+
+A re-count puts the number at **64**, and classifying them matters more than the total. Roughly 20
+are full-scan **by contract** — an erasure that stops at a `LIMIT` is a compliance bug, and so is a
+half-swept `reconcile` or a partial migration backfill. Another 8 are aggregates bounded by group
+cardinality, and ~19 are key-bounded (`getGopFrames(gopId)`, `getRelationsFrom(id)`). Bounding
+those would be a correctness regression dressed as a fix.
+
+The soak (`npm run test:soak`) measured what actually degrades:
+
+| read | 20k frames | 100k | 500k |
+|---|---|---|---|
+| `frames.getStats()` | 7.0 ms | 67.6 ms | **245.4 ms** |
+| `frames.compact()` | 4.3 ms | 71.7 ms | 231.4 ms |
+| `sessions.getActive()` | 0.1 ms / 100 rows | 0.6 ms / 500 | 1.3 ms / **2500 rows** |
+| `frames.getRecent(50)` | 0.5 ms | 0.3 ms | **0.2 ms** |
+| `frames.getGopFrames(gopId)` | 0.6 ms | 1.5 ms | 2.1 ms |
+| `knowledge.getEntities()` | 0.3 ms | 0.4 ms | 0.3 ms |
+
+**Correction (2026-09-19).** The row above first attributed those `getStats` timings to
+`orchestrator.getMemoryStats()`. They are not the same method. `FrameStore.getStats()` runs three
+`GROUP BY` aggregates and is called by `hive-mind-mcp-server` resources and tools — **not** on the
+chat-turn path. `getMemoryStats()` ran three plain `COUNT(*)` queries per mind, which is what runs
+every turn. Measured separately, against the exact three queries:
+
+| per user turn | 100k frames | 500k |
+|---|---|---|
+| three `COUNT(*)` scans (before) | 2.2 ms | 14.6 ms |
+| `MindDB.memoryCounts()` (after) | 0.1 ms | 0.2 ms |
+
+So the per-turn cost was **2–15 ms, not 68–245 ms**. The direction was right and the fix is real —
+a scan that grows with the database replaced by an O(1) read — but an order of magnitude smaller
+than first written. `FrameStore.getStats()`'s own cost was real and is now also addressed — splitting it into its
+three queries said exactly where it lived:
+
+| `FrameStore.getStats()` at 500k frames | before | after |
+|---|---|---|
+| `COUNT(*)` for `total` | 18 ms | reads `row_counts` |
+| `GROUP BY frame_type` | 61 ms | 74 ms (unchanged; variance) |
+| `GROUP BY importance` | **219 ms** | **34 ms** |
+| whole call | **375 ms** | **107 ms** |
+
+`importance` had no index, so grouping on it read every row — 58% of the call. It has five distinct
+values, so the index is small. The remaining 74 ms is the `frame_type` grouping, which already rides
+`idx_frames_type (frame_type, gop_id)`; a dedicated single-column index would shave it further at the
+cost of a second overlapping index on every write, and was judged not worth it.
+
+SQLite has no O(1) row count, so each `COUNT(*)` walks the table; the soak asserts that
+structurally with `EXPLAIN QUERY PLAN` rather than relying on a wall-clock number.
+
+`compact()` is linear and that is correct — it must see every row. `sessions.getActive()` is the
+one row count that grows without limit; 2500 rows is cheap today, but nothing stops it.
+
+So R-3 is not "add `LIMIT` to 64 queries". It is: **a write-counter for the per-turn counts**, then
+a bound on the handful of list reads that genuinely grow (`sessions.getActive`, `install-audit`,
+`cron-store`, `file-indexer`), each pinned first.
+
 ## Health Checks & Metrics
 
 - **Local sidecar `/health`** (`local/index.ts`) is a genuine deep check: it validates the
@@ -148,10 +205,10 @@ Authenticode/signing gates in `docs/production-readiness/09-LAUNCH_RECOMMENDATIO
 
 | # | Item | Priority | Owner | Note |
 |---|---|---|---|---|
-| R-3 | Bound the 65 unbounded `.all()` reads; paginate the list surfaces | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first |
+| R-3 | **Narrowed by R-6; both count paths done.** Not 65 blanket `LIMIT`s: per-turn counts read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k), and `FrameStore.getStats()` went 375 ms → 107 ms by indexing `importance` and sourcing `total` from the counter. Left: the few genuinely growing list reads (`sessions.getActive`, `install-audit`, `cron-store`, `file-indexer`) | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
 | R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | Not on the Windows Solo path |
 | R-5 | Updater + fast rollback for the desktop artifact | P2 | founder | Entangled with signing gates; release-engineering arc |
-| R-6 | Soak test against a large, aged `.mind` database | P2 | agent | The desktop-shaped replacement for "load test to 3x peak". Nothing exercises this today |
+| R-6 | **done 2026-09-19** — `packages/hive-mind-core/tests/soak/`, `npm run test:soak`, sized by `WAGGLE_SOAK_FRAMES` | — | agent | Own lane (`vitest.soak.config.ts`); excluded from the default gate. Setup bulk-inserts because the subject is the read path, and one test proves a bulk row is indistinguishable from an API row |
 | R-7 | 9 sites bound themselves with hand-rolled `setTimeout`+abort instead of `AbortSignal.timeout` | P3 | agent | Consistency only — they *are* bounded. A Phase 6 DRY finding surfaced during R-1 |
 
 ## Chaos / Failure Injection

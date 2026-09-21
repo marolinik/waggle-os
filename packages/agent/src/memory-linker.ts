@@ -1,4 +1,7 @@
-import type { HybridSearch, SearchResult } from '@waggle/core';
+import type { SearchResult } from '@waggle/core';
+import type {
+  MemorySearchPort,
+} from './memory-ports.js';
 
 export interface MemoryLink {
   frameId: number;
@@ -7,10 +10,10 @@ export interface MemoryLink {
 }
 
 export class MemoryLinker {
-  private search: HybridSearch;
+  private search: MemorySearchPort;
   private threshold: number;
 
-  constructor(config: { search: HybridSearch; threshold?: number }) {
+  constructor(config: { search: MemorySearchPort; threshold?: number }) {
     this.search = config.search;
     this.threshold = config.threshold ?? 0.1;
   }
