@@ -81,6 +81,19 @@ jobs:
           WAGGLE_REQUIRE_PWSH7: '1'
         run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/server/tests/tauri-config.test.ts -t "CI/CD Configuration"
 
+      # TD-TEST-14: the `test` job is ubuntu, so Windows-only tests run nowhere
+      # else. Every test file with a win32 gate must appear in one of these
+      # vitest steps; tauri-config.test.ts pins that rule.
+      - name: Verify Windows-only process, shim and path guards
+        shell: pwsh
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/agent/tests/cli-tools.test.ts packages/agent/tests/system-tools.test.ts packages/agent/tests/sidecar-owned-process.test.ts packages/agent/tests/tool-process-tracker.test.ts packages/agent/tests/tool-launcher.test.ts packages/agent/tests/mcp-runtime.test.ts packages/agent/tests/lsp-tools.test.ts packages/agent/tests/external-tool-runner.test.ts packages/hive-mind-hooks-codex/tests/paths.test.ts packages/hive-mind-core/tests/mind/transformers-model-load.test.ts packages/server/tests/local/mcps.test.ts tests/mcp-import-path-security.test.ts
+
+      - name: Verify Windows-only packaging and certifier guards
+        shell: pwsh
+        env:
+          WAGGLE_REQUIRE_PWSH7: '1'
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/server/tests/tauri-config.test.ts -t "Tauri Production Configuration|Windows installer certifier timeout contract"
+
       - name: Install locked Tauri CLI
         run: npm ci --prefix app --ignore-scripts
 

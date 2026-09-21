@@ -4506,6 +4506,41 @@ Expect-Rejection {
     ).toBeLessThan(windowsJob.indexOf('- name: Install locked Tauri CLI'));
   });
 
+  it('verify-windows runs every test file that has a Windows-only gate (TD-TEST-14)', () => {
+    // The `test` job is ubuntu, so a Windows-only test that no verify-windows
+    // step names runs nowhere in CI. Derive the rule from the gates themselves,
+    // not a file list, so a new Windows-only test file cannot be missed.
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'), 'utf-8'),
+    ) as { jobs?: Record<string, { steps?: Array<{ run?: string }> }> };
+    const covered = new Set(
+      (workflow.jobs?.['verify-windows']?.steps ?? [])
+        .map((step) => step.run ?? '')
+        .filter((run) => run.includes('vitest.mjs run'))
+        .flatMap((run) => run.split(/\s+/).filter((token) => /\.test\.[cm]?[jt]sx?$/.test(token))),
+    );
+    const listed = spawnSync(
+      'git',
+      ['-C', ROOT, 'ls-files', '-z', '--', '*.test.ts', '*.test.tsx', '*.test.mjs'],
+      { encoding: 'utf8' },
+    );
+    expect(listed.status, listed.stderr).toBe(0);
+    const windowsGate = /\.runIf\(\s*process\.platform\s*===\s*'win32'\s*\)|\.skipIf\(\s*process\.platform\s*!==\s*'win32'\s*\)/;
+    // An early return makes ubuntu report the test as passed, not skipped.
+    const silentGate = /if \(process\.platform !== 'win32'\) return;/;
+    const gated: string[] = [];
+    const silent: string[] = [];
+    for (const file of listed.stdout.split('\0').filter(Boolean)) {
+      const content = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+      if (windowsGate.test(content)) gated.push(file);
+      if (silentGate.test(content)) silent.push(file);
+    }
+
+    expect(gated.length).toBeGreaterThan(0);
+    expect(gated.filter((file) => !covered.has(file))).toEqual([]);
+    expect(silent).toEqual([]);
+  });
+
   it('desktop workflows pin every third-party action to a full commit SHA', () => {
     for (const name of ['release.yml', 'tauri-build-pr.yml']) {
       const workflow = fs.readFileSync(
