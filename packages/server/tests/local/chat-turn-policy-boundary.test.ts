@@ -27,6 +27,7 @@ const ROUTES_DIR = path.join(
   'routes',
 );
 const ENTRY = path.join(ROUTES_DIR, 'chat-turn-policy.ts');
+const USAGE_LEDGER_ENTRY = path.join(ROUTES_DIR, 'chat-turn-usage-ledger.ts');
 
 /** Bare specifiers the policy layer may depend on at runtime. Inward only. */
 const ALLOWED_RUNTIME_PACKAGES = ['@waggle/agent/permissions', '@waggle/agent/tool-filter'];
@@ -102,5 +103,30 @@ describe('chat-turn-policy boundary', () => {
   it('keeps the route module out of the policy graph', () => {
     // The direction that matters: chat.ts imports the policy, never the reverse.
     expect(graph.files).not.toContain('chat.ts');
+  });
+});
+
+/**
+ * The turn usage ledger (TD-CHAT-3) is the same kind of module: one turn's
+ * token arithmetic, extracted out of the `POST /api/chat` closure where it lived
+ * as eight hoisted mutable variables. Its header claims no framework, no
+ * persistence and no I/O, and a claim nothing executes is a comment.
+ *
+ * It is guarded here rather than in `eslint.config.js` because the repo's
+ * config-protection hook refuses edits to that file; the walk is the stronger
+ * check of the two anyway, since it follows the graph rather than one file.
+ */
+describe('chat-turn-usage-ledger boundary', () => {
+  const graph = walk(USAGE_LEDGER_ENTRY);
+
+  it('has no runtime dependency at all', () => {
+    // Arithmetic over receipts. The only import is the billing-class type, and
+    // a type import is erased, so a consumer pays nothing to load this.
+    expect([...graph.runtime]).toEqual([]);
+    expect([...graph.typeOnly]).toEqual(['@waggle/agent']);
+  });
+
+  it('is a single leaf module', () => {
+    expect(graph.files).toEqual(['chat-turn-usage-ledger.ts']);
   });
 });
