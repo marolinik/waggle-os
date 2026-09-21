@@ -7211,7 +7211,11 @@ describe('Windows installer certifier timeout contract', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helper = script.slice(helperStart, helperEnd);
 
-    let responseDelayMs = 1_200;
+    // A fresh pwsh's first HttpClient request costs more than a second on the
+    // GitHub Windows runner, so a 1.2 s reply against a 2 s budget timed out
+    // there. Keep seconds of margin on both sides. The failing case stays below
+    // the helper's 5 s default, so it fails only if the override is honored.
+    let responseDelayMs = 1_000;
     const server = http.createServer((_request, response) => {
       setTimeout(() => {
         response.writeHead(200, { 'content-type': 'application/json' });
@@ -7242,8 +7246,8 @@ describe('Windows installer certifier timeout contract', () => {
       });
 
     try {
-      await expect(runProbe(2)).resolves.toBeUndefined();
-      responseDelayMs = 1_500;
+      await expect(runProbe(4)).resolves.toBeUndefined();
+      responseDelayMs = 3_000;
       await expect(runProbe(1)).rejects.toBeDefined();
     } finally {
       await new Promise<void>((resolve, reject) => {
