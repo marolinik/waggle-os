@@ -1,10 +1,9 @@
 /**
  * E-4 — Regression guard for scripts/oss-subtree-split.sh.
  *
- * This is a STATIC analysis of the script + the package structure it
- * operates on. It does NOT actually run `git subtree split` (that's a
- * minutes-long operation per package, gated behind an explicit local
- * invocation). Instead it locks down:
+ * This is mostly a STATIC analysis of the script + the package structure it
+ * operates on. Only the ref-preservation test runs `git subtree split`, and
+ * only against a throwaway fixture repo. The static tests lock down:
  *
  *   1. The script exists and is executable.
  *   2. The list of forbidden top-level entries the script checks for
@@ -53,6 +52,11 @@ const SUPERSEDED_PLAN_PATH = join(
   'E-4-OSS-EXTRACTION-VERIFIED-2026-05-20.md',
 );
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
+
+// The ref-preservation test runs the real script four times (six subtree splits).
+// On Windows each split plus the script's grep pipelines costs MSYS process spawns:
+// measured 28–54 s alone on 2026-09-21, so the 30 s default fails even unloaded.
+const REAL_SPLIT_TIMEOUT_MS = 120_000;
 
 function normalizedDriftHash(content: string): string {
   return createHash('sha256')
@@ -415,7 +419,7 @@ describe('hive-mind publication boundary', () => {
     } finally {
       rmSync(tempRepo, { recursive: true, force: true });
     }
-  });
+  }, REAL_SPLIT_TIMEOUT_MS);
 
   it('invalidates the historical raw-push plan', () => {
     const content = readFileSync(SUPERSEDED_PLAN_PATH, 'utf-8');

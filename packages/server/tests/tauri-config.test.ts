@@ -4604,6 +4604,41 @@ Expect-Rejection {
     ).toBeLessThan(windowsJob.indexOf('- name: Install locked Tauri CLI'));
   });
 
+  it('verify-windows runs every test file that has a Windows-only gate (TD-TEST-14)', () => {
+    // The `test` job is ubuntu, so a Windows-only test that no verify-windows
+    // step names runs nowhere in CI. Derive the rule from the gates themselves,
+    // not a file list, so a new Windows-only test file cannot be missed.
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'), 'utf-8'),
+    ) as { jobs?: Record<string, { steps?: Array<{ run?: string }> }> };
+    const covered = new Set(
+      (workflow.jobs?.['verify-windows']?.steps ?? [])
+        .map((step) => step.run ?? '')
+        .filter((run) => run.includes('vitest.mjs run'))
+        .flatMap((run) => run.split(/\s+/).filter((token) => /\.test\.[cm]?[jt]sx?$/.test(token))),
+    );
+    const listed = spawnSync(
+      'git',
+      ['-C', ROOT, 'ls-files', '-z', '--', '*.test.ts', '*.test.tsx', '*.test.mjs'],
+      { encoding: 'utf8' },
+    );
+    expect(listed.status, listed.stderr).toBe(0);
+    const windowsGate = /\.runIf\(\s*process\.platform\s*===\s*'win32'\s*\)|\.skipIf\(\s*process\.platform\s*!==\s*'win32'\s*\)/;
+    // An early return makes ubuntu report the test as passed, not skipped.
+    const silentGate = /if \(process\.platform !== 'win32'\) return;/;
+    const gated: string[] = [];
+    const silent: string[] = [];
+    for (const file of listed.stdout.split('\0').filter(Boolean)) {
+      const content = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+      if (windowsGate.test(content)) gated.push(file);
+      if (silentGate.test(content)) silent.push(file);
+    }
+
+    expect(gated.length).toBeGreaterThan(0);
+    expect(gated.filter((file) => !covered.has(file))).toEqual([]);
+    expect(silent).toEqual([]);
+  });
+
   it('desktop workflows pin every third-party action to a full commit SHA', () => {
     for (const name of ['release.yml', 'tauri-build-pr.yml']) {
       const workflow = fs.readFileSync(
@@ -7261,8 +7296,7 @@ try {
 });
 
 describe('Windows installer certifier timeout contract', () => {
-  it('honors one bounded JSON GET timeout override and still fails closed', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('honors one bounded JSON GET timeout override and still fails closed', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(
@@ -7275,12 +7309,19 @@ describe('Windows installer certifier timeout contract', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helper = script.slice(helperStart, helperEnd);
 
-    let responseDelayMs = 1_200;
-    const server = http.createServer((_request, response) => {
+    // On the GitHub Windows runner the FIRST request of a fresh pwsh missed a
+    // 2 s and then a 4 s budget against a loopback reply sent after 1 s (the
+    // certifier's liveness probe retries once for the same reason). One untimed
+    // warm-up request in the same process absorbs that first-request cost, so
+    // the timed calls measure only the helper's timeout. The slow reply stays
+    // below the helper's 5 s default, so it times out only if the override is
+    // honored. Stopwatch output lands in the failure message for diagnosis.
+    const delayByPath: Record<string, number> = { '/warm': 0, '/fast': 1_000, '/slow': 3_000 };
+    const server = http.createServer((request, response) => {
       setTimeout(() => {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{"ok":true}');
-      }, responseDelayMs);
+      }, delayByPath[request.url ?? ''] ?? 0);
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -7288,36 +7329,41 @@ describe('Windows installer certifier timeout contract', () => {
       server.close();
       throw new Error('Could not bind delayed loopback probe server');
     }
-    const uri = `http://127.0.0.1:${address.port}/`;
-    const runProbe = (timeoutSeconds: number) =>
-      new Promise<void>((resolve, reject) => {
-        execFile(
-          pwsh,
-          [
-            '-NoLogo',
-            '-NoProfile',
-            '-NonInteractive',
-            '-Command',
-            `${helper}\n$result = Invoke-JsonRequest -Uri '${uri}' -Headers @{} -TimeoutSeconds ${timeoutSeconds}\nif (-not $result.ok) { throw 'Unexpected JSON payload' }`,
-          ],
-          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
-          (error) => (error ? reject(error) : resolve()),
-        );
-      });
+    const base = `http://127.0.0.1:${address.port}`;
+    const probe = [
+      'Set-StrictMode -Version Latest',
+      "$ErrorActionPreference = 'Stop'",
+      helper,
+      '$clock = [System.Diagnostics.Stopwatch]::StartNew()',
+      `$null = Invoke-JsonRequest -Uri '${base}/warm' -Headers @{} -TimeoutSeconds 30`,
+      'Write-Output "warm-up took $($clock.ElapsedMilliseconds) ms"',
+      '$clock.Restart()',
+      `$result = Invoke-JsonRequest -Uri '${base}/fast' -Headers @{} -TimeoutSeconds 4`,
+      'if (-not $result.ok) { throw "Unexpected JSON payload after $($clock.ElapsedMilliseconds) ms" }',
+      '$clock.Restart()',
+      '$timedOut = $false',
+      `try { $null = Invoke-JsonRequest -Uri '${base}/slow' -Headers @{} -TimeoutSeconds 1 } catch { $timedOut = $true }`,
+      'if (-not $timedOut) { throw "Timeout override ignored: slow reply accepted after $($clock.ElapsedMilliseconds) ms" }',
+    ].join('\n');
 
     try {
-      await expect(runProbe(2)).resolves.toBeUndefined();
-      responseDelayMs = 1_500;
-      await expect(runProbe(1)).rejects.toBeDefined();
+      const stdout = await new Promise<string>((resolve, reject) => {
+        execFile(
+          pwsh,
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', probe],
+          { encoding: 'utf-8', timeout: 60_000, windowsHide: true },
+          (error, out, err) => (error ? reject(new Error(`${error.message}\n${out}\n${err}`)) : resolve(out)),
+        );
+      });
+      expect(stdout).toContain('warm-up took');
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
-  });
+  }, 90_000);
 
-  it('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(
@@ -7383,8 +7429,7 @@ if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $sc
     await expect(runProbe('fail')).resolves.toBeUndefined();
   });
 
-  it('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
-    if (process.platform !== 'win32') return;
+  it.runIf(process.platform === 'win32')('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
 
     const pwsh = powershellProbeExecutable();
     const script = fs.readFileSync(
