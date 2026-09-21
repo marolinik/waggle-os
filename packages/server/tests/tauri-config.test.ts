@@ -741,6 +741,104 @@ describe('Tauri Production Configuration', () => {
     }
   });
 
+  it('build-sidecar provenance exempts lockfile-installed nested node_modules, not untracked source', () => {
+    // npm nests a dependency under packages/<workspace>/node_modules when the
+    // root already holds an incompatible version: fastify-plugin 6 for the
+    // server beside the root's 5 for @clerk/fastify (dependabot #73). That file
+    // comes from package-lock.json exactly like a hoisted one, so it is exempt
+    // the same way. An untracked FIRST-PARTY file must still fail the build.
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-sidecar-nested-'));
+    const writeRelative = (relative: string, content: string) => {
+      const target = path.join(fixtureRoot, ...relative.split('/'));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content);
+    };
+    const runResult = (command: string, args: string[]) => spawnSync(command, args, {
+      cwd: fixtureRoot,
+      env: { ...process.env, TEMP: fixtureRoot, TMP: fixtureRoot, TMPDIR: fixtureRoot },
+      encoding: 'utf8',
+      timeout: 60_000,
+      windowsHide: true,
+    });
+    const run = (command: string, args: string[]) => {
+      const result = runResult(command, args);
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+      return result;
+    };
+    const serviceInput = 'packages/server/src/local/service.ts';
+    const nestedInput = 'packages/server/node_modules/fastify-plugin/index.js';
+    const untrackedInput = 'packages/server/src/local/untracked.ts';
+    const writeFakeEsbuild = (inputs: string[]) => writeRelative(
+      'node_modules/esbuild/index.js',
+      [
+        "import fs from 'node:fs';",
+        "import path from 'node:path';",
+        'export async function build(options) {',
+        '  fs.mkdirSync(path.dirname(options.outfile), { recursive: true });',
+        "  fs.writeFileSync(options.outfile, 'fixture bundle\\n');",
+        `  const inputs = Object.fromEntries(${JSON.stringify(inputs)}.map((input) => [input, { bytes: 1, imports: [] }]));`,
+        '  return { errors: [], warnings: [], metafile: { inputs } };',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    try {
+      const trackedFiles = new Map<string, string>([
+        ['package-lock.json', '{"lockfileVersion":3}\n'],
+        ['package.json', '{"name":"sidecar-nested-fixture","private":true}\n'],
+        ['packages/marketplace/marketplace.db', 'fixture database'],
+        ['packages/server/package.json', '{"name":"@waggle/server"}\n'],
+        [serviceInput, 'export const fixture = true;\n'],
+      ]);
+      for (const [relative, content] of trackedFiles) writeRelative(relative, content);
+      writeRelative(
+        'scripts/build-sidecar.mjs',
+        fs.readFileSync(path.join(ROOT, 'scripts', 'build-sidecar.mjs'), 'utf8'),
+      );
+      writeRelative(
+        'node_modules/esbuild/package.json',
+        JSON.stringify({ name: 'esbuild', version: '0.0.0', type: 'module', exports: './index.js' }),
+      );
+      writeRelative(
+        'node_modules/typescript/package.json',
+        JSON.stringify({ name: 'typescript', version: '0.0.0', type: 'module', exports: './index.js' }),
+      );
+      writeRelative('node_modules/typescript/index.js', 'export default {};\n');
+      writeRelative(nestedInput, 'module.exports = function fp (plugin) { return plugin; };\n');
+
+      run('git', ['init']);
+      run('git', ['config', 'user.email', 'sidecar-nested@waggle.invalid']);
+      run('git', ['config', 'user.name', 'Waggle Fixture']);
+      run('git', ['add', '--', 'scripts/build-sidecar.mjs', ...trackedFiles.keys()]);
+      run('git', ['commit', '-m', 'fixture']);
+
+      writeFakeEsbuild([serviceInput, nestedInput]);
+      run(process.execPath, ['scripts/build-sidecar.mjs']);
+      const service = fs.readFileSync(
+        path.join(fixtureRoot, 'app', 'src-tauri', 'resources', 'service.js'),
+        'utf8',
+      );
+      const firstLine = service.slice(0, service.indexOf('\n'));
+      const prefix = '// Waggle-Sidecar-Provenance: ';
+      expect(firstLine.startsWith(prefix)).toBe(true);
+      const manifest = JSON.parse(
+        Buffer.from(firstLine.slice(prefix.length), 'base64').toString('utf8'),
+      ) as { sourceInputs: Array<{ path: string }> };
+      const sourcePaths = manifest.sourceInputs.map((input) => input.path);
+      expect(sourcePaths).toContain(serviceInput);
+      expect(sourcePaths).not.toContain(nestedInput);
+
+      writeRelative(untrackedInput, 'export const untracked = true;\n');
+      writeFakeEsbuild([serviceInput, untrackedInput]);
+      const rejected = runResult(process.execPath, ['scripts/build-sidecar.mjs']);
+      expect(rejected.status, rejected.stderr || rejected.stdout).toBe(1);
+      expect(rejected.stderr).toContain(`Sidecar repository input is not tracked: ${untrackedInput}`);
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it('D12: the bundled sidecar is generated at build time, never tracked', () => {
     // beforeBuildCommand regenerates the bundle on EVERY build path — including
     // a raw `npx tauri build` that bypasses the npm scripts and CI steps. A
@@ -860,7 +958,7 @@ describe('Tauri Production Configuration', () => {
       next: '16.3.5',
     };
 
-    expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
+    expect(manifest.engines?.node).toBe('>=22.19.0');
     expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
     // sharp moved with the group bump. The nested override above moves with it

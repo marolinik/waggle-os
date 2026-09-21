@@ -29,7 +29,7 @@ export function getStripe(): Stripe | null {
 
   stripeSecretKey = secretKey;
   stripeInstance = secretKey
-    ? new Stripe(secretKey, { apiVersion: '2026-03-25.dahlia' })
+    ? new Stripe(secretKey, { apiVersion: '2026-08-26.dahlia' })
     : null;
 
   return stripeInstance;

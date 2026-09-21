@@ -41,7 +41,7 @@
     "mammoth": "^1.12.3",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.0",
-    "stripe": "^21.0.1"
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",

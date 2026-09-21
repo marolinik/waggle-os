@@ -84,7 +84,7 @@ WaggleDance, governance) is the upgrade trigger.
 | Deploy | Windows Tauri installer; optional Dockerfile + docker-compose.production.yml + render.yaml |
 
 Package manager: npm with the root `package-lock.json`. Source development requires Node
-`^20.19.0 || >=22.12.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
+`>=22.19.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
 
 ---
 

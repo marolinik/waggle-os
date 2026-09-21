@@ -226,7 +226,9 @@ try {
   const localInputs = new Set([buildScriptRelative, 'package.json', 'package-lock.json']);
   for (const input of Object.keys(result.metafile.inputs)) {
     const relative = repositoryRelative(path.resolve(root, input));
-    if (relative === 'node_modules' || relative.startsWith('node_modules/')) continue;
+    // Every node_modules tree, hoisted or nested under a workspace package, is
+    // installed from package-lock.json, which is already a hashed input.
+    if (relative.split('/').includes('node_modules')) continue;
     localInputs.add(relative);
   }
   for (const relative of [...localInputs]) {
