@@ -2526,7 +2526,7 @@ Expect-Rejection {
       expect(workflow).not.toContain(forbidden);
     }
     expect(signingJob).toContain(
-      'azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca',
+      'azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906',
     );
     expect(signingJob).toContain('client-id: ${{ vars.AZURE_CLIENT_ID }}');
     expect(signingJob).toContain('tenant-id: ${{ vars.AZURE_TENANT_ID }}');
@@ -2578,7 +2578,7 @@ Expect-Rejection {
       },
     });
     expect(parsedSigningSteps[parsedAzureIndex]?.uses).toBe(
-      'azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca',
+      'azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906',
     );
     for (const index of [parsedRefreshIndex, parsedRevalidationIndex, parsedAzureIndex]) {
       expect(parsedSigningSteps[index]).not.toHaveProperty('if');
