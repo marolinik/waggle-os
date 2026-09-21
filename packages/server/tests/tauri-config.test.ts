@@ -7309,16 +7309,19 @@ describe('Windows installer certifier timeout contract', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helper = script.slice(helperStart, helperEnd);
 
-    // A fresh pwsh's first HttpClient request costs more than a second on the
-    // GitHub Windows runner, so a 1.2 s reply against a 2 s budget timed out
-    // there. Keep seconds of margin on both sides. The failing case stays below
-    // the helper's 5 s default, so it fails only if the override is honored.
-    let responseDelayMs = 1_000;
-    const server = http.createServer((_request, response) => {
+    // On the GitHub Windows runner the FIRST request of a fresh pwsh missed a
+    // 2 s and then a 4 s budget against a loopback reply sent after 1 s (the
+    // certifier's liveness probe retries once for the same reason). One untimed
+    // warm-up request in the same process absorbs that first-request cost, so
+    // the timed calls measure only the helper's timeout. The slow reply stays
+    // below the helper's 5 s default, so it times out only if the override is
+    // honored. Stopwatch output lands in the failure message for diagnosis.
+    const delayByPath: Record<string, number> = { '/warm': 0, '/fast': 1_000, '/slow': 3_000 };
+    const server = http.createServer((request, response) => {
       setTimeout(() => {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{"ok":true}');
-      }, responseDelayMs);
+      }, delayByPath[request.url ?? ''] ?? 0);
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -7326,33 +7329,39 @@ describe('Windows installer certifier timeout contract', () => {
       server.close();
       throw new Error('Could not bind delayed loopback probe server');
     }
-    const uri = `http://127.0.0.1:${address.port}/`;
-    const runProbe = (timeoutSeconds: number) =>
-      new Promise<void>((resolve, reject) => {
-        execFile(
-          pwsh,
-          [
-            '-NoLogo',
-            '-NoProfile',
-            '-NonInteractive',
-            '-Command',
-            `${helper}\n$result = Invoke-JsonRequest -Uri '${uri}' -Headers @{} -TimeoutSeconds ${timeoutSeconds}\nif (-not $result.ok) { throw 'Unexpected JSON payload' }`,
-          ],
-          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
-          (error) => (error ? reject(error) : resolve()),
-        );
-      });
+    const base = `http://127.0.0.1:${address.port}`;
+    const probe = [
+      'Set-StrictMode -Version Latest',
+      "$ErrorActionPreference = 'Stop'",
+      helper,
+      '$clock = [System.Diagnostics.Stopwatch]::StartNew()',
+      `$null = Invoke-JsonRequest -Uri '${base}/warm' -Headers @{} -TimeoutSeconds 30`,
+      'Write-Output "warm-up took $($clock.ElapsedMilliseconds) ms"',
+      '$clock.Restart()',
+      `$result = Invoke-JsonRequest -Uri '${base}/fast' -Headers @{} -TimeoutSeconds 4`,
+      'if (-not $result.ok) { throw "Unexpected JSON payload after $($clock.ElapsedMilliseconds) ms" }',
+      '$clock.Restart()',
+      '$timedOut = $false',
+      `try { $null = Invoke-JsonRequest -Uri '${base}/slow' -Headers @{} -TimeoutSeconds 1 } catch { $timedOut = $true }`,
+      'if (-not $timedOut) { throw "Timeout override ignored: slow reply accepted after $($clock.ElapsedMilliseconds) ms" }',
+    ].join('\n');
 
     try {
-      await expect(runProbe(4)).resolves.toBeUndefined();
-      responseDelayMs = 3_000;
-      await expect(runProbe(1)).rejects.toBeDefined();
+      const stdout = await new Promise<string>((resolve, reject) => {
+        execFile(
+          pwsh,
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', probe],
+          { encoding: 'utf-8', timeout: 60_000, windowsHide: true },
+          (error, out, err) => (error ? reject(new Error(`${error.message}\n${out}\n${err}`)) : resolve(out)),
+        );
+      });
+      expect(stdout).toContain('warm-up took');
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
-  });
+  }, 90_000);
 
   it.runIf(process.platform === 'win32')('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
 
