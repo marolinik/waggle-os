@@ -119,6 +119,46 @@ describe('POST /api/chat request validation (characterization)', () => {
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(runnerCalls).toBe(runnerCallsBefore + 1);
   });
+  /**
+   * Review Critical #1: a request-supplied `workspacePath` stays anchored to
+   * dataDir. The guard had no test at all before 2026-09-22 (TD-CHAT-33 pin),
+   * so nothing proved a traversal attempt is refused rather than merely
+   * normalised, and nothing proved a legitimate path still runs.
+   */
+  describe('request-supplied workspacePath (characterization)', () => {
+    it('refuses a path outside the data directory before the runner', async () => {
+      const outside = path.join(os.tmpdir(), 'waggle-traversal-outside');
+
+      const { status, body } = await post({ message: 'traversal attempt', workspacePath: outside });
+
+      expect(status).toBe(400);
+      expect(body).toEqual({ error: 'Invalid workspace path', code: 'PATH_TRAVERSAL' });
+    });
+
+    it('refuses a relative escape out of the data directory', async () => {
+      const escape = path.join(tmpDir, '..', 'waggle-traversal-escape');
+
+      const { status, body } = await post({ message: 'traversal attempt', workspacePath: escape });
+
+      expect(status).toBe(400);
+      expect(body.code).toBe('PATH_TRAVERSAL');
+    });
+
+    it('runs a turn for a path inside the data directory', async () => {
+      const inside = path.join(tmpDir, 'workspaces', 'anchored-files');
+      fs.mkdirSync(inside, { recursive: true });
+      resetRateLimiter(server);
+
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'an anchored turn', workspacePath: inside, session: 'anchored-path' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
+    });
+  });
 });
 
 describe('POST /api/chat slash-command turns (characterization)', () => {
