@@ -29,6 +29,7 @@ const ROUTES_DIR = path.join(
 const ENTRY = path.join(ROUTES_DIR, 'chat-turn-policy.ts');
 const USAGE_LEDGER_ENTRY = path.join(ROUTES_DIR, 'chat-turn-usage-ledger.ts');
 const EXECUTION_TRACE_ENTRY = path.join(ROUTES_DIR, 'chat-turn-execution-trace.ts');
+const RECALL_CONTEXT_ENTRY = path.join(ROUTES_DIR, 'chat-turn-recall-context.ts');
 
 /** Bare specifiers the policy layer may depend on at runtime. Inward only. */
 const ALLOWED_RUNTIME_PACKAGES = ['@waggle/agent/permissions', '@waggle/agent/tool-filter'];
@@ -150,5 +151,24 @@ describe('chat-turn-execution-trace boundary', () => {
 
   it('is a single leaf module', () => {
     expect(graph.files).toEqual(['chat-turn-execution-trace.ts']);
+  });
+});
+
+/**
+ * The turn recalled context (TD-CHAT-3, third slice) is what one turn recalled
+ * and the four places it goes, extracted out of the same closure where it lived
+ * as four hoisted mutable variables. It is string assembly over text the route
+ * already scanned, so it needs nothing at all.
+ */
+describe('chat-turn-recall-context boundary', () => {
+  const graph = walk(RECALL_CONTEXT_ENTRY);
+
+  it('imports nothing, not even a type', () => {
+    expect([...graph.runtime]).toEqual([]);
+    expect([...graph.typeOnly]).toEqual([]);
+  });
+
+  it('is a single leaf module', () => {
+    expect(graph.files).toEqual(['chat-turn-recall-context.ts']);
   });
 });

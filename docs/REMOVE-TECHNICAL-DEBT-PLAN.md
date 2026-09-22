@@ -149,6 +149,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-17 | 5 | A verbatim move and an Extract Function never share a commit, even when both close the same ledger row | They carry different proofs. The move is checkable mechanically — set-difference the destination's added lines against the source's removed lines, and exactly one survives (the `GoalAncestry` type import `chat.ts` drops in the same commit). The extraction changes shape, so its proof is the seven pins written against the old code passing unchanged. A combined diff would let a reviewer verify neither |
 | 2026-09-21 | 2 (pass 2) | TD-CHAT-3 slice 1: the usage-accounting cluster became `TurnUsageLedger`, pinned first (`6611389b`, `1c24fdf0`) | Replace Method with Method Object one cohesive cluster at a time, not the 3529-line closure at once; the fold was written out twice and asserted nowhere. Row recorded 2026-09-22: the slice shipped without one. |
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 2 = the trace cluster (founder), ahead of the recall cluster (`8fe4e797`, `17ce055b`) | Its lifecycle (start, finalize once, three exits) fits one small object and its pins needed no new harness; the recall cluster feeds the prompt, so it is persona-receipt-sensitive and needs new pins first. The finalize swallow stays silent in the structure-only commit even though the Adopted Convention wants a warn: adding it changes behavior (TD-CHAT-48). |
+| 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 3 = the recall cluster (`5237cf62`, `45707fbf`); pins through the `runAgentLoop` module mock, not the `agentRunner` seam | Every write sits behind `!hasCustomRunner`, so the injected-runner seam cannot reach it (TD-CHAT-16). The memory text is not a unique marker, since two other prompt sections list the same memory, so the pins key on the recall block and on the exact text `recallMemory` returned. |
 
 ## Next Actions
 
@@ -180,7 +181,10 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
   - [x] TD-CHAT-3 slice 1, usage accounting -> `TurnUsageLedger` (agent, `6611389b` + `1c24fdf0`, 2026-09-21)
   - [x] TD-CHAT-3 slice 2, execution trace -> `TurnExecutionTrace` (agent, `8fe4e797` + `17ce055b`, 2026-09-22)
-  - [ ] TD-CHAT-3 slice 3, the recall cluster: pin its prompt-side effects first (agent, P1)
+  - [x] TD-CHAT-3 slice 3, recalled context -> `TurnRecalledContext` (agent, `5237cf62` + `45707fbf`, 2026-09-22)
+  - [ ] TD-CHAT-3 slice 4, the persistence flags a turn can downgrade (agent, P1)
+  - [ ] TD-CHAT-3 slices 5-6, the turn-teardown resources the outer finally releases (agent, P1)
+  - [ ] TD-CHAT-3 control flow: Extract Method on the handler's phases once its state has owners (agent, P1)
   - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)
 - [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
