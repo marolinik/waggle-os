@@ -543,6 +543,7 @@ import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { TurnRetention } from './chat-turn-retention.js';
+import { TurnResources } from './chat-turn-resources.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -2140,11 +2141,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // B1-B7: Rerouted message from slash command processing — scoped to handler
     let reroutedMessage: string | undefined;
 
-    // Review Critical #2: hoist unregisterHook so the outer finally can always clean up.
-    // Old code's only cleanup was at the happy-path line ~1125; every exception path leaked
-    // the hook into the shared hookRegistry, causing ghost confirmation prompts on every
+    // Review Critical #2: the turn's releasable resources are held here so the
+    // outer finally can always clean up. Old code's only cleanup was at the
+    // happy-path line ~1125; every exception path leaked the pre:tool hook into
+    // the shared hookRegistry, causing ghost confirmation prompts on every
     // subsequent request with closures pointing at dead sockets.
-    let unregisterHook: (() => void) | undefined;
+    const turnResources = new TurnResources();
     let requestHookRegistry: HookRegistry | undefined;
 
     // H-07 G4: hoisted so the outer catch can finalize aborted/errored traces
@@ -2157,16 +2159,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
-    let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
     let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
     let workspaceTurnScope: WorkspaceTurnScope | undefined;
-    // Turn-scoped pin for an implicit/default request-owned workspace mind.
-    // Hoisted so the outer finally can release it.
-    let pinnedSharedMindId: string | null = null;
-    // A named workspace session owns a long-lived pin. Each active chat turn
-    // takes another pin so Fleet kill cannot release/evict its mind before the
-    // turn observes the workspace abort signal and unwinds.
-    let pinnedWorkspaceMindId: string | null = null;
     const activeSessionId = requestedSessionId ?? historyWorkspaceId;
     const activeWorkspaceId = historyWorkspaceId;
     const activeExecutionWorkspaceId = executionWorkspaceId;
@@ -2261,7 +2255,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
 
           server.mindCache.acquire(effectiveWorkspace);
-          pinnedWorkspaceMindId = effectiveWorkspace;
+          turnResources.holdWorkspaceMindPin(() => server.mindCache.release(effectiveWorkspace));
           const runtime = acquireChatRuntime(
             activeWorkspaceSession,
             sessionId,
@@ -2270,7 +2264,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           );
 
           wsSession = activeWorkspaceSession;
-          activeChatRuntime = { workspaceSession: activeWorkspaceSession, sessionId, runtime };
+          turnResources.holdChatRuntime(() => releaseChatRuntime(activeWorkspaceSession, sessionId, runtime));
           sessionOrch = runtime.orchestrator;
           sessionTools = runtime.tools;
         } catch (err) {
@@ -2281,7 +2275,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         try {
           if (authorizedWorkspace) {
             const requestMind = server.mindCache.acquire(authorizedWorkspace);
-            pinnedSharedMindId = authorizedWorkspace;
+            turnResources.holdSharedMindPin(() => server.mindCache.release(authorizedWorkspace));
             sessionOrch = server.agentState.createSessionOrchestrator(requestMind);
           } else {
             sessionOrch = server.agentState.createSessionOrchestrator();
@@ -2302,6 +2296,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           executionWorkspacePath ?? os.homedir(),
           turnSignal,
         );
+        const heldScope = workspaceTurnScope;
+        turnResources.holdTurnScope(() => heldScope.release());
       }
 
       // ── Model Pilot: resolve model with fallback chain ──
@@ -2795,9 +2791,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
         const autoApprove = AUTO_APPROVE;
-        // Assignment (not declaration) — unregisterHook is declared at outer try scope
-        // so the outer finally can always clean up regardless of which path we exit on.
-        unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
+        // Held by turnResources (not a local) so the outer finally can always
+        // clean up regardless of which path we exit on.
+        const unregisterToolHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
           if (turnSignal.aborted) {
             return { cancel: true, reason: 'Chat or workspace cancelled' };
           }
@@ -3120,6 +3116,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_granted', toolName, sessionId, approved: true });
           return { authorize: true };
         });
+        if (unregisterToolHook) turnResources.holdToolHook(unregisterToolHook);
 
         // Use workspace-scoped tools if a workspacePath was specified
       if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
@@ -4700,12 +4697,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sendEvent('step', { content: budgetPressure.trim() });
         }
 
-        // Unregister the per-request approval hook. Setting to undefined so the outer
-        // finally's defensive cleanup is a no-op on the happy path.
-        if (unregisterHook) {
-          unregisterHook();
-          unregisterHook = undefined;
-        }
+        // Unregister the per-request approval hook, so the outer finally's
+        // defensive cleanup is a no-op on the happy path.
+        turnResources.unhookTools();
 
         // Track every dispatched attempt against the model that actually ran it.
         const successfulAttemptReceipts = usageLedger.receipts;
@@ -5247,29 +5241,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
-      if (workspaceTurnScope) {
-        try { await workspaceTurnScope.release(); } catch { /* lease already released */ }
-      }
-      if (activeChatRuntime) {
-        releaseChatRuntime(
-          activeChatRuntime.workspaceSession,
-          activeChatRuntime.sessionId,
-          activeChatRuntime.runtime,
-        );
-      }
-      if (pinnedWorkspaceMindId) {
-        try { server.mindCache.release(pinnedWorkspaceMindId); } catch { /* cache already torn down */ }
-      }
-      // Un-pin the shared orchestrator's workspace mind (see acquire above).
-      if (pinnedSharedMindId) {
-        try { server.mindCache.release(pinnedSharedMindId); } catch { /* cache already torn down */ }
-      }
-      // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
-      // already unregisters and sets to undefined; this guarantees we never leak the
-      // hook into the shared hookRegistry on any exception path.
-      if (unregisterHook) {
-        try { unregisterHook(); } catch { /* registry already torn down — ignore */ }
-      }
+      // Workspace turn scope, chat runtime, both mind pins, and — defensively,
+      // for every path the happy-path `unhookTools()` did not reach — the
+      // pre:tool hook. Released in that order; see `TurnResources`.
+      await turnResources.releaseHeld();
       // H-07 G4: defensive trace finalization. Catches SSE-disconnect and any
       // exotic exit path where the outer catch didn't run. Outcome stays
       // 'abandoned' because we don't know if the agent produced a usable
