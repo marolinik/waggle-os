@@ -58,14 +58,15 @@ below and in the Debt Ledger, with owners.
 |---|---|
 | Changed modules have characterization tests that run green | **met** — `TESTING.md` Safety Net Map covers every path touched; suite 13021+/13030 |
 | Every outbound call has a timeout; critical dependencies have breakers and bulkheads | **met, with one row judged non-transferable** — 183/183 bounded (R-1), breaker on the model endpoint (R-2). Bulkheads do not transfer to a single-user desktop sidecar; the property that matters is obtained by keying the breaker on origin (`RELIABILITY.md`) |
-| The Dependency Rule holds for reworked modules | **partly met** — CA-1, CA-2, CA-5, CA-6 closed and guarded by a test *and* a lint rule. **CA-3/CA-4 remain**: `@waggle/agent` names concrete `FrameStore`/`SessionStore` across 61 files. That is the largest single piece of debt left in the repo |
+| The Dependency Rule holds for reworked modules | **met** — CA-1, CA-2, CA-5, CA-6 closed and guarded by a test *and* a lint rule. **CA-3/CA-4 closed too** (`cbf65c12` pins, `f24d192b` inversion, `edc2f455` seam; `memory-layers-default.ts` owns all 12 gateway constructions, guarded by `memory-gateway-confinement.test.ts`). Corrected 2026-09-22: this row claimed they were the largest piece of debt left in the repo, which stopped being true when they closed. CA-5b remains |
 | A current context map, and at least one clean context behind an ACL | **met** — map in `ARCHITECTURE.md`; the harvest ACL already existed and is now named and explained. No context extracted yet (D-1) |
 | No untracked hacks; debt budget and broken-windows policy written down | **met** — zero untracked TODO markers, measured; policy ratified in `TECH-DEBT.md` |
 
 ### What the journey did not do, and why
 
-- **CA-3/CA-4** (invert the memory boundary) is a genuine multi-session arc crossing packages and
-  needs its own pin program first. It was correctly not attempted inside a phase pass.
+- ~~**CA-3/CA-4** (invert the memory boundary) needs its own pin program and was not attempted
+  inside a phase pass.~~ **Done since** — closed with pins, an inversion and a confinement test;
+  corrected 2026-09-22.
 - **D-1** (extract `governance`) is designed but blocked on a real question: sticky erasure
   crosses `memory` and `harvest`, and a compliance trail that a GDPR erase must *not* delete needs
   that interaction resolved before the tables move.
@@ -151,8 +152,12 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 2 = the trace cluster (founder), ahead of the recall cluster (`8fe4e797`, `17ce055b`) | Its lifecycle (start, finalize once, three exits) fits one small object and its pins needed no new harness; the recall cluster feeds the prompt, so it is persona-receipt-sensitive and needs new pins first. The finalize swallow stays silent in the structure-only commit even though the Adopted Convention wants a warn: adding it changes behavior (TD-CHAT-48). |
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 3 = the recall cluster (`5237cf62`, `45707fbf`); pins through the `runAgentLoop` module mock, not the `agentRunner` seam | Every write sits behind `!hasCustomRunner`, so the injected-runner seam cannot reach it (TD-CHAT-16). The memory text is not a unique marker, since two other prompt sections list the same memory, so the pins key on the recall block and on the exact text `recallMemory` returned. |
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 4 = the retention flags (`d12e4345`, `41821209`), as a holder with getters and one `settle()`, not a pure settle function returning four values | A pure function would have moved the rule but left four reassignable `let`s and about forty readers able to reassign them; the holder removes the `let`s. The grant type is declared in the module rather than imported from `chat-helpers.ts`, so the boundary walk stays a single leaf. |
+| 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 5 = the releasable resources (`8b683a06`, `0abe3fcc`), holding release closures rather than the resources themselves | The module then needs no type from the session manager, mind cache or turn coordinator, and the release order and swallow rules become unit-testable — including the two releases no route test can observe. The activity lease stays in the route because it is released after the stream ends. |
+| 2026-09-22 | close-out | **Close every recorded finding first, production after** (founder) | Plan in `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-22.md`: 53 open/partial ledger rows plus CA-5b, R-3/R-4/R-5/R-7, D-1/D-2, in six waves, 26-32 PRs. Six rows need a founder decision and are batched into one round. |
 
 ## Next Actions
+
+Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-22.md` (founder direction, 2026-09-22).
 
 - [x] Phase 1: baseline test run green under Node 22.23.2 (agent, 2026-09-14)
 - [x] Phase 1: effect sketch + pinch points for `chat.ts` (agent, 2026-09-14)
@@ -163,7 +168,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 - [x] Branch review (43-agent workflow, 3 refuters per finding): 5/5 refactor commits behavior-preserved; 9 doc/test findings fixed in `a55a1712` + this docs commit (agent, 2026-09-15)
 - [x] Merge `chore/tech-debt-phase1-chat-safety-net` into `main` after review (founder, PR #84 `b248ce38`)
 - [x] Phase 5 pass 1: dependency map + 7 violations (CA-1..CA-7) in `docs/ARCHITECTURE.md`; CA-1 and CA-2 closed on `chore/tech-debt-phase5-chat-turn-policy` (agent, `86d0d19f`, `a2f24546`, `3e380190`, 2026-09-17)
-- [ ] CA-3 / CA-4: invert the memory boundary — `@waggle/agent` use cases own a `FrameStore`/`SessionStore` interface that `@waggle/core` implements; 61 files import `@waggle/core` today (agent, P1)
+- [x] CA-3 / CA-4: invert the memory boundary — closed (`cbf65c12` pins, `f24d192b` inversion, `edc2f455` seam); `memory-layers-default.ts` owns all 12 gateway constructions, guarded by `memory-gateway-confinement.test.ts` (agent)
 - [x] CA-5: `server.traceRecorder` decorated at the composition root and shared with `HarnessTraceBridge`; the chat route reads it instead of building a second one. `CredentialPool` dropped from the row — plugin scope, never per request (agent, 2026-09-17)
 - [ ] CA-5b: the same duplicate `TraceRecorder` construction at `local/fleet-run-executor.ts:660` and `local/routes/fleet.ts:380` — **pin first**, no fleet test touches the trace path today (agent, P3)
 - [x] CA-6: second slice — the regulated-content disclaimer, goal ancestry and approval-timeout policy moved behind the policy boundary, pin first (agent, `5b616dd2` + `2fe718da` + `1c49e805`, 2026-09-17)
@@ -184,7 +189,8 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
   - [x] TD-CHAT-3 slice 2, execution trace -> `TurnExecutionTrace` (agent, `8fe4e797` + `17ce055b`, 2026-09-22)
   - [x] TD-CHAT-3 slice 3, recalled context -> `TurnRecalledContext` (agent, `5237cf62` + `45707fbf`, 2026-09-22)
   - [x] TD-CHAT-3 slice 4, retention flags -> `TurnRetention` (agent, `d12e4345` + `41821209`, 2026-09-22)
-  - [ ] TD-CHAT-3 slices 5-6, the turn-teardown resources the outer finally releases (agent, P1)
+  - [x] TD-CHAT-3 slice 5, releasable resources -> `TurnResources` (agent, `8b683a06` + `0abe3fcc`, 2026-09-22)
+  - [ ] TD-CHAT-3 slice 6, the five singles (`firstTokenAt`, `workspacePath`/TD-CHAT-33, `turnSignal`, `reroutedMessage`/TD-CHAT-25, `responseCommitted`) (agent, P1)
   - [ ] TD-CHAT-3 control flow: Extract Method on the handler's phases once its state has owners (agent, P1)
   - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)
 - [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
