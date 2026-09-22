@@ -31,6 +31,7 @@ const USAGE_LEDGER_ENTRY = path.join(ROUTES_DIR, 'chat-turn-usage-ledger.ts');
 const EXECUTION_TRACE_ENTRY = path.join(ROUTES_DIR, 'chat-turn-execution-trace.ts');
 const RECALL_CONTEXT_ENTRY = path.join(ROUTES_DIR, 'chat-turn-recall-context.ts');
 const RETENTION_ENTRY = path.join(ROUTES_DIR, 'chat-turn-retention.ts');
+const RESOURCES_ENTRY = path.join(ROUTES_DIR, 'chat-turn-resources.ts');
 
 /** Bare specifiers the policy layer may depend on at runtime. Inward only. */
 const ALLOWED_RUNTIME_PACKAGES = ['@waggle/agent/permissions', '@waggle/agent/tool-filter'];
@@ -190,5 +191,24 @@ describe('chat-turn-retention boundary', () => {
 
   it('is a single leaf module', () => {
     expect(graph.files).toEqual(['chat-turn-retention.ts']);
+  });
+});
+
+/**
+ * The turn resources (TD-CHAT-3, fifth slice) hold the release closures for one
+ * turn and run them in the route's order. They take closures rather than the
+ * things themselves, so the module needs no type from the session, cache or
+ * coordinator it ultimately releases.
+ */
+describe('chat-turn-resources boundary', () => {
+  const graph = walk(RESOURCES_ENTRY);
+
+  it('imports nothing, not even a type', () => {
+    expect([...graph.runtime]).toEqual([]);
+    expect([...graph.typeOnly]).toEqual([]);
+  });
+
+  it('is a single leaf module', () => {
+    expect(graph.files).toEqual(['chat-turn-resources.ts']);
   });
 });
