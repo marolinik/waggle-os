@@ -221,7 +221,58 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
         ...extraPayload,
       },
     });
+    // Each pin opens its own workspace, and the session manager caps live
+    // workspace sessions at the tier limit (FREE = 10), so the eleventh pin
+    // was refused with "not ready for chat". Release the session per turn.
+    server.sessionManager.close(workspaceId);
     return { status: res.statusCode, events: parseSSE(res.body) };
+  }
+
+  /**
+   * Runs a turn and answers its first approval card through the real
+   * `/api/approval/:requestId` route while the hook is waiting on it.
+   */
+  async function runTurnAnswering(
+    workspaceId: string,
+    message: string,
+    session: string,
+    approved: boolean,
+  ) {
+    let answered: { status: number; body: Record<string, unknown> } | undefined;
+    let stop = false;
+    const answer = (async () => {
+      while (!stop && !answered) {
+        const [requestId] = server.agentState.pendingApprovals.keys();
+        if (requestId) {
+          const res = await injectWithAuth(server, {
+            method: 'POST',
+            url: `/api/approval/${requestId}`,
+            payload: { approved },
+          });
+          answered = { status: res.statusCode, body: JSON.parse(res.body) };
+          return;
+        }
+        await new Promise(r => setTimeout(r, 10));
+      }
+    })();
+    try {
+      const turn = await runTurn(workspaceId, message, session);
+      return { ...turn, answered };
+    } finally {
+      stop = true;
+      await answer;
+    }
+  }
+
+  function stepContents(events: Array<{ event: string; data: string }>): string[] {
+    return events
+      .filter(e => e.event === 'step')
+      .map(e => JSON.parse(e.data).content as string);
+  }
+
+  function toolResultText(events: Array<{ event: string; data: string }>, name: string): string | undefined {
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === name);
+    return toolResult ? JSON.parse(toolResult.data).result as string : undefined;
   }
 
   it('enriches a gated tool approval, then denies it when no client answers', async () => {
@@ -532,6 +583,68 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
       .toBe('[BLOCKED] create_skill could not be described, so it was not run.');
 
     expect(events.some(e => e.event === 'done')).toBe(true);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
+  });
+
+  it('auto-approves a gated tool at elevated autonomy and says why', async () => {
+    stubProvider('write_file', { path: 'autonomy.txt', content: 'hello' });
+    const { status, events } = await runTurn(
+      createWorkspace('autonomy'),
+      'Write hello into notes.txt',
+      'approval-autonomy',
+      { autonomy: { level: 'yolo' } },
+    );
+    expect(status).toBe(200);
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    expect(stepContents(events)).toContain('⚡ write_file auto-approved (yolo)');
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual(['write_file']);
+  });
+
+  it('skips the card when a saved grant covers the call', async () => {
+    const args = { path: 'granted.txt', content: 'hello' };
+    const workspaceId = createWorkspace('saved-grant');
+    server.agentState.approvalGrantStore.grant('write_file', args, workspaceId);
+    stubProvider('write_file', args);
+    const { status, events } = await runTurn(workspaceId, 'Write hello into notes.txt', 'approval-saved-grant');
+    expect(status).toBe(200);
+    expect(events.some(e => e.event === 'approval_required')).toBe(false);
+    expect(stepContents(events)).toContain('✔ write_file allowed by saved grant');
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual(['write_file']);
+  });
+
+  it('runs the tool when the client approves the card', async () => {
+    stubProvider('write_file', { path: 'approved.txt', content: 'hello' });
+    const { status, events, answered } = await runTurnAnswering(
+      createWorkspace('approved'),
+      'Write hello into notes.txt',
+      'approval-approved',
+      true,
+    );
+    expect(status).toBe(200);
+    expect(answered).toEqual({
+      status: 200,
+      body: expect.objectContaining({ ok: true, approved: true }),
+    });
+    expect(events.some(e => e.event === 'approval_required')).toBe(true);
+    expect(stepContents(events)).toContain('✔ write_file approved');
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual(['write_file']);
+  });
+
+  it('blocks the tool when the client denies the card', async () => {
+    stubProvider('write_file', { path: 'denied.txt', content: 'hello' });
+    const { status, events, answered } = await runTurnAnswering(
+      createWorkspace('denied'),
+      'Write hello into notes.txt',
+      'approval-denied',
+      false,
+    );
+    expect(status).toBe(200);
+    expect(answered).toEqual({
+      status: 200,
+      body: expect.objectContaining({ ok: true, approved: false }),
+    });
+    expect(stepContents(events)).toContain('✖ write_file denied by user');
+    expect(toolResultText(events, 'write_file')).toBe('[BLOCKED] User denied write_file');
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
 });
