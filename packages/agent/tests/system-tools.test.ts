@@ -913,7 +913,11 @@ describe('createSystemTools', () => {
       expect(readyBeforeBlock).toBe(true);
       expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(result).not.toContain('descendants may still be running');
+      // The Windows worker reports 'tree' only when taskkill walked the tree, so a
+      // degraded warning there means the root-only fallback ran. The POSIX
+      // supervisor reports every timeout as degraded by design: a group kill
+      // cannot prove no descendant escaped the group.
+      if (process.platform === 'win32') expect(result).not.toContain('descendants may still be running');
       expect(await waitForProcessExit(descendantPid), result).toBe(true);
       await expectDescendantStopped(ready, heartbeat);
     }, 20_000);
@@ -1008,7 +1012,11 @@ describe('createSystemTools', () => {
       expect(descendantReadyAtUnblock).toBe(true);
       expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(result).not.toContain('descendants may still be running');
+      // The Windows worker reports 'tree' only when taskkill walked the tree, so a
+      // degraded warning there means the root-only fallback ran. The POSIX
+      // supervisor reports every timeout as degraded by design: a group kill
+      // cannot prove no descendant escaped the group.
+      if (process.platform === 'win32') expect(result).not.toContain('descendants may still be running');
       expect(await waitForProcessExit(descendantPid), result).toBe(true);
       await expectDescendantStopped(descendantReady, heartbeat);
     }, 20_000);
