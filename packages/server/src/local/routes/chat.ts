@@ -541,6 +541,7 @@ export {
 export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
+import { TurnRecalledContext } from './chat-turn-recall-context.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -2128,17 +2129,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     };
 
-    // Declare at handler scope so error handler can surface recalled memories (P1-4)
-    let recalledContext = '';
-    let workspaceSessionContext = '';
-    // W4.5: unprefixed recall text handed to the PromptAssembler (fixes
-    // double-compute — assembler reuses it instead of re-searching).
-    let recallTextForAssembler = '';
-    // Terminal, content-free proof that saved memory actually entered this
-    // turn's model context. The UI must never infer this from message count or
-    // an attempted recall because empty, failed, and safety-dropped lookups did
-    // not influence the answer.
-    let memoryContext = { included: false, count: 0 };
+    // Recalled memory and workspace-session context adopted this turn. Its
+    // `receipt` is terminal, content-free proof that saved memory actually
+    // entered the model context: the UI must never infer that from message
+    // count or an attempted recall, because empty, failed, and safety-dropped
+    // lookups did not influence the answer.
+    const turnRecall = new TurnRecalledContext();
 
     // B1-B7: Rerouted message from slash command processing — scoped to handler
     let reroutedMessage: string | undefined;
@@ -2654,9 +2650,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   isError: false,
                 });
               } else {
-                recalledContext = '\n\n' + recall.text;
-                recallTextForAssembler = recall.text;
-                memoryContext = { included: true, count: recall.count };
+                turnRecall.adoptRecall(recall.text, recall.count);
 
                 // B5: Include content snippets so ToolCard can show what was recalled
                 const snippets = (recall.recalled ?? []).slice(0, 3);
@@ -2796,8 +2790,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && isEnabled('PROMPT_ASSEMBLER');
 
         // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
-        // recall block is already INSIDE the assembled prompt — appending
-        // recalledContext again injected every recalled memory twice.
+        // recall block is already INSIDE the assembled prompt — appending it
+        // again injected every recalled memory twice (`staticPromptTail`).
         let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
         const initialPromptModel = resolvedModel;
         let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
@@ -3190,7 +3184,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (recentSessions.text) {
             const sessionContextScan = scanForInjection(recentSessions.text, 'tool_output');
             if (sessionContextScan.safe) {
-              workspaceSessionContext = `\n\n${recentSessions.text}`;
+              turnRecall.adoptWorkspaceSessions(recentSessions.text);
               sendEvent('step', {
                 content: `Reviewed ${recentSessions.sessionCount} recent workspace session${recentSessions.sessionCount === 1 ? '' : 's'}.`,
               });
@@ -3686,7 +3680,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
               taskShape: turnTaskShape,
               turnId,
-              recalledText: recallTextForAssembler,
+              recalledText: turnRecall.assemblerText,
               model: resolvedModel,
               availableTools: effectiveTools,
             });
@@ -3766,7 +3760,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 assembledForModel = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
                   taskShape: turnTaskShape,
                   turnId,
-                  recalledText: recallTextForAssembler,
+                  recalledText: turnRecall.assemblerText,
                   model: logicalModel,
                   availableTools: effectiveTools,
                 });
@@ -3819,8 +3813,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 + packagedSystemPrompt
                 + templateContext
                 + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
-                + (assembledForModel ? '' : recalledContext)
-                + workspaceSessionContext;
+                + turnRecall.staticPromptTail(Boolean(assembledForModel));
             return hasSpecialEvidenceBoundary
               ? basePrompt
               : basePrompt + buildTurnContextSuffix(
@@ -4905,8 +4898,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // honest hedge note; durations/percents only inform the log signal
         // (noisier — advice timelines like "2 weeks" would false-positive). The
         // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && allowResponseDecoration && finalContent && (recalledContext || workspaceSessionContext)) {
-          const grounding = checkGrounding(finalContent, recalledContext + workspaceSessionContext + '\n' + message);
+        if (!hasCustomRunner && allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
+          const grounding = checkGrounding(finalContent, turnRecall.groundingEvidence(message));
           if (grounding.ungrounded.length > 0) {
             log.info('[grounding] reply asserts specifics absent from recalled memory', {
               score: grounding.score,
@@ -4974,7 +4967,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
           billingClass: messageBillingClass,
-          memoryContext,
+          memoryContext: turnRecall.receipt,
           contextMetrics: {
             toolCatalogCount,
             toolEligibleCount,
