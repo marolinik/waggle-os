@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -540,6 +540,7 @@ export {
 } from './chat-turn-policy.js';
 export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
+import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -2149,13 +2150,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let unregisterHook: (() => void) | undefined;
     let requestHookRegistry: HookRegistry | undefined;
 
-    // H-07 G4: hoist trace recorder/handle so the outer catch can finalize
-    // aborted/errored traces with outcome='abandoned'. Without this, a failed
-    // turn leaves its row in the 'pending' state and EvalDatasetBuilder skips
-    // it, starving the evolution loop of negative examples.
-    let traceRecorder: TraceRecorder | null = null;
-    let traceHandle: TraceHandle | null = null;
-    let traceFinalized = false;
+    // H-07 G4: hoisted so the outer catch can finalize aborted/errored traces
+    // with outcome='abandoned'. Without this, a failed turn leaves its row in
+    // the 'pending' state and EvalDatasetBuilder skips it, starving the
+    // evolution loop of negative examples.
+    const turnTrace = new TurnExecutionTrace();
 
     // #3 (launch-blocker): hoist the resolved orchestrator so the outer catch
     // can persist the raw user turn even when generation fails. Memory capture
@@ -3582,7 +3581,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             costTracker,
             executionScopeId,
             listOllamaChatModelIds,
-            () => traceHandle?.id,
+            () => turnTrace.id,
             (model) => isExactConfiguredKeylessCompatibleModel(server, model),
           );
           effectiveTools = bindChatCollaborationTools({
@@ -4256,21 +4255,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Start execution trace (self-evolution substrate) ──
         // Taken from the composition root, not built here (CA-5). Still read
         // defensively so unit tests with no decorator (legacy suites) pass.
-        // Assigned to the hoisted outer-scope variables so the outer catch can
-        // finalize with outcome='abandoned' on any exception path (H-07 G4 fix).
+        // Started on the hoisted `turnTrace` so the outer catch can finalize
+        // with outcome='abandoned' on any exception path (H-07 G4 fix).
         // This operational audit trail is intentionally retained for
         // bounded/read-only turns; it is not learned memory or a user-work
         // mutation.
-        traceRecorder = server.traceRecorder ?? null;
-        traceHandle = traceRecorder
-          ? traceRecorder.start({
-              sessionId,
-              personaId: activePersonaId,
-              workspaceId: effectiveWorkspace ?? null,
-              model: resolvedModel,
-              input: retainedTurnText(message),
-            })
-          : null;
+        turnTrace.start(server.traceRecorder ?? null, {
+          sessionId,
+          personaId: activePersonaId,
+          workspaceId: effectiveWorkspace ?? null,
+          model: resolvedModel,
+          input: retainedTurnText(message),
+        });
 
         // #4: route locally-selected Ollama models to Ollama's OpenAI-compatible
         // endpoint instead of LiteLLM (graceful degradation / sovereignty story).
@@ -4284,9 +4280,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...agentConfig,
           ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
-          modelSpendTraceId: traceHandle?.id,
-          ...(allowDerivedPersistence && traceRecorder && traceHandle
-            ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
+          modelSpendTraceId: turnTrace.id,
+          ...(allowDerivedPersistence && turnTrace.recording
+            ? { traceRecording: turnTrace.recording }
             : {}),
           // AI-OS Phase 3 — skill diffusion. When the D1 closed
           // learning loop fires, broadcast a skill_share signal on
@@ -4943,22 +4939,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Default trace outcome is success; correction-detector may downgrade
         // it to corrected on the next turn. The assistant history above is the
         // durable response commit that this trace describes.
-        if (traceRecorder && traceHandle) {
-          try {
-            const finalizedTrace = traceRecorder.finalize(traceHandle, {
-              outcome: 'success',
-              output: retainedTurnText(finalContent ?? ''),
-              model: usageLedger.attemptModel ?? resolvedModel,
-              tokens: {
-                input: turnUsage.inputTokens,
-                output: turnUsage.outputTokens,
-              },
-              costUsd: resultCost,
-            });
-            resultCost = finalizedTrace?.cost_usd ?? resultCost;
-            traceFinalized = true;
-          } catch { /* tracing is best-effort — don't fail the response */ }
-        }
+        const finalizedTrace = turnTrace.finalizeOnce(() => ({
+          outcome: 'success',
+          output: retainedTurnText(finalContent ?? ''),
+          model: usageLedger.attemptModel ?? resolvedModel,
+          tokens: {
+            input: turnUsage.inputTokens,
+            output: turnUsage.outputTokens,
+          },
+          costUsd: resultCost,
+        }));
+        resultCost = finalizedTrace?.cost_usd ?? resultCost;
 
         // The agent loop streams every model turn, including provisional prose
         // before tools, retries, and completion-gate corrections. Reconcile at
@@ -5053,7 +5044,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 // PR3.5 frame↔trace backlink — link auto-saved frames to the
                 // turn's execution trace so Memory-Trust can answer why this
                 // memory exists. Undefined when tracing is unavailable.
-                traceId: traceHandle ? String(traceHandle.id) : undefined,
+                traceId: turnTrace.id?.toString(),
               });
               if (saved.length > 0) {
                 log.info(`[chat] auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} after response commit`);
@@ -5144,25 +5135,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // H-07 G4: finalize aborted trace so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
       // and GEPA never sees it — starving the loop of counterexamples.
-      if (traceRecorder && traceHandle && !traceFinalized) {
-        try {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          traceRecorder.finalize(traceHandle, {
-            outcome: 'abandoned',
-            output: '',
-            model: usageLedger.attemptModel ?? undefined,
-            tokens: billableFailureUsage ? {
-              input: billableFailureUsage.inputTokens,
-              output: billableFailureUsage.outputTokens,
-            } : undefined,
-            costUsd: failureCostUsd,
-            ...(!turnSignal.aborted && {
-              correctionFeedback: retainedTurnText(errMsg).slice(0, 500),
-            }),
-          });
-          traceFinalized = true;
-        } catch { /* best-effort */ }
-      }
+      turnTrace.finalizeOnce(() => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        return {
+          outcome: 'abandoned',
+          output: '',
+          model: usageLedger.attemptModel ?? undefined,
+          tokens: billableFailureUsage ? {
+            input: billableFailureUsage.inputTokens,
+            output: billableFailureUsage.outputTokens,
+          } : undefined,
+          costUsd: failureCostUsd,
+          ...(!turnSignal.aborted && {
+            correctionFeedback: retainedTurnText(errMsg).slice(0, 500),
+          }),
+        };
+      });
       // A user Stop/client disconnect is not an assistant answer or generation
       // failure. Keep the already-persisted user turn, but never fabricate an
       // authoritative assistant/error turn from partial work.
@@ -5297,16 +5285,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // exotic exit path where the outer catch didn't run. Outcome stays
       // 'abandoned' because we don't know if the agent produced a usable
       // output — the correction-detector can upgrade it later if appropriate.
-      if (traceRecorder && traceHandle && !traceFinalized) {
-        try {
-          traceRecorder.finalize(traceHandle, {
-            outcome: 'abandoned',
-            output: retainedTurnText(''),
-            model: usageLedger.attemptModel ?? undefined,
-          });
-          traceFinalized = true;
-        } catch { /* best-effort */ }
-      }
+      turnTrace.finalizeOnce(() => ({
+        outcome: 'abandoned',
+        output: retainedTurnText(''),
+        model: usageLedger.attemptModel ?? undefined,
+      }));
       activeChatTurns.delete(activeSessionStateKey);
       pruneRetainedSessionState();
       // End the SSE stream before releasing the exact workspace generation.
