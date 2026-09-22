@@ -88,6 +88,21 @@ describe('createSystemTools', () => {
     }
   }
 
+  /**
+   * Wait for a killed process to be gone rather than sampling it once: a loaded
+   * Windows runner can still report a force-terminated PID for a moment. The
+   * bound stays well inside boundedHeartbeatChildCode's 15 s self-exit, so a
+   * kill that never happened still fails.
+   */
+  async function waitForProcessExit(pid: number, timeoutMs = 2_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (isProcessRunning(pid)) {
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return true;
+  }
+
   async function expectDescendantStopped(ready: string, heartbeat: string): Promise<void> {
     expect(fs.existsSync(ready)).toBe(true);
     const descendantPid = Number(fs.readFileSync(ready, 'utf8'));
@@ -893,13 +908,13 @@ describe('createSystemTools', () => {
       const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
 
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 9_000);
-      const aliveAtUnblock = descendantPidValid && isProcessRunning(descendantPid);
       const result = await execution;
 
       expect(readyBeforeBlock).toBe(true);
       expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(aliveAtUnblock).toBe(false);
+      expect(result).not.toContain('descendants may still be running');
+      expect(await waitForProcessExit(descendantPid), result).toBe(true);
       await expectDescendantStopped(ready, heartbeat);
     }, 20_000);
 
@@ -987,14 +1002,14 @@ describe('createSystemTools', () => {
         }
       }
       const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
-      const aliveAtUnblock = descendantPidValid && isProcessRunning(descendantPid);
       const result = await execution;
 
       expect(rootReadyAtUnblock).toBe(true);
       expect(descendantReadyAtUnblock).toBe(true);
       expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(aliveAtUnblock).toBe(false);
+      expect(result).not.toContain('descendants may still be running');
+      expect(await waitForProcessExit(descendantPid), result).toBe(true);
       await expectDescendantStopped(descendantReady, heartbeat);
     }, 20_000);
 
