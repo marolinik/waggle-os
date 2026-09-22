@@ -1969,7 +1969,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     if (workspacePaths.rejection) {
       return reply.status(workspacePaths.rejection.status).send(workspacePaths.rejection.body);
     }
-    let workspacePath = workspacePaths.workspacePath;
+    const workspacePath = workspacePaths.workspacePath;
     const { workspacePathFromTrustedConfig, executionWorkspacePath } = workspacePaths;
 
     // Validation and auth checks remain before reply.hijack(); once hijacked,
@@ -2087,7 +2087,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           code: 'PATH_TRAVERSAL',
         });
       }
-      workspacePath = resolved;
     }
 
     // Hijack the response so Fastify doesn't try to send its own reply.
