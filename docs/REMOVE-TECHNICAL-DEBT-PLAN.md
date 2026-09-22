@@ -150,6 +150,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-21 | 2 (pass 2) | TD-CHAT-3 slice 1: the usage-accounting cluster became `TurnUsageLedger`, pinned first (`6611389b`, `1c24fdf0`) | Replace Method with Method Object one cohesive cluster at a time, not the 3529-line closure at once; the fold was written out twice and asserted nowhere. Row recorded 2026-09-22: the slice shipped without one. |
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 2 = the trace cluster (founder), ahead of the recall cluster (`8fe4e797`, `17ce055b`) | Its lifecycle (start, finalize once, three exits) fits one small object and its pins needed no new harness; the recall cluster feeds the prompt, so it is persona-receipt-sensitive and needs new pins first. The finalize swallow stays silent in the structure-only commit even though the Adopted Convention wants a warn: adding it changes behavior (TD-CHAT-48). |
 | 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 3 = the recall cluster (`5237cf62`, `45707fbf`); pins through the `runAgentLoop` module mock, not the `agentRunner` seam | Every write sits behind `!hasCustomRunner`, so the injected-runner seam cannot reach it (TD-CHAT-16). The memory text is not a unique marker, since two other prompt sections list the same memory, so the pins key on the recall block and on the exact text `recallMemory` returned. |
+| 2026-09-22 | 2 (pass 2) | TD-CHAT-3 slice 4 = the retention flags (`d12e4345`, `41821209`), as a holder with getters and one `settle()`, not a pure settle function returning four values | A pure function would have moved the rule but left four reassignable `let`s and about forty readers able to reassign them; the holder removes the `let`s. The grant type is declared in the module rather than imported from `chat-helpers.ts`, so the boundary walk stays a single leaf. |
 
 ## Next Actions
 
@@ -182,7 +183,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
   - [x] TD-CHAT-3 slice 1, usage accounting -> `TurnUsageLedger` (agent, `6611389b` + `1c24fdf0`, 2026-09-21)
   - [x] TD-CHAT-3 slice 2, execution trace -> `TurnExecutionTrace` (agent, `8fe4e797` + `17ce055b`, 2026-09-22)
   - [x] TD-CHAT-3 slice 3, recalled context -> `TurnRecalledContext` (agent, `5237cf62` + `45707fbf`, 2026-09-22)
-  - [ ] TD-CHAT-3 slice 4, the persistence flags a turn can downgrade (agent, P1)
+  - [x] TD-CHAT-3 slice 4, retention flags -> `TurnRetention` (agent, `d12e4345` + `41821209`, 2026-09-22)
   - [ ] TD-CHAT-3 slices 5-6, the turn-teardown resources the outer finally releases (agent, P1)
   - [ ] TD-CHAT-3 control flow: Extract Method on the handler's phases once its state has owners (agent, P1)
   - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)

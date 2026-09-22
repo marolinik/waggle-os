@@ -30,6 +30,7 @@ const ENTRY = path.join(ROUTES_DIR, 'chat-turn-policy.ts');
 const USAGE_LEDGER_ENTRY = path.join(ROUTES_DIR, 'chat-turn-usage-ledger.ts');
 const EXECUTION_TRACE_ENTRY = path.join(ROUTES_DIR, 'chat-turn-execution-trace.ts');
 const RECALL_CONTEXT_ENTRY = path.join(ROUTES_DIR, 'chat-turn-recall-context.ts');
+const RETENTION_ENTRY = path.join(ROUTES_DIR, 'chat-turn-retention.ts');
 
 /** Bare specifiers the policy layer may depend on at runtime. Inward only. */
 const ALLOWED_RUNTIME_PACKAGES = ['@waggle/agent/permissions', '@waggle/agent/tool-filter'];
@@ -170,5 +171,24 @@ describe('chat-turn-recall-context boundary', () => {
 
   it('is a single leaf module', () => {
     expect(graph.files).toEqual(['chat-turn-recall-context.ts']);
+  });
+});
+
+/**
+ * The turn retention (TD-CHAT-3, fourth slice) decides what one turn may leave
+ * behind, extracted out of the same closure where it lived as four hoisted
+ * mutable variables. It is three booleans and one narrowing rule, so it needs
+ * nothing at all.
+ */
+describe('chat-turn-retention boundary', () => {
+  const graph = walk(RETENTION_ENTRY);
+
+  it('imports nothing, not even a type', () => {
+    expect([...graph.runtime]).toEqual([]);
+    expect([...graph.typeOnly]).toEqual([]);
+  });
+
+  it('is a single leaf module', () => {
+    expect(graph.files).toEqual(['chat-turn-retention.ts']);
   });
 });
