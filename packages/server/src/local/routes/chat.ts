@@ -542,6 +542,7 @@ export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
+import { TurnRetention } from './chat-turn-retention.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -2010,7 +2011,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       && !isExplicitMemorySaveRequest(message)
       && !isExplicitExternalResearchRequest(message)
       && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
-    let toolFreeAdvisory = false;
     const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
     const turnPersonaId = personaOverride
       ?? executionWorkspaceConfig?.personaId
@@ -2022,21 +2022,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       personaIsReadOnly: turnPersona?.isReadOnly === true,
       closedWorldRewrite: requestClosedWorldRewrite,
     });
-    let allowMemoryPersistence = turnPersistence.allowMemoryPersistence;
-    let allowDerivedPersistence = turnPersistence.allowDerivedPersistence;
+    // What this turn may leave behind; narrowed once its history is loaded.
+    const retention = new TurnRetention({
+      ...turnPersistence,
+      allowResponseDecoration: allowsPostResponseDecoration(
+        turnMutationPolicy,
+        requestClosedWorldRewrite,
+      ),
+    });
     const retainedTurnText = (value: string): string => (
-      allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
+      retention.allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
     );
     const retainedTurnJson = (value: unknown): string => (
-      allowDerivedPersistence
+      retention.allowDerivedPersistence
         ? JSON.stringify(value) ?? 'null'
         : JSON.stringify({ redacted: NON_RETAINED_TURN_CONTENT })
     );
-    const turnAllowsResponseDecoration = allowsPostResponseDecoration(
-      turnMutationPolicy,
-      requestClosedWorldRewrite,
-    );
-    let allowResponseDecoration = turnAllowsResponseDecoration;
 
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
@@ -2448,18 +2449,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Current-message-only packaging is safe only when there is no prior
       // conversation to erase. Capability classifiers above separately keep
       // workspace, memory, connector, and web evidence requests tool-capable.
-      toolFreeAdvisory = toolFreeAdvisoryCandidate && history.length === 0;
-      allowMemoryPersistence = !toolFreeAdvisory && turnPersistence.allowMemoryPersistence;
-      allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
-      allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
-      if ((explicitReadOnlyToolCandidate === 'read_file'
-          && directReadFileDirective.kind === 'valid')
-        || explicitReadOnlyToolCandidate === 'search_memory'
-        || decisionMatrixToolSequenceRequested) {
-        allowMemoryPersistence = false;
-        allowDerivedPersistence = false;
-        allowResponseDecoration = false;
-      }
+      retention.settle({
+        toolFreeAdvisory: toolFreeAdvisoryCandidate && history.length === 0,
+        forcedReadOnlyTurn: (explicitReadOnlyToolCandidate === 'read_file'
+            && directReadFileDirective.kind === 'valid')
+          || explicitReadOnlyToolCandidate === 'search_memory'
+          || decisionMatrixToolSequenceRequested,
+      });
 
       // A saved-history opt-out is both a read and retention boundary for this turn.
       if (!turnMutationPolicy.denyConversationHistory && !retryUserAlreadyPersisted) {
@@ -2549,7 +2545,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !persistedMemoryReadAllowed;
         const blocksMarketplaceMutation = (marketplaceSubcommand === 'install'
           || marketplaceSubcommand === 'sync')
-          && (!persistedMemoryReadAllowed || !allowDerivedPersistence);
+          && (!persistedMemoryReadAllowed || !retention.allowDerivedPersistence);
         const cmdResult = blocksMarketplaceRead || blocksMarketplaceMutation
           ? 'Persisted marketplace state is disabled for this turn.'
           : await commandRegistry.execute(message, cmdContext);
@@ -2626,7 +2622,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Automatic memory recall ─────────────────────────────
         if (!hasCustomRunner
           && !closedWorldRewrite
-          && !toolFreeAdvisory
+          && !retention.toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
           && !isCurrentConversationOnlyReferenceRequest(agentMessage)
           && allowsAutomaticRecall(turnMutationPolicy)) {
@@ -2708,9 +2704,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner
           && isFirstUserMessage
           && !closedWorldRewrite
-          && !toolFreeAdvisory
+          && !retention.toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
-          && allowDerivedPersistence
+          && retention.allowDerivedPersistence
           && turnMutationPolicy.contextScope === 'default') {
           try {
             const optimizer = await getOptimizerService(server);
@@ -2761,7 +2757,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner
           && isFirstUserMessage
           && !closedWorldRewrite
-          && !toolFreeAdvisory
+          && !retention.toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
           && turnMutationPolicy.contextScope === 'default') {
         const wsTemplateId = effectiveWorkspace
@@ -2785,7 +2781,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const shouldAssemblePrompt = !hasCustomRunner
           && turnMutationPolicy.contextScope === 'default'
           && persistedMemoryReadAllowed
-          && !toolFreeAdvisory
+          && !retention.toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
           && isEnabled('PROMPT_ASSEMBLER');
 
@@ -3082,13 +3078,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             heldEvent: {
               requestId,
               toolName,
-              input: allowDerivedPersistence ? input : { redacted: NON_RETAINED_TURN_CONTENT },
+              input: retention.allowDerivedPersistence ? input : { redacted: NON_RETAINED_TURN_CONTENT },
               sourceWorkspaceId: effectiveWorkspace || null,
               held: true,
               message: 'Moved to Approvals inbox',
               ...trustMeta,
             },
-            policy: allowDerivedPersistence
+            policy: retention.allowDerivedPersistence
               ? approvalTimeoutPolicy
               : { ...approvalTimeoutPolicy, action: 'deny' },
             sendEvent,
@@ -3193,7 +3189,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           }
         }
-        if (closedWorldRewrite || toolFreeAdvisory) {
+        if (closedWorldRewrite || retention.toolFreeAdvisory) {
           effectiveTools = [];
           spawnAvailableTools = [];
         }
@@ -3217,7 +3213,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         const externalToolNames = new Set<string>();
         const retrievedToolNames = new Set<string>();
-        if (!hasCustomRunner && !closedWorldRewrite && !toolFreeAdvisory) {
+        if (!hasCustomRunner && !closedWorldRewrite && !retention.toolFreeAdvisory) {
           effectiveTools = filterAvailableTools(effectiveTools);
           spawnAvailableTools = effectiveTools;
 
@@ -3327,7 +3323,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? verifiedCompressionModel
             : null;
         }
-        if (closedWorldRewrite || toolFreeAdvisory || explicitReadOnlyToolCandidate) {
+        if (closedWorldRewrite || retention.toolFreeAdvisory || explicitReadOnlyToolCandidate) {
           windowedMessages = [{ role: 'user', content: agentMessage }];
         } else if (!allowsConversationHistory(turnMutationPolicy)) {
           windowedMessages = buildTurnMessageWindow(history, agentMessage, turnMutationPolicy);
@@ -3365,7 +3361,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // tool/connector output, so scan it before it can enter durable
               // memory; fail-soft with the W4A closed-DB guard so persistence
               // never fails the turn.
-              if (!hasCustomRunner && allowMemoryPersistence) {
+              if (!hasCustomRunner && retention.allowMemoryPersistence) {
                 const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
                 if (summaryScan.score >= 0.7) {
                   log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
@@ -3594,7 +3590,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   externalToolNames,
                 )
               : undefined,
-            allowDerivedPersistence,
+            allowDerivedPersistence: retention.allowDerivedPersistence,
             securityContext: {
               hooks: requestHookRegistry,
               blockedTools: governancePolicies?.blockedTools,
@@ -3748,7 +3744,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             explicitReadOnlyToolSequence: decisionMatrixToolSequenceRequested
               ? DECISION_MATRIX_TOOL_SEQUENCE
               : undefined,
-            explicitToolFreeAdvisory: toolFreeAdvisory,
+            explicitToolFreeAdvisory: retention.toolFreeAdvisory,
             exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
               || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
           });
@@ -3794,7 +3790,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               decisionMatrixToolSequenceRequested ? DECISION_MATRIX_TOOL_SEQUENCE : undefined,
               logicalModel,
               activeSessionStateWorkspaceId,
-              toolFreeAdvisory || Boolean(
+              retention.toolFreeAdvisory || Boolean(
                 explicitReadOnlyToolCandidate
                 && !explicitReadOnlyToolChoice
                 && !requiredToolSequence,
@@ -3805,7 +3801,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             );
             const hasSpecialEvidenceBoundary = turnMutationPolicy.contextScope !== 'default'
               || closedWorldRewrite
-              || toolFreeAdvisory
+              || retention.toolFreeAdvisory
               || Boolean(explicitReadOnlyToolCandidate);
             const basePrompt = hasSpecialEvidenceBoundary
               ? packagedSystemPrompt
@@ -3828,7 +3824,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build routing suggestions from the exact executable/serialized set.
         const capabilityRouter = hasCustomRunner
-          || toolFreeAdvisory
+          || retention.toolFreeAdvisory
           || Boolean(explicitReadOnlyToolCandidate)
           || !persistedMemoryReadAllowed
           || !allowsConversationHistory(turnMutationPolicy)
@@ -3857,7 +3853,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
         let maxOutputTokens: number | undefined;
         const reasoningForModelAttempt = (logicalModel: string): AgentLoopConfig['reasoning'] =>
-          toolFreeAdvisory
+          retention.toolFreeAdvisory
           && !requiredToolSequence
           && packageMode === 'compact'
           && logicalModel.trim().toLowerCase() === 'openrouter/anthropic/claude-sonnet-5'
@@ -3901,7 +3897,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           maxOutputTokens = 512;
         } else if (
           closedWorldRewrite
-          || toolFreeAdvisory
+          || retention.toolFreeAdvisory
           || (turnMutationPolicy.contextScope !== 'default' && effectiveTools.length === 0)
         ) {
           agentRunBudget = {
@@ -3980,7 +3976,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
-          skillDistillationGate: allowDerivedPersistence,
+          skillDistillationGate: retention.allowDerivedPersistence,
           signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
@@ -4194,7 +4190,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
 
           // TeamSync push — after save_memory in team workspace (fire-and-forget)
-          if (allowMemoryPersistence && name === 'save_memory' && !result.startsWith('Error')) {
+          if (retention.allowMemoryPersistence && name === 'save_memory' && !result.startsWith('Error')) {
             const pushWsConfig = activeExecutionWorkspaceId
               ? server.workspaceManager?.get(activeExecutionWorkspaceId)
               : undefined;
@@ -4274,7 +4270,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
           modelSpendTraceId: turnTrace.id,
-          ...(allowDerivedPersistence && turnTrace.recording
+          ...(retention.allowDerivedPersistence && turnTrace.recording
             ? { traceRecording: turnTrace.recording }
             : {}),
           // AI-OS Phase 3 — skill diffusion. When the D1 closed
@@ -4282,7 +4278,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // the v2 bus so MCP-consuming external tools can adopt
           // the soon-to-be-authored skill. Failures are swallowed
           // upstream (agent-loop wraps in try/catch).
-          onSkillDistillationFire: allowDerivedPersistence && server.signalBus
+          onSkillDistillationFire: retention.allowDerivedPersistence && server.signalBus
             ? async ({ patternKey, toolsUsed, directive }) => {
                 const signalBus = server.signalBus;
                 if (!signalBus) return;
@@ -4744,7 +4740,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         usageLedger.markAccounted();
 
         // M8: commit deferred signal markings now that model call succeeded
-        if (!hasCustomRunner && allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
+        if (!hasCustomRunner && retention.allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
 
         // ── R1 closed learning loop: deterministic skill distillation ──
         // Hermes parity (premium-harness D1). The runtime — not just the
@@ -4755,7 +4751,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
         // Skipped whenever learned/derived persistence is disabled.
-        if (!hasCustomRunner && allowDerivedPersistence) {
+        if (!hasCustomRunner && retention.allowDerivedPersistence) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
             sendEvent('step', { content: distillPlan.directive });
@@ -4778,7 +4774,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — KG enrichment never fails the response.
         // Skipped whenever learned/derived persistence is disabled; review and
         // evidence-bounded output must not inflate the knowledge graph.
-        if (!hasCustomRunner && allowDerivedPersistence && result.content && result.content.length > 100) {
+        if (!hasCustomRunner && retention.allowDerivedPersistence && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
@@ -4812,7 +4808,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — detection failure shouldn't affect the response.
         // Skipped whenever learned/derived persistence is disabled; a review
         // instruction can quote old corrections that must not re-fire.
-        if (!hasCustomRunner && allowDerivedPersistence) {
+        if (!hasCustomRunner && retention.allowDerivedPersistence) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);
@@ -4832,7 +4828,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // ── Auto skill capture — detect repeatable workflow patterns ──
         if (!hasCustomRunner
-          && allowDerivedPersistence
+          && retention.allowDerivedPersistence
           && result.toolsUsed
           && result.toolsUsed.length > 0) {
           try {
@@ -4878,13 +4874,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Post-processing: append professional disclaimer for regulated personas ONLY when content is substantive
         let finalContent = result.content;
-        if (allowResponseDecoration && finalContent) {
+        if (retention.allowResponseDecoration && finalContent) {
           finalContent += regulatedDisclaimerSuffix(finalContent, activePersonaId);
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
         if (!hasCustomRunner
-          && allowResponseDecoration
+          && retention.allowResponseDecoration
           && finalContent
           && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
           finalContent += SCHEDULE_SUGGESTION;
@@ -4898,7 +4894,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // honest hedge note; durations/percents only inform the log signal
         // (noisier — advice timelines like "2 weeks" would false-positive). The
         // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
+        if (!hasCustomRunner && retention.allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
           const grounding = checkGrounding(finalContent, turnRecall.groundingEvidence(message));
           if (grounding.ungrounded.length > 0) {
             log.info('[grounding] reply asserts specifics absent from recalled memory', {
@@ -5029,7 +5025,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // coherent outcome. Keep this awaited so the workspace mind cannot be
         // released mid-write, but never turn a late disconnect into a hidden
         // memory write or contradict the response that was already committed.
-        if (!hasCustomRunner && allowMemoryPersistence) {
+        if (!hasCustomRunner && retention.allowMemoryPersistence) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
@@ -5226,7 +5222,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Gated by the resolved persistence policy for automated, bounded, and
       // persona-read-only turns. Persisting one of those prompts here as a
       // 'user_stated' frame would bypass the happy-path memory boundary.
-      if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
+      if (activeSessionOrch && retention.allowMemoryPersistence && message.trim().length >= 8) {
         try {
           const workspaceMind = usesNamedWorkspace
             ? server.agentState.getWorkspaceMindDb(historyWorkspaceId)
