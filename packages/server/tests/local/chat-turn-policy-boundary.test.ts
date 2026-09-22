@@ -28,6 +28,7 @@ const ROUTES_DIR = path.join(
 );
 const ENTRY = path.join(ROUTES_DIR, 'chat-turn-policy.ts');
 const USAGE_LEDGER_ENTRY = path.join(ROUTES_DIR, 'chat-turn-usage-ledger.ts');
+const EXECUTION_TRACE_ENTRY = path.join(ROUTES_DIR, 'chat-turn-execution-trace.ts');
 
 /** Bare specifiers the policy layer may depend on at runtime. Inward only. */
 const ALLOWED_RUNTIME_PACKAGES = ['@waggle/agent/permissions', '@waggle/agent/tool-filter'];
@@ -128,5 +129,26 @@ describe('chat-turn-usage-ledger boundary', () => {
 
   it('is a single leaf module', () => {
     expect(graph.files).toEqual(['chat-turn-usage-ledger.ts']);
+  });
+});
+
+/**
+ * The turn execution trace (TD-CHAT-3, second slice) is one turn's trace-row
+ * lifecycle, extracted out of the same closure where it lived as three hoisted
+ * mutable variables. It drives a recorder it is handed and imports none, so the
+ * persistence it reaches is the caller's choice, not a load-time dependency.
+ */
+describe('chat-turn-execution-trace boundary', () => {
+  const graph = walk(EXECUTION_TRACE_ENTRY);
+
+  it('has no runtime dependency at all', () => {
+    // The recorder, handle and finalize-options types are its only imports,
+    // and type imports are erased.
+    expect([...graph.runtime]).toEqual([]);
+    expect([...graph.typeOnly]).toEqual(['@waggle/agent']);
+  });
+
+  it('is a single leaf module', () => {
+    expect(graph.files).toEqual(['chat-turn-execution-trace.ts']);
   });
 });
