@@ -569,6 +569,7 @@ import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.
 import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
+import { TurnModelSelection } from './chat-turn-model-selection.js';
 import { TurnResources } from './chat-turn-resources.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -2222,9 +2223,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const budgetThreshold = pilotConfig.getBudgetThreshold();
 
       // Resolve model selection before availability and fallback checks.
-      let resolvedModel = primaryModel;
-      let modelSwitchReason: string | null = null;
-      let budgetModelSelected = false;
+      const modelSelection = new TurnModelSelection({
+        primaryModel,
+        fallbackModel,
+        canonicalize: canonicalizeModelReference,
+      });
+      const resolveModel = (candidate: string) => resolveUsableModel(server, candidate);
       const budgetRoutingAllowed = budgetModel
         ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
         : false;
@@ -2237,44 +2241,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (budgetModel && budgetRoutingAllowed && budgetThresholdReached) {
         const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
-          resolvedModel = routing.model;
-          budgetModelSelected = resolvedModel !== primaryModel;
-          if (budgetModelSelected) {
-            modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-          }
+          modelSelection.selectBudgetModel(
+            routing.model,
+            `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`,
+          );
         }
       }
 
       // ── Model resolution: confirm the selected model is routable; on failure fall
-      // back budget → primary → configured fallback, recording modelSwitchReason ──
-      try {
-        const selectedModelBeforeResolution = resolvedModel.trim();
-        resolvedModel = await resolveUsableModel(server, resolvedModel);
-        const normalizedOnly = resolvedModel
-          === canonicalizeModelReference(selectedModelBeforeResolution);
-        if (!normalizedOnly) {
-          budgetModelSelected = false;
-          modelSwitchReason = `${selectedModelBeforeResolution} unavailable; ${resolvedModel} selected`;
-        }
-      } catch (selectedResolutionError) {
-        const unavailableModel = resolvedModel;
-        if (budgetModelSelected && unavailableModel !== primaryModel) {
-          try {
-            resolvedModel = await resolveUsableModel(server, primaryModel);
-            budgetModelSelected = false;
-            modelSwitchReason = `${unavailableModel} unavailable; primary selected`;
-          } catch (primaryResolutionError) {
-            if (!fallbackModel || fallbackModel === unavailableModel) throw primaryResolutionError;
-            resolvedModel = await resolveUsableModel(server, fallbackModel);
-            budgetModelSelected = false;
-            modelSwitchReason = `${unavailableModel} and ${primaryModel} unavailable; configured fallback selected`;
-          }
-        } else {
-          if (!fallbackModel || fallbackModel === unavailableModel) throw selectedResolutionError;
-          resolvedModel = await resolveUsableModel(server, fallbackModel);
-          modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
-        }
-      }
+      // back budget → primary → configured fallback, recording the switch reason ──
+      await modelSelection.resolvePreflight(resolveModel);
       throwIfTurnAborted();
 
       const configuredFallbackModel = fallbackModel
@@ -2282,7 +2258,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         : null;
       const hasDistinctConfiguredFallback = Boolean(
         configuredFallbackModel
-        && canonicalizeModelReference(resolvedModel) !== configuredFallbackModel,
+        && canonicalizeModelReference(modelSelection.model) !== configuredFallbackModel,
       );
 
       // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
@@ -2378,7 +2354,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // resolveUsableModel() only returns an ollama/* selection after the tag
       // is observed locally, so it remains authoritative even if startup's
       // cloud-provider status has not yet caught up with onboarding.
-      const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
+      const resolvedLocalOllama = modelSelection.model.toLowerCase().startsWith('ollama/');
       let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
       if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
@@ -2697,7 +2673,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // in `rebuildSystemPromptForModel` omits it; appending it again would
         // inject every recalled memory twice.
         let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
-        const initialPromptModel = resolvedModel;
+        const initialPromptModel = modelSelection.model;
         let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
 
         // Register a per-request pre:tool hook for confirmation gates
@@ -2893,7 +2869,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
         let compressionModel = budgetModel
-          && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
+          && canUseBudgetModelWithoutCloudEgress(modelSelection.model, budgetModel)
           ? budgetModel
           : null;
         const liveModelBudget = costTracker.getBudget();
@@ -2904,8 +2880,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !isOfflineOllamaModelReference(compressionModel)) {
           compressionModel = null;
         }
-        const discoveredWindow = getModelContextWindow(resolvedModel);
-        const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
+        const discoveredWindow = getModelContextWindow(modelSelection.model);
+        const isLocalModel = isOfflineOllamaModelReference(modelSelection.model);
         const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
           conservativeDefault: isLocalModel ? 8192 : 128_000,
         });
@@ -3179,7 +3155,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             workspaceId: executionScopeId,
             parentSessionId: sessionId,
             parentTask: agentMessage,
-            model: resolvedModel,
+            model: modelSelection.model,
             runLoop: childAgentRunner,
             runWorkerTransaction: workspaceTurnScope
               ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
@@ -3275,7 +3251,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               taskShape: turnTaskShape,
               turnId,
               recalledText: turnRecall.assemblerText,
-              model: resolvedModel,
+              model: modelSelection.model,
               availableTools: effectiveTools,
             });
             throwIfTurnAborted();
@@ -3415,7 +3391,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 Math.max(0, windowedMessages.length - 1),
               );
           };
-          systemPrompt = await rebuildSystemPromptForModel(resolvedModel);
+          systemPrompt = await rebuildSystemPromptForModel(modelSelection.model);
           throwIfTurnAborted();
           log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }
@@ -3548,11 +3524,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           fetch: server.llmFetch ?? globalThis.fetch,
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
-          model: resolvedModel,
-          billingModel: resolvedModel,
+          model: modelSelection.model,
+          billingModel: modelSelection.model,
           modelSpendBudget: costTracker,
-          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel)
-            || isExactConfiguredKeylessCompatibleModel(server, resolvedModel)
+          modelSpendBillingClass: isOfflineOllamaModelReference(modelSelection.model)
+            || isExactConfiguredKeylessCompatibleModel(server, modelSelection.model)
             ? 'free'
             : 'priced',
           spendWorkspaceId: executionScopeId,
@@ -3565,7 +3541,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(hasDistinctConfiguredFallback ? { initialModelActivityTimeoutMs: 20_000 } : {}),
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
-          reasoning: reasoningForModelAttempt(resolvedModel),
+          reasoning: reasoningForModelAttempt(modelSelection.model),
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
@@ -3632,7 +3608,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               toolName: name,
               input: retainedTurnJson(disclosedInput),
               sessionId,
-              model: resolvedModel,
+              model: modelSelection.model,
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
@@ -3706,7 +3682,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // as a virtual key against its DB, returning "No connected db." (no_db_connection)
         // when no DB is attached. So skip the pool entirely on the LiteLLM path.
         const usingLiteLLM = server.agentState.llmProvider?.provider === 'litellm';
-        const providerName = resolvedModel.startsWith('claude') ? 'anthropic' : resolvedModel.split('/')[0] ?? 'anthropic';
+        const providerName = modelSelection.model.startsWith('claude') ? 'anthropic' : modelSelection.model.split('/')[0] ?? 'anthropic';
         const credPool = usingLiteLLM ? undefined : getCredentialPool(providerName);
         const poolKey = credPool?.getKey();
         const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
@@ -3723,7 +3699,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sessionId,
           personaId: activePersonaId,
           workspaceId: effectiveWorkspace ?? null,
-          model: resolvedModel,
+          model: modelSelection.model,
           input: retainedTurnText(message),
         });
 
@@ -3732,12 +3708,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // The sidecar reaches Ollama directly (as it does for embeddings) — no
         // Docker->host hop, no API key. Strip the 'ollama/' routing prefix to the
         // bare tag Ollama expects (e.g. "llama3.2:latest").
-        const isOllamaModel = resolvedModel.startsWith('ollama/');
+        const isOllamaModel = modelSelection.model.startsWith('ollama/');
         const ollamaUrl = (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1';
 
         const runConfig: typeof agentConfig = {
           ...agentConfig,
-          ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
+          ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: modelSelection.model.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
           modelSpendTraceId: turnTrace.id,
           ...(retention.allowDerivedPersistence && turnTrace.recording
@@ -3802,14 +3778,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           };
         };
 
-        let announcedModelSwitchKey: string | null = null;
         const announceModelSwitch = (attemptModel: string) => {
-          if (!modelSwitchReason) return;
-          const switchKey = `${attemptModel}\u0000${modelSwitchReason}`;
-          if (announcedModelSwitchKey === switchKey) return;
-          announcedModelSwitchKey = switchKey;
-          sendEvent('model_switch', { model: attemptModel, reason: modelSwitchReason, primary: primaryModel });
-          sendEvent('step', { content: `⬡ Switched to ${attemptModel} — ${modelSwitchReason}` });
+          const announcement = modelSelection.takeSwitchAnnouncement(attemptModel);
+          if (!announcement) return;
+          sendEvent('model_switch', announcement);
+          sendEvent('step', { content: `⬡ Switched to ${announcement.model} — ${announcement.reason}` });
         };
 
         let initialActivityDeadlineAvailable = true;
@@ -3818,7 +3791,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           bufferedAgentTokens = [];
           capabilityReceipt = null;
           pendingCapabilityToolResults = [];
-          const attemptModel = config.billingModel ?? resolvedModel;
+          const attemptModel = config.billingModel ?? modelSelection.model;
           usageLedger.beginAttempt(attemptModel, config.modelSpendBillingClass ?? 'priced');
           announceModelSwitch(attemptModel);
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
@@ -3867,7 +3840,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             throw error;
           }
           if (turnSignal.aborted) {
-            usageLedger.completeAttempt(attemptedResult.usage, resolvedModel);
+            usageLedger.completeAttempt(attemptedResult.usage, modelSelection.model);
             throwIfTurnAborted();
           }
           toolActivity.assertCompleted();
@@ -3920,25 +3893,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             throw initialError;
           }
           let failure = initialError;
-          let failedBudgetModel: string | null = null;
+          const failedBudgetModel = modelSelection.failedBudgetModel();
 
-          if (budgetModelSelected && resolvedModel !== primaryModel) {
-            failedBudgetModel = resolvedModel;
-            try {
-              resolvedModel = await resolveUsableModel(server, primaryModel);
-              budgetModelSelected = false;
-              modelSwitchReason = `${failedBudgetModel} failed; primary selected`;
-            } catch (primaryResolutionError) {
-              failure = primaryResolutionError;
-              budgetModelSelected = false;
-              if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
-              resolvedModel = await resolveUsableModel(server, fallbackModel);
-              modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
-              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+          if (failedBudgetModel) {
+            const selected = await modelSelection.returnFromFailedBudgetModel(failedBudgetModel, resolveModel);
+            if (selected === 'fallback') {
+              return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
             }
 
             try {
-              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+              return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
             } catch (primaryRunError) {
               if (toolActivity.replayBlocked) throw primaryRunError;
               if (isTerminalAttemptError(primaryRunError)) {
@@ -3949,13 +3913,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
 
           if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
-            && fallbackModel
-            && fallbackModel !== failedBudgetModel
-            && resolvedModel !== fallbackModel) {
-            const failedModel = resolvedModel;
-            resolvedModel = await resolveUsableModel(server, fallbackModel);
-            modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
-            return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+            && modelSelection.canSwitchToFallback(failedBudgetModel)) {
+            await modelSelection.switchToFallbackAfter(failure, resolveModel);
+            return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
           }
 
           throw failure;
@@ -3972,7 +3932,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               modelOperationTimeoutMs: runConfig.modelOperationTimeoutMs,
               elapsedMs: performance.now() - primaryAttemptStartedAt,
               offersTools: runConfig.tools.length > 0,
-              budgetModelSelected,
+              budgetModelSelected: modelSelection.budgetModelSelected,
               replayBlocked: toolActivity.replayBlocked,
               explicitToolWasUsed: toolActivity.explicitToolWasUsed,
             });
@@ -4078,7 +4038,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...result,
           toolsUsed: [...new Set([...failedAttemptToolsUsed, ...(result.toolsUsed ?? [])])],
         };
-        usageLedger.completeAttempt(result.usage, resolvedModel);
+        usageLedger.completeAttempt(result.usage, modelSelection.model);
 
         const capabilityToolResults = pendingCapabilityToolResults as Array<{
           input: Record<string, unknown>;
@@ -4328,7 +4288,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const assistantMessage = {
           role: 'assistant',
           content: finalContent,
-          model: resolvedModel,
+          model: modelSelection.model,
           ...(capabilityReceipt ? { tools: [capabilityReceipt] } : {}),
         };
         if (!turnMutationPolicy.denyConversationHistory) {
@@ -4342,7 +4302,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const finalizedTrace = turnTrace.finalizeOnce(() => ({
           outcome: 'success',
           output: retainedTurnText(finalContent ?? ''),
-          model: usageLedger.attemptModel ?? resolvedModel,
+          model: usageLedger.attemptModel ?? modelSelection.model,
           tokens: {
             input: turnUsage.inputTokens,
             output: turnUsage.outputTokens,
@@ -4372,7 +4332,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           usage: turnUsage,
           usageEstimated: usageLedger.isEstimated,
           toolsUsed: result.toolsUsed,
-          model: resolvedModel,
+          model: modelSelection.model,
           billingClass: messageBillingClass,
           memoryContext: turnRecall.receipt,
           contextMetrics: {
@@ -4407,7 +4367,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           type: 'agent:completed',
           workspaceId: executionScopeId,
             content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${turnUsage.outputTokens} tokens`,
-            metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
+            metadata: { model: modelSelection.model, toolsUsed: result.toolsUsed, cost: messageCost },
           });
       } catch { /* best-effort activity projection */ }
 
@@ -4427,8 +4387,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             emitNotification(server, {
               title: `${agentName} finished in ${wsName}`,
               body: toolCount > 0
-                ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
-                : `${resolvedModel} · response ready`,
+                ? `${modelSelection.model} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
+                : `${modelSelection.model} · response ready`,
               category: 'agent',
             actionUrl: effectiveWorkspace
               ? `/workspaces/${effectiveWorkspace}/chat`
