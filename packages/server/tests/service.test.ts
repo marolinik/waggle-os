@@ -54,7 +54,9 @@ describe('Agent Service', () => {
 
     // Remove temp dirs
     for (const dir of tmpDirs) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      // A write a closed server had already queued can land while the tree is
+      // removed (ENOTEMPTY on Linux CI); Node retries exactly that class.
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
     tmpDirs.length = 0;
   });
