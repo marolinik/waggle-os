@@ -1251,6 +1251,24 @@ describe('SSE Stream Resilience', () => {
         expect(secondResponse.body).not.toContain('event: done');
         expect(secondResponse.body).not.toContain('AFTER_COMPLETE');
 
+        // The rejection returns before the turn's `try`, so no `finally` runs
+        // for it. If it ever ran one, the finally would release the FIRST
+        // turn's claim on the session and let a later request overlap it
+        // (TD-CHAT-13). A third request while the first still runs proves the
+        // claim survived the rejection.
+        const thirdResponse = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspace: workspaceId,
+            session: sessionId,
+            model: 'ollama/local-same',
+            message: 'LEASE_THIRD',
+          },
+        });
+        expect(thirdResponse.body).toContain('"code":"SESSION_TURN_IN_PROGRESS"');
+        expect(thirdResponse.body).not.toContain('event: done');
+
         releaseFirst.resolve();
         const firstResponse = await firstRequest;
         expect(firstResponse.statusCode).toBe(200);
