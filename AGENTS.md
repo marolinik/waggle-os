@@ -239,15 +239,21 @@ npm run test:all        # Full Playwright
 
 ### Verification Commands (run these, don't claim "it compiles")
 ```bash
-npx tsc --noEmit --project packages/agent/tsconfig.json
-npx tsc --noEmit --project packages/server/tsconfig.json   # sidecar — runs via tsx (transpile-only), so NOT typechecked by `npm run build`
+npm run build:packages          # authoritative package typecheck (tsc --build chain, rebuilds each dist/ in order)
+npm run typecheck:server-tests  # server tests; packages/server/tsconfig.json excludes tests/
 npx tsc --noEmit --project app/tsconfig.json
 npm run test -- --run
 npm run lint
 ```
+> `npx tsc --noEmit --project packages/<pkg>/tsconfig.json` is a fast check of one
+> package only: it resolves sibling `@waggle/*` packages through their already-built
+> `dist/`, so after a cross-package type change it passes against stale declarations
+> while CI fails. Run `npm run build:packages` before claiming a package typechecks
+> (`docs/TESTING.md`, TD-TEST-12).
+
 > `npm run build` typechecks **only `apps/web`**. The Fastify sidecar runs via
 > `tsx` (transpile-only) — server-route type errors ship undetected unless you
-> run the `packages/server` tsc above. (A real type error slipped through this
+> run `npm run build:packages` above, whose chain ends in `packages/server`. (A real type error slipped through this
 > way on 2026-05-28; see `docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md`.)
 
 ### Windows Solo release commands (PowerShell 7; frozen clean checkout)

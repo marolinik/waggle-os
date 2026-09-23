@@ -86,6 +86,17 @@ describe('POST /api/chat request validation (characterization)', () => {
     expect(body).toEqual({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
   });
 
+  // Moved from chat-api.test.ts, where they asserted only the status and
+  // `toContain('message')` (TD-TEST-7). This refusal carries no code.
+  it.each([
+    ['missing', {}],
+    ['empty', { message: '' }],
+  ])('rejects a %s message', async (_label, payload) => {
+    const { status, body } = await post(payload);
+    expect(status).toBe(400);
+    expect(body).toEqual({ error: 'message is required' });
+  });
+
   describe('message length limit (WAGGLE_MAX_MESSAGE_LENGTH, read per request)', () => {
     const original = process.env.WAGGLE_MAX_MESSAGE_LENGTH;
     afterEach(() => {
