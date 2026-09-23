@@ -244,6 +244,21 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
       '## Status Report\n\nPersisted workspace state is disabled for this turn.\n\n**Skills loaded:** 0',
     );
   });
+
+  it('/catchup with persisted memory denied presents the disabled notice as the briefing', async () => {
+    const { content } = await commandTurn('/catchup - do not use my saved memory');
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-1): only the no-state sentinel is
+    // recognised, so the disabled notice is introduced as workspace activity.
+    expect(content).toBe(
+      "## Catch-Up Briefing\n\nHere's what's been happening in this workspace:\n\nPersisted workspace state is disabled for this turn.",
+    );
+  });
+
+  it('/now with persisted memory denied presents the disabled notice as current state', async () => {
+    const { content } = await commandTurn('/now - do not use my saved memory');
+    // QUIRK (docs/TECH-DEBT.md TD-CHAT-1), as for /catchup.
+    expect(content).toBe('## Right Now\n\nPersisted workspace state is disabled for this turn.');
+  });
 });
 
 describe('POST /api/chat workspace resolution rejections (characterization)', () => {
