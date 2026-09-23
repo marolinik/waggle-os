@@ -395,6 +395,7 @@ export {
 } from './workflow-composer.js';
 export { CommandRegistry, AGENT_LOOP_REROUTE_PREFIX, type CommandDefinition, type CommandContext } from './commands/command-registry.js';
 export { registerWorkflowCommands } from './commands/workflow-commands.js';
+export { COMMAND_CONTEXT_SENTINEL, isEmptyMemorySearch, isTurnDenialNotice } from './commands/command-context-sentinels.js';
 export { registerMarketplaceCommands } from './commands/marketplace-commands.js';
 export { createCronTools, type TurnOrigin } from './cron-tools.js';
 export {

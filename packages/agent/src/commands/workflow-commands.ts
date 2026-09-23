@@ -11,6 +11,11 @@
 
 import type { CommandRegistry, CommandDefinition } from './command-registry.js';
 import { AGENT_LOOP_REROUTE_PREFIX } from './command-registry.js';
+import {
+  COMMAND_CONTEXT_SENTINEL,
+  isEmptyMemorySearch,
+  isTurnDenialNotice,
+} from './command-context-sentinels.js';
 
 // ── Individual command factories ────────────────────────────────────────
 
@@ -24,7 +29,11 @@ function catchupCommand(): CommandDefinition {
       // Try workspace state first
       if (ctx.getWorkspaceState) {
         const state = await ctx.getWorkspaceState();
-        if (state && state !== 'No workspace state available.') {
+        // A denied read is a notice, not activity, and not a fresh workspace.
+        if (state && isTurnDenialNotice(state)) {
+          return `## Catch-Up Briefing\n\n_${state}_`;
+        }
+        if (state && state !== COMMAND_CONTEXT_SENTINEL.noWorkspaceState) {
           return `## Catch-Up Briefing\n\nHere's what's been happening in this workspace:\n\n${state}`;
         }
       }
@@ -32,7 +41,7 @@ function catchupCommand(): CommandDefinition {
       // B5: Fallback — search memory for recent activity when workspace state is empty
       if (ctx.searchMemory) {
         const memories = await ctx.searchMemory('recent activity decisions progress updates');
-        if (memories && memories !== 'No relevant memories found.' && memories !== 'Memory search unavailable.') {
+        if (memories && !isEmptyMemorySearch(memories)) {
           return `## Catch-Up Briefing\n\nHere's what I found in workspace memory:\n\n${memories}\n\n_Based on stored memories. Start a conversation to build richer context._`;
         }
       }
@@ -51,7 +60,10 @@ function nowCommand(): CommandDefinition {
     handler: async (_args, ctx) => {
       if (ctx.getWorkspaceState) {
         const state = await ctx.getWorkspaceState();
-        if (state && state !== 'No workspace state available.') {
+        if (state && isTurnDenialNotice(state)) {
+          return `## Right Now\n\n_${state}_`;
+        }
+        if (state && state !== COMMAND_CONTEXT_SENTINEL.noWorkspaceState) {
           return `## Right Now\n\n${state}`;
         }
       }
@@ -59,7 +71,7 @@ function nowCommand(): CommandDefinition {
       // Fallback with memory search
       if (ctx.searchMemory) {
         const memories = await ctx.searchMemory('current status tasks in progress');
-        if (memories && memories !== 'No relevant memories found.' && memories !== 'Memory search unavailable.') {
+        if (memories && !isEmptyMemorySearch(memories)) {
           return `## Right Now\n\n${memories}`;
         }
       }
@@ -200,7 +212,10 @@ function statusCommand(): CommandDefinition {
       // Workspace state (includes memory count, sessions, etc.)
       if (ctx.getWorkspaceState) {
         const state = await ctx.getWorkspaceState();
-        if (state && state !== 'No workspace state available.') {
+        if (state && isTurnDenialNotice(state)) {
+          // A notice, not a report section (TD-CHAT-1).
+          sections.push(`_${state}_`);
+        } else if (state && state !== COMMAND_CONTEXT_SENTINEL.noWorkspaceState) {
           sections.push(state);
         }
       }
@@ -215,7 +230,7 @@ function statusCommand(): CommandDefinition {
         // Only header — no data available
         if (ctx.searchMemory) {
           const memories = await ctx.searchMemory('status progress milestones');
-          if (memories && memories !== 'No relevant memories found.' && memories !== 'Memory search unavailable.') {
+          if (memories && !isEmptyMemorySearch(memories)) {
             sections.push(memories);
           }
         }
@@ -244,6 +259,9 @@ function memoryCommand(): CommandDefinition {
         return '## Memory\n\nUsage: `/memory <query>` to search workspace memory.\n\nExamples:\n- `/memory architecture decisions`\n- `/memory last meeting notes`\n- `/memory project goals`';
       }
       const results = await ctx.searchMemory(args.trim());
+      // A denied search echoes nothing back: the query text carries the
+      // denial phrase itself (TD-CHAT-2).
+      if (isTurnDenialNotice(results)) return `## Memory Search\n\n${results}`;
       return `## Memory Search: "${args.trim()}"\n\n${results}`;
     },
   };
