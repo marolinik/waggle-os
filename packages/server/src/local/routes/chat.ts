@@ -593,6 +593,15 @@ function isLocalStorageFailure(error: unknown): boolean {
   return typeof code === 'string' && typeof syscall === 'string' && typeof failedPath === 'string';
 }
 
+const LOCAL_DATABASE_UNAVAILABLE_MESSAGE = 'Waggle could not update its local database just now. Try again in a moment.';
+
+/** A better-sqlite3 error: its `code` names the SQLite result (SQLITE_BUSY, ...). */
+function isLocalDatabaseFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' && code.startsWith('SQLITE_');
+}
+
 function isIncompleteCompletionError(error: unknown): boolean {
   return typeof error === 'object'
     && error !== null
@@ -4640,10 +4649,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       const storageFailure = isLocalStorageFailure(err);
+      const databaseFailure = !storageFailure && isLocalDatabaseFailure(err);
       if (storageFailure) {
         // A failed history read or write: Node's message names the absolute
         // file, which must not reach the client or the transcript (TD-CHAT-14).
         errorMessage = CHAT_STORAGE_UNAVAILABLE_MESSAGE;
+      } else if (databaseFailure) {
+        // A critical-path SQLite write that failed (a locked store, say). The
+        // driver's text is internal and is logged above, not sent (TD-REL-4).
+        errorMessage = LOCAL_DATABASE_UNAVAILABLE_MESSAGE;
       } else if (err instanceof Error) {
         // Clean up common error messages for the user. Authentication and
         // endpoint availability are different recovery paths: never send a
@@ -4670,7 +4684,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       const budgetCode = isTerminalModelBudgetError(err)
         ? (err as { code: string }).code
-        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE' : undefined;
+        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE'
+          : databaseFailure ? 'LOCAL_DATABASE_UNAVAILABLE' : undefined;
       sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI

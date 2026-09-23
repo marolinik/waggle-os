@@ -270,7 +270,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(recorder.finalize).not.toHaveBeenCalled();
   });
 
-  it('QUIRK (TD-REL-4): a fatal local-database error reaches the client verbatim', async () => {
+  it('answers a fatal local-database error with a fixed message and code', async () => {
     // Stands in for any critical-path SQLite write that fails, such as issuing
     // a capability proposal, which stays fail-closed by design.
     installRunner(() => {
@@ -280,7 +280,11 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     const { events } = await runTurn('sqlite-busy-error');
 
     const errors = events.filter(ev => ev.event === 'error').map(ev => JSON.parse(ev.data) as Record<string, unknown>);
-    expect(errors).toEqual([{ message: 'SQLITE_BUSY: database is locked' }]);
+    // Until TD-REL-4 the client got 'SQLITE_BUSY: database is locked' verbatim.
+    expect(errors).toEqual([{
+      message: 'Waggle could not update its local database just now. Try again in a moment.',
+      code: 'LOCAL_DATABASE_UNAVAILABLE',
+    }]);
   });
 
   it('runs untraced when no recorder is decorated', async () => {
