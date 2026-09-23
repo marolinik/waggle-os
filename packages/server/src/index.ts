@@ -4,7 +4,9 @@ import { pathToFileURL } from 'node:url';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { loadConfig, type ServerConfig } from './config.js';
+import { sql } from 'drizzle-orm';
 import { createDb, type Db } from './db/connection.js';
+import { checkReadiness } from './readiness.js';
 import redisPlugin from './plugins/redis.js';
 import authPlugin from './plugins/auth.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -80,8 +82,22 @@ export async function buildServer(configOverrides?: Partial<ServerConfig>) {
   await server.register(analyticsRoutes);
   await server.register(wsGateway);
 
-  // Health check
+  // Liveness: the process answers. Kept shallow on purpose, because Render
+  // restarts a service whose health check fails (see readiness.ts).
   server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  // Readiness: Postgres and Redis answer (R-4). 503 with a coarse reason per
+  // dependency; the underlying error is logged, never returned.
+  server.get('/health/ready', async (_request, reply) => {
+    const { report, errors } = await checkReadiness([
+      { name: 'database', check: () => db.execute(sql`select 1`) },
+      { name: 'redis', check: () => server.redis.ping() },
+    ]);
+    if (report.status !== 'ready') {
+      server.log.warn({ checks: report.checks, errors }, 'readiness check failed');
+    }
+    return reply.code(report.status === 'ready' ? 200 : 503).send(report);
+  });
 
   return server;
 }
