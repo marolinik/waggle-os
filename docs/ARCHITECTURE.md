@@ -527,6 +527,36 @@ The 27 technical-only names (`WorkspaceManager`, `PluginManager`, `OfflineManage
 are almost all infrastructure, where the technical name IS the domain term. Logged as a ledger
 row, not a rename arc.
 
+**D-2 — closed 2026-09-23 with zero renames.** The rule was: rename only where the Domain Glossary
+above already has a term for what the class models, and never an export of an OSS-mirrored
+`hive-mind-*` package (`CLAUDE.md` §7.5). Re-enumerated from `packages/*/src`: the 27 are ten
+`*Manager`, fifteen `*Service`, `FeedbackHandler` and `JobProcessor`. None models a glossary
+concept its name lacks. Where a glossary term applies (`Workspace`, `Harvest`), the name already
+carries it; the suffix names a role (a lifecycle owner, or an application service over one
+aggregate), and no glossary term names that role.
+
+| Class | File | Ruling | Reason |
+|---|---|---|---|
+| `WorkspaceManager` | `hive-mind-core/src/workspace-manager.ts` | keep | OSS-mirrored export (§7.5); already carries the glossary term |
+| `WorkspaceSessionManager` | `server/src/local/workspace-sessions.ts` | keep | Lifecycle owner of per-workspace sessions; already carries the glossary term |
+| `OfflineManager` | `server/src/local/offline-manager.ts` | keep | Infrastructure: LLM reachability state; no glossary term |
+| `ChannelManager` | `server/src/local/channels/manager.ts` | keep | Adapter lifecycle and inbound pipeline for IM channels; no glossary term |
+| `ConnectionManager` | `server/src/ws/connection-manager.ts` | keep | Infrastructure: WebSocket connections |
+| `ContextManager` | `agent/src/long-task/context-manager.ts` | keep | Infrastructure: context-window budget for long runs; not a Turn or Recall concept |
+| `PermissionManager` | `agent/src/permissions.ts` | keep | Tool allow/deny lists; no glossary term (Turn policy is a different, per-turn module) |
+| `AuthManager` | `cli/src/auth.ts` | keep | Infrastructure: CLI credentials |
+| `PluginManager` | `sdk/src/plugin-manager.ts` | keep | Public SDK surface; plugin is not a glossary term |
+| `PluginRuntimeManager` | `sdk/src/plugin-runtime.ts` | keep | Public SDK surface |
+| `AgentService`, `AnalyticsService`, `AuditService`, `CronService`, `JobService`, `KnowledgeService`, `MessageService`, `ProactiveService`, `ResourceService`, `TaskService`, `TeamService`, `UserService` | `server/src/services/*` | keep | Team-server application services, one per aggregate; "Service" is the layer role |
+| `EvolutionService`, `HarvestAutoSyncService`, `VectorEnrichmentService` | `server/src/local/services/*` | keep | Background application services; `Harvest` already carries the glossary term |
+| `FeedbackHandler` | `agent/src/feedback-handler.ts` | keep | Corrects and retires knowledge-graph entities; "correction" is not a glossary term, and inventing one here is out of scope for D-2 |
+| `JobProcessor` | `worker/src/job-processor.ts` | keep | Infrastructure: BullMQ job dispatch |
+
+Counts: 3 already carry a glossary term (`WorkspaceManager`, also OSS-mirrored;
+`WorkspaceSessionManager`; `HarvestAutoSyncService`), 14 other application services, 7
+infrastructure, 2 public SDK surface, 1 with no glossary term to rename to (`FeedbackHandler`) —
+27. A future glossary term (for example "Correction") reopens only the matching row.
+
 **Anemic entities, on purpose.** `MemoryFrame` is an `interface` — a data shape with no behavior;
 the rules live in `FrameStore`. For SQLite rows in a desktop app this is the right trade:
 rehydrating every read into behavior-bearing objects has a cost the Core Domain would pay on
