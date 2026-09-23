@@ -267,6 +267,19 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(recorder.finalize).not.toHaveBeenCalled();
   });
 
+  it('QUIRK (TD-REL-4): a fatal local-database error reaches the client verbatim', async () => {
+    // Stands in for any critical-path SQLite write that fails, such as issuing
+    // a capability proposal, which stays fail-closed by design.
+    installRunner(() => {
+      throw Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    });
+
+    const { events } = await runTurn('sqlite-busy-error');
+
+    const errors = events.filter(ev => ev.event === 'error').map(ev => JSON.parse(ev.data) as Record<string, unknown>);
+    expect(errors).toEqual([{ message: 'SQLITE_BUSY: database is locked' }]);
+  });
+
   it('runs untraced when no recorder is decorated', async () => {
     const decorated = server.traceRecorder;
     (server as { traceRecorder?: unknown }).traceRecorder = undefined;
