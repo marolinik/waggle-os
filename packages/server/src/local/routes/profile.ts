@@ -222,8 +222,7 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
           if (identity) {
             const frames = orch.getFrames();
             const sessions = orch.getSessions();
-            const active = sessions.getActive();
-            const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+            const gopId = sessions.ensureActive().gop_id;
             // Replace-on-update (the W4.3 profile-card lane): a profile save
             // updates THE identity card — every save appending another
             // "User identity:" frame filled the memory list with duplicates.

@@ -557,6 +557,7 @@ import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
+import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
 import { TurnResources } from './chat-turn-resources.js';
@@ -2066,7 +2067,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (event === 'token' && firstTokenAt === null) {
         firstTokenAt = performance.now();
       }
-      raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!writeSseEvent(raw, event, data)) {
+        log.warn('[chat] SSE reader stopped reading; closed the stream and aborted the turn', {
+          maxBufferedBytes: SSE_MAX_BUFFERED_BYTES,
+        });
+      }
     };
     const throwIfTurnAborted = (): void => {
       if (turnSignal.aborted) {
@@ -4733,8 +4738,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const sessions = workspaceMind
             ? new SessionStore(workspaceMind)
             : activeSessionOrch.getSessions();
-          const active = sessions.getActive();
-          const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+          const gopId = sessions.ensureActive().gop_id;
           const latestI = frames.getLatestIFrame(gopId);
           if (latestI) frames.createPFrame(gopId, message, latestI.id, 'normal', 'user_stated');
           else frames.createIFrame(gopId, message, 'normal', 'user_stated');

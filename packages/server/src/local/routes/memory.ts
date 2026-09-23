@@ -456,14 +456,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     const sessions = new SessionStore(targetDb);
 
     // Get or create active session
-    const active = sessions.getActive();
-    let gopId: string;
-    if (active.length === 0) {
-      const session = sessions.create();
-      gopId = session.gop_id;
-    } else {
-      gopId = active[0].gop_id;
-    }
+    const gopId = sessions.ensureActive().gop_id;
 
     // BUG-R1-01: Dedup check at route level — catches both I-Frames and P-Frames
     const existingDup = frames.findDuplicate(content);
@@ -817,8 +810,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
     const frames = new FrameStore(targetDb);
     const sessions = new SessionStore(targetDb);
-    const active = sessions.getActive();
-    const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+    const gopId = sessions.ensureActive().gop_id;
 
     // Provenance is user_stated — quick capture is the user speaking directly.
     const latestI = frames.getLatestIFrame(gopId);

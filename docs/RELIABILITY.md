@@ -169,6 +169,42 @@ So R-3 is not "add `LIMIT` to 64 queries". It is: **a write-counter for the per-
 a bound on the handful of list reads that genuinely grow (`sessions.getActive`, `install-audit`,
 `cron-store`, `file-indexer`), each pinned first.
 
+### R-3 list-read rulings (closed 2026-09-23)
+
+Every caller of the four named reads was traced. One was bounded; the rest are full-scan by
+contract or capped by something other than a `LIMIT`.
+
+- **`SessionStore.getActive()`: bounded where one row is used** (`ee6f2d1e`, pinned first in
+  `f4381fde`). Active sessions really do grow: nothing in production calls `close()`, and named
+  sessions accumulate (`mcp:<date>` adds one a day, plus ingest and harvest sessions). Nine memory
+  write paths loaded them all to take `active[0]` or create one: `POST /api/memory/frames`,
+  `POST /api/quick-capture`, `POST /api/memory`, `POST /api/memory/merge`, the profile identity
+  card, the chat turn's raw-turn capture, the agent-inferred save in `local/index.ts`,
+  `save_memory`'s raw-frame fallback, and `MemoryWeaver.distillSessionContent`. All nine now call
+  the existing `ensureActive()` (`LIMIT 1`, transactional). No `hive-mind-core` source changed, so
+  there is nothing to forward-port.
+  - **Kept as full scans.** Weaver consolidation (`routes/weaver.ts` twice; the personal and
+    workspace timers in `local/index.ts`) runs `consolidateGop` on every active session, so it
+    needs the full set. The artifacts search (`routes/artifacts.ts`) slices to `SESSION_SCAN` after
+    loading. Bounding it would need a `limit` on the OSS-mirrored `getActive()` (§7.5) to save a
+    few hundred small rows on a user-initiated search, which is not worth it.
+- **`install-audit`: kept.** `/api/admin/audit-export` is an export, so it is full-scan by
+  contract. `/api/extend/audit?capability=` reads one capability's history with
+  `getByCapability`, then filters and caps it at 100. That history grows only through deliberate
+  install, update, uninstall and reject actions on that one capability. The general feeds
+  (`getRecent`, `getRecentByType`) already use `LIMIT`.
+- **`cron-store`: kept.**
+  - `list()` backs the schedules UI (full set by contract). Its rows are the fixed system seeds
+    plus schedules the user creates.
+  - `getDue()` must return every due schedule.
+  - `listStaleRunLeases()` is read once at startup, and `clearRunLeases()` empties the table right
+    after, so it holds at most the jobs that were running at a crash.
+  - `listPendingActions` is only called with `'held'` (awaiting approval; expires).
+  - Execution history is already `LIMIT`ed and pruned.
+- **`file-indexer`: kept.** `listAll()` has no production caller; only its unit tests use it.
+  Every production read is keyed by path (`get` or `LIMIT 1`). The index session is one fixed
+  `gop_id`, not one per file.
+
 ## Health Checks & Metrics
 
 - **Local sidecar `/health`** (`local/index.ts`) is a genuine deep check: it validates the
@@ -205,7 +241,7 @@ Authenticode/signing gates in `docs/production-readiness/09-LAUNCH_RECOMMENDATIO
 
 | # | Item | Priority | Owner | Note |
 |---|---|---|---|---|
-| R-3 | **Narrowed by R-6; both count paths done.** Not 65 blanket `LIMIT`s: per-turn counts read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k), and `FrameStore.getStats()` went 375 ms → 107 ms by indexing `importance` and sourcing `total` from the counter. Left: the few genuinely growing list reads (`sessions.getActive`, `install-audit`, `cron-store`, `file-indexer`) | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
+| R-3 | **Closed 2026-09-23** (`ee6f2d1e`, pins `f4381fde`). Both count paths were done under R-6: per-turn counts read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k), and `FrameStore.getStats()` went 375 ms → 107 ms. Of the four growing list reads, `sessions.getActive()` is bounded at its nine first-row callers through `ensureActive()`. Its full-set callers, `install-audit`, `cron-store` and `file-indexer` are ruled full-scan by contract or capped otherwise (see "R-3 list-read rulings") | P2 | agent | No `hive-mind-core` source changed, so there is no §7.5 forward-port |
 | R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | **Closed 2026-09-23** (`bd13c04f`): `/health/ready` checks Postgres and Redis; `/health` stays liveness because Render restarts on a failing check |
 | R-5 | Updater + fast rollback for the desktop artifact | P2 | founder | **Deferred to the release arc (founder 2026-09-23)**: built with the public Authenticode signing, outside the tech-debt close-out; an updater cannot be verified end to end before the artifact is publicly signed |
 | R-6 | **done 2026-09-19** — `packages/hive-mind-core/tests/soak/`, `npm run test:soak`, sized by `WAGGLE_SOAK_FRAMES` | — | agent | Own lane (`vitest.soak.config.ts`); excluded from the default gate. Setup bulk-inserts because the subject is the read path, and one test proves a bulk row is indistinguishable from an API row |
