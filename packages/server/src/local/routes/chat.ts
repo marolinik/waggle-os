@@ -556,6 +556,15 @@ import { createChatApprovalHook } from './chat-approval-hook.js';
 import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
 import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
+import {
+  emptyModelResponseError,
+  getFailedCompletionUsage,
+  isEmptyModelResponseError,
+  isIncompleteCompletionError,
+  isTerminalAttemptError,
+  isTerminalModelBudgetError,
+  planInterruptedRetry,
+} from './chat-attempt-policy.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
@@ -606,60 +615,6 @@ function isLocalDatabaseFailure(error: unknown): boolean {
   return typeof code === 'string' && code.startsWith('SQLITE_');
 }
 
-function isIncompleteCompletionError(error: unknown): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
-}
-
-function isRetryableStreamInterruption(error: unknown): boolean {
-  return isIncompleteCompletionError(error)
-    && /\(stream ended before data:\s*\[DONE\]\); partial content was not accepted\.?$/i.test(
-      (error as { message?: unknown }).message as string,
-    );
-}
-
-type EmptyModelResponseError = Error & {
-  code: 'EMPTY_MODEL_RESPONSE';
-  status: 502;
-  usage: AgentResponse['usage'];
-  toolsUsed: string[];
-};
-
-function isEmptyModelResponseError(error: unknown): error is EmptyModelResponseError {
-  return typeof error === 'object'
-    && error !== null
-    && (error as { code?: unknown }).code === 'EMPTY_MODEL_RESPONSE';
-}
-
-function emptyModelResponseError(response: AgentResponse): EmptyModelResponseError {
-  const error = new Error('Model returned an empty response.') as EmptyModelResponseError;
-  error.name = 'EmptyModelResponseError';
-  error.code = 'EMPTY_MODEL_RESPONSE';
-  error.status = 502;
-  error.usage = response.usage;
-  error.toolsUsed = [...response.toolsUsed];
-  return error;
-}
-
-function isTerminalEmptyModelResponse(error: unknown): boolean {
-  return isEmptyModelResponseError(error) && error.toolsUsed.length > 0;
-}
-
-function getFailedCompletionUsage(
-  error: unknown,
-): { inputTokens: number; outputTokens: number } | null {
-  const code = (error as { code?: unknown } | null | undefined)?.code;
-  if (
-    !isIncompleteCompletionError(error)
-    && !isEmptyModelResponseError(error)
-    && code !== 'MODEL_OPERATION_TIMEOUT'
-    && code !== 'INITIAL_MODEL_ACTIVITY_TIMEOUT'
-    && code !== 'AGENT_LOOP_ABORTED'
-  ) return null;
-  return getBillableUsage((error as { usage?: unknown }).usage);
-}
-
 /** Injected runners still need request-scoped evidence boundaries. */
 export function shouldPackageSystemPromptForTurn(
   hasCustomRunner: boolean,
@@ -667,14 +622,6 @@ export function shouldPackageSystemPromptForTurn(
   closedWorldRewrite: boolean,
 ): boolean {
   return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
-}
-
-
-function isTerminalModelBudgetError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const code = (error as { code?: unknown }).code;
-  return code === 'DAILY_MODEL_BUDGET_EXCEEDED'
-    || code === 'DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE';
 }
 
 
@@ -3971,9 +3918,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // The agent may already have executed tools before detecting a
           // truncated final completion. Replaying the whole run on another
           // model would repeat those side effects, so this signal is terminal.
-          if (isIncompleteCompletionError(initialError)
-            || isTerminalEmptyModelResponse(initialError)
-            || isTerminalModelBudgetError(initialError)) {
+          if (isTerminalAttemptError(initialError)) {
             throw initialError;
           }
           let failure = initialError;
@@ -3998,9 +3943,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
               if (toolActivity.replayBlocked) throw primaryRunError;
-              if (isIncompleteCompletionError(primaryRunError)
-                || isTerminalEmptyModelResponse(primaryRunError)
-                || isTerminalModelBudgetError(primaryRunError)) {
+              if (isTerminalAttemptError(primaryRunError)) {
                 throw primaryRunError;
               }
               failure = primaryRunError;
@@ -4025,34 +3968,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           try {
             return await runAgentAttempt(runConfig);
           } catch (error) {
-            const failedUsage = getFailedCompletionUsage(error);
-            const consumedTokens = (failedUsage?.inputTokens ?? 0) + (failedUsage?.outputTokens ?? 0);
-            const remainingTokenBudget = runConfig.maxTokenBudget === undefined
-              ? 0
-              : Math.floor(runConfig.maxTokenBudget - consumedTokens);
-            const remainingModelTimeMs = runConfig.modelOperationTimeoutMs === undefined
-              ? 0
-              : Math.floor(runConfig.modelOperationTimeoutMs - (performance.now() - primaryAttemptStartedAt));
-            const canReplayWithoutSideEffects = isRetryableStreamInterruption(error)
-              && runConfig.tools.length === 0
-              && !budgetModelSelected
-              && !toolActivity.replayBlocked
-              && !toolActivity.explicitToolWasUsed
-              && remainingTokenBudget > 0
-              && remainingModelTimeMs > 0;
-            if (!canReplayWithoutSideEffects) throw error;
+            const retryAllowance = planInterruptedRetry({
+              error,
+              maxTokenBudget: runConfig.maxTokenBudget,
+              modelOperationTimeoutMs: runConfig.modelOperationTimeoutMs,
+              elapsedMs: performance.now() - primaryAttemptStartedAt,
+              offersTools: runConfig.tools.length > 0,
+              budgetModelSelected,
+              replayBlocked: toolActivity.replayBlocked,
+              explicitToolWasUsed: toolActivity.explicitToolWasUsed,
+            });
+            if (!retryAllowance) throw error;
             sendEvent('step', {
               content: 'Model response was interrupted — retrying once on the same model.',
             });
             return await runAgentAttempt({
               ...runConfig,
-              maxTokenBudget: remainingTokenBudget,
-              modelOperationTimeoutMs: remainingModelTimeMs,
+              maxTokenBudget: retryAllowance.maxTokenBudget,
+              modelOperationTimeoutMs: retryAllowance.modelOperationTimeoutMs,
               ...(runConfig.initialModelActivityTimeoutMs === undefined
                 ? {}
                 : { initialModelActivityTimeoutMs: Math.min(
                     runConfig.initialModelActivityTimeoutMs,
-                    remainingModelTimeMs,
+                    retryAllowance.modelOperationTimeoutMs,
                   ) }),
             });
           }
@@ -4072,9 +4010,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (toolActivity.explicitToolWasUsed && toolActivity.explicitToolResult === null) {
             throw primaryErr;
           }
-          if (isIncompleteCompletionError(primaryErr)
-            || isTerminalEmptyModelResponse(primaryErr)
-            || isTerminalModelBudgetError(primaryErr)) {
+          if (isTerminalAttemptError(primaryErr)) {
             throw primaryErr;
           }
           // Report error to credential pool and try next key
