@@ -557,6 +557,7 @@ import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
+import { writeSseEvent } from './chat-sse.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
 import { TurnResources } from './chat-turn-resources.js';
 
@@ -2062,7 +2063,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (event === 'token' && firstTokenAt === null) {
         firstTokenAt = performance.now();
       }
-      raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      writeSseEvent(raw, event, data);
     };
     const throwIfTurnAborted = (): void => {
       if (turnSignal.aborted) {
