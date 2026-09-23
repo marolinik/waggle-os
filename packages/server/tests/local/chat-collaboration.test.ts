@@ -95,6 +95,7 @@ function bind(
   model = 'model-default',
   parentSignal = new AbortController().signal,
   hooks?: HookRegistry,
+  overrides: Partial<Parameters<typeof bindChatCollaborationTools>[0]> = {},
 ) {
   const visibleTools = [
     ...collaborationNames.map(tool),
@@ -120,6 +121,7 @@ function bind(
     },
     turnOrigin: { session: sessionId, workspace: 'workspace-a' },
     parentSignal,
+    ...overrides,
   } satisfies Parameters<typeof bindChatCollaborationTools>[0] & { parentSignal: AbortSignal };
   return bindChatCollaborationTools(bindingOptions);
 }
@@ -135,6 +137,30 @@ afterEach(async () => {
 });
 
 describe('request-bound chat collaboration', () => {
+  it('stores the non-retained marker in the Room when derived persistence is denied', async () => {
+    // The literal is the governance contract the chat turn stores for the same
+    // denial, so the two surfaces must print the same text (TD-CHAT-27).
+    const { registry, server } = setup();
+    const tools = bind(
+      server,
+      async () => ({ content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }),
+      'chat-session-a',
+      undefined,
+      'model-default',
+      new AbortController().signal,
+      undefined,
+      { allowDerivedPersistence: false },
+    );
+    await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Release researcher', role: 'researcher', task: 'Inspect the release evidence',
+    });
+    const worker = registry.list({ source: 'chat_subagent', workspaceId: 'workspace-a' })
+      .find((run) => run.kind === 'worker')!;
+    const room = registry.get(worker.roomId)!;
+    expect(room.title).toBe('[Not retained: memory disabled for this turn]');
+    expect(room.task).toBe('[Not retained: memory disabled for this turn]');
+  });
+
   it('creates a durable scoped Room, Dance chain, dual memory, and registry-backed list/get', async () => {
     const { dir, registry, signalBus, statusEvents, server } = setup();
     const runnerCalls: AgentLoopConfig[] = [];

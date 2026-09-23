@@ -29,10 +29,23 @@ export type FinalizedTraceRow = ReturnType<TraceRecorder['finalize']>;
 
 export type TraceRecording = { recorder: TraceRecorder; handle: TraceHandle };
 
+export interface TurnExecutionTraceOptions {
+  /**
+   * Told when a finalize throws. The trace stays best-effort and I/O-free; the
+   * route decides how the failure is reported (TD-CHAT-48).
+   */
+  onFinalizeError?: (error: unknown, traceId: number | undefined) => void;
+}
+
 export class TurnExecutionTrace {
   private recorder: TraceRecorder | null = null;
   private handle: TraceHandle | null = null;
   private finalized = false;
+  private readonly onFinalizeError: (error: unknown, traceId: number | undefined) => void;
+
+  constructor(options: TurnExecutionTraceOptions = {}) {
+    this.onFinalizeError = options.onFinalizeError ?? (() => {});
+  }
 
   /** Start the turn's row on `recorder`; with no recorder the turn is untraced. */
   start(recorder: TraceRecorder | null, input: TraceStartInput): void {
@@ -63,10 +76,11 @@ export class TurnExecutionTrace {
       const row = this.recorder.finalize(this.handle, buildOptions());
       this.finalized = true;
       return row;
-    } catch {
+    } catch (error) {
       // Tracing is best-effort: what is lost is this finalize only. The row
       // stays unfinalized, so the next site (the outer finally) may still
-      // record it as abandoned.
+      // record it as abandoned. The loss is reported, never thrown.
+      try { this.onFinalizeError(error, this.handle.id); } catch { /* reporting is best-effort too */ }
       return undefined;
     }
   }

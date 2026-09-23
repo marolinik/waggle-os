@@ -169,10 +169,8 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
     // The conversation grouping the remote side sees is the chat session, and
     // it arrives as the entity NAME: `frameToEntity` maps `gop_id` onto `name`,
     // so a reader looking for `gop_id` on the wire will not find it.
-    //
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-40): the `?? 'unknown'` guard at the
-    // call site is dead - the session id is typed `string` and is never
-    // nullish there, so no push can ever carry the fallback.
+    // The session id is typed `string` and never nullish here, so the push
+    // carries no fallback (TD-CHAT-40 removed a dead `?? 'unknown'`).
     expect(push.body.name).toBe(session);
     // The remote copy is the tool result, capped: a local write is not
     // reproduced verbatim without bound.

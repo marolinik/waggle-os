@@ -142,7 +142,7 @@ export function validateChatRequestFields(
   if (typeof message !== 'string') {
     return reject(400, { error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
   }
-  const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
+  const MAX_MESSAGE_LENGTH = resolveMaxMessageLength(process.env.WAGGLE_MAX_MESSAGE_LENGTH);
   if (message.length > MAX_MESSAGE_LENGTH) {
     return reject(400, { error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
   }
@@ -187,6 +187,18 @@ export function validateChatRequestFields(
     assertSafeSegment(value, field);
   }
   return { selectedSkill, retryTarget };
+}
+
+const DEFAULT_MAX_MESSAGE_LENGTH = 50_000;
+
+/**
+ * The configured message limit, or the default when the value is not a
+ * positive integer. `parseInt` alone turned a typo into NaN, every length
+ * comparison was false, and the limit silently disappeared (TD-CHAT-5).
+ */
+function resolveMaxMessageLength(configured: string | undefined): number {
+  const parsed = configured === undefined ? Number.NaN : Number.parseInt(configured, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_MESSAGE_LENGTH;
 }
 
 /**
@@ -645,6 +657,11 @@ function isReportedToolFailure(result: string): boolean {
   // effect happened" — the `file_created` disclosure, the artifact index — was
   // being told a denied write had succeeded.
   if (trimmed.startsWith('[BLOCKED]')) return true;
+  // The executor's answer to a tool the turn never transmitted. It carries
+  // `succeeded: false`, but `onToolResult` only receives the text, and without
+  // this a file tool the model called anyway was announced as a created file
+  // (TD-CHAT-50).
+  if (/^Tool "[^"]+" not found./.test(trimmed)) return true;
   try {
     const parsed = JSON.parse(trimmed) as { error?: unknown; ok?: unknown; success?: unknown };
     return parsed.ok === false
@@ -1067,6 +1084,9 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     log.warn(`[chat] ${chatHistoryLayout.reason}`);
   }
   const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
+  // Read with the timeout policy, once per registration, not at module import
+  // (TD-CHAT-11). Test mode only.
+  const autoApprove = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
   let persistedTraceBoundaryId = 0;
   try {
     persistedTraceBoundaryId = server.traceStore?.getLatestId() ?? 0;
@@ -2039,7 +2059,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // with outcome='abandoned'. Without this, a failed turn leaves its row in
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
-    const turnTrace = new TurnExecutionTrace();
+    const turnTrace = new TurnExecutionTrace({
+      onFinalizeError: (error, traceId) => {
+        log.warn('[chat] execution trace finalize failed; the row stays unfinalized', {
+          workspaceId: executionScopeId,
+          traceId,
+          error,
+        });
+      },
+    });
 
     // #3 (launch-blocker): hoist the resolved orchestrator so the outer catch
     // can persist the raw user turn even when generation fails. Memory capture
@@ -2686,6 +2714,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           autonomyLevel,
           proposeHeldTurn,
           approvalTimeoutPolicy,
+          autoApprove,
           retention,
           turnSignal,
           sendEvent,
