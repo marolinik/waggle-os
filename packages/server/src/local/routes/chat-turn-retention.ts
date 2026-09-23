@@ -18,6 +18,9 @@
  * It imports nothing.
  */
 
+/** What a turn that may not retain content stores and reports in its place. */
+export const NON_RETAINED_TURN_CONTENT = '[Not retained: memory disabled for this turn]';
+
 /**
  * The permissions a turn's policy grants before its history is known. The two
  * persistence fields are the shape `resolveTurnPersistencePermissions` returns.
