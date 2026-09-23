@@ -66,22 +66,33 @@ describe('Command Execution Route', () => {
 
   // TD-CHAT-35: with no workspace named, a command runs on the personal
   // orchestrator, so its workspace state must not come from another mind.
-  it.each(executeCases)('QUIRK (TD-CHAT-35): %s /now with no workspace reads the managed default workspace', async (_label, url) => {
+  it.each(executeCases)('%s /now with no workspace does not read the managed default workspace', async (_label, url) => {
     const marker = `Default workspace state marker ${_label}`;
     server.workspaceManager.ensure('default', { name: 'Default', group: 'Test' });
     const defaultMind = server.mindCache.getOrOpen('default')!;
     const session = new SessionStore(defaultMind).create('default-state');
     new FrameStore(defaultMind).createIFrame(session.gop_id, marker, 'normal');
     try {
-      const response = await injectWithAuth(server, {
+      const unnamed = await injectWithAuth(server, {
         method: 'POST',
         url,
         payload: url === '/api/commands/execute' ? { command: '/now' } : { input: '/now' },
       });
-      expect(response.statusCode, response.body).toBe(200);
-      // The personal orchestrator runs the command while the state block is
-      // built from the managed 'default' workspace's mind.
-      expect(JSON.stringify(response.json())).toContain(marker);
+      expect(unnamed.statusCode, unnamed.body).toBe(200);
+      // Until TD-CHAT-35 the personal orchestrator ran the command while the
+      // state block came from the managed 'default' workspace's mind.
+      expect(JSON.stringify(unnamed.json())).not.toContain(marker);
+
+      // Naming the managed default scopes the whole command to it.
+      const named = await injectWithAuth(server, {
+        method: 'POST',
+        url,
+        payload: url === '/api/commands/execute'
+          ? { command: '/now', workspaceId: 'default' }
+          : { input: '/now', workspaceId: 'default' },
+      });
+      expect(named.statusCode, named.body).toBe(200);
+      expect(JSON.stringify(named.json())).toContain(marker);
     } finally {
       server.mindCache.close('default');
       server.workspaceManager.delete('default');

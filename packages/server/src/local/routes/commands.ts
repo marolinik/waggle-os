@@ -12,7 +12,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, type Orchestrator } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
-import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
+import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt, PERSONAL_COMMAND_WORKSPACE_LABEL } from './workspace-context.js';
 
 export const commandRoutes: FastifyPluginAsync = async (server) => {
   server.post<{
@@ -24,7 +24,15 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const { commandRegistry, orchestrator } = server.agentState;
-    const effectiveWorkspaceId = workspaceId ?? 'default';
+    // A workspace is in scope only when one is named, and the literal
+    // 'default' only when a managed default exists, as in the chat route.
+    // Otherwise the command runs on the personal orchestrator and reads no
+    // other mind's state (TD-CHAT-35).
+    const scopedWorkspaceId = workspaceId
+      && (workspaceId !== 'default' || server.workspaceManager.get('default'))
+      ? workspaceId
+      : undefined;
+    const effectiveWorkspaceId = scopedWorkspaceId ?? PERSONAL_COMMAND_WORKSPACE_LABEL;
 
     // Phase A.1 migration: build a per-request orchestrator scoped to this
     // workspace so slash commands never collide with in-flight chat sessions
@@ -32,20 +40,20 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
     // back to the shared orchestrator (personal mind only).
     let commandOrch: Orchestrator = orchestrator;
     let releaseCommandWorkspace: (() => void) | undefined;
-    if (workspaceId && workspaceId !== 'default') {
-      if (!server.workspaceManager.get(workspaceId)) {
+    if (scopedWorkspaceId) {
+      if (!server.workspaceManager.get(scopedWorkspaceId)) {
         return reply.status(404).send({ error: 'Workspace not found' });
       }
-      const existing = server.sessionManager.get(workspaceId);
+      const existing = server.sessionManager.get(scopedWorkspaceId);
       if (existing) {
-        const activity = server.sessionManager.acquireActivity(workspaceId);
+        const activity = server.sessionManager.acquireActivity(scopedWorkspaceId);
         if (!activity) {
           return reply.status(409).send({ error: 'Workspace session is not active' });
         }
         commandOrch = activity.session.orchestrator;
         releaseCommandWorkspace = activity.release;
       } else {
-        const mindLease = server.mindCache.acquireLease(workspaceId);
+        const mindLease = server.mindCache.acquireLease(scopedWorkspaceId);
         releaseCommandWorkspace = mindLease.release;
         try {
           commandOrch = server.agentState.createSessionOrchestrator(mindLease.db);
@@ -65,11 +73,11 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
         try {
           const recall = await commandOrch.recallMemory(query);
           if (recall.count === 0) {
-          // recallMemory reports its own failure as an empty result (TD-CHAT-29).
-          return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
-            ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
-            : COMMAND_CONTEXT_SENTINEL.noMemories;
-        }
+            // recallMemory reports its own failure as an empty result (TD-CHAT-29).
+            return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
+              ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
+              : COMMAND_CONTEXT_SENTINEL.noMemories;
+          }
           const items = (recall.recalled ?? []).slice(0, 5);
           return items.map((item, i) => `${i + 1}. ${item}`).join('\n');
         } catch {
@@ -78,9 +86,10 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       },
 
       getWorkspaceState: async (): Promise<string> => {
+        if (!scopedWorkspaceId) return COMMAND_CONTEXT_SENTINEL.noWorkspaceState;
         const block = buildWorkspaceNowBlock({
           dataDir: server.localConfig.dataDir,
-          workspaceId: effectiveWorkspaceId,
+          workspaceId: scopedWorkspaceId,
           wsManager: server.workspaceManager,
           activateWorkspaceMind: server.agentState.activateWorkspaceMind,
           cronSchedules: server.cronStore.list(),
