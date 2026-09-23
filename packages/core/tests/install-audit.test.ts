@@ -458,7 +458,8 @@ describe('InstallAuditStore — legacy CHECK migration', () => {
 
   it('recovers rows stranded by a crash between recreate and copy-back (fresh empty install_audit)', () => {
     {
-      const seed = new MindDB(dbPath); // creates the CURRENT empty install_audit
+      const seed = new MindDB(dbPath);
+      new InstallAuditStore(seed); // creates the CURRENT empty install_audit
       const raw = seed.getDatabase();
       raw.prepare(FIX3_ERA_DDL.replace('CREATE TABLE install_audit', 'CREATE TABLE install_audit__mig_old')).run();
       raw.prepare(LEGACY_ROW_INSERT('install_audit__mig_old')).run();
