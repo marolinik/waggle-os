@@ -63,9 +63,21 @@ jobs:
           npm run build --workspace @waggle-ai/waggle
           npm run build --workspace waggle-memory-mcp
 
+      # Coverage ratchet for the chat route and its extracted modules (TD-TEST-2).
+      # Measured 2026-09-23 over the server suite: statements/lines 94.5%,
+      # branches 87.9%, functions 98.9%. The thresholds sit just under those
+      # and may only rise: raise them when coverage rises, never lower them to
+      # pass a change.
       - name: Unit tests — packages + cross-cutting (root vitest)
         run: |
           npm test -- \
+            --coverage.enabled=true \
+            --coverage.include='packages/server/src/local/routes/chat*.ts' \
+            --coverage.reporter=text-summary \
+            --coverage.thresholds.statements=94 \
+            --coverage.thresholds.lines=94 \
+            --coverage.thresholds.branches=87 \
+            --coverage.thresholds.functions=98 \
             --exclude=packages/cli/tests/cli-runtime.test.ts \
             --exclude=packages/marketplace/tests/cli-runtime.test.ts \
             --exclude=packages/hive-mind-cli/tests/cli-help.test.ts \
