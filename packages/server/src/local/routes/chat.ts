@@ -2445,12 +2445,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
-          raw.end();
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
           // Stream the command result as SSE tokens and persist it
           if (!(await streamCannedReply(cmdResult, COMMAND_REPLY_WORD_DELAY_MS))) return;
-          raw.end();
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
       }
