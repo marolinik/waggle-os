@@ -115,10 +115,12 @@ function createDriftFixture() {
         'mind/execution-traces.ts',
         'mind/improvement-signals.ts',
       ],
-      pathPrefixes: ['vault.ts', 'compliance/'],
+      pathPrefixes: ['vault.ts', 'compliance/', 'governance/'],
       markers: [
         { path: 'mind/db.ts', token: 'install_audit' },
         { path: 'mind/schema.ts', token: 'install_audit' },
+        { path: 'mind/db.ts', token: 'ai_interactions' },
+        { path: 'mind/schema.ts', token: 'CREATE TABLE IF NOT EXISTS ai_interactions' },
       ],
     },
   };
