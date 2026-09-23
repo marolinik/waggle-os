@@ -238,9 +238,12 @@ describe('buildChatCommandContext (characterization)', () => {
         wsManager: stubWorkspaceManager(tmpDir, workspace),
         cronSchedules: [],
       })!);
-      const state = await contextFor('/now', { server: stubServer(tmpDir, workspace), executionWorkspaceId: workspace.id })
-        .getWorkspaceState();
+      const context = contextFor('/now', { server: stubServer(tmpDir, workspace), executionWorkspaceId: workspace.id });
+      const state = await context.getWorkspaceState();
       expect(state).toBe(expected);
+      // One execution id feeds both the command context and the state block, so
+      // they name the same workspace (TD-TEST-8).
+      expect(context.workspaceId).toBe(workspace.id);
       expect(state.startsWith(`# Workspace Now — ${workspace.name}\n\n`)).toBe(true);
       expect(state).toContain(`${ABOUT}.`);
       // The session count comes from <dataDir>/workspaces/ws-seeded/sessions.
