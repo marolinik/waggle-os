@@ -10,7 +10,7 @@ import type {
   WorkspaceSession,
   WorkspaceSessionActivityLease,
 } from '../workspace-sessions.js';
-import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
+import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt, PERSONAL_COMMAND_WORKSPACE_LABEL } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
@@ -55,11 +55,9 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 
 /** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
 const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
-// Workspace label that slash-command handlers interpolate into user-facing
-// prompts when the turn runs in the personal scope. Deliberately not
-// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
-// and must never reach a prompt as if it were a workspace.
-const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
+// Slash commands in the personal scope see PERSONAL_COMMAND_WORKSPACE_LABEL,
+// deliberately not PERSONAL_CHAT_SCOPE_ID: that sentinel names the
+// audit/collaboration stream and must never reach a prompt as a workspace.
 
 type ChatRequestRejection = {
   status: 400 | 403 | 404 | 409;
@@ -381,7 +379,7 @@ function resolveChatWorkspacePaths(
  * the command handlers render verbatim.
  *
  * `executionWorkspaceId` is the workspace the turn runs in, or undefined for a
- * personal turn, in which case commands see `PERSONAL_CHAT_COMMAND_CONTEXT`.
+ * personal turn, in which case commands see `PERSONAL_COMMAND_WORKSPACE_LABEL`.
  */
 export function buildChatCommandContext(input: {
   server: ChatServer;
@@ -400,7 +398,7 @@ export function buildChatCommandContext(input: {
     // Command handlers interpolate this value into user-facing agent
     // instructions. Keep the non-workspace observability sentinel out of
     // those prompts so personal commands cannot target a fake workspace.
-    workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+    workspaceId: executionWorkspaceId ?? PERSONAL_COMMAND_WORKSPACE_LABEL,
     sessionId,
     searchMemory: async (query: string): Promise<string> => {
       if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.memoryAccessDisabled;
@@ -2767,8 +2765,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
         // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
-        // — create_skill survives the allowlist — is unit-testable; this block is
-        // !hasCustomRunner-gated and therefore unreachable from route tests).
+        // — create_skill survives the allowlist — is unit-testable). This block
+        // is !hasCustomRunner-gated: route tests reach it only without an
+        // injected runner, as sse-resilience and persona-acceptance do.
         // Resolution order matches buildSystemPrompt (Phase A.2): per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
