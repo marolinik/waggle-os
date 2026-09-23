@@ -2034,7 +2034,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // with outcome='abandoned'. Without this, a failed turn leaves its row in
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
-    const turnTrace = new TurnExecutionTrace();
+    const turnTrace = new TurnExecutionTrace({
+      onFinalizeError: (error, traceId) => {
+        log.warn('[chat] execution trace finalize failed; the row stays unfinalized', {
+          workspaceId: executionScopeId,
+          traceId,
+          error,
+        });
+      },
+    });
 
     // #3 (launch-blocker): hoist the resolved orchestrator so the outer catch
     // can persist the raw user turn even when generation fails. Memory capture
