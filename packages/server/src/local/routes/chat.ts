@@ -1986,13 +1986,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Review Critical #1: request-supplied paths stay anchored to dataDir.
     // A workspace directory loaded from persisted config is an explicit user
     // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
-    if (workspacePath) {
-      const resolved = path.resolve(workspacePath);
+    // A trusted config also makes the request's own path irrelevant, and that
+    // path is ignored (pinned in chat-api). Otherwise the body's
+    // `workspacePath` is checked even when the branch above did not adopt it,
+    // so the answer depends on the request, not on which workspace the session
+    // happens to have active (TD-CHAT-44).
+    const requestSuppliedPaths = workspacePathFromTrustedConfig ? [] : [
+      ...(workspacePath ? [workspacePath] : []),
+      ...(typeof explicitWorkspacePath === 'string' && explicitWorkspacePath && explicitWorkspacePath !== workspacePath
+        ? [explicitWorkspacePath]
+        : []),
+    ];
+    for (const candidate of requestSuppliedPaths) {
+      const resolved = path.resolve(candidate);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (!workspacePathFromTrustedConfig
-        && resolved !== allowed
-        && !resolved.startsWith(allowed + path.sep)) {
-        log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
+      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+        log.warn(`[security] Path traversal attempt blocked: ${candidate}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',
           code: 'PATH_TRAVERSAL',
