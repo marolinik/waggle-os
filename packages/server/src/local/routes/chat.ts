@@ -449,7 +449,7 @@ export function buildChatCommandContext(input: {
  * built-in PERSONAS array — `listPersonas()` adds the custom ones from disk
  * via `loadCustomPersonas()`. The deploy comment in evolution-deploy.ts
  * explicitly says "loader picks it up on next listPersonas() call", but
- * the chat consumer was reading the wrong function. See FR #3 in
+ * the chat consumer was reading the wrong function. See
  * docs/GEPA-SCOPE-AUDIT-2026-04-30.md.
  */
 function resolvePersona(id: string) {
@@ -1147,7 +1147,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // Read dynamically — may be updated to built-in proxy at runtime
   const getLitellmUrl = () => server.localConfig.litellmUrl;
 
-  // W2.2: Register pre:memory-write validation hook — flags dramatic claims
+  // Register pre:memory-write validation hook — flags dramatic claims
   const DRAMATIC_PATTERNS = [
     /\b(shut\s*down|shutting\s*down|closing|dissolv|bankrupt|terminat|fired|laid\s*off|resign)\b/i,
     /\b(cancel|cancelled|abandon|scrap|kill)\s+(the\s+)?(company|project|deal|contract|engagement)\b/i,
@@ -1192,7 +1192,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     }
   });
 
-// C3: Cache the base system prompt per session to avoid rebuilding on every message
+// Cache the base system prompt per session to avoid rebuilding on every message
 const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
@@ -1263,8 +1263,8 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     pruneChatRuntimes(cache);
   }
 
-  // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
-  // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
+  // Profile cache: a fs.readFileSync on every buildSystemPrompt call would
+  // block the Node event loop on every concurrent SSE request. Load once per mtime change,
   // keyed by file mtime so a profile update flips the cache without a restart.
   let profileCache: { mtimeMs: number; data: Record<string, unknown> | null } | null = null;
   function loadProfile(dataDir: string): Record<string, unknown> | null {
@@ -1283,7 +1283,7 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
 
   // Context compression: track previous summaries per session for iterative compression
   const compressionSummaries = new Map<string, string>();
-  // #12: frame id of each session's persisted compaction summary — later
+  // Frame id of each session's persisted compaction summary — later
   // compaction passes update that frame in place instead of stacking near-
   // duplicates. In-memory like compressionSummaries (a sidecar restart just
   // means the next pass creates a fresh frame — rare, benign).
@@ -1423,8 +1423,8 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
 
   // Build the rich system prompt — behavioral specification, not just tool docs
   // Accepts the caller's orchestrator so per-session orchestrators get their own
-  // workspace layers reflected in the prompt (Phase A.1 Option Y migration).
-  // Phase A.2: accepts an optional `personaOverride` so different chat windows
+  // workspace layers reflected in the prompt.
+  // Accepts an optional `personaOverride` so different chat windows
   // on the same workspace can run different personas without touching the
   // workspace record.
   function buildSystemPrompt(
@@ -1435,7 +1435,7 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     workspaceId?: string,
     personaOverride?: string,
     /**
-     * FR #4: when PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
+     * When PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
      * AssembledPrompt via `orch.buildAssembledPrompt(query, persona, opts)`.
      * If provided, its `system` replaces the basic `orch.buildSystemPrompt()`
      * call below. The wrapper adds only context that is not already represented
@@ -1547,11 +1547,11 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     }
 
     // Orchestrator's built prompt (identity + self-awareness + preloaded context).
-    // FR #4: when PromptAssembler is on, swap in the structured assembled prompt
+    // When PromptAssembler is on, swap in the structured assembled prompt
     // — adds Identity + Persona + State + Recent + Memory sections via the
     // sixth-layer assembler. Wrapper-only profile, runtime, workspace, active
     // behavioral, and correction context is layered below.
-    // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
+    // Supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
     if (includePersistedMemory) {
       orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
@@ -1559,7 +1559,7 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     prompt += assembled?.system
       ?? (includePersistedMemory ? orch.buildSystemPrompt(selectedModel, availableTools) : '');
 
-    // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
+    // Inject user profile context (cached by mtime in `loadProfile`, no sync I/O per turn)
     if (includePersistedMemory) {
       try {
         const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
@@ -1684,7 +1684,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     }
 
-    // W3.3: Inject actionable correction signals — user corrections from prior sessions
+    // Inject actionable correction signals — user corrections from prior sessions
     if (includePersistedMemory) {
       try {
         const signalStore = orch.getImprovementSignals();
@@ -1700,13 +1700,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       } catch { /* non-blocking */ }
     }
 
-    // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
-    // content stays singular. DOCX guidance always applies; persisted workspace
-    // tone is withheld when the user disables memory reads for this turn.
     if (volatileTail) {
       prompt += volatileTail;
     }
 
+    // Add persona only on the legacy path; assembler-owned persona
+    // content stays singular. DOCX guidance always applies; persisted workspace
+    // tone is withheld when the user disables memory reads for this turn.
     const workspaceTone = includePersistedMemory ? wsConfig?.tone : undefined;
     const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
     prompt = composeChatPromptTail(prompt, {
@@ -1715,7 +1715,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       assembled: assembled ?? null,
     });
 
-    // C3: Cache the built prompt — only when there's no per-turn assembler
+    // Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
     if (!assembled && includePersistedMemory) {
       systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode, model: selectedModel });
@@ -1755,7 +1755,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       /** Exact installed skill proposed by a first-party starter chip; always validated here. */
       selectedSkill?: string;
       /**
-       * Phase B.5: tiered autonomy override. When absent or 'normal', the
+       * Tiered autonomy override, resolved by `resolveAutonomyLevel` at the
+       * top of the handler. When absent or 'normal', the
        * existing gate applies. 'trusted' or 'yolo' relax the gate per the
        * rules in needsConfirmationWithAutonomy.
        * `expiresAt` is a client-supplied deadline — if set and in the past,
@@ -1763,7 +1764,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        */
       autonomy?: { level: AutonomyLevel; expiresAt?: number };
       /**
-       * F4: set by a client Retry after a failed turn. Drops the previously
+       * Set by a client Retry after a failed turn. Drops the previously
        * persisted failed user+assistant pair (RAM + disk) before re-issuing so
        * a reload doesn't show a duplicate.
        */
@@ -1780,7 +1781,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        */
       proposeHeld?: boolean;
       /**
-       * Steal #13: automation-origin memory write-back gate. Set ONLY by
+       * Automation-origin memory write-back gate. Set ONLY by
        * headless/automated callers (idle-watcher review turns, scheduled
        * loops) — an automated turn re-analyzes existing transcripts, so its
        * post-response write-back (auto-save, skill distillation, KG
@@ -1790,7 +1791,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        */
       origin?: 'automation' | 'router';
       /**
-       * #17: originating IM channel of this turn (real platform + chatId).
+       * Originating IM channel of this turn (real platform + chatId).
        * Set only by ChannelManager.handleInbound via the loopback client —
        * published as the request-scoped turn origin so create_schedule can
        * stamp ai_task delivery targets from a trusted snapshot.
@@ -1801,8 +1802,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const totalServerStartedAt = performance.now();
     let firstTokenAt: number | null = null;
 
-    // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
-    // Phase A.2: `persona` is an optional per-window override — takes precedence
+    // Accept both 'workspace' and 'workspaceId' for backwards compat (P0-4).
+    // `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
     const {
       message, workspace: workspaceRaw, workspaceId: workspaceIdRaw, model, session,
@@ -1864,22 +1865,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       executionScopeId,
       executionWorkspaceConfig,
     } = workspaceTarget;
-    // #13: automated turns skip the post-response memory write-back seams
+    // Automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
     // Compliance execution traces stay ungated. Learned memory, improvement
     // signals, and skill capture are gated below by the resolved turn policy.
     const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
-    // Phase B.5: resolve the effective autonomy level for this request.
+    // Resolve the effective autonomy level for this request (the request
+    // body's `autonomy` field documents the levels and the expiry fallback).
     const autonomyLevel = resolveAutonomyLevel(autonomyRaw);
 
-    // H-AUDIT-1: generate per-turn trace ID at the conceptual turn boundary
+    // Generate per-turn trace ID at the conceptual turn boundary
     // (POST /api/chat entry). Propagated explicitly into agent-loop,
     // orchestrator, retrieval, prompt-assembler, cognify, and each tool
     // call. Every stage logs a structured event tagged with this turnId
     // so the full turn graph is reconstructable from a single correlation
-    // key. Also satisfies EU AI Act Art. 14 traceability requirements.
+    // key. Also satisfies EU AI Act Art. 14 traceability requirements (H-AUDIT-1).
     const turnId = generateTurnId();
     logTurnEvent(turnId, {
       stage: 'chat.turn.start',
@@ -1888,7 +1890,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       messageChars: (message ?? '').length,
     });
 
-    // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
+    // Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
     const workspacePaths = resolveChatWorkspacePaths(server, {
       workspace,
@@ -1975,7 +1977,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
       // High-confidence injection: block entirely.
-      // Review Major #3: flags NOT included in the client response — the scanner's
+      // Flags NOT included in the client response — the scanner's
       // internal pattern vocabulary leaks a roadmap for crafting bypassing payloads.
       log.warn(`[security] Prompt injection BLOCKED (score ${injectionResult.score})`, injectionResult.flags);
       return reply.code(400).send({
@@ -1994,7 +1996,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const explicitReadOnlyToolCandidate = preScanExplicitReadOnlyToolCandidate
       ?? warningTierDirectReadFileCandidate;
 
-    // Review Critical #3: viewer RBAC moved above reply.hijack() — after hijack,
+    // Viewer RBAC runs before reply.hijack() — after hijack,
     // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
     if (workspaceConfig?.teamId && workspaceConfig?.teamRole === 'viewer') {
         return reply.status(403).send({
@@ -2003,7 +2005,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
     }
 
-    // Review Critical #1: request-supplied paths stay anchored to dataDir.
+    // Request-supplied paths stay anchored to dataDir.
     // A workspace directory loaded from persisted config is an explicit user
     // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
     // A trusted config also makes the request's own path irrelevant, and that
@@ -2077,19 +2079,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // lookups did not influence the answer.
     const turnRecall = new TurnRecalledContext();
 
-    // B1-B7: Rerouted message from slash command processing — scoped to handler
+    // Rerouted message from slash command processing — set by the
+    // AGENT_LOOP_REROUTE_PREFIX branch of the command dispatch, read by
+    // `hasReroute`/`agentMessage` and the last-user-message swap before the loop.
     let reroutedMessage: string | undefined;
 
-    // Review Critical #2: the turn's releasable resources are held here so the
-    // outer finally can always clean up. Old code's only cleanup was at the
-    // happy-path line ~1125; every exception path leaked the pre:tool hook into
-    // the shared hookRegistry, causing ghost confirmation prompts on every
-    // subsequent request with closures pointing at dead sockets.
+    // The turn's releasable resources are held here so the outer finally's
+    // `turnResources.releaseHeld()` can always clean up. The happy path's
+    // `turnResources.unhookTools()` alone would leave every exception path
+    // leaking the pre:tool hook into the shared hookRegistry, causing ghost
+    // confirmation prompts on every subsequent request with closures pointing
+    // at dead sockets.
     const turnResources = new TurnResources();
     let requestHookRegistry: HookRegistry | undefined;
 
-    // H-07 G4: hoisted so the outer catch can finalize aborted/errored traces
-    // with outcome='abandoned'. Without this, a failed turn leaves its row in
+    // Hoisted so the outer catch and the outer finally can finalize
+    // aborted/errored traces with outcome='abandoned' through
+    // `turnTrace.finalizeOnce`. Without this, a failed turn leaves its row in
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
     const turnTrace = new TurnExecutionTrace({
@@ -2108,8 +2114,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       },
     });
 
-    // #3 (launch-blocker): hoist the resolved orchestrator so the outer catch
-    // can persist the raw user turn even when generation fails. Memory capture
+    // Hoist the resolved orchestrator so the outer catch's raw-turn capture
+    // can persist the user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
     let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
@@ -2325,7 +2331,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         && canonicalizeModelReference(resolvedModel) !== configuredFallbackModel,
       );
 
-      // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
+      // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
 
       // A conversation-history denial is a read boundary, not only a prompt-
       // packaging choice. Do not read or cache the saved transcript for this turn.
@@ -2374,7 +2380,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         retryUserAlreadyPersisted = true;
       }
 
-      // F4 legacy retry-dedup: older clients only identified failed turns. Drop
+      // Legacy retry-dedup: older clients only identified failed turns. Drop
       // the previously persisted failed user+assistant pair (RAM + disk) so a
       // reload doesn't render it duplicated alongside the fresh turn.
       if (retryTurn && !retryTarget && !turnMutationPolicy.denyConversationHistory) {
@@ -2499,7 +2505,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ? 'Persisted marketplace state is disabled for this turn.'
           : await commandRegistry.execute(message, cmdContext);
 
-        // B1-B7: Check if the command wants to be re-processed through the agent loop
+        // Check if the command wants to be re-processed through the agent loop
         if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && modelAvailable) {
           // Extract the rewritten message and fall through to agent loop processing
           const rerouted = cmdResult.slice(AGENT_LOOP_REROUTE_PREFIX.length);
@@ -2514,16 +2520,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
           if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return; // Review Major #5: explicit terminal — don't fall through to agent loop
+          return; // explicit terminal — don't fall through to agent loop
         } else {
           // Stream the command result as SSE tokens and persist it
           if (!(await streamCannedReply(cmdResult, COMMAND_REPLY_WORD_DELAY_MS))) return;
           if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return; // Review Major #5: explicit terminal — don't fall through to agent loop
+          return; // explicit terminal — don't fall through to agent loop
         }
       }
 
-      // B1-B7: Check if a slash command requested agent-loop rerouting
+      // Check if a slash command requested agent-loop rerouting.
       // A reroute is the command asking for the loop, whatever its body says;
       // reading the body as a boolean let an empty one end the turn with no
       // answer and no done (TD-CHAT-25).
@@ -2562,7 +2568,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Workspace mind activation ────────────────────────────
-        // With the Phase A.1 session migration, the per-session orchestrator
+        // The per-session orchestrator
         // created above already has the workspace mind mounted. This legacy
         // shared-orchestrator activation only fires as a fallback when
         // session creation failed (wsSession is undefined) — matches the
@@ -2589,7 +2595,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             throwIfTurnAborted();
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
-              // Minor #3: scan recalled memory for injection payloads before injecting into prompt
+              // Scan recalled memory for injection payloads before injecting into prompt
               const recallInjection = scanForInjection(recall.text, 'tool_output');
               if (!recallInjection.safe) {
                 log.warn('[security] Injection detected in recalled memory — dropping context', recallInjection.flags);
@@ -2603,13 +2609,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               } else {
                 turnRecall.adoptRecall(recall.text, recall.count);
 
-                // B5: Include content snippets so ToolCard can show what was recalled
+                // Include content snippets so ToolCard can show what was recalled
                 const snippets = (recall.recalled ?? []).slice(0, 3);
                 const snippetText = snippets.map(s => `  - ${s}`).join('\n');
                 const resultText = `${recall.count} memories recalled:\n${snippetText}`;
-                // PR3.5: distinct provenance sources of the recalled memories
+                // Distinct provenance sources of the recalled memories
                 // (raw frame.source values; the FE owns the friendly label map).
-                // Review M-4: emit the breakdown ONLY when it covers EVERY recalled
+                // Emit the breakdown ONLY when it covers EVERY recalled
                 // frame — a partial breakdown next to "Recalled N memories" would
                 // imply all N share these sources. Any 'unknown' (e.g. the rare
                 // catch-up lane, which doesn't carry source) suppresses the pill
@@ -2643,7 +2649,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Count prior user messages FIRST — needed by both GEPA and ambiguity guards.
-        // Q11:A — Mid-conversation follow-ups like "yes", "run it", "LGTM" are valid
+        // Mid-conversation follow-ups like "yes", "run it", "LGTM" are valid
         // replies and should NOT be expanded or flagged as vague.
         const priorUserMessages = history.filter((m: { role: string }) => m.role === 'user').length;
         const isFirstUserMessage = priorUserMessages <= 1; // history already includes current message
@@ -2689,7 +2695,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Build system prompt (with workspace path awareness + recalled memories)
-        // GAP-006: Prepend ambiguity guard when user message is too brief/vague
+        // Prepend ambiguity guard when user message is too brief/vague
         const shouldCheckAmbiguity = isFirstUserMessage
           && !gepaExpanded
           && !closedWorldRewrite
@@ -2697,7 +2703,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && turnMutationPolicy.contextScope === 'default'; // Skip when expansion or an explicit evidence boundary already resolves intent
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
-        // M2-7: Track session start on first user message
+        // Track session start on first user message
       if (isFirstUserMessage && server.telemetry) {
         server.telemetry.track('session_start', {
           workspaceId: executionScopeId,
@@ -2727,7 +2733,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // FR #4: pre-fetch a structured AssembledPrompt when PROMPT_ASSEMBLER is on.
+        // Pre-fetch a structured AssembledPrompt when PROMPT_ASSEMBLER is on.
         // The assembler runs sixth-layer prompt packaging (Identity + Persona +
         // memory sections + task-shape scaffold). Failures fall back gracefully
         // to the static system prompt — never block a chat turn on assembler errors.
@@ -2740,9 +2746,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !explicitReadOnlyToolCandidate
           && isEnabled('PROMPT_ASSEMBLER');
 
-        // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
-        // recall block is already INSIDE the assembled prompt — appending it
-        // again injected every recalled memory twice (`staticPromptTail`).
+        // When the assembler ran, the recall block is already INSIDE the
+        // assembled prompt, so `turnRecall.staticPromptTail(Boolean(assembledForModel))`
+        // in `rebuildSystemPromptForModel` omits it; appending it again would
+        // inject every recalled memory twice.
         let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
         const initialPromptModel = resolvedModel;
         let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
@@ -2796,13 +2803,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let directReadFileExecutionOutcome: ToolExecutionOutcome | null = null;
         let boundedExactMemoryExecutionOutcome: BoundedExactMemoryExecutionOutcome | null = null;
 
-        // W3.1: Filter tools by persona — non-technical personas get a reduced
+        // Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
         // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
         // — create_skill survives the allowlist — is unit-testable). This block
         // is !hasCustomRunner-gated: route tests reach it only without an
         // injected runner, as sse-resilience and persona-acceptance do.
-        // Resolution order matches buildSystemPrompt (Phase A.2): per-window
+        // Resolution order matches buildSystemPrompt: per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
         const activePersonaId = turnPersonaId;
@@ -2842,7 +2849,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spawnAvailableTools = [];
         }
 
-        // #17: schedule-originated turns must not schedule further work — an
+        // Schedule-originated turns must not schedule further work — an
         // ai_task turn re-invoking create_schedule could self-replicate, and
         // loop-guard cannot see across turns. list/delete stay available.
         if (sessionId.startsWith('schedule-')) {
@@ -2865,7 +2872,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           effectiveTools = filterAvailableTools(effectiveTools);
           spawnAvailableTools = effectiveTools;
 
-          // Steal #6: relevance-gate connected MCP tools into the pool. This is
+          // Relevance-gate connected MCP tools into the pool. This is
           // the FIRST point MCP tools enter effectiveTools. Runs after
           // availability filtering (so counts are real) and before the
           // conversational narrowing + spawn-allowlist snapshot, so a spawned
@@ -2919,10 +2926,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // B1-B7: If this is a rerouted slash command, replace the last user message
+        // If this is a rerouted slash command, replace the last user message
         // with the enriched agent prompt so the LLM gets better instructions
         if (reroutedMessage && !turnMutationPolicy.denyConversationHistory) {
-          // The original slash command is already persisted to disk at line 724.
+          // The original slash command is already persisted to disk by the
+          // user-turn `persistMessage` call before command dispatch.
           // For the agent loop, swap in the rerouted message so the LLM sees the
           // enhanced prompt (e.g., "Draft the following. Search memory first...")
           let lastUserIdx = -1;
@@ -2998,9 +3006,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             if (compressionResult.summary) {
               compressionSummaries.set(sessionStateKey, compressionResult.summary);
 
-              // #12: dual-use — persist the summary the compressor already
+              // Dual-use — persist the summary the compressor already
               // paid for as a durable memory frame (skipped for automated
-              // turns per #13, and for injected-runner turns like every other
+              // turns, and for injected-runner turns like every other
               // write-back seam in this route). The summary aggregates
               // tool/connector output, so scan it before it can enter durable
               // memory; fail-soft with the W4A closed-DB guard so persistence
@@ -3617,7 +3625,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           governancePolicies,
           skillDistillationGate: retention.allowDerivedPersistence,
           signal: turnSignal,
-          turnId, // H-AUDIT-1: propagate trace ID into the loop
+          turnId, // propagate trace ID into the loop (H-AUDIT-1)
 
           onModelActivity: () => {
             if (modelResponseActivitySent || turnSignal.aborted) return;
@@ -3648,7 +3656,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             bufferedAgentTokens.push(token);
           },
           onGiveUp: (giveUpMessage: string) => {
-            // Steal #9 T3 — the tiered loop-guard aborted the run after a
+            // The tiered loop-guard aborted the run after a
             // critical failure streak. Surface the give-up copy as a step so the
             // client sees it immediately (it is also the loop's final content).
             sendEvent('step', { content: giveUpMessage });
@@ -3671,7 +3679,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${retainedTurnJson(disclosedInput).slice(0, 100)})` });
             // Track start time for duration calculation
             toolActivity.startTimer(name);
-          // F2: Audit trail — log tool call
+          // Audit trail — log tool call
           emitAuditEvent(server, {
             workspaceId: executionScopeId,
               eventType: 'tool_call',
@@ -3716,7 +3724,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               const disclosedResult = boundedExactMemoryResultSummary ?? result;
               sendEvent('tool_result', { name, result: disclosedResult, duration, isError });
             }
-          // F2: Audit trail — log tool result (truncated output)
+          // Audit trail — log tool result (truncated output)
           const auditedResult = boundedExactMemoryResultSummary ?? result;
           emitAuditEvent(server, {
             workspaceId: executionScopeId,
@@ -3761,7 +3769,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Taken from the composition root, not built here (CA-5). Still read
         // defensively so unit tests with no decorator (legacy suites) pass.
         // Started on the hoisted `turnTrace` so the outer catch can finalize
-        // with outcome='abandoned' on any exception path (H-07 G4 fix).
+        // with outcome='abandoned' on any exception path.
         // This operational audit trail is intentionally retained for
         // bounded/read-only turns; it is not learned memory or a user-work
         // mutation.
@@ -3773,7 +3781,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           input: retainedTurnText(message),
         });
 
-        // #4: route locally-selected Ollama models to Ollama's OpenAI-compatible
+        // Route locally-selected Ollama models to Ollama's OpenAI-compatible
         // endpoint instead of LiteLLM (graceful degradation / sovereignty story).
         // The sidecar reaches Ollama directly (as it does for embeddings) — no
         // Docker->host hop, no API key. Strip the 'ollama/' routing prefix to the
@@ -3789,7 +3797,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(retention.allowDerivedPersistence && turnTrace.recording
             ? { traceRecording: turnTrace.recording }
             : {}),
-          // AI-OS Phase 3 — skill diffusion. When the D1 closed
+          // Skill diffusion. When the closed
           // learning loop fires, broadcast a skill_share signal on
           // the v2 bus so MCP-consuming external tools can adopt
           // the soon-to-be-authored skill. Failures are swallowed
@@ -4199,7 +4207,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // L-17 C3: per-session token accumulation for /api/fleet visibility.
+        // Per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
         accountWorkspaceSessionTokens(
@@ -4207,15 +4215,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         );
         usageLedger.markAccounted();
 
-        // M8: commit deferred signal markings now that model call succeeded
+        // Commit deferred signal markings now that model call succeeded
         if (!hasCustomRunner && retention.allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
 
-        // ── R1 closed learning loop: deterministic skill distillation ──
-        // Hermes parity (premium-harness D1). The runtime — not just the
-        // behavioral-spec prose — detects a successful ≥5-tool turn and
+        // ── Closed learning loop: deterministic skill distillation ──
+        // The runtime — not just the behavioral-spec prose — detects a successful ≥5-tool turn and
         // surfaces the distillation directive, so the agent reliably authors
-        // a reusable skill via its own create_skill tool. R2-gated end to
-        // end: a refusal / self-incapacity turn yields no plan. The signal
+        // a reusable skill via its own create_skill tool. Gated end to
+        // end on the outcome: a refusal / self-incapacity turn yields no plan. The signal
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
         // Skipped whenever learned/derived persistence is disabled.
@@ -4347,7 +4354,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           finalContent += regulatedDisclaimerSuffix(finalContent, activePersonaId);
         }
 
-        // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
+        // Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
         if (!hasCustomRunner
           && retention.allowResponseDecoration
           && finalContent
@@ -4505,7 +4512,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (!agentAlreadySaved) {
             try {
               const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
-                // PR3.5 frame↔trace backlink — link auto-saved frames to the
+                // Frame↔trace backlink — link auto-saved frames to the
                 // turn's execution trace so Memory-Trust can answer why this
                 // memory exists. Undefined when tracing is unavailable.
                 traceId: turnTrace.id?.toString(),
@@ -4605,7 +4612,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           );
         }
       }
-      // H-07 G4: finalize aborted trace so the evolution dataset builder can
+      // Finalize the hoisted `turnTrace` as aborted so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
       // and GEPA never sees it — starving the loop of counterexamples.
       turnTrace.finalizeOnce(() => {
@@ -4705,8 +4712,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
 
-      // #3 (launch-blocker): memory capture MUST NOT depend on generation
-      // success. On the happy path the write-back at ~L1410 captures the
+      // Memory capture MUST NOT depend on generation success; this is the
+      // counterpart of the hoisted `activeSessionOrch`. On the happy path
+      // `sessionOrch.autoSaveFromExchange` captures the
       // exchange; when the model call fails that never runs, so the user's
       // turn would be lost from memory ("remembers everything" broken). Persist
       // the raw turn directly here — NOT via the conservative pattern-write-back
@@ -4746,7 +4754,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // for every path the happy-path `unhookTools()` did not reach — the
       // pre:tool hook. Released in that order; see `TurnResources`.
       await turnResources.releaseHeld();
-      // H-07 G4: defensive trace finalization. Catches SSE-disconnect and any
+      // Defensive finalization of the hoisted `turnTrace`. Catches SSE-disconnect and any
       // exotic exit path where the outer catch didn't run. Outcome stays
       // 'abandoned' because we don't know if the agent produced a usable
       // output — the correction-detector can upgrade it later if appropriate.
@@ -4769,9 +4777,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
   });
 
   // DELETE /api/chat/history — clear session history AND all per-session in-process state.
-  // Review Major #6: previously only sessionHistories was evicted. The other Maps
-  // (systemPromptCache, compressionSummaries, sessionToolSequences) grew unbounded
-  // across the sidecar's lifetime, compounding in heavy-use instances.
+  // Every per-session Map is evicted, not only sessionHistories: the others
+  // (systemPromptCache, compressionSummaries, sessionToolSequences) would grow
+  // unbounded across the sidecar's lifetime, compounding in heavy-use instances.
   server.delete<{
     Querystring: { session?: string; workspace?: string };
   }>('/api/chat/history', async (request, reply) => {
