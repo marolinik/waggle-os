@@ -557,14 +557,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         }
 
         // Fallback: raw frame creation (no entity extraction or vector indexing)
-        const active = targetSessions.getActive();
-        let gopId: string;
-        if (active.length === 0) {
-          const session = targetSessions.create();
-          gopId = session.gop_id;
-        } else {
-          gopId = active[0].gop_id;
-        }
+        const gopId = targetSessions.ensureActive().gop_id;
         const latestI = targetFrames.getLatestIFrame(gopId);
         if (latestI) {
           targetFrames.createPFrame(gopId, content, latestI.id, importance, source);

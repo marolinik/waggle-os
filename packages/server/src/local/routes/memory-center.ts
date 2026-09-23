@@ -319,8 +319,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
 
     const frames = new FrameStore(targetDb);
     const sessions = new SessionStore(targetDb);
-    const active = sessions.getActive();
-    const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+    const gopId = sessions.ensureActive().gop_id;
     const imp = asImportance(b.importance) ?? 'normal';
 
     const dup = frames.findDuplicate(content);
@@ -836,8 +835,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     if (!targetDb) return reply.status(500).send({ error: 'Target mind unavailable' });
 
     const sessions = new SessionStore(targetDb);
-    const active = sessions.getActive();
-    const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+    const gopId = sessions.ensureActive().gop_id;
 
     // Highest importance among sources wins; the merged record is agent_inferred.
     const order: Importance[] = ['deprecated', 'temporary', 'normal', 'important', 'critical'];
