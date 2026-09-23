@@ -375,6 +375,28 @@ describe('Memory Weaver (Consolidation)', () => {
       expect(strategy[0].content).toContain('point B');
     });
 
+    it('joins the most recent active session, not a newer closed one', () => {
+      const insert = db.getDatabase().prepare(
+        'INSERT INTO sessions (gop_id, status, started_at) VALUES (?, ?, ?)',
+      );
+      insert.run('session:older', 'active', '2026-01-01 09:00:00');
+      insert.run('session:newer', 'active', '2026-03-01 09:00:00');
+      insert.run('session:closed', 'closed', '2026-06-01 09:00:00');
+
+      const frame = weaver.distillSessionContent('2026-03-12', 'Hiring plan review', []);
+
+      expect(frame.gop_id).toBe('session:newer');
+    });
+
+    it('opens one distilled session when none is active', () => {
+      const frame = weaver.distillSessionContent('2026-03-13', 'Vendor shortlist', []);
+
+      const active = sessions.getActive();
+      expect(active).toHaveLength(1);
+      expect(active[0].project_id).toBe('distilled');
+      expect(frame.gop_id).toBe(active[0].gop_id);
+    });
+
     it('creates a frame even without key points', () => {
       const frame = weaver.distillSessionContent(
         '2026-03-11',

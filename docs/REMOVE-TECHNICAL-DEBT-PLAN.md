@@ -182,7 +182,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
 - [ ] TD-CHAT-28 / TD-CHAT-15: ledgered at the Phase 6 scope decision, not consumed (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
-- [ ] R-3: bound the 65 unbounded `.all()` reads, clustered in the memory substrate — touches OSS-mirrored `hive-mind-core`, §7.5 applies, pin each query first (agent, P2)
+- [x] R-3: unbounded `.all()` reads. Count paths were done under R-6. `sessions.getActive()` is bounded at its nine first-row callers through `ensureActive()`; `install-audit`, `cron-store` and `file-indexer` are ruled in RELIABILITY.md. No `hive-mind-core` change (agent, `ee6f2d1e`, 2026-09-23)
 - [ ] R-5: Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
 - [x] R-6: soak test against a large aged `.mind` database — the desktop-shaped replacement for a throughput ramp (agent, `bf2aaedd`, 2026-09-19; `npm run test:soak`, see RELIABILITY.md)
 - [x] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3) R-4 closed (`bd13c04f`, `/health/ready`); R-7 won't fix (TimeoutError vs AbortError contracts, body-read scope, OSS-mirrored sites; see RELIABILITY.md).
