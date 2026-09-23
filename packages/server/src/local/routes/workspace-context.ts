@@ -435,6 +435,14 @@ export function buildWorkspaceNowBlock(opts: {
 
 // ── Formatter (for system prompt injection) ────────────────────────────
 
+/**
+ * The workspace label a slash command sees when it runs in the personal scope,
+ * shared by the chat route and both command routes (TD-CHAT-35). It is a
+ * label, never an id: `assertSafeSegment` accepts it, so it must never be
+ * passed to `workspaceManager.get`.
+ */
+export const PERSONAL_COMMAND_WORKSPACE_LABEL = 'Personal';
+
 export function formatWorkspaceNowPrompt(block: WorkspaceNowBlock): string {
   const sections: string[] = [];
 

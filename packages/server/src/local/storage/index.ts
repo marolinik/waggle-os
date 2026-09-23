@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { FsStorageProvider } from './fs-provider.js';
 import { S3StorageProvider } from './s3-provider.js';
@@ -24,6 +25,18 @@ interface WorkspaceLike {
  * - local:   user-specified directory on their machine (like Claude Code)
  * - team:    MinIO/S3 bucket shared across team members
  */
+/**
+ * Where a personal-scope turn keeps its files: managed storage under the data
+ * directory, the same shape as a workspace's virtual storage. A personal turn
+ * has no workspace to supply a root, and it must never fall back to the user's
+ * home directory (TD-CHAT-26, founder 2026-09-23). Created on first use.
+ */
+export function resolvePersonalFilesRoot(dataDir: string): string {
+  const root = path.join(dataDir, 'personal', 'files');
+  fs.mkdirSync(root, { recursive: true });
+  return root;
+}
+
 export function getStorageProvider(workspace: WorkspaceLike, dataDir: string): StorageProvider {
   switch (workspace.storageType) {
     case 'local': {

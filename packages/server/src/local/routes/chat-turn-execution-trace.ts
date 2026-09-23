@@ -14,8 +14,11 @@
  *
  * Three invariants the route relied on implicitly and this module now states:
  *  - A row is finalized at most once. A finalize that throws does not count, so
- *    a later site still gets its turn — that is how the finally block catches a
- *    failed success finalize (pinned as a QUIRK: it records `abandoned`).
+ *    a later site still gets its turn, and that turn retries the FAILED
+ *    payload rather than building its own: the attempt that failed knew the
+ *    outcome, tokens and cost, the finally block does not. Until TD-CHAT-22 a
+ *    delivered answer whose success finalize failed was recorded `abandoned`,
+ *    and an error-path retry lost its tokens, cost and feedback.
  *  - Starting and finalizing are both best-effort and never fail the turn. A
  *    throwing `start` (a locked store, say) leaves the turn untraced; until
  *    TD-REL-4 it aborted the turn and sent the raw store error to the client.
@@ -44,6 +47,8 @@ export class TurnExecutionTrace {
   private recorder: TraceRecorder | null = null;
   private handle: TraceHandle | null = null;
   private finalized = false;
+  /** The payload of the last finalize that threw, retried by the next site. */
+  private failedOptions: TraceFinalizeOptions | undefined;
   private readonly onFinalizeError: (error: unknown, traceId: number | undefined) => void;
   private readonly onStartError: (error: unknown) => void;
 
@@ -77,20 +82,25 @@ export class TurnExecutionTrace {
   }
 
   /**
-   * Finalize the row unless an earlier site already has. Returns the finalized
-   * row, or undefined when the turn is untraced, the row is already final, or
-   * finalizing threw.
+   * Finalize the row unless an earlier site already has. When an earlier site
+   * tried and threw, its payload is retried and `buildOptions` is not called.
+   * Returns the finalized row, or undefined when the turn is untraced, the row
+   * is already final, or finalizing threw.
    */
   finalizeOnce(buildOptions: () => TraceFinalizeOptions): FinalizedTraceRow {
     if (!this.recorder || !this.handle || this.finalized) return undefined;
+    let options: TraceFinalizeOptions | undefined;
     try {
-      const row = this.recorder.finalize(this.handle, buildOptions());
+      options = this.failedOptions ?? buildOptions();
+      const row = this.recorder.finalize(this.handle, options);
       this.finalized = true;
+      this.failedOptions = undefined;
       return row;
     } catch (error) {
       // Tracing is best-effort: what is lost is this finalize only. The row
-      // stays unfinalized, so the next site (the outer finally) may still
-      // record it as abandoned. The loss is reported, never thrown.
+      // stays unfinalized and keeps the payload, so the next site retries it.
+      // The loss is reported, never thrown.
+      if (options) this.failedOptions = options;
       try { this.onFinalizeError(error, this.handle.id); } catch { /* reporting is best-effort too */ }
       return undefined;
     }

@@ -9,6 +9,6 @@ if (s.provider !== 'echo') {
   const result = await s.synthesize('Summarize in 2 sentences: Waggle OS is an AI workspace platform with persistent memory built by Egzakta Group.');
   console.log('Output:', result.slice(0, 300));
 } else {
-  console.log('\nNo LLM available — echo mode.');
+  console.log('\nNo LLM available — setup-required mode.');
   console.log('Set ANTHROPIC_API_KEY or WAGGLE_OLLAMA_URL for real synthesis.');
 }

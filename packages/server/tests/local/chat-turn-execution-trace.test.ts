@@ -39,6 +39,28 @@ describe('TurnExecutionTrace', () => {
     expect(reported).toHaveLength(1);
   });
 
+  it('retries the failed payload instead of building a new one', () => {
+    const trace = new TurnExecutionTrace();
+    const seen: unknown[] = [];
+    let calls = 0;
+    const recorder = {
+      start: () => ({ id: 42 }),
+      finalize: (_handle: unknown, opts: unknown) => {
+        seen.push(opts);
+        calls += 1;
+        if (calls === 1) throw new Error('trace store unavailable');
+        return { id: 42 };
+      },
+    } as unknown as TraceRecorder;
+    trace.start(recorder, {} as never);
+
+    const first = { outcome: 'success', output: 'answer' } as never;
+    const second = { outcome: 'abandoned', output: '' } as never;
+    expect(trace.finalizeOnce(() => first)).toBeUndefined();
+    expect(trace.finalizeOnce(() => second)).toEqual({ id: 42 });
+    expect(seen).toEqual([first, first]);
+  });
+
   it('never throws, even when the report itself throws', () => {
     const trace = new TurnExecutionTrace({
       onFinalizeError: () => { throw new Error('logger down'); },

@@ -45,7 +45,7 @@ export interface RecordInteractionInput {
   riskContext?: string;
   importedFrom?: string;
   persona?: string;
-  // Review Critical #3: optional because echo-mode interactions may not have meaningful
+  // Review Critical #3: optional because setup-required interactions may not have meaningful
   // content. Callers on the live agent path SHOULD pass these; record() does not reject
   // absent values but the compliance status checker flags them as a gap.
   inputText?: string;

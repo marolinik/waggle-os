@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
@@ -11,7 +10,7 @@ import type {
   WorkspaceSession,
   WorkspaceSessionActivityLease,
 } from '../workspace-sessions.js';
-import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
+import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt, PERSONAL_COMMAND_WORKSPACE_LABEL } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
@@ -56,11 +55,9 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 
 /** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
 const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
-// Workspace label that slash-command handlers interpolate into user-facing
-// prompts when the turn runs in the personal scope. Deliberately not
-// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
-// and must never reach a prompt as if it were a workspace.
-const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
+// Slash commands in the personal scope see PERSONAL_COMMAND_WORKSPACE_LABEL,
+// deliberately not PERSONAL_CHAT_SCOPE_ID: that sentinel names the
+// audit/collaboration stream and must never reach a prompt as a workspace.
 
 type ChatRequestRejection = {
   status: 400 | 403 | 404 | 409;
@@ -382,7 +379,7 @@ function resolveChatWorkspacePaths(
  * the command handlers render verbatim.
  *
  * `executionWorkspaceId` is the workspace the turn runs in, or undefined for a
- * personal turn, in which case commands see `PERSONAL_CHAT_COMMAND_CONTEXT`.
+ * personal turn, in which case commands see `PERSONAL_COMMAND_WORKSPACE_LABEL`.
  */
 export function buildChatCommandContext(input: {
   server: ChatServer;
@@ -401,7 +398,7 @@ export function buildChatCommandContext(input: {
     // Command handlers interpolate this value into user-facing agent
     // instructions. Keep the non-workspace observability sentinel out of
     // those prompts so personal commands cannot target a fake workspace.
-    workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+    workspaceId: executionWorkspaceId ?? PERSONAL_COMMAND_WORKSPACE_LABEL,
     sessionId,
     searchMemory: async (query: string): Promise<string> => {
       if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.memoryAccessDisabled;
@@ -555,6 +552,7 @@ export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 export { waitForApprovalDecision } from './chat-approval-hook.js';
 import { createChatApprovalHook } from './chat-approval-hook.js';
 import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
+import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
@@ -580,6 +578,19 @@ export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 function isClosedDbError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return /database (connection|handle) is not open|database is closed/i.test(msg);
+}
+
+const CHAT_STORAGE_UNAVAILABLE_MESSAGE = 'Your conversation could not be saved on this device. Check free disk space and folder permissions, then try again.';
+
+/**
+ * A Node system error from the filesystem. `code` and `syscall` alone would
+ * also match a network failure (ECONNREFUSED on `connect`, a socket error on
+ * `read`); only a filesystem error names the `path` it touched.
+ */
+function isLocalStorageFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code, syscall, path: failedPath } = error as NodeJS.ErrnoException;
+  return typeof code === 'string' && typeof syscall === 'string' && typeof failedPath === 'string';
 }
 
 function isIncompleteCompletionError(error: unknown): boolean {
@@ -1603,7 +1614,7 @@ ${includePersistedMemory
 - Date: ${dateStr}
 - Platform: ${process.platform} (${process.arch})
 - Shell: ${process.platform === 'win32' ? 'cmd.exe (use /t flag for date, time)' : '/bin/sh'}
-- Working directory: ${workspacePath ?? os.homedir()}
+- Working directory: ${workspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir)}
 ${workspacePath
   ? (workspacePath.includes('/files') || workspacePath.includes('\\files')
     ? `- Workspace files: managed storage (${workspacePath})\n- Generated files will appear in managed workspace storage.`
@@ -1986,13 +1997,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Review Critical #1: request-supplied paths stay anchored to dataDir.
     // A workspace directory loaded from persisted config is an explicit user
     // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
-    if (workspacePath) {
-      const resolved = path.resolve(workspacePath);
+    // A trusted config also makes the request's own path irrelevant, and that
+    // path is ignored (pinned in chat-api). Otherwise the body's
+    // `workspacePath` is checked even when the branch above did not adopt it,
+    // so the answer depends on the request, not on which workspace the session
+    // happens to have active (TD-CHAT-44).
+    const requestSuppliedPaths = workspacePathFromTrustedConfig ? [] : [
+      ...(workspacePath ? [workspacePath] : []),
+      ...(typeof explicitWorkspacePath === 'string' && explicitWorkspacePath && explicitWorkspacePath !== workspacePath
+        ? [explicitWorkspacePath]
+        : []),
+    ];
+    for (const candidate of requestSuppliedPaths) {
+      const resolved = path.resolve(candidate);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (!workspacePathFromTrustedConfig
-        && resolved !== allowed
-        && !resolved.startsWith(allowed + path.sep)) {
-        log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
+      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+        log.warn(`[security] Path traversal attempt blocked: ${candidate}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',
           code: 'PATH_TRAVERSAL',
@@ -2206,7 +2226,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           sessionTools = server.agentState.buildToolsForSession(
             sessionOrch,
-            executionWorkspacePath ?? os.homedir(),
+            executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
             authorizedWorkspace ?? undefined,
           );
         } catch (err) {
@@ -2217,7 +2237,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       activeSessionOrch = sessionOrch;
       if (!hasCustomRunner) {
         workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          executionWorkspacePath ?? os.homedir(),
+          executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
           turnSignal,
         );
         const heldScope = workspaceTurnScope;
@@ -2390,15 +2410,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // is observed locally, so it remains authoritative even if startup's
       // cloud-provider status has not yet caught up with onboarding.
       const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
-      let litellmAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
+      let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
       if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
         if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
           // Healthy tracked provider — skip HTTP probe. For litellm the
           // per-request 3s probe raced concurrent completions (uvicorn busy
-          // serving LLM calls), randomly dropping healthy turns into echo mode;
+          // serving LLM calls), randomly dropping healthy turns into the setup-required reply;
           // the health monitor already tracks child liveness.
-          litellmAvailable = true;
+          modelAvailable = true;
         } else {
           try {
             const healthHeaders: Record<string, string> = {};
@@ -2413,7 +2433,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               signal: AbortSignal.any([turnSignal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
-            litellmAvailable = healthRes.ok;
+            modelAvailable = healthRes.ok;
           } catch {
             // LiteLLM not reachable
           }
@@ -2424,7 +2444,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // turn denies conversation history, and emits the terminal `done` event.
       // Resolves false when the turn was aborted before `done` was sent.
       // Does not end the stream: the caller owns `raw.end()`. The two
-      // slash-command callers call it; the setup-required echo caller
+      // slash-command callers call it; the setup-required caller
       // deliberately does not, and reaches the handler's outer `finally`
       // through the skipped agent-loop block instead.
       const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
@@ -2446,7 +2466,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         return true;
       };
 
-      // ── Slash command routing (works even in echo mode) ──
+      // ── Slash command routing (works even when no model is ready) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
       const isSlashCommand = commandRegistry.isCommand(message);
@@ -2471,7 +2491,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           : await commandRegistry.execute(message, cmdContext);
 
         // B1-B7: Check if the command wants to be re-processed through the agent loop
-        if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && litellmAvailable) {
+        if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && modelAvailable) {
           // Extract the rewritten message and fall through to agent loop processing
           const rerouted = cmdResult.slice(AGENT_LOOP_REROUTE_PREFIX.length);
           sendEvent('step', { content: `Processing /${message.trim().split(/\s+/)[0].slice(1)} via AI...` });
@@ -2480,7 +2500,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // We achieve this by NOT returning here — the code falls through to the agent loop
           // with the rerouted message replacing the original
           reroutedMessage = rerouted;
-        } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
+        } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !modelAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
@@ -2495,20 +2515,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = reroutedMessage || (!isSlashCommand && litellmAvailable);
-      const shouldEchoMode = !reroutedMessage && !isSlashCommand && !litellmAvailable;
+      // A reroute is the command asking for the loop, whatever its body says;
+      // reading the body as a boolean let an empty one end the turn with no
+      // answer and no done (TD-CHAT-25).
+      const hasReroute = reroutedMessage !== undefined;
+      const shouldRunAgentLoop = hasReroute || (!isSlashCommand && modelAvailable);
+      const shouldReplySetupRequired = !hasReroute && !isSlashCommand && !modelAvailable;
 
-      if (shouldEchoMode) {
+      if (shouldReplySetupRequired) {
         // Setup-required mode — respond without pretending the user's input
         // was answered. The raw turn is still persisted for continuity.
-        const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
-        // Persist echo response so session continuity is maintained
-        if (!(await streamCannedReply(echoResponse, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
+        const setupRequiredReply = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
+        // Persist the setup-required reply so session continuity is maintained
+        if (!(await streamCannedReply(setupRequiredReply, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
       }
 
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
-        const agentMessage = reroutedMessage ?? message;
+        // An empty rerouted body gives the loop nothing to answer, so it gets
+        // the user's own command instead.
+        const agentMessage = reroutedMessage || message;
         const closedWorldRewrite = requestClosedWorldRewrite
           || isClosedWorldRewriteRequest(agentMessage);
 
@@ -2764,8 +2790,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
         // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
-        // — create_skill survives the allowlist — is unit-testable; this block is
-        // !hasCustomRunner-gated and therefore unreachable from route tests).
+        // — create_skill survives the allowlist — is unit-testable). This block
+        // is !hasCustomRunner-gated: route tests reach it only without an
+        // injected runner, as sse-resilience and persona-acceptance do.
         // Resolution order matches buildSystemPrompt (Phase A.2): per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
@@ -4146,6 +4173,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             billingClass: receipt.billingClass,
           })
         ), 0);
+        // Production spend is charged inside the agent loop, through the
+        // modelSpendBudget the route hands it. An injected runner bypasses the
+        // loop and its meter, so only then does the route charge here; doing
+        // it for a production turn would count every call twice (TD-CHAT-8,
+        // pinned in chat-spend-accounting-characterization.test.ts).
         if (hasCustomRunner) {
           for (const receipt of successfulAttemptReceipts) {
             costTracker.addUsage(
@@ -4607,7 +4639,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
-      if (err instanceof Error) {
+      const storageFailure = isLocalStorageFailure(err);
+      if (storageFailure) {
+        // A failed history read or write: Node's message names the absolute
+        // file, which must not reach the client or the transcript (TD-CHAT-14).
+        errorMessage = CHAT_STORAGE_UNAVAILABLE_MESSAGE;
+      } else if (err instanceof Error) {
         // Clean up common error messages for the user. Authentication and
         // endpoint availability are different recovery paths: never send a
         // user to API-key settings when a local/OpenAI-compatible endpoint is
@@ -4633,7 +4670,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       const budgetCode = isTerminalModelBudgetError(err)
         ? (err as { code: string }).code
-        : undefined;
+        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE' : undefined;
       sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
