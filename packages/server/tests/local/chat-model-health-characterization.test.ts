@@ -6,13 +6,22 @@
  * whether it can serve a completion before deciding between the agent loop
  * and the setup-required reply. The probe is pinned through a fetch spy; a
  * probe that answers 503 keeps every turn on the setup-required reply, so no
- * model call is needed.
+ * model call is needed. The one turn that passes the probe reaches
+ * `runAgentLoop`, replaced through a module mock.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+
+const loop = vi.hoisted(() => ({ runAgentLoop: vi.fn() }));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return { ...actual, runAgentLoop: loop.runAgentLoop };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { MODEL_HEALTH_PROBE_TTL_MS } from '../../src/local/routes/chat-model-health.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
@@ -79,6 +88,25 @@ describe('POST /api/chat model-health probe (characterization)', () => {
     expect(res.body).toContain('No AI model is ready');
     return res;
   }
+
+  it('runs the agent loop when the probe answers ok', async () => {
+    const respond = fetchSpy.getMockImplementation()!;
+    fetchSpy.mockImplementation(async (input, init) => (
+      String(input).endsWith('/health/readiness')
+        ? new Response(JSON.stringify({ status: 'ready' }), { status: 200 })
+        : respond(input, init)
+    ));
+    loop.runAgentLoop.mockResolvedValueOnce({
+      content: 'Here is the plan.', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    resetRateLimiter(server);
+    const res = await injectWithAuth(server, {
+      method: 'POST', url: '/api/chat', payload: { message: 'Draft a launch plan', session: 'model-health-ok' },
+    });
+    expect(res.body).toContain('Here is the plan.');
+    expect(res.body).not.toContain('No AI model is ready');
+    expect(loop.runAgentLoop).toHaveBeenCalledTimes(1);
+  });
 
   // Until TD-REL-2 every turn probed the proxy again.
   it('reuses one probe result for turns within the TTL', async () => {
