@@ -20,6 +20,7 @@ import type {
 } from '@waggle/shared';
 import { isOfflineOllamaModelReference } from './routes/chat-helpers.js';
 import { emitSubagentStatus } from './routes/notifications.js';
+import { NON_RETAINED_TURN_CONTENT } from './routes/chat-turn-retention.js';
 
 const COLLABORATION_TOOL_NAMES = new Set([
   'spawn_agent', 'list_agents', 'get_agent_result',
@@ -29,7 +30,6 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 const QUARANTINED_AGENT_INPUT = '[Quarantined agent input: unsafe external content]';
 const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
 const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
-const NON_RETAINED_AGENT_CONTENT = '[Not retained: memory disabled for this turn]';
 
 type CollaborationTextKind = 'input' | 'result' | 'error';
 
@@ -153,7 +153,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
   const registryText = (text: string, kind: CollaborationTextKind) => (
     allowDerivedPersistence
       ? guardCollaborationText(text, kind)
-      : NON_RETAINED_AGENT_CONTENT
+      : NON_RETAINED_TURN_CONTENT
   );
   const registryOptionalText = (
     text: string | undefined,
@@ -238,7 +238,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
           source: 'chat_subagent',
           title: allowDerivedPersistence
             ? `Chat collaboration - ${parentSessionId}`
-            : NON_RETAINED_AGENT_CONTENT,
+            : NON_RETAINED_TURN_CONTENT,
           task: registryText(parentTask, 'input'),
           executor: { kind: 'coordinator' },
           capabilities: { cancel: true },

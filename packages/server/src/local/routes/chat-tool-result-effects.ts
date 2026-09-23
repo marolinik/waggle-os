@@ -168,7 +168,7 @@ export function applyToolResultSideEffects(effect: ToolResultEffect): void {
             // Fire-and-forget push — non-blocking
             sync.pushFrame({
               id: Date.now(),
-              gop_id: sessionId ?? 'unknown',
+              gop_id: sessionId,
               t: 0,
               frame_type: 'I',
               base_frame_id: null,

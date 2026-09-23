@@ -39,9 +39,6 @@ import { NON_RETAINED_TURN_CONTENT, type TurnRetention } from './chat-turn-reten
 // Same logger name as the handler, so the hook's warnings keep their source.
 const log = createLogger('chat');
 
-// Read once at plugin registration — consistent for the lifetime of the server
-const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
-
 const APPROVAL_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface ApprovalWaitOptions {
@@ -104,18 +101,21 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
           });
           held = true;
         } catch (error) {
-          log.warn(`[security] Failed to hold timed-out approval ${options.requestId}; auto-denying instead: ${error instanceof Error ? error.message : error}`);
+          log.warn('[security] failed to hold a timed-out approval; auto-denying instead', {
+            requestId: options.requestId,
+            error,
+          });
         }
         if (held) {
           try {
             options.sendEvent('approval_held', { ...options.heldEvent, expiresAt });
           } catch (error) {
-            log.warn(`[approval] Failed to emit approval_held for ${options.requestId}: ${error instanceof Error ? error.message : error}`);
+            log.warn('[approval] failed to emit approval_held', { requestId: options.requestId, error });
           }
           try {
             options.onHeld(expiresAt);
           } catch (error) {
-            log.warn(`[approval] Failed to report held approval ${options.requestId}: ${error instanceof Error ? error.message : error}`);
+            log.warn('[approval] failed to report a held approval', { requestId: options.requestId, error });
           }
         }
       }
@@ -139,6 +139,8 @@ export interface ChatApprovalHookTurn {
   autonomyLevel: AutonomyLevel;
   proposeHeldTurn: boolean | undefined;
   approvalTimeoutPolicy: ApprovalTimeoutPolicy;
+  /** `WAGGLE_AUTO_APPROVE` test mode, read when the plugin registered. */
+  autoApprove: boolean;
   retention: TurnRetention;
   turnSignal: AbortSignal;
   sendEvent: (event: string, data: unknown) => void;
@@ -156,13 +158,13 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
     autonomyLevel,
     proposeHeldTurn,
     approvalTimeoutPolicy,
+    autoApprove,
     retention,
     turnSignal,
     sendEvent,
     retainedTurnJson,
     retainedTurnText,
   } = turn;
-  const autoApprove = AUTO_APPROVE;
   return async (ctx) => {
     if (turnSignal.aborted) {
       return { cancel: true, reason: 'Chat or workspace cancelled' };
@@ -456,7 +458,12 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
       sendEvent,
       signal: turnSignal,
       onHeld: (expiresAt) => {
-        log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
+        log.warn('[security] approval timed out; moved to the Approvals inbox', {
+          workspaceId: executionScopeId,
+          sessionId,
+          toolName,
+          requestId,
+        });
         emitAuditEvent(server, {
           workspaceId: executionScopeId,
           eventType: 'approval_held',
@@ -476,7 +483,12 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
         return { cancel: true, reason: `Approval for ${toolName} moved to Approvals inbox` };
       }
       if (timedOut) {
-        log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
+        log.warn('[security] approval timed out; auto-denied for safety', {
+            workspaceId: executionScopeId,
+            sessionId,
+            toolName,
+            requestId,
+          });
       }
       sendEvent('step', { content: `\u2716 ${toolName} denied by user` });
       emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_denied', toolName, sessionId, approved: false });

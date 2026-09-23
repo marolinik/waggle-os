@@ -274,6 +274,23 @@ describe('Chat Streaming API', () => {
     )).resolves.toBe(false);
   });
 
+  it('resolves a case-equivalent bound read path through the real filesystem by default', async () => {
+    // The default resolver is fs.promises.realpath; every other pin injects one,
+    // so this is the only test that runs it (TD-TEST-3). Whether the two paths
+    // name one file is the filesystem's call, so the expectation is read from it.
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-bound-read-'));
+    try {
+      fs.writeFileSync(path.join(workspaceRoot, 'notes.txt'), 'hello');
+      const caseInsensitive = fs.existsSync(path.join(workspaceRoot, 'NOTES.txt'));
+      await expect(boundDirectReadFilePathsMatch(workspaceRoot, 'notes.txt', 'NOTES.txt'))
+        .resolves.toBe(caseInsensitive);
+      await expect(boundDirectReadFilePathsMatch(workspaceRoot, 'notes.txt', 'missing.txt'))
+        .resolves.toBe(false);
+    } finally {
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('disables hidden thinking for direct OpenAI-compatible Qwen requests', async () => {
     let outboundBody: Record<string, unknown> | null = null;
     const result = await runAgentLoop({
