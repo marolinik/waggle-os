@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { writeSseEvent } from '../../src/local/routes/chat-sse.js';
+import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from '../../src/local/routes/chat-sse.js';
 
 /** A stream whose reader never reads: the first write never completes. */
 function stalledStream(): Writable {
@@ -17,11 +17,21 @@ describe('writeSseEvent', () => {
     expect(chunks).toEqual(['event: token\ndata: {"content":"hi "}\n\n']);
   });
 
-  it('QUIRK: buffers without bound when the reader stops reading (TD-REL-1)', () => {
+  // Until TD-REL-1 the backlog grew past 16 MiB and the stream stayed open.
+  it('closes the stream once a stalled reader falls past the cap', () => {
     const stream = stalledStream();
     const token = { content: 'x'.repeat(64 * 1024) };
-    for (let i = 0; i < 256; i += 1) writeSseEvent(stream, 'token', token);
-    expect(stream.writableLength).toBeGreaterThan(16 * 1024 * 1024);
-    expect(stream.destroyed).toBe(false);
+    let written = 0;
+    while (writeSseEvent(stream, 'token', token)) written += 1;
+    expect(stream.destroyed).toBe(true);
+    expect(written).toBeLessThan(SSE_MAX_BUFFERED_BYTES / (64 * 1024));
+    expect(written).toBeGreaterThan(SSE_MAX_BUFFERED_BYTES / (64 * 1024) - 2);
+  });
+
+  it('keeps the stream open while the backlog is within the cap', () => {
+    const stream = stalledStream();
+    expect(writeSseEvent(stream, 'token', { content: 'abcd' }, 1024)).toBe(true);
+    expect(writeSseEvent(stream, 'token', { content: 'x'.repeat(2048) }, 1024)).toBe(false);
+    expect(stream.destroyed).toBe(true);
   });
 });
