@@ -2509,8 +2509,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = !!reroutedMessage || (!isSlashCommand && modelAvailable);
-      const shouldReplySetupRequired = !reroutedMessage && !isSlashCommand && !modelAvailable;
+      // A reroute is the command asking for the loop, whatever its body says;
+      // reading the body as a boolean let an empty one end the turn with no
+      // answer and no done (TD-CHAT-25).
+      const hasReroute = reroutedMessage !== undefined;
+      const shouldRunAgentLoop = hasReroute || (!isSlashCommand && modelAvailable);
+      const shouldReplySetupRequired = !hasReroute && !isSlashCommand && !modelAvailable;
 
       if (shouldReplySetupRequired) {
         // Setup-required mode — respond without pretending the user's input
@@ -2522,7 +2526,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
-        const agentMessage = reroutedMessage ?? message;
+        // An empty rerouted body gives the loop nothing to answer, so it gets
+        // the user's own command instead.
+        const agentMessage = reroutedMessage || message;
         const closedWorldRewrite = requestClosedWorldRewrite
           || isClosedWorldRewriteRequest(agentMessage);
 
