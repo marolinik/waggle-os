@@ -209,7 +209,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(options.correctionFeedback).toBe('second attempt failed');
   });
 
-  it('QUIRK: a success finalize that throws leaves the row to the finally block, which records the delivered answer as abandoned', async () => {
+  it('retries a failed success finalize from the finally block with the success payload', async () => {
     const recorder = spyOnRecorder();
     recorder.finalize.mockImplementationOnce(() => { throw new Error('trace store unavailable'); });
     installRunner(() => ({ content: 'delivered anyway', toolsUsed: [], usage: { inputTokens: 5, outputTokens: 7 } }));
@@ -221,11 +221,13 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     const options = finalizeOptions(recorder.finalize);
     expect(options).toHaveLength(2);
     expect(options[0].outcome).toBe('success');
-    expect(options[1]).toEqual({ outcome: 'abandoned', output: '', model: ROUTED_MODEL });
-    expect(server.traceStore.get(handle.id)?.outcome).toBe('abandoned');
+    // Until TD-CHAT-22 the finally block built its own payload and recorded the
+    // delivered answer as abandoned, a false negative example for evolution.
+    expect(options[1]).toEqual(options[0]);
+    expect(server.traceStore.get(handle.id)?.outcome).toBe('success');
   });
 
-  it('retries a failed error-path finalize once from the finally block, without the error details', async () => {
+  it('retries a failed error-path finalize once from the finally block, with the error details', async () => {
     const recorder = spyOnRecorder();
     recorder.finalize.mockImplementationOnce(() => { throw new Error('trace store unavailable'); });
     installRunner(() => { throw new Error('forced trace failure'); });
@@ -235,7 +237,8 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     const options = finalizeOptions(recorder.finalize);
     expect(options).toHaveLength(2);
     expect(options[0].correctionFeedback).toBe('forced trace failure');
-    expect(options[1]).toEqual({ outcome: 'abandoned', output: '', model: ROUTED_MODEL });
+    // Until TD-CHAT-22 the retry dropped the feedback, tokens and cost.
+    expect(options[1]).toEqual(options[0]);
   });
 
   it('a read-only persona turn records redacted text and gives the loop no recording', async () => {
