@@ -25,10 +25,14 @@ const FORBIDDEN_EXPORTS = Object.freeze({
     'mind/execution-traces.ts',
     'mind/improvement-signals.ts',
   ],
-  pathPrefixes: ['vault.ts', 'compliance/'],
+  pathPrefixes: ['vault.ts', 'compliance/', 'governance/'],
   markers: [
     { path: 'mind/db.ts', token: 'install_audit' },
     { path: 'mind/schema.ts', token: 'install_audit' },
+    // The governance context (D-1). The mirror's schema.ts names ai_interactions
+    // in a comment listing what it excludes, so the schema marker is the DDL.
+    { path: 'mind/db.ts', token: 'ai_interactions' },
+    { path: 'mind/schema.ts', token: 'CREATE TABLE IF NOT EXISTS ai_interactions' },
   ],
 });
 const VALID_ADAPTATION_KINDS = new Set(['branding', 'import', 'layout', 'logger']);
