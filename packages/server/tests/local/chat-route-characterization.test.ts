@@ -186,7 +186,7 @@ describe('POST /api/chat request validation (characterization)', () => {
       expect(body.code).toBe('PATH_TRAVERSAL');
     });
 
-    it("QUIRK (TD-CHAT-44): ignores the same outside path when a workspace is active", async () => {
+    it('refuses the same outside path when a workspace is active', async () => {
       const active = server.workspaceManager.create({ name: `traversal active ${Date.now()}`, group: 'test' });
       server.agentState.activeWorkspaceId = active.id;
       try {
@@ -201,9 +201,10 @@ describe('POST /api/chat request validation (characterization)', () => {
             session: 'traversal-active',
           },
         });
-        // The virtual-storage branch never reads the request's path, and the
-        // turn runs in the active workspace instead.
-        expect(res.statusCode).toBe(200);
+        // Until TD-CHAT-44 the virtual-storage branch never read the request's
+        // path, so it was ignored and the turn ran in the active workspace.
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toEqual({ error: 'Invalid workspace path', code: 'PATH_TRAVERSAL' });
       } finally {
         server.agentState.activeWorkspaceId = null;
       }
