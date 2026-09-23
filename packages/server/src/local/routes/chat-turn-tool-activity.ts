@@ -46,8 +46,8 @@ export class TurnToolActivity {
   private readonly sequenceUseOrder: string[] = [];
   private readonly sequenceResultOrder: string[] = [];
   private sequenceFailure: string | null = null;
+  /** Start time of each tool's latest call; tool calls run one at a time. */
   private readonly startTimes = new Map<string, number>();
-  private startCounter = 0;
 
   constructor(options: TurnToolActivityOptions) {
     this.explicitChoice = options.explicitReadOnlyToolChoice;
@@ -95,15 +95,14 @@ export class TurnToolActivity {
 
   /** Starts the duration clock for a tool call, after its start is disclosed. */
   startTimer(name: string): void {
-    this.startTimes.set(name + ':' + this.startCounter++, Date.now());
+    this.startTimes.set(name, Date.now());
   }
 
   /**
-   * Records a tool call's result and returns how long it took.
-   *
-   * QUIRK: the duration is measured from the OLDEST unmatched start of a tool
-   * with this name, not the latest, because a Map iterates in insertion order.
-   * Two overlapping calls of one tool therefore swap durations.
+   * Records a tool call's result and returns how long it took, measured from
+   * the latest start of that tool. The agent loop runs tool calls one at a
+   * time, so the latest start is this call's own; an older one was left
+   * unanswered when `onToolUse` threw, and a new start replaces it (TD-CHAT-51).
    */
   recordResult(name: string, result: string, isError: boolean): number | undefined {
     if (this.requiredSequence) {
@@ -118,15 +117,9 @@ export class TurnToolActivity {
         this.explicitResult = this.capResultForModel(result);
       }
     }
-    let duration: number | undefined;
-    for (const [key, startTime] of this.startTimes) {
-      if (key.startsWith(name + ':')) {
-        duration = Date.now() - startTime;
-        this.startTimes.delete(key);
-        break;
-      }
-    }
-    return duration;
+    const startTime = this.startTimes.get(name);
+    this.startTimes.delete(name);
+    return startTime === undefined ? undefined : Date.now() - startTime;
   }
 
   /** Refuses a second attempt once the first one has done something unrepeatable. */
