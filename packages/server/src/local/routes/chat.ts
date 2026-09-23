@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -558,7 +558,6 @@ import {
   emptyModelResponseError,
   getFailedCompletionUsage,
   isEmptyModelResponseError,
-  isIncompleteCompletionError,
   isTerminalAttemptError,
   isTerminalModelBudgetError,
   planInterruptedRetry,
@@ -570,6 +569,7 @@ import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
 import { TurnAttemptState } from './chat-turn-attempt-state.js';
+import { rotateCredentials } from './chat-credential-rotation.js';
 import { TurnModelSelection } from './chat-turn-model-selection.js';
 import { TurnResources } from './chat-turn-resources.js';
 
@@ -3950,58 +3950,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           // Report error to credential pool and try next key
           if (credPool && poolKey && !isEmptyModelResponseError(primaryErr)) {
-            let failedKey = poolKey;
-            let credentialError = primaryErr;
-            let credentialResult: AgentResponse | null = null;
-            let poolExhausted = false;
-
-            for (let failureIndex = 0; failureIndex < credPool.size; failureIndex++) {
-              const errorStatus = extractStatusCode(credentialError);
-              if (!errorStatus) break;
-
-              const keyName = credPool.getNameForKey(failedKey) ?? failedKey;
-              const hasMore = credPool.reportError(
-                failedKey,
-                errorStatus,
-                (credentialError as Error).message,
-              );
-              log.warn(`[credential-pool] Key ${keyName} failed (${errorStatus}), cooldown applied. More keys: ${hasMore}`);
-
-              if (!hasMore || failureIndex === credPool.size - 1) {
-                poolExhausted = true;
-                break;
-              }
-
-              const nextKey = credPool.getKey();
-              if (!nextKey) {
-                poolExhausted = true;
-                break;
-              }
-              sendEvent('step', { content: `API key rotated — retrying with next credential` });
-              try {
-                credentialResult = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
-                credPool.reportSuccess(nextKey);
-                break;
-              } catch (nextCredentialError) {
-                if (turnSignal.aborted) throw nextCredentialError;
-                if (toolActivity.replayBlocked) {
-                  throw nextCredentialError;
-                }
-                if (isEmptyModelResponseError(nextCredentialError)) {
-                  credentialError = nextCredentialError;
-                  break;
-                }
-                if (isIncompleteCompletionError(nextCredentialError)
-                  || isTerminalModelBudgetError(nextCredentialError)) {
-                  throw nextCredentialError;
-                }
-                failedKey = nextKey;
-                credentialError = nextCredentialError;
-              }
-            }
-
-            result = credentialResult
-              ?? await runModelFallbackChain(credentialError, poolExhausted);
+            const rotation = await rotateCredentials({
+              pool: credPool,
+              failedKey: poolKey,
+              error: primaryErr,
+              runWithKey: (key) => runAgentAttempt({ ...runConfig, litellmApiKey: key }),
+              isAborted: () => turnSignal.aborted,
+              isReplayBlocked: () => toolActivity.replayBlocked,
+              onRotate: () => sendEvent('step', { content: `API key rotated — retrying with next credential` }),
+              warn: (message) => log.warn(message),
+            });
+            result = rotation.result
+              ?? await runModelFallbackChain(rotation.error, rotation.poolExhausted);
           } else {
             result = await runModelFallbackChain(primaryErr);
           }
