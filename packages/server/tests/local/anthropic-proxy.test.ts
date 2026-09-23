@@ -26,6 +26,13 @@ import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
 
+/** Flattens fetch-style headers into the plain record server.inject() takes. */
+function headersToRecord(init: RequestInit['headers']): Record<string, string> {
+  const record: Record<string, string> = {};
+  new Headers(init).forEach((value, key) => { record[key] = value; });
+  return record;
+}
+
 function createTestServer(options: {
   vaultApiKey?: string;
   vaultProviders?: Record<string, { value: string; metadata?: Record<string, unknown> }>;
@@ -48,12 +55,14 @@ function createTestServer(options: {
       if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
       return options.vaultProviders?.[name] ?? null;
     };
+    // Deliberate partial double: the proxy reads only get() and has().
     server.decorate('vault', {
       get: getVaultValue,
       has: (name: string) => getVaultValue(name) !== null,
-    });
+    } as unknown as FastifyInstance['vault']);
   } else {
-    server.decorate('vault', null);
+    // Deliberately absent vault: the proxy must fall back to env/config keys.
+    server.decorate('vault', null as unknown as FastifyInstance['vault']);
   }
 
   if (options.costTracker) {
@@ -72,7 +81,7 @@ function createTestServer(options: {
   // Mock localConfig (needed by getAnthropicKey for config.json fallback)
   server.decorate('localConfig', {
     dataDir: options.dataDir ?? '/tmp/nonexistent-waggle-test',
-  });
+  } as unknown as FastifyInstance['localConfig']);
 
   if (options.sessionToken || options.authenticateRunToken) {
     server.register(securityMiddleware, {
@@ -1412,7 +1421,7 @@ describe('Anthropic Proxy Routes', () => {
         const injected = await server.inject({
           method: 'POST',
           url: '/v1/chat/completions',
-          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          headers: headersToRecord(init?.headers),
           payload: JSON.parse(String(init?.body)),
         });
         return new Response(injected.body, {
@@ -1881,7 +1890,7 @@ describe('Anthropic Proxy Routes', () => {
         const injected = await server.inject({
           method: 'POST',
           url: '/v1/chat/completions',
-          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          headers: headersToRecord(init?.headers),
           payload: JSON.parse(String(init?.body)),
         });
         return new Response(injected.body, {

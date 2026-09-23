@@ -12,15 +12,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { MindDB } from '@waggle/core';
+import type { MultiMind } from '@waggle/core';
+import type { AgentState } from '../../src/local/index.js';
 import { knowledgeRoutes } from '../../src/local/routes/knowledge.js';
 
 function createTestServer(db: MindDB) {
   const server = Fastify({ logger: false });
-  server.decorate('multiMind', { personal: db });
+  // Deliberate partial doubles: the knowledge route reads only these members.
+  server.decorate('multiMind', { personal: db } as unknown as MultiMind);
   server.decorate('agentState', {
     getWorkspaceMindDb: () => undefined,
     listWorkspaces: () => [],
-  });
+  } as unknown as AgentState);
   server.register(knowledgeRoutes);
   return server;
 }

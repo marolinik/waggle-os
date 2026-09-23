@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type LightMyRequestResponse } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +26,7 @@ import {
 } from '../../src/local/index.js';
 import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 import { WorkspaceSessionManager } from '../../src/local/workspace-sessions.js';
-import { addAgent } from '../../src/local/agents-store.js';
+import { addAgent, type NewAgentInput } from '../../src/local/agents-store.js';
 
 const runAgentLoopMock = vi.hoisted(() => vi.fn());
 vi.mock('@waggle/agent', async () => ({
@@ -195,7 +195,7 @@ describe('isolated Fleet execution', () => {
     }
   });
 
-  it.each([
+  it.each<[string, keyof NewAgentInput, Partial<NewAgentInput>]>([
     ['permissions', 'permissions', { permissions: { arbitraryGrant: true } }],
     ['manual autonomy', 'autonomyLevel', { autonomyLevel: 'manual' }],
     ['medium autonomy', 'autonomyLevel', { autonomyLevel: 'medium' }],
@@ -204,7 +204,7 @@ describe('isolated Fleet execution', () => {
     ['team memory', 'memoryScopes', { memoryScopes: ['personal', 'team'] }],
     ['organization memory', 'memoryScopes', { memoryScopes: ['personal', 'organization'] }],
     ['team identity', 'teamId', { type: 'team', teamId: 'team-1' }],
-  ] as const)('rejects unsupported saved-agent %s before creating a durable run', async (_label, field, overrides) => {
+  ])('rejects unsupported saved-agent %s before creating a durable run', async (_label, field, overrides) => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-policy-'));
     tempDirs.push(dataDir);
     const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir);
@@ -240,13 +240,13 @@ describe('isolated Fleet execution', () => {
     await server.close();
   });
 
-  it.each([
+  it.each<[string, Partial<NewAgentInput>, Record<string, string[]>]>([
     ['missing skill', { skillIds: ['missing-skill'] }, { skills: ['missing-skill'] }],
     ['disconnected connector', { connectorIds: ['slack'] }, { connectors: ['slack'] }],
     ['missing MCP', { mcpIds: ['missing'] }, { mcps: ['missing'] }],
     ['unhealthy MCP', { mcpIds: ['unhealthy'] }, { mcps: ['unhealthy'] }],
     ['wrong-workspace MCP', { mcpIds: ['wrong-scope'] }, { mcps: ['wrong-scope'] }],
-  ] as const)('rejects %s before creating a durable run', async (_label, capability, missing) => {
+  ])('rejects %s before creating a durable run', async (_label, capability, missing) => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-capability-'));
     tempDirs.push(dataDir);
     const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir, {
@@ -570,7 +570,7 @@ describe('isolated Fleet execution', () => {
         return `ok:${name}`;
       },
     });
-    let capturedConfig: AgentLoopConfig | null = null;
+    let capturedConfig = null as AgentLoopConfig | null;
     let childWorkerToolNames: string[] = [];
     let acquiredWorkspaceMinds = 0;
     let recordedScopes: readonly string[] = [];
@@ -976,7 +976,7 @@ describe('isolated Fleet execution', () => {
       availabilityCheck,
     );
     const fullPool = [...relevantTools, ...irrelevantTools, unavailableTool];
-    let capturedConfig: AgentLoopConfig | null = null;
+    let capturedConfig = null as AgentLoopConfig | null;
 
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test' });
@@ -1497,7 +1497,9 @@ describe('isolated Fleet execution', () => {
         ...buildCollaborationTools(checkoutTools, runner),
       ],
       bindWorkspaceCollaborationTools: (options: WorkspaceCollaborationBinding) => (
-        bindWorkspaceChildTools(options, buildCollaborationTools)
+        bindWorkspaceChildTools(options, (tools, runLoop, _defaultModel, signal) => (
+          buildCollaborationTools(tools, runLoop, signal)
+        ))
       ),
       workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
     } as never);
@@ -1888,7 +1890,7 @@ describe('isolated Fleet execution', () => {
       status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
     }));
     await server.register(fleetRoutes);
-    let pending: ReturnType<typeof server.inject> | undefined;
+    let pending: Promise<LightMyRequestResponse> | undefined;
     let closing: Promise<void> | undefined;
 
     try {
@@ -1983,7 +1985,7 @@ describe('isolated Fleet execution', () => {
       buildToolsForSession: () => [],
     } as never);
     await server.register(fleetRoutes);
-    let pending: ReturnType<typeof server.inject> | undefined;
+    let pending: Promise<LightMyRequestResponse> | undefined;
     let closing: Promise<void> | undefined;
 
     try {

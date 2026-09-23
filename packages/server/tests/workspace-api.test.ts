@@ -76,7 +76,7 @@ describe('Workspace & Session API', () => {
       });
       expect(createRes.statusCode).toBe(201);
       const created = JSON.parse(createRes.body);
-      linkedWorkspaceId = created.id;
+      linkedWorkspaceId = created.id as string;
       expect(created.storageType).toBe('local');
       expect(created.storagePath).toBe(fs.realpathSync.native(linkedRoot));
       expect(created.storageConfig).toBeUndefined();

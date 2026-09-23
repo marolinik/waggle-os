@@ -29,11 +29,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MindDB, ExecutionTraceStore } from '@waggle/core';
+import type { InstallAuditStore } from '@waggle/core';
 import { agentRoutes } from '../../src/local/routes/agent.js';
 import { agentEntityRoutes } from '../../src/local/routes/agents.js';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { securityMiddleware } from '../../src/local/security-middleware.js';
-import type { WorkspaceSession } from '../../src/local/workspace-sessions.js';
+import type { WorkspaceSession, WorkspaceSessionManager } from '../../src/local/workspace-sessions.js';
+import type { AgentState } from '../../src/local/index.js';
 
 interface FakeSession {
   workspaceId: string;
@@ -54,7 +56,9 @@ function createTestServer(opts: {
   workspaceManager?: { get(id: string): unknown };
 }) {
   const server = Fastify({ logger: false });
-  server.decorate('localConfig', { dataDir: opts.dataDir });
+  server.decorate('localConfig', { dataDir: opts.dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+  // sessionManager, auditStore and agentState below are deliberate partial
+  // doubles: the agent routes read only the members stubbed here.
   server.decorate('traceStore', opts.traceStore);
   server.decorate('sessionManager', {
     getActive: () => opts.sessions ?? [],
@@ -62,13 +66,13 @@ function createTestServer(opts: {
       opts.pausedIds?.push(wsId);
       return true;
     },
-  });
+  } as unknown as WorkspaceSessionManager);
   server.decorate('auditStore', {
     record: (input: Record<string, unknown>) => {
       opts.auditRecords?.push(input);
       return input;
     },
-  });
+  } as unknown as InstallAuditStore);
   if (opts.agentRunRegistry) server.decorate('agentRunRegistry', opts.agentRunRegistry);
   if (opts.workspaceManager) server.decorate('workspaceManager', opts.workspaceManager as never);
   // Minimal agentState so the REAL agentRoutes plugin registers (it reads
@@ -81,7 +85,7 @@ function createTestServer(opts: {
     },
     currentModel: 'test-model',
     sessionHistories: new Map(),
-  });
+  } as unknown as AgentState);
   // Stub of the real executor path POST /api/fleet/spawn (fleet.ts).
   server.post('/api/fleet/spawn', async (request) => {
     const body = request.body as Record<string, unknown>;

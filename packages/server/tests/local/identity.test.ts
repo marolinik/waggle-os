@@ -81,7 +81,7 @@ describe('identity.ts route module', () => {
     const { IdentityLayer } = await import('@waggle/core');
     // Verify the methods the route calls actually exist on the prototype —
     // catches schema drift before the route fails at runtime in production.
-    const proto = IdentityLayer.prototype as Record<string, unknown>;
+    const proto = IdentityLayer.prototype as unknown as Record<string, unknown>;
     expect(typeof proto.exists).toBe('function');
     expect(typeof proto.get).toBe('function');
     expect(typeof proto.create).toBe('function');

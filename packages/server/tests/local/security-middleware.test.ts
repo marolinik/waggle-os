@@ -828,8 +828,9 @@ describe('Team viewer read-only enforcement', () => {
           { id: 'personal-workspace' },
         ];
       },
-    });
-    server.decorate('agentState', { activeWorkspaceId: activeWorkspaceId ?? undefined });
+    // Partial test doubles: the middleware reads only these members.
+    } as never);
+    server.decorate('agentState', { activeWorkspaceId: activeWorkspaceId ?? undefined } as never);
 
     await server.register(securityMiddleware);
 

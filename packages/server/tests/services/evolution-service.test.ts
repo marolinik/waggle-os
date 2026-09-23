@@ -227,7 +227,7 @@ describe('EvolutionService — H-10 G1', () => {
 
     it('invokes the runner for the picked target when gate passes', async () => {
       seedTraces(fx, { personaId: 'coder', count: 25 });
-      const runner = vi.fn<Parameters<NonNullable<EvolutionServiceDeps['runner']>>, Promise<TickResult>>()
+      const runner = vi.fn<NonNullable<EvolutionServiceDeps['runner']>>()
         .mockResolvedValue({
           skipped: false,
           targetKind: 'persona-system-prompt',

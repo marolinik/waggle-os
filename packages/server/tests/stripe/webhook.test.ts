@@ -238,7 +238,7 @@ describe('Stripe Webhook — tier update logic', () => {
     async function buildServer() {
       const { webhookRoutes } = await import('../../src/stripe/webhook.js');
       const app = Fastify();
-      app.decorate('localConfig', { dataDir: tmpDir });
+      app.decorate('localConfig', { dataDir: tmpDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
       await app.register(webhookRoutes);
       await app.ready();
       return app;
@@ -415,7 +415,7 @@ describe('P2 — webhook is auth-exempt under securityMiddleware (hosted-deploy 
     const { webhookRoutes } = await import('../../src/stripe/webhook.js');
     const app = Fastify({ logger: false });
     await app.register(securityMiddleware, { sessionToken: SESSION_TOKEN });
-    app.decorate('localConfig', { dataDir: tmpDir });
+    app.decorate('localConfig', { dataDir: tmpDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
     // A normal protected route to prove auth IS enforced for non-exempt paths.
     app.post('/api/other', async () => ({ ok: true }));
     await app.register(webhookRoutes);

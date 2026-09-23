@@ -67,12 +67,12 @@ describe('PostgreSQL schema', () => {
   });
 
   it('creates all 16 tables', async () => {
-    const result = await db.execute(sql`
+    const result = await db.execute<{ table_name: string }>(sql`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name
     `);
-    const tableNames = (result as Array<{ table_name: string }>).map((r) => r.table_name);
+    const tableNames = result.map((r) => r.table_name);
     expect(tableNames).toContain('users');
     expect(tableNames).toContain('teams');
     expect(tableNames).toContain('team_members');

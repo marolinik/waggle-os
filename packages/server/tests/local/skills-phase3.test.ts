@@ -14,18 +14,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { listStarterSkills, listCapabilityPacks } from '@waggle/sdk';
+import type { InstallAuditStore, SkillHashStore } from '@waggle/core';
+import type { AgentState } from '../../src/local/index.js';
 import { skillRoutes } from '../../src/local/routes/skills.js';
 import { skillsAliasRoutes } from '../../src/local/routes/skills-aliases.js';
 
 describe('Skills Phase-3 routes', () => {
   let dataDir: string;
-  let server: ReturnType<typeof Fastify>;
+  let server: FastifyInstance;
   let marketplaceCalls: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
@@ -33,14 +35,16 @@ describe('Skills Phase-3 routes', () => {
     fs.mkdirSync(dataDir, { recursive: true });
     marketplaceCalls = [];
     server = Fastify({ logger: false });
-    server.decorate('localConfig', { dataDir });
-    server.decorate('agentState', { skills: [] });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    // agentState, skillHashStore and auditStore are deliberate partial doubles:
+    // the skill routes read only the members stubbed here.
+    server.decorate('agentState', { skills: [] } as unknown as AgentState);
     server.decorate('skillHashStore', {
       setHash: () => {},
       removeHash: () => {},
-      checkAll: () => ({ changed: [], unchanged: [], missing: [] }),
-    });
-    server.decorate('auditStore', { record: () => ({}), getRecent: () => [] });
+      checkAll: () => ({ changed: [], added: [], removed: [] }),
+    } as unknown as SkillHashStore);
+    server.decorate('auditStore', { record: () => ({}), getRecent: () => [] } as unknown as InstallAuditStore);
     // Stub of the marketplace installer target — asserts the dispatcher's
     // delegated payload ({ packageId }) reaches it.
     server.post('/api/marketplace/install', async (request) => {
