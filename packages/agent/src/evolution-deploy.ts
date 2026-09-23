@@ -124,7 +124,7 @@ export function rollbackPersonaOverride(
   const filePath = path.join(dataDir, 'personas', `${personaId}.json`);
   const backupPath = `${filePath}.bak`;
   if (fs.existsSync(backupPath)) {
-    fs.renameSync(backupPath, filePath);
+    renameWithRetry(backupPath, filePath);
     return true;
   }
   if (fs.existsSync(filePath)) {
@@ -224,7 +224,7 @@ export function rollbackBehavioralSpecOverride(
   const filePath = path.join(dataDir, 'behavioral-overrides', `${section}.json`);
   const backupPath = `${filePath}.bak`;
   if (fs.existsSync(backupPath)) {
-    fs.renameSync(backupPath, filePath);
+    renameWithRetry(backupPath, filePath);
     return true;
   }
   if (fs.existsSync(filePath)) {
@@ -278,22 +278,28 @@ export function applyBehavioralSpecOverrides(
 function writeAtomic(filePath: string, contents: string): void {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, contents, 'utf-8');
-  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
 
   try {
-    for (let attempt = 1; attempt <= 10; attempt++) {
-      try {
-        fs.renameSync(tmpPath, filePath);
-        return;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
-        if (!transient || attempt === 10) throw error;
-        // Windows antivirus and indexers can briefly hold an exclusive handle.
-        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
-      }
-    }
+    renameWithRetry(tmpPath, filePath);
   } finally {
     try { fs.rmSync(tmpPath, { force: true }); } catch { /* best-effort cleanup */ }
+  }
+}
+
+/** Rename, retrying the transient locks Windows antivirus and indexers hold. */
+function renameWithRetry(from: string, to: string): void {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+      if (!transient || attempt === 10) throw error;
+      // Windows antivirus and indexers can briefly hold an exclusive handle.
+      Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+    }
   }
 }

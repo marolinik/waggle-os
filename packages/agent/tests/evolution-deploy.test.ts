@@ -148,6 +148,26 @@ describe('evolution-deploy', () => {
     it('returns false for non-existent personas', () => {
       expect(rollbackPersonaOverride(tmpDir, 'ghost')).toBe(false);
     });
+
+    it('retries transient Windows rename locks before restoring .bak', () => {
+      deployPersonaOverride(tmpDir, { personaId: 'coder', systemPrompt: 'v1' });
+      deployPersonaOverride(tmpDir, { personaId: 'coder', systemPrompt: 'v2' });
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('locked'), { code: 'EPERM' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+        });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      expect(rollbackPersonaOverride(tmpDir, 'coder')).toBe(true);
+
+      expect(rename).toHaveBeenCalledTimes(3);
+      expect(wait).toHaveBeenCalledTimes(2);
+      const [loaded] = loadCustomPersonas(tmpDir);
+      expect(loaded.systemPrompt).toBe('v1');
+    });
   });
 
   // ── deployBehavioralSpecOverride ──
@@ -285,6 +305,40 @@ describe('evolution-deploy', () => {
       const ok = rollbackBehavioralSpecOverride(tmpDir, 'coreLoop');
       expect(ok).toBe(true);
       expect(loadBehavioralSpecOverrides(tmpDir).coreLoop).toBeUndefined();
+    });
+
+    it('retries transient Windows rename locks before restoring .bak', () => {
+      deployBehavioralSpecOverride(tmpDir, { section: 'coreLoop', text: 'v1' });
+      deployBehavioralSpecOverride(tmpDir, { section: 'coreLoop', text: 'v2' });
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('locked'), { code: 'EPERM' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+        });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      expect(rollbackBehavioralSpecOverride(tmpDir, 'coreLoop')).toBe(true);
+
+      expect(rename).toHaveBeenCalledTimes(3);
+      expect(wait).toHaveBeenCalledTimes(2);
+      expect(loadBehavioralSpecOverrides(tmpDir).coreLoop).toBe('v1');
+    });
+
+    it('keeps the current override when the restore fails non-transiently', () => {
+      deployBehavioralSpecOverride(tmpDir, { section: 'coreLoop', text: 'v1' });
+      deployBehavioralSpecOverride(tmpDir, { section: 'coreLoop', text: 'v2' });
+      const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw Object.assign(new Error('disk error'), { code: 'EIO' });
+      });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      expect(() => rollbackBehavioralSpecOverride(tmpDir, 'coreLoop')).toThrow(/disk error/);
+
+      expect(rename).toHaveBeenCalledTimes(1);
+      expect(wait).not.toHaveBeenCalled();
+      expect(loadBehavioralSpecOverrides(tmpDir).coreLoop).toBe('v2');
     });
   });
 
