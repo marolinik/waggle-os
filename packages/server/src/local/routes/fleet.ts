@@ -377,7 +377,9 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         }
 
         if (fastify.traceStore) {
-          traceRecorder = new TraceRecorder(fastify.traceStore);
+          // The composition root's shared recorder (CA-5b); an embedder that
+          // registers these routes alone has none, so it gets its own.
+          traceRecorder = fastify.traceRecorder ?? new TraceRecorder(fastify.traceStore);
           traceHandle = traceRecorder.start({
             sessionId: spawnSessionId,
             personaId: session.personaId ?? persona ?? null,
