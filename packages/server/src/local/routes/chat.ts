@@ -458,7 +458,7 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUseSafe, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUseSafe, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -555,18 +555,17 @@ import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
 import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import {
-  emptyModelResponseError,
   getFailedCompletionUsage,
   isEmptyModelResponseError,
   isTerminalAttemptError,
   isTerminalModelBudgetError,
-  planInterruptedRetry,
 } from './chat-attempt-policy.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
 import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
+import { createAttemptChain } from './chat-attempt-chain.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
 import { TurnAttemptState } from './chat-turn-attempt-state.js';
 import { rotateCredentials } from './chat-credential-rotation.js';
@@ -3738,198 +3737,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
-        const configForModelAttempt = async (
-          logicalModel: string,
-          apiKey = effectiveApiKey,
-        ): Promise<typeof runConfig> => {
-          const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
-          const systemPromptForAttempt = rebuildSystemPromptForModel
-            ? await rebuildSystemPromptForModel(logicalModel)
-            : runConfig.systemPrompt;
-          throwIfTurnAborted();
-          systemPrompt = systemPromptForAttempt;
-          return {
-            ...runConfig,
-            systemPrompt: systemPromptForAttempt,
-            model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
-            billingModel: logicalModel,
-            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel)
-              || isExactConfiguredKeylessCompatibleModel(server, logicalModel)
-              ? 'free'
-              : 'priced',
-            litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
-            litellmApiKey: apiKey,
-            modelOperationTimeoutMs: 100_000,
-            initialModelActivityTimeoutMs: undefined,
-            reasoning: reasoningForModelAttempt(logicalModel),
-          };
-        };
-
-        const announceModelSwitch = (attemptModel: string) => {
-          const announcement = modelSelection.takeSwitchAnnouncement(attemptModel);
-          if (!announcement) return;
-          sendEvent('model_switch', announcement);
-          sendEvent('step', { content: `⬡ Switched to ${announcement.model} — ${announcement.reason}` });
-        };
-
-        const runAgentAttempt = async (config: typeof runConfig) => {
-          toolActivity.assertReplayable();
-          attemptState.beginAttempt();
-          const attemptModel = config.billingModel ?? modelSelection.model;
-          usageLedger.beginAttempt(attemptModel, config.modelSpendBillingClass ?? 'priced');
-          announceModelSwitch(attemptModel);
-          const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
-          const initialModelActivityTimeoutMs = attemptState.takeInitialActivityDeadline()
-            ? attemptBaseConfig.initialModelActivityTimeoutMs
-            : undefined;
-          const strictToolRetryContext = toolActivity.strictContinuation(agentMessage);
-          let attemptedResult: AgentResponse;
-          if (!turnSignal.aborted && attemptState.claimOnce('modelRequested')) {
-            sendEvent('step', {
-              content: 'Sending your request to the model…',
-              phase: 'model_requested',
-            });
-          }
-          try {
-            attemptedResult = await agentRunner({
-              ...attemptBaseConfig,
-              initialModelActivityTimeoutMs,
-              ...(toolActivity.pendingExplicitToolChoice
-                ? { toolChoice: toolActivity.pendingExplicitToolChoice }
-                : explicitReadOnlyToolChoice
-                  ? {
-                      tools: [],
-                      ...(strictToolRetryContext
-                        ? {
-                            systemPrompt: `${attemptBaseConfig.systemPrompt}\n\n# COMPLETED READ-ONLY TOOL CONTINUATION\nThe requested tool already ran exactly once. No tools remain available; synthesize only from the bounded result in the current messages.`,
-                            messages: [...attemptBaseConfig.messages, strictToolRetryContext],
-                          }
-                        : {}),
-                    }
-                  : {}),
-            });
-          } catch (error) {
-            const failedUsage = getFailedCompletionUsage(error);
-            attemptState.recordFailedTools((error as { toolsUsed?: unknown } | null | undefined)?.toolsUsed);
-            usageLedger.recordFailedAttempt(failedUsage, {
-              estimated: (error as { usageEstimated?: unknown }).usageEstimated === true,
-            });
-            throw error;
-          }
-          if (turnSignal.aborted) {
-            usageLedger.completeAttempt(attemptedResult.usage, modelSelection.model);
-            throwIfTurnAborted();
-          }
-          toolActivity.assertCompleted();
-          const completedResult = explicitReadOnlyToolChoice === 'read_file'
-            && directReadFileDirective.kind === 'valid'
-            && toolActivity.explicitToolResult !== null
-            ? {
-                ...attemptedResult,
-                content: formatDirectReadFileResponse(
-                  directReadFileDirective,
-                  toolActivity.explicitToolResult,
-                ),
-              }
-            : explicitReadOnlyToolChoice === 'search_memory'
-              && boundedExactPersistedMemoryLookup
-              && toolActivity.explicitToolResult !== null
-              ? {
-                  ...attemptedResult,
-                  content: toolActivity.explicitToolResult,
-                }
-            : attemptedResult;
-          if (!completedResult.content.trim()) {
-            const emptyError = emptyModelResponseError(completedResult);
-            attemptState.recordFailedToolNames(completedResult.toolsUsed);
-            // `emptyModelResponseError` builds the error here and never marks it
-            // estimated, so this attempt is always a counted one.
-            usageLedger.recordFailedAttempt(getFailedCompletionUsage(emptyError));
-            throw emptyError;
-          }
-          return strictToolRetryContext
-            ? {
-                ...completedResult,
-                toolsUsed: Array.from(new Set([
-                  ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
-                  ...completedResult.toolsUsed,
-                ])),
-              }
-            : completedResult;
-        };
-
-        const runModelFallbackChain = async (
-          initialError: unknown,
-          allowNonRetryableConfiguredFallback = false,
-        ) => {
-          if (toolActivity.replayBlocked) throw initialError;
-          // The agent may already have executed tools before detecting a
-          // truncated final completion. Replaying the whole run on another
-          // model would repeat those side effects, so this signal is terminal.
-          if (isTerminalAttemptError(initialError)) {
-            throw initialError;
-          }
-          let failure = initialError;
-          const failedBudgetModel = modelSelection.failedBudgetModel();
-
-          if (failedBudgetModel) {
-            const selected = await modelSelection.returnFromFailedBudgetModel(failedBudgetModel, resolveModel);
-            if (selected === 'fallback') {
-              return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
-            }
-
-            try {
-              return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
-            } catch (primaryRunError) {
-              if (toolActivity.replayBlocked) throw primaryRunError;
-              if (isTerminalAttemptError(primaryRunError)) {
-                throw primaryRunError;
-              }
-              failure = primaryRunError;
-            }
-          }
-
-          if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
-            && modelSelection.canSwitchToFallback(failedBudgetModel)) {
-            await modelSelection.switchToFallbackAfter(failure, resolveModel);
-            return await runAgentAttempt(await configForModelAttempt(modelSelection.model));
-          }
-
-          throw failure;
-        };
-
         const primaryAttemptStartedAt = performance.now();
-        const runPrimaryWithSafeInterruptedRetry = async (): Promise<AgentResponse> => {
-          try {
-            return await runAgentAttempt(runConfig);
-          } catch (error) {
-            const retryAllowance = planInterruptedRetry({
-              error,
-              maxTokenBudget: runConfig.maxTokenBudget,
-              modelOperationTimeoutMs: runConfig.modelOperationTimeoutMs,
-              elapsedMs: performance.now() - primaryAttemptStartedAt,
-              offersTools: runConfig.tools.length > 0,
-              budgetModelSelected: modelSelection.budgetModelSelected,
-              replayBlocked: toolActivity.replayBlocked,
-              explicitToolWasUsed: toolActivity.explicitToolWasUsed,
-            });
-            if (!retryAllowance) throw error;
-            sendEvent('step', {
-              content: 'Model response was interrupted — retrying once on the same model.',
-            });
-            return await runAgentAttempt({
-              ...runConfig,
-              maxTokenBudget: retryAllowance.maxTokenBudget,
-              modelOperationTimeoutMs: retryAllowance.modelOperationTimeoutMs,
-              ...(runConfig.initialModelActivityTimeoutMs === undefined
-                ? {}
-                : { initialModelActivityTimeoutMs: Math.min(
-                    runConfig.initialModelActivityTimeoutMs,
-                    retryAllowance.modelOperationTimeoutMs,
-                  ) }),
-            });
-          }
-        };
+        const attemptChain = createAttemptChain({
+          server,
+          runConfig,
+          effectiveApiKey,
+          rebuildSystemPromptForModel,
+          ollamaUrl,
+          getLitellmUrl,
+          reasoningForModelAttempt,
+          throwIfTurnAborted,
+          isTurnAborted: () => turnSignal.aborted,
+          sendEvent,
+          agentRunner,
+          agentMessage,
+          explicitReadOnlyToolChoice,
+          directReadFileDirective,
+          formatDirectReadFileResponse,
+          boundedExactPersistedMemoryLookup,
+          toolActivity,
+          attemptState,
+          usageLedger,
+          modelSelection,
+          resolveModel,
+          primaryAttemptStartedAt,
+        });
+        const { runAgentAttempt, runModelFallbackChain, runPrimaryWithSafeInterruptedRetry } = attemptChain;
 
         // ── Run agent with credential pool + fallback chain ──
         let result: AgentResponse;
@@ -3968,6 +3801,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } finally {
           agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
+        // configForModelAttempt rebuilt the prompt for the model that answered.
+        if (attemptChain.lastSystemPrompt !== undefined) systemPrompt = attemptChain.lastSystemPrompt;
 
         // The model response is complete, but proposal resolution below can
         // still be interrupted. Preserve usage before any further awaited work.
