@@ -12,8 +12,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { buildLocalServer } from '../../src/local/index.js';
+import { MODEL_HEALTH_PROBE_TTL_MS } from '../../src/local/routes/chat-model-health.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
 
@@ -24,7 +25,7 @@ describe('POST /api/chat model-health probe (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let previousEnv: Map<string, string | undefined>;
-  let fetchSpy: ReturnType<typeof vi.spyOn<typeof globalThis, 'fetch'>>;
+  let fetchSpy: MockInstance<typeof fetch>;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-model-health-'));
@@ -60,6 +61,7 @@ describe('POST /api/chat model-health probe (characterization)', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     fetchSpy.mockRestore();
     for (const [name, value] of previousEnv) {
       if (value === undefined) delete process.env[name];
@@ -78,9 +80,40 @@ describe('POST /api/chat model-health probe (characterization)', () => {
     return res;
   }
 
-  it('QUIRK: probes the proxy again on every turn (TD-REL-2)', async () => {
+  // Until TD-REL-2 every turn probed the proxy again.
+  it('reuses one probe result for turns within the TTL', async () => {
     await turn('Draft a launch plan', 'model-health-a');
     await turn('Draft a release note', 'model-health-b');
+    expect(probeCalls()).toBe(1);
+  });
+
+  it('probes again once the provider status changes', async () => {
+    await turn('Draft a launch plan', 'model-health-c');
+    server.agentState.llmProvider = { ...server.agentState.llmProvider, checkedAt: new Date().toISOString() };
+    await turn('Draft a release note', 'model-health-d');
     expect(probeCalls()).toBe(2);
+  });
+
+  it('probes again after the TTL has passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await turn('Draft a launch plan', 'model-health-e');
+    vi.setSystemTime(Date.now() + MODEL_HEALTH_PROBE_TTL_MS + 1);
+    await turn('Draft a release note', 'model-health-f');
+    expect(probeCalls()).toBe(2);
+  });
+
+  it('shares one in-flight probe between concurrent turns', async () => {
+    // A slow proxy keeps the first probe in flight while the second turn
+    // reaches the same point.
+    const respond = fetchSpy.getMockImplementation()!;
+    fetchSpy.mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/health/readiness')) await new Promise(r => setTimeout(r, 500));
+      return respond(input, init);
+    });
+    await Promise.all([
+      turn('Draft a launch plan', 'model-health-g'),
+      turn('Draft a release note', 'model-health-h'),
+    ]);
+    expect(probeCalls()).toBe(1);
   });
 });
