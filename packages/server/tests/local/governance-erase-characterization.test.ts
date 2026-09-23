@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { InteractionStore } from '@waggle/core';
+import { AI_INTERACTIONS_PSEUDONYMIZED_TEXT, InteractionStore } from '@waggle/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
@@ -45,22 +45,35 @@ describe('erase routes and the ai_interactions trail (characterization)', () => 
       .prepare('SELECT * FROM ai_interactions WHERE id = ?').get(id) as Record<string, unknown>;
   }
 
-  it('QUIRK: clearing a chat history leaves its interactions untouched (D-1)', async () => {
+  // Until D-1 both erase routes left these rows untouched.
+  it("clearing a chat history pseudonymizes that session's interactions, and only those", async () => {
     const id = record(undefined, 'gov-session');
+    const other = record(undefined, 'gov-other-session');
     const before = row(id);
+    const untouched = row(other);
     resetRateLimiter(server);
     const res = await injectWithAuth(server, { method: 'DELETE', url: '/api/chat/history?session=gov-session' });
     expect(res.statusCode).toBe(200);
-    expect(row(id)).toEqual(before);
+    const after = row(id);
+    expect(after.input_text).toBe(AI_INTERACTIONS_PSEUDONYMIZED_TEXT);
+    expect(after.output_text).toBe(AI_INTERACTIONS_PSEUDONYMIZED_TEXT);
+    expect(after.session_id).toMatch(/^pseud:/);
+    expect(after.pseudonymized_at).toEqual(expect.any(String));
+    expect([after.model, after.cost_usd, after.tools_called]).toEqual([before.model, before.cost_usd, before.tools_called]);
+    expect(row(other)).toEqual(untouched);
+    expect(JSON.stringify(after)).not.toContain('Ana');
   });
 
-  it('QUIRK: deleting a workspace leaves its interactions untouched (D-1)', async () => {
+  it('deleting a workspace pseudonymizes its interactions and its id in them', async () => {
     const workspaceId = server.workspaceManager.create({ name: `gov ${Date.now()}`, group: 'test' }).id;
     const id = record(workspaceId, 'gov-ws-session');
-    const before = row(id);
     resetRateLimiter(server);
     const res = await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${workspaceId}` });
     expect(res.statusCode).toBe(204);
-    expect(row(id)).toEqual(before);
+    const after = row(id);
+    expect(after.workspace_id).toMatch(/^pseud:/);
+    expect(after.session_id).toMatch(/^pseud:/);
+    expect(after.input_text).toBe(AI_INTERACTIONS_PSEUDONYMIZED_TEXT);
+    expect(JSON.stringify(after)).not.toContain(workspaceId);
   });
 });

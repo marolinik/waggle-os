@@ -4,7 +4,10 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { MindDB, WaggleConfig, createFileStore, reconcileFtsIndex } from '@waggle/core';
+import {
+  MindDB, WaggleConfig, createFileStore, reconcileFtsIndex,
+  governancePseudonymKey, pseudonymizeInteractions,
+} from '@waggle/core';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { validateBody } from '../../validate-body.js';
@@ -1104,6 +1107,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(409).send({
         error: 'workspace_busy',
         message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    // GDPR Art.17: the governance trail survives the delete with the workspace
+    // and its sessions pseudonymized (D-1). It runs before the delete, so a
+    // failure keeps the workspace instead of reporting an erase it did not do.
+    try {
+      pseudonymizeInteractions(
+        server.multiMind.personal,
+        { workspaceId: request.params.id },
+        governancePseudonymKey(server.vault),
+      );
+    } catch (err) {
+      retirement?.rollback();
+      log.warn('[workspaces] could not pseudonymize the interaction log; workspace kept', {
+        workspaceId: request.params.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return reply.status(500).send({
+        error: 'governance_pseudonymization_failed',
+        message: 'The workspace was not deleted because its audit trail could not be pseudonymized.',
       });
     }
     try {
