@@ -159,6 +159,8 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-23 | close-out | **Founder decision round** (four of the six blocked rows) | TD-CHAT-26: a managed personal folder under the data directory replaces the `os.homedir()` fallbacks (behavior change, pin first). TD-CHAT-43: won't fix, the H-AUDIT-1 turn-entry placement stands. TD-CHAT-45: stays open rather than closing as won't fix. R-5 and D-1 stay in the close-out (W5); D-1 still needs the sticky-erasure vs compliance-trail ruling before it starts. TD-CHAT-36 was not asked: the 2026-09-17 ruling already covers its deny posture, to be re-verified in W4. |
 | 2026-09-23 | close-out | **Founder decision round 2** | TD-CHAT-12: only automated turns notify. TD-CHAT-17: the vocabulary is "setup-required", and `litellmAvailable` becomes `modelAvailable`. D-1: a GDPR erase KEEPS the governance trail (`install_audit`, `ai_interactions`) and pseudonymizes the subject in it (Art. 17(3)(b) legal obligation), which unblocks the extraction. |
 | 2026-09-23 | close-out | **Founder decision round 3** | TD-CHAT-19: one comment-only sweep is allowed (tags become intent; a paired hoist/cleanup comment names its counterpart symbol), replacing the "never as a sweep" rule. TD-TEST-2: a coverage ratchet on `routes/chat*.ts` in the existing CI step, not a full or nightly coverage job. |
+| 2026-09-23 | close-out | **Founder decision round 4** (D-1) | The full data-dir wipe stays total (same SQLite file, no separate governance database); pseudonymization keeps `tools_called` tool names; `MindErasure` gets no governance effect; `ai_interactions` stays latent, with no production writer added before launch |
+| 2026-09-23 | close-out | **Founder decision round 5** | TD-TEST-19 (vite 6 vs 7) deferred post-launch with TD-DEP-2; R-5 (updater and rollback) deferred to the release arc with public signing |
 
 ## Next Actions
 
@@ -182,8 +184,8 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
 - [ ] TD-CHAT-28 / TD-CHAT-15: ledgered at the Phase 6 scope decision, not consumed (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
-- [ ] R-3: bound the 65 unbounded `.all()` reads, clustered in the memory substrate — touches OSS-mirrored `hive-mind-core`, §7.5 applies, pin each query first (agent, P2)
-- [ ] R-5: Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
+- [x] R-3: unbounded `.all()` reads. Count paths were done under R-6. `sessions.getActive()` is bounded at its nine first-row callers through `ensureActive()`; `install-audit`, `cron-store` and `file-indexer` are ruled in RELIABILITY.md. No `hive-mind-core` change (agent, `ee6f2d1e`, 2026-09-23)
+- [x] R-5 (deferred to the release arc, founder 2026-09-23): Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
 - [x] R-6: soak test against a large aged `.mind` database — the desktop-shaped replacement for a throughput ramp (agent, `bf2aaedd`, 2026-09-19; `npm run test:soak`, see RELIABILITY.md)
 - [x] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3) R-4 closed (`bd13c04f`, `/health/ready`); R-7 won't fix (TimeoutError vs AbortError contracts, body-read scope, OSS-mirrored sites; see RELIABILITY.md).
 - [x] Phase 8 pass 1: context map, canonical Domain Glossary, harvest ACL named, `tests/mind-context-boundaries.test.ts` guard (agent, `7910b057`, 2026-09-18)

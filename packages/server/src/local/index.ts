@@ -1018,8 +1018,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         // construct here; the decayFrames weaver will pick these up later.
         const frames = new FrameStore(targetDb);
         const sessions = new SessionStore(targetDb);
-        const active = sessions.getActive();
-        const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+        const gopId = sessions.ensureActive().gop_id;
         const latestI = frames.getLatestIFrame(gopId);
         if (latestI) {
           frames.createPFrame(gopId, content, latestI.id, 'normal', 'agent_inferred');

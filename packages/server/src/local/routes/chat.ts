@@ -3995,8 +3995,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const sessions = workspaceMind
             ? new SessionStore(workspaceMind)
             : activeSessionOrch.getSessions();
-          const active = sessions.getActive();
-          const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+          const gopId = sessions.ensureActive().gop_id;
           const latestI = frames.getLatestIFrame(gopId);
           if (latestI) frames.createPFrame(gopId, message, latestI.id, 'normal', 'user_stated');
           else frames.createIFrame(gopId, message, 'normal', 'user_stated');

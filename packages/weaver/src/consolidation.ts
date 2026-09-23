@@ -236,13 +236,7 @@ export class MemoryWeaver {
     this.frames.deleteByContentPrefix(`Session (${sessionDate}): ${summary}`);
 
     // Create a session for the distilled content (or reuse an active one)
-    const active = this.sessions.getActive();
-    let gopId: string;
-    if (active.length > 0) {
-      gopId = active[0].gop_id;
-    } else {
-      gopId = this.sessions.create('distilled').gop_id;
-    }
+    const gopId = this.sessions.ensureActive('distilled').gop_id;
 
     return this.frames.createIFrame(gopId, content, 'important');
   }
