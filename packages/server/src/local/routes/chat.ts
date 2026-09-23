@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -200,6 +200,11 @@ function resolveMaxMessageLength(configured: string | undefined): number {
   const parsed = configured === undefined ? Number.NaN : Number.parseInt(configured, 10);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_MESSAGE_LENGTH;
 }
+
+/** Per-word pacing when a canned reply is streamed: slash-command output. */
+const COMMAND_REPLY_WORD_DELAY_MS = 10;
+/** Per-word pacing for the "No AI model is ready" setup reply. */
+const SETUP_REQUIRED_REPLY_WORD_DELAY_MS = 15;
 
 /**
  * Resolves the effective autonomy level for a request. Expired grants fall
@@ -1277,9 +1282,8 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     return pool;
   }
 
-  // Auto skill capture: track tool sequences per session and dismissed suggestions
+  // Auto skill capture: track tool sequences per session
   const sessionToolSequences = new Map<string, string[][]>();
-  const dismissedCaptureSuggestions = new Set<string>();
   const MAX_RETAINED_CHAT_SESSION_STATES = 64;
   const MAX_RETAINED_HISTORY_CHARS_PER_SESSION = 2_000_000;
   const MAX_RETAINED_HISTORY_CHARS_TOTAL = 8_000_000;
@@ -2473,13 +2477,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
-          if (!(await streamCannedReply(friendlyError, 10))) return;
-          raw.end();
+          if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
           // Stream the command result as SSE tokens and persist it
-          if (!(await streamCannedReply(cmdResult, 10))) return;
-          raw.end();
+          if (!(await streamCannedReply(cmdResult, COMMAND_REPLY_WORD_DELAY_MS))) return;
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
       }
@@ -2493,7 +2497,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // was answered. The raw turn is still persisted for continuity.
         const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         // Persist echo response so session continuity is maintained
-        if (!(await streamCannedReply(echoResponse, 15))) return;
+        if (!(await streamCannedReply(echoResponse, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
       }
 
       if (shouldRunAgentLoop) {
@@ -3440,10 +3444,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             mcpRuntime: server.agentState.mcpRuntime,
           });
 
-        const iterBudget = new IterationBudget({
-          maxIterations: 90,
-          freeToolCalls: ['execute_code'],
-        });
         let agentRunBudget = selectAgentRunBudget({
           taskShape: turnTaskShape.type,
           complexity: turnTaskShape.complexity,
@@ -4124,13 +4124,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
         pendingCapabilityToolResults = [];
 
-        // Track iteration and inject budget pressure
-        iterBudget.tick();
-        const budgetPressure = iterBudget.getPressureMessage();
-        if (budgetPressure) {
-          sendEvent('step', { content: budgetPressure.trim() });
-        }
-
         // Unregister the per-request approval hook, so the outer finally's
         // defensive cleanup is a no-op on the happy path.
         turnResources.unhookTools();
@@ -4284,15 +4277,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
               if (captureResult.suggest && captureResult.pattern) {
                 const patternKey = captureResult.pattern.name;
-                if (!dismissedCaptureSuggestions.has(patternKey)) {
-                  sendEvent('notification', {
-                    type: 'workflow_captured',
-                    title: captureResult.notification?.title ?? 'Pattern detected',
-                    message: captureResult.notification?.message ?? captureResult.reason,
-                    pattern: captureResult.pattern,
-                  });
-                  log.info(`[auto-skill] Suggested capture: ${patternKey}`);
-                }
+                sendEvent('notification', {
+                  type: 'workflow_captured',
+                  title: captureResult.notification?.title ?? 'Pattern detected',
+                  message: captureResult.notification?.message ?? captureResult.reason,
+                  pattern: captureResult.pattern,
+                });
+                log.info(`[auto-skill] Suggested capture: ${patternKey}`);
               }
             }
           } catch {
