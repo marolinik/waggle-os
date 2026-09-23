@@ -1252,9 +1252,8 @@ const systemPromptCache = new Map<string, { prompt: string; workspace: string | 
     return pool;
   }
 
-  // Auto skill capture: track tool sequences per session and dismissed suggestions
+  // Auto skill capture: track tool sequences per session
   const sessionToolSequences = new Map<string, string[][]>();
-  const dismissedCaptureSuggestions = new Set<string>();
   const MAX_RETAINED_CHAT_SESSION_STATES = 64;
   const MAX_RETAINED_HISTORY_CHARS_PER_SESSION = 2_000_000;
   const MAX_RETAINED_HISTORY_CHARS_TOTAL = 8_000_000;
@@ -4250,15 +4249,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
               if (captureResult.suggest && captureResult.pattern) {
                 const patternKey = captureResult.pattern.name;
-                if (!dismissedCaptureSuggestions.has(patternKey)) {
-                  sendEvent('notification', {
-                    type: 'workflow_captured',
-                    title: captureResult.notification?.title ?? 'Pattern detected',
-                    message: captureResult.notification?.message ?? captureResult.reason,
-                    pattern: captureResult.pattern,
-                  });
-                  log.info(`[auto-skill] Suggested capture: ${patternKey}`);
-                }
+                sendEvent('notification', {
+                  type: 'workflow_captured',
+                  title: captureResult.notification?.title ?? 'Pattern detected',
+                  message: captureResult.notification?.message ?? captureResult.reason,
+                  pattern: captureResult.pattern,
+                });
+                log.info(`[auto-skill] Suggested capture: ${patternKey}`);
               }
             }
           } catch {
