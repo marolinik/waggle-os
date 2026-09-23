@@ -151,6 +151,11 @@ export {
 
 // ── Governance context (D-1): install_audit + ai_interactions DDL ──
 export { ensureGovernanceSchema } from './governance/ensure-schema.js';
+export {
+  pseudonymizeInteractions, governancePseudonymKey, GOVERNANCE_PSEUDONYM_KEY_VAULT_NAME,
+  type PseudonymizationScope,
+} from './governance/pseudonymize.js';
+export { AI_INTERACTIONS_PSEUDONYMIZED_TEXT, PSEUDONYM_PREFIX } from './governance/schema.js';
 
 // ── Compliance (AI Act) — stays in @waggle/core; excluded by curated export ──
 export { InteractionStore } from './compliance/interaction-store.js';

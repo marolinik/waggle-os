@@ -73,7 +73,9 @@ CREATE TABLE IF NOT EXISTS ai_interactions (
   -- EU AI Act Art. 12.1(a) records the actual inputs and outputs, not just
   -- token counts. Added 2026-04-15; ensureGovernanceSchema adds them to older DBs.
   input_text TEXT,
-  output_text TEXT
+  output_text TEXT,
+  -- Set once when a GDPR Art.17 erase pseudonymizes the row (D-1).
+  pseudonymized_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (workspace_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
@@ -85,6 +87,48 @@ export const AI_INTERACTIONS_NO_DELETE_TRIGGER_SQL =
   'CREATE TRIGGER IF NOT EXISTS ai_interactions_no_delete BEFORE DELETE ON ai_interactions '
   + `BEGIN SELECT RAISE(ABORT, '${AI_INTERACTIONS_APPEND_ONLY_MESSAGE}'); END`;
 
+/** What replaces a pseudonymized row's prompt and answer text. */
+export const AI_INTERACTIONS_PSEUDONYMIZED_TEXT = '[PSEUDONYMIZED — GDPR Art.17]';
+
+/** Prefix of a keyed-HMAC pseudonym standing in for a session or workspace id. */
+export const PSEUDONYM_PREFIX = 'pseud:';
+
+/** Columns an auditor needs (Art. 12, Art. 19); no update may change them. */
+const AI_INTERACTIONS_KEPT_COLUMNS = [
+  'id', 'timestamp', 'model', 'provider', 'input_tokens', 'output_tokens', 'cost_usd',
+  'tools_called', 'human_action', 'imported_from', 'persona',
+] as const;
+
+const keptUnchanged = AI_INTERACTIONS_KEPT_COLUMNS.map((c) => `NEW.${c} IS OLD.${c}`).join(' AND ');
+const isPseudonym = (column: string) => `substr(NEW.${column}, 1, ${PSEUDONYM_PREFIX.length}) = '${PSEUDONYM_PREFIX}'`;
+
+/**
+ * Rows are append-only, with exactly two permitted updates, both GDPR Art.17
+ * pseudonymization:
+ * - the first: `pseudonymized_at` goes from NULL to a timestamp, the text
+ *   columns become the marker, `risk_context` is cleared, a non-NULL
+ *   `session_id` becomes a pseudonym and `workspace_id` stays or becomes one;
+ * - a later workspace erase of an already pseudonymized row: only
+ *   `workspace_id` changes, from an id to a pseudonym.
+ * Every kept column is unchanged in both. An appended tombstone row would
+ * leave the original text in place, which is not erasure.
+ */
 export const AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL =
-  'CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update BEFORE UPDATE ON ai_interactions '
-  + `BEGIN SELECT RAISE(ABORT, '${AI_INTERACTIONS_APPEND_ONLY_MESSAGE}'); END`;
+  'CREATE TRIGGER ai_interactions_no_update BEFORE UPDATE ON ai_interactions WHEN NOT ('
+  + '(OLD.pseudonymized_at IS NULL AND NEW.pseudonymized_at IS NOT NULL AND NEW.pseudonymized_at <> \'\' '
+  + `AND NEW.input_text IS '${AI_INTERACTIONS_PSEUDONYMIZED_TEXT}' `
+  + `AND NEW.output_text IS '${AI_INTERACTIONS_PSEUDONYMIZED_TEXT}' `
+  + 'AND NEW.risk_context IS NULL '
+  + `AND ((OLD.session_id IS NULL AND NEW.session_id IS NULL) OR ${isPseudonym('session_id')}) `
+  + `AND (NEW.workspace_id IS OLD.workspace_id OR ${isPseudonym('workspace_id')}) `
+  + `AND ${keptUnchanged}) `
+  + 'OR (OLD.pseudonymized_at IS NOT NULL AND NEW.pseudonymized_at IS OLD.pseudonymized_at '
+  + 'AND NEW.input_text IS OLD.input_text AND NEW.output_text IS OLD.output_text '
+  + 'AND NEW.risk_context IS OLD.risk_context AND NEW.session_id IS OLD.session_id '
+  + `AND substr(OLD.workspace_id, 1, ${PSEUDONYM_PREFIX.length}) <> '${PSEUDONYM_PREFIX}' AND ${isPseudonym('workspace_id')} `
+  + `AND ${keptUnchanged})`
+  + ') BEGIN SELECT RAISE(ABORT, '
+  + `'${AI_INTERACTIONS_APPEND_ONLY_MESSAGE}; only a one-time GDPR Art.17 pseudonymization is permitted'); END`;
+
+/** The live no-update trigger is current when it carries this clause. */
+export const AI_INTERACTIONS_NO_UPDATE_SENTINEL = 'OLD.pseudonymized_at IS NULL';

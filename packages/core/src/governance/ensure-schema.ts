@@ -8,6 +8,7 @@
 import type { MindDB } from '@waggle/hive-mind-core';
 import {
   AI_INTERACTIONS_NO_DELETE_TRIGGER_SQL,
+  AI_INTERACTIONS_NO_UPDATE_SENTINEL,
   AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL,
   AI_INTERACTIONS_TABLE_SQL,
   INSTALL_AUDIT_CHECK_LISTS,
@@ -93,12 +94,24 @@ function hasColumn(raw: RawDatabase, table: string, column: string): boolean {
 
 function ensureAiInteractions(raw: RawDatabase): void {
   raw.exec(AI_INTERACTIONS_TABLE_SQL);
-  // Databases from before 2026-04-15 recorded token counts only.
-  for (const column of ['input_text', 'output_text']) {
+  // Databases from before 2026-04-15 recorded token counts only, and from
+  // before D-1 had no pseudonymization marker.
+  for (const column of ['input_text', 'output_text', 'pseudonymized_at']) {
     if (!hasColumn(raw, 'ai_interactions', column)) {
       raw.exec(`ALTER TABLE ai_interactions ADD COLUMN ${column} TEXT`);
     }
   }
   raw.exec(AI_INTERACTIONS_NO_DELETE_TRIGGER_SQL);
-  raw.exec(AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL);
+  // CREATE TRIGGER IF NOT EXISTS cannot replace the older absolute trigger, so
+  // it is swapped by DROP + CREATE in one transaction: a crash or a concurrent
+  // writer must never see the table with no update guard at all.
+  const liveNoUpdate = (raw.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='ai_interactions_no_update'",
+  ).get() as { sql: string } | undefined)?.sql;
+  if (!liveNoUpdate?.includes(AI_INTERACTIONS_NO_UPDATE_SENTINEL)) {
+    raw.transaction(() => {
+      raw.exec('DROP TRIGGER IF EXISTS ai_interactions_no_update');
+      raw.exec(AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL);
+    })();
+  }
 }
