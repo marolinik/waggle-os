@@ -628,6 +628,9 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(events.some(e => e.event === 'approval_required')).toBe(true);
     expect(stepContents(events)).toContain('✔ write_file approved');
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual(['write_file']);
+    // The approved write succeeded, so the client is told which file it made.
+    const created = events.filter(e => e.event === 'file_created').map(e => JSON.parse(e.data));
+    expect(created).toEqual([{ filePath: 'approved.txt', fileAction: 'write' }]);
   });
 
   it('blocks the tool when the client denies the card', async () => {
