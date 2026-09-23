@@ -26,7 +26,7 @@ import {
   WEIGHTS,
   VERDICT6_VALUES,
   type JudgedJsonlRecord,
-} from '../../src/benchmarks/aggregate.ts';
+} from '../../src/benchmarks/aggregate.js';
 
 // ── Fixture builder ─────────────────────────────────────────────────────
 

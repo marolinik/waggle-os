@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -149,7 +149,7 @@ function crashRecoveryProcessHarness() {
 async function seedActiveRuntime(
   dataDir: string,
   artifact: OllamaRuntimeArtifact,
-  bytes: Buffer,
+  bytes: Buffer<ArrayBuffer>,
   artifactCatalog: ReadonlyArray<OllamaRuntimeArtifact>,
 ): Promise<void> {
   const processes = runtimeProcessHarness();
@@ -439,7 +439,7 @@ describe('ManagedOllamaRuntime', () => {
     const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
     const artifactCatalog = [firstArtifact, nextArtifact];
     const processes = runtimeProcessHarness();
-    const dependencies = (artifact: OllamaRuntimeArtifact, bytes: Buffer) => ({
+    const dependencies = (artifact: OllamaRuntimeArtifact, bytes: Buffer<ArrayBuffer>) => ({
       artifact,
       artifactCatalog,
       fetchImpl: (async () => new Response(bytes, {
@@ -828,7 +828,7 @@ describe('ManagedOllamaRuntime', () => {
     expect(runtime.getStatus()).toMatchObject({ running: true, activeVersion: 'test-1.0.0' });
 
     processes.crashOwnedDaemon();
-    await new Promise((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
     await expect(runtime.startInstalled()).rejects.toThrow(/one recovery attempt/i);
     expect(processes.spawnImpl).toHaveBeenCalledTimes(2);
     expect(processes.liveChildren).toBe(0);
@@ -2054,7 +2054,7 @@ setInterval(() => {}, 1000);
       }),
       kill: vi.fn(() => true),
     });
-    const spawnImpl = vi.fn(() => child as never);
+    const spawnImpl = vi.fn((_file: string, _args: readonly string[], _options: SpawnOptions) => child as never);
     const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
       artifact: fixtureArtifact(bytes),
       fetchImpl: (async () => new Response(bytes, {

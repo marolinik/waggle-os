@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,28 +51,30 @@ function createTestServer(
   dataDir?: string,
 ) {
   const server = Fastify({ logger: false });
+  // The decorators below are deliberate partial doubles: they implement only
+  // the members the home and memory-center routes read.
   server.decorate('multiMind', {
     personal: db,
     getFrameStore: () => undefined,
     search: () => [],
     workspace: undefined,
     setWorkspace: () => {},
-  });
+  } as unknown as FastifyInstance['multiMind']);
   server.decorate('agentState', {
     getWorkspaceMindDb: () => undefined,
     activateWorkspaceMind: () => undefined,
     listWorkspaces: () => [],
-  });
+  } as unknown as FastifyInstance['agentState']);
   server.decorate('workspaceManager', {
     list: () => workspaces,
     get: (id: string) => workspaces.find((w) => w.id === id),
     getMindPath: (id: string) => path.join(dataDir ?? '', 'workspaces', id, 'mind.db'),
-  });
+  } as unknown as FastifyInstance['workspaceManager']);
   server.decorate('cronStore', {
     list: () => cronSchedules,
     getExecutionHistory: () => [],
-  });
-  if (dataDir) server.decorate('localConfig', { dataDir });
+  } as unknown as FastifyInstance['cronStore']);
+  if (dataDir) server.decorate('localConfig', { dataDir } as unknown as FastifyInstance['localConfig']);
   // localConfig is otherwise intentionally absent — see file header.
   server.register(homeRoutes);
   server.register(memoryCenterRoutes);

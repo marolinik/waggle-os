@@ -13,7 +13,7 @@ import {
 
 const conn = (over: Partial<ConnectorDefinition>): ConnectorDefinition => ({
   id: 'x', name: 'X', description: '', service: 'x', authType: 'bearer',
-  status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'misc',
+  status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'integration',
   ...over,
 });
 
@@ -28,9 +28,9 @@ describe('tokenizeNeed', () => {
 
 describe('scoreConnectors', () => {
   const defs = [
-    conn({ id: 'slack', name: 'Slack', description: 'Team chat', service: 'slack', authType: 'bearer', tools: ['send_message'], category: 'comms' }),
+    conn({ id: 'slack', name: 'Slack', description: 'Team chat', service: 'slack', authType: 'bearer', tools: ['send_message'], category: 'communication' }),
     conn({ id: 'gcal', name: 'Google Calendar', description: 'Calendar events', service: 'google', authType: 'oauth2', category: 'productivity' }),
-    conn({ id: 'github', name: 'GitHub', description: 'Code hosting', service: 'github', authType: 'bearer', status: 'connected', category: 'dev' }),
+    conn({ id: 'github', name: 'GitHub', description: 'Code hosting', service: 'github', authType: 'bearer', status: 'connected', category: 'development' }),
   ];
 
   it('matches a token connector to a store-install descriptor with the namespaced id', () => {

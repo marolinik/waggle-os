@@ -25,16 +25,17 @@ import { sessionRoutes } from '../../src/local/routes/sessions.js';
 
 function createTestServer(db: MindDB, dataDir: string) {
   const server = Fastify({ logger: false });
-  server.decorate('localConfig', { dataDir });
+  // Partial test doubles: the routes read only the fields supplied here.
+  server.decorate('localConfig', { dataDir } as never);
   server.decorate('workspaceManager', {
     list: () => [{ id: 'ws-test', name: 'Test Workspace' }],
     get: (id: string) => id === 'ws-test' ? { id, name: 'Test Workspace' } : undefined,
-  });
+  } as never);
   server.decorate('agentState', {
     getWorkspaceMindDb: () => undefined,
     listWorkspaces: () => [],
-  });
-  server.decorate('multiMind', { personal: db });
+  } as never);
+  server.decorate('multiMind', { personal: db } as never);
   server.register(artifactRoutes);
   server.register(sessionRoutes);
   return server;

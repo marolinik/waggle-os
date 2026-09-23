@@ -78,7 +78,7 @@ describe('dynamic provider model completion path', () => {
     ) as { model_list: Array<{ model_name: string }> };
     expect(routerConfig.model_list.map((entry) => entry.model_name)).toContain(newModel);
 
-    const completionFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    const completionFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { model: string };
       const configured = routerConfig.model_list.some((entry) => entry.model_name === body.model);
       return new Response(JSON.stringify(configured
@@ -157,7 +157,7 @@ describe('dynamic provider model completion path', () => {
     ) as { model_list: Array<{ model_name: string }> };
     expect(routerConfig.model_list.map((entry) => entry.model_name)).toContain(newModel);
 
-    const completionFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    const completionFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { model: string };
       return new Response(JSON.stringify({
         choices: [{ message: { role: 'assistant', content: 'Hot model completed.' }, finish_reason: 'stop' }],

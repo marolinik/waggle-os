@@ -7172,7 +7172,6 @@ if ($Mode -eq 'clean') {
   throw 'Unknown probe mode'
 }
 `}`,
-          'utf8',
         );
         const powershell = powershellProbeExecutable();
         const probe = (mode: string, sourcePath = packagedPath) => run(
@@ -7275,7 +7274,6 @@ try {
   [System.IO.File]::WriteAllBytes($sidecarPath, $original)
 }
 `}`,
-          'utf8',
         );
         run(
           powershell,

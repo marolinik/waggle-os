@@ -253,7 +253,6 @@ describe('Offline shutdown lifecycle', () => {
       server = await buildLocalServer({
         dataDir,
         port: 0,
-        skipLiteLLM: true,
         useBuiltInProxy: true,
         manageLiteLLM: false,
       });
@@ -344,7 +343,6 @@ describe('Offline shutdown lifecycle', () => {
       server = await buildLocalServer({
         dataDir,
         port: 0,
-        skipLiteLLM: true,
         useBuiltInProxy: true,
         manageLiteLLM: false,
       });

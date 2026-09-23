@@ -929,7 +929,7 @@ describe('Command Execution Route', () => {
     it('says so when a recall returns nothing', async () => {
       vi.spyOn(Orchestrator.prototype, 'recallMemory').mockResolvedValue({
         count: 0,
-        recalled: [],
+        recalled: [] as string[],
       } as Awaited<ReturnType<Orchestrator['recallMemory']>>);
       expect(await execute('/memory packaging')).toContain('No relevant memories found.');
     });

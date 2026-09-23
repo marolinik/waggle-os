@@ -598,7 +598,8 @@ describe('Agent Service', () => {
     };
     server.agentState.currentModel = changedModel;
     server.agentState.llmProvider = changedModelStatus;
-    releaseHeldResponse?.();
+    // The probe callback reassigns this; widen past TS's `= undefined` narrowing.
+    (releaseHeldResponse as (() => void) | undefined)?.();
     releaseHeldResponse = undefined;
     failHeldResponse = undefined;
     await expect(modelCheck).resolves.toBe(false);
@@ -635,9 +636,9 @@ describe('Agent Service', () => {
       closePromise.then(() => true),
       new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
     ]);
-    if (!closedWithoutFallback) releaseHeldResponse?.();
+    if (!closedWithoutFallback) (releaseHeldResponse as (() => void) | undefined)?.();
     await closePromise;
-    releaseHeldResponse?.();
+    (releaseHeldResponse as (() => void) | undefined)?.();
     releaseHeldResponse = undefined;
 
     expect(closedWithoutFallback).toBe(true);

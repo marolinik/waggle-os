@@ -89,7 +89,7 @@ describe('Capabilities Route', () => {
       getAllSkills: () => ['test-plugin:summarize'],
     };
 
-    (server.agentState as Record<string, unknown>).pluginRuntimeManager = mockManager;
+    (server.agentState as unknown as Record<string, unknown>).pluginRuntimeManager = mockManager;
 
     const res = await injectWithAuth(server, { method: 'GET', url: '/api/capabilities/status' });
     const body = JSON.parse(res.body);
@@ -107,7 +107,7 @@ describe('Capabilities Route', () => {
     expect(body.tools.plugin).toBe(2);
 
     // Cleanup
-    (server.agentState as Record<string, unknown>).pluginRuntimeManager = null;
+    (server.agentState as unknown as Record<string, unknown>).pluginRuntimeManager = null;
   });
 
   it('returns MCP data when mcpRuntime is present', async () => {
@@ -121,7 +121,7 @@ describe('Capabilities Route', () => {
       getHealthy: () => [{ config: { name: 'fs-server' } }],
     };
 
-    (server.agentState as Record<string, unknown>).mcpRuntime = mockMcp;
+    (server.agentState as unknown as Record<string, unknown>).mcpRuntime = mockMcp;
 
     const res = await injectWithAuth(server, { method: 'GET', url: '/api/capabilities/status' });
     const body = JSON.parse(res.body);
@@ -143,7 +143,7 @@ describe('Capabilities Route', () => {
     expect(body.tools.mcp).toBe(3);
 
     // Cleanup
-    (server.agentState as Record<string, unknown>).mcpRuntime = null;
+    (server.agentState as unknown as Record<string, unknown>).mcpRuntime = null;
   });
 
   it('returns workflow + marketplace commands from the wired CommandRegistry', async () => {
@@ -230,8 +230,8 @@ describe('Capabilities Route', () => {
       getHealthy: () => [{ config: { name: 's1' } }],
     };
 
-    (server.agentState as Record<string, unknown>).pluginRuntimeManager = mockManager;
-    (server.agentState as Record<string, unknown>).mcpRuntime = mockMcp;
+    (server.agentState as unknown as Record<string, unknown>).pluginRuntimeManager = mockManager;
+    (server.agentState as unknown as Record<string, unknown>).mcpRuntime = mockMcp;
 
     const res = await injectWithAuth(server, { method: 'GET', url: '/api/capabilities/status' });
     const body = JSON.parse(res.body);
@@ -244,7 +244,7 @@ describe('Capabilities Route', () => {
     expect(body.tools.count).toBe(nativeCount + 3 + 2);
 
     // Cleanup
-    (server.agentState as Record<string, unknown>).pluginRuntimeManager = null;
-    (server.agentState as Record<string, unknown>).mcpRuntime = null;
+    (server.agentState as unknown as Record<string, unknown>).pluginRuntimeManager = null;
+    (server.agentState as unknown as Record<string, unknown>).mcpRuntime = null;
   });
 });

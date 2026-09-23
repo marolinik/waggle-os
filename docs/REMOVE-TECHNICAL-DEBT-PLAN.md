@@ -179,7 +179,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] CA-6: second slice — the regulated-content disclaimer, goal ancestry and approval-timeout policy moved behind the policy boundary, pin first (agent, `5b616dd2` + `2fe718da` + `1c49e805`, 2026-09-17)
 - [x] CA-7: layer rule shipped as `@typescript-eslint/no-restricted-imports` over all three policy-graph files; proven non-vacuous on four banned forms (agent, `a40475e2`, 2026-09-18)
 - [x] Phase 6 pass 1: TD-CHAT-18 (`c362ae45`), TD-TEST-5 (`7dca4555`), CA-7 (`a40475e2`); Debt Budget & Broken-Windows Policy ratified; 3 new Adopted Conventions (agent, 2026-09-18)
-- [ ] TD-TEST-11: `packages/server/tsconfig.json` excludes `tests/` — no test file is typechecked; a test-only tsconfig is its own arc (agent, P2)
+- [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
 - [ ] TD-CHAT-28 / TD-CHAT-15: ledgered at the Phase 6 scope decision, not consumed (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
 - [ ] R-3: bound the 65 unbounded `.all()` reads, clustered in the memory substrate — touches OSS-mirrored `hive-mind-core`, §7.5 applies, pin each query first (agent, P2)

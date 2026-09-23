@@ -592,7 +592,7 @@ describe('request-bound chat collaboration', () => {
   it.each([
     {
       name: 'standalone sub-agent',
-      source: 'chat_subagent',
+      source: 'chat_subagent' as const,
       toolName: 'spawn_agent',
       input: {
         name: 'Parent-cancelled delegate',
@@ -602,7 +602,7 @@ describe('request-bound chat collaboration', () => {
     },
     {
       name: 'workflow Room',
-      source: 'workflow',
+      source: 'workflow' as const,
       toolName: 'orchestrate_workflow',
       input: {
         task: 'Hold the workflow transaction until parent cancellation settles',
@@ -709,7 +709,7 @@ describe('request-bound chat collaboration', () => {
   it.each([
     {
       name: 'standalone sub-agent',
-      source: 'chat_subagent',
+      source: 'chat_subagent' as const,
       toolName: 'spawn_agent',
       input: {
         name: 'Pre-cancelled delegate',
@@ -719,7 +719,7 @@ describe('request-bound chat collaboration', () => {
     },
     {
       name: 'workflow Room',
-      source: 'workflow',
+      source: 'workflow' as const,
       toolName: 'orchestrate_workflow',
       input: {
         task: 'Must never enter the injected workflow runner',
