@@ -127,14 +127,13 @@ describe('buildChatCommandContext (characterization)', () => {
       expect(await contextFor('/memory anything').searchMemory('anything')).toBe('No relevant memories found.');
     });
 
-    it('reports a recall outage as no matches', async () => {
-      // QUIRK (docs/TECH-DEBT.md TD-CHAT-29): Orchestrator.recallMemory never
-      // rejects for a string query — its own catch returns count 0 with an
-      // outage notice in `text`, which searchMemory ignores. The user sees
-      // "no matches"; the branch below is reachable only from a test double.
+    it('reports a recall outage as unavailable, not as no matches', async () => {
+      // Orchestrator.recallMemory never rejects for a string query: its own
+      // catch returns count 0 with MEMORY_RECALL_UNAVAILABLE_TEXT. Until
+      // TD-CHAT-29 searchMemory ignored that text and the user saw "no matches".
       const stub = stubOrchestrator(async () => OUTAGE_RECALL);
       expect(await contextFor('/memory anything', { orchestrator: stub.orchestrator }).searchMemory('anything'))
-        .toBe('No relevant memories found.');
+        .toBe('Memory search unavailable.');
     });
 
     it('reports the search as unavailable only when recallMemory itself throws', async () => {

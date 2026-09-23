@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import {
-  TraceRecorder,
+  type TraceFinalizeOptions,
   READONLY_TOOLS,
   detectTaskShape,
   filterAvailableTools,
@@ -566,6 +566,16 @@ async function executeFleetRun(
   let workspaceTurnScope: WorkspaceTurnScope | undefined;
   let traceId: number | undefined;
   let fleetSpendMeter: ModelSpendMeter | undefined;
+  // Finalize through the shared recorder when there is one, so the tool calls
+  // the loop buffered in it are flushed into the row instead of dropped (CA-5b).
+  const finalizeTrace = (options: TraceFinalizeOptions): void => {
+    if (traceId === undefined) return;
+    if (server.traceStore && server.traceRecorder) {
+      server.traceRecorder.finalize({ id: traceId, startedAt: Date.now() }, options);
+    } else {
+      server.traceStore?.finalize(traceId, options);
+    }
+  };
   try {
     const mountsWorkspaceMemory = !savedAgentPolicy
       || savedAgentPolicy.memoryScopes.includes('workspace');
@@ -657,7 +667,7 @@ async function executeFleetRun(
       input: task,
       tags: [`room:${run.roomId}`, `run:${run.id}`, ...(run.executor.agentId ? [`agent:${run.executor.agentId}`] : [])],
     });
-    const traceRecorder = traceId !== undefined && server.traceStore ? new TraceRecorder(server.traceStore) : undefined;
+    const traceRecorder = traceId !== undefined && server.traceStore ? server.traceRecorder : undefined;
     server.agentRunRegistry.update(run.id, {
       status: 'running',
       result: { sessionId, ...(traceId !== undefined ? { traceId: String(traceId) } : {}) },
@@ -749,7 +759,7 @@ async function executeFleetRun(
     } catch { /* best-effort room projection */ }
     if (traceId !== undefined) {
       try {
-        server.traceStore?.finalize(traceId, {
+        finalizeTrace({
           outcome: 'success',
           output: result.content,
           tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
@@ -823,7 +833,7 @@ async function executeFleetRun(
       } catch { /* best effort */ }
       if (traceId !== undefined) {
         try {
-          server.traceStore?.finalize(traceId, {
+          finalizeTrace({
             outcome: 'abandoned',
             output: summary,
             tokens: { input: inputTokens, output: outputTokens },
@@ -867,7 +877,7 @@ async function executeFleetRun(
     } catch { /* best effort */ }
     if (traceId !== undefined) {
       try {
-        server.traceStore?.finalize(traceId, {
+        finalizeTrace({
           outcome: 'abandoned',
           output: message,
           costUsd: fleetSpendMeter?.totalCostUsd(),
