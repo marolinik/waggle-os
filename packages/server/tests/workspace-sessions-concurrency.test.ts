@@ -121,8 +121,8 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
     const orchA = buildOrchestrator(personal.mind, wsA.mind);
     const orchB = buildOrchestrator(personal.mind, wsB.mind);
 
-    const sessionA = manager.create('workspace-A', wsA.mind, orchA, [], null);
-    const sessionB = manager.create('workspace-B', wsB.mind, orchB, [], null);
+    const sessionA = manager.create('workspace-A', wsA.mind, orchA, [], undefined);
+    const sessionB = manager.create('workspace-B', wsB.mind, orchB, [], undefined);
 
     // The invariant: session A's orchestrator must hold workspace A's layers,
     // session B's must hold workspace B's. In the broken pre-A.1 code they'd
@@ -141,7 +141,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       ws.mind,
       buildOrchestrator(personal.mind, ws.mind),
       [],
-      null,
+      undefined,
     );
 
     build('A', wsA);
@@ -162,7 +162,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       ws.mind,
       buildOrchestrator(personal.mind, ws.mind),
       [],
-      null,
+      undefined,
     );
 
     build('A', wsA);
@@ -188,8 +188,8 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
   it('pause and resume flip status without affecting other sessions', () => {
     const manager = new WorkspaceSessionManager(3);
 
-    const sessA = manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], null);
-    const sessB = manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], null);
+    const sessA = manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], undefined);
+    const sessB = manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], undefined);
 
     expect(sessA.status).toBe('active');
     expect(sessB.status).toBe('active');
@@ -212,8 +212,8 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
   it('close() closes one session cleanly and leaves others intact', () => {
     const manager = new WorkspaceSessionManager(3);
 
-    manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], null);
-    const sessB = manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], null);
+    manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], undefined);
+    const sessB = manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], undefined);
 
     expect(manager.size).toBe(2);
     expect(manager.close('A')).toBe(true);
@@ -238,13 +238,13 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       tools: (_m: MindDB, _o: Orchestrator) => { toolsFactoryCallCount++; return []; },
     };
 
-    const first = manager.getOrCreate('A', factories.mind, factories.orch, factories.tools, null);
+    const first = manager.getOrCreate('A', factories.mind, factories.orch, factories.tools, undefined);
     expect(mindFactoryCallCount).toBe(1);
     expect(orchFactoryCallCount).toBe(1);
     expect(toolsFactoryCallCount).toBe(1);
 
     // Second call should return the SAME session, not invoke factories
-    const second = manager.getOrCreate('A', factories.mind, factories.orch, factories.tools, null);
+    const second = manager.getOrCreate('A', factories.mind, factories.orch, factories.tools, undefined);
     expect(second).toBe(first);
     expect(mindFactoryCallCount).toBe(1);
     expect(orchFactoryCallCount).toBe(1);
@@ -260,9 +260,9 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
   it('closeAll clears every session at once', () => {
     const manager = new WorkspaceSessionManager(4);
 
-    manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], null);
-    manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], null);
-    manager.create('C', wsC.mind, buildOrchestrator(personal.mind, wsC.mind), [], null);
+    manager.create('A', wsA.mind, buildOrchestrator(personal.mind, wsA.mind), [], undefined);
+    manager.create('B', wsB.mind, buildOrchestrator(personal.mind, wsB.mind), [], undefined);
+    manager.create('C', wsC.mind, buildOrchestrator(personal.mind, wsC.mind), [], undefined);
 
     expect(manager.size).toBe(3);
     manager.closeAll();
@@ -282,8 +282,8 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
     const orchA = buildOrchestrator(personal.mind, wsA.mind);
     const orchB = buildOrchestrator(personal.mind, wsB.mind);
 
-    manager.create('A', wsA.mind, orchA, [], null);
-    manager.create('B', wsB.mind, orchB, [], null);
+    manager.create('A', wsA.mind, orchA, [], undefined);
+    manager.create('B', wsB.mind, orchB, [], undefined);
 
     // Fire two recalls in parallel. The invariant: each orchestrator only
     // sees its own workspace's frames. On the pre-A.1 shared-orchestrator

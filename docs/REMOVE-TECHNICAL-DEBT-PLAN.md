@@ -158,6 +158,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-23 | 2 (pass 2) | The approval hook takes a flat `ChatApprovalHookTurn`, not `ChatTurnScope` (`caf7b6da`) | `ChatTurnScope` (P4-A1) replaces the id derivation in `resolveChatWorkspaceTarget` and rebinds ~20 read sites across the handler; doing it inside a verbatim move would have mixed a rewiring into a structure-only commit. The hook's parameter object keeps the handler's names, so a later `ChatTurnScope` can replace its three id fields in one place. |
 | 2026-09-23 | close-out | **Founder decision round** (four of the six blocked rows) | TD-CHAT-26: a managed personal folder under the data directory replaces the `os.homedir()` fallbacks (behavior change, pin first). TD-CHAT-43: won't fix, the H-AUDIT-1 turn-entry placement stands. TD-CHAT-45: stays open rather than closing as won't fix. R-5 and D-1 stay in the close-out (W5); D-1 still needs the sticky-erasure vs compliance-trail ruling before it starts. TD-CHAT-36 was not asked: the 2026-09-17 ruling already covers its deny posture, to be re-verified in W4. |
 | 2026-09-23 | close-out | **Founder decision round 2** | TD-CHAT-12: only automated turns notify. TD-CHAT-17: the vocabulary is "setup-required", and `litellmAvailable` becomes `modelAvailable`. D-1: a GDPR erase KEEPS the governance trail (`install_audit`, `ai_interactions`) and pseudonymizes the subject in it (Art. 17(3)(b) legal obligation), which unblocks the extraction. |
+| 2026-09-23 | close-out | **Founder decision round 3** | TD-CHAT-19: one comment-only sweep is allowed (tags become intent; a paired hoist/cleanup comment names its counterpart symbol), replacing the "never as a sweep" rule. TD-TEST-2: a coverage ratchet on `routes/chat*.ts` in the existing CI step, not a full or nightly coverage job. |
 
 ## Next Actions
 
@@ -178,7 +179,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] CA-6: second slice — the regulated-content disclaimer, goal ancestry and approval-timeout policy moved behind the policy boundary, pin first (agent, `5b616dd2` + `2fe718da` + `1c49e805`, 2026-09-17)
 - [x] CA-7: layer rule shipped as `@typescript-eslint/no-restricted-imports` over all three policy-graph files; proven non-vacuous on four banned forms (agent, `a40475e2`, 2026-09-18)
 - [x] Phase 6 pass 1: TD-CHAT-18 (`c362ae45`), TD-TEST-5 (`7dca4555`), CA-7 (`a40475e2`); Debt Budget & Broken-Windows Policy ratified; 3 new Adopted Conventions (agent, 2026-09-18)
-- [ ] TD-TEST-11: `packages/server/tsconfig.json` excludes `tests/` — no test file is typechecked; a test-only tsconfig is its own arc (agent, P2)
+- [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
 - [ ] TD-CHAT-28 / TD-CHAT-15: ledgered at the Phase 6 scope decision, not consumed (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
 - [ ] R-3: bound the 65 unbounded `.all()` reads, clustered in the memory substrate — touches OSS-mirrored `hive-mind-core`, §7.5 applies, pin each query first (agent, P2)

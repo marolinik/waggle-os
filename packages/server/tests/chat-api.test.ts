@@ -4016,7 +4016,7 @@ describe('Chat Streaming API', () => {
         directive: 'Managed skill draft',
       });
 
-      const skillShares = personalServer.signalBus.query({
+      const skillShares = personalServer.signalBus!.query({
         subtype: 'skill_share',
       });
       expect(skillShares).toEqual(expect.arrayContaining([

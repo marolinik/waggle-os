@@ -79,7 +79,11 @@ describe('TurnToolActivity', () => {
       .toContain('Tool result: "abcd"');
   });
 
-  it('QUIRK: measures a repeated tool from its oldest unmatched start', () => {
+  it('measures a call from its own start when an earlier start of that tool was never answered', () => {
+    // Tool calls run one at a time, so a result always answers the latest
+    // start of its tool. An older start is left unanswered only when onToolUse
+    // threw after startTimer; until TD-CHAT-51 the next call of that tool was
+    // charged from the stale start.
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     const activity = new TurnToolActivity({
@@ -91,9 +95,24 @@ describe('TurnToolActivity', () => {
     vi.setSystemTime(1_300);
     activity.startTimer('search_files');
     vi.setSystemTime(1_500);
-    // The second call finishes first, but is charged from the first start.
-    expect(activity.recordResult('search_files', 'b', false)).toBe(500);
-    expect(activity.recordResult('search_files', 'a', false)).toBe(200);
+    expect(activity.recordResult('search_files', 'b', false)).toBe(200);
+  });
+
+  it('pairs sequential calls of one tool with their own starts', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const activity = new TurnToolActivity({
+      explicitReadOnlyToolChoice: undefined,
+      requiredToolSequence: undefined,
+      capResultForModel: identity,
+    });
+    activity.startTimer('search_files');
+    vi.setSystemTime(1_100);
+    expect(activity.recordResult('search_files', 'a', false)).toBe(100);
+    vi.setSystemTime(2_000);
+    activity.startTimer('search_files');
+    vi.setSystemTime(2_050);
+    expect(activity.recordResult('search_files', 'b', false)).toBe(50);
     expect(activity.recordResult('search_files', 'x', false)).toBeUndefined();
   });
 });

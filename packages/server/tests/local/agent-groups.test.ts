@@ -46,7 +46,7 @@ function createServer(
     litellmApiKey: 'test-key',
     hookRegistry: undefined,
     spawnSecurityContext: null,
-  });
+  } as never);
   server.decorate('agentRunner', runLoop);
   server.register(agentGroupRoutes);
   server.register(localJobRoutes);
@@ -633,7 +633,10 @@ describe('local agent group execution', () => {
         ...buildWorkflowTools(checkoutTools, runner),
       ],
       bindWorkspaceCollaborationTools: (options: WorkspaceCollaborationBinding) => (
-        bindWorkspaceChildTools(options, buildWorkflowTools)
+        bindWorkspaceChildTools(
+          options,
+          (tools, childRunLoop, _defaultModel, signal) => buildWorkflowTools(tools, childRunLoop, signal),
+        )
       ),
     } as never);
     server.decorate('agentRunner', runner);

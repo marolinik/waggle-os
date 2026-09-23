@@ -1,4 +1,4 @@
-import { BEHAVIORAL_SPEC, CLOSED_WORLD_REWRITE_CONTRACT, detectTaskShape, getPersona, scanForInjection, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
+import { BEHAVIORAL_SPEC, CLOSED_WORLD_REWRITE_CONTRACT, detectTaskShape, getPersona, scanForInjection, type AgentPersona, type AssembledPrompt, type ToolDefinition } from '@waggle/agent';
 import { describe, expect, it } from 'vitest';
 import {
   behavioralRulesForPromptPackage,
@@ -691,7 +691,8 @@ describe('chat prompt packaging', () => {
     expect(isExplicitGatedToolRequest(message)).toBe(false);
     const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
     expect(eligible).toEqual([]);
-    const selected = selectToolsForTurn(eligible, {
+    // Name-only tool doubles: selection here depends on the tool name alone.
+    const selected = selectToolsForTurn(eligible as unknown as ToolDefinition[], {
       message,
       mandatoryToolNames: isExplicitGatedToolRequest(message)
         ? ['search_skills', 'create_skill']
@@ -720,7 +721,8 @@ describe('chat prompt packaging', () => {
     expect(isExplicitGatedToolRequest(message)).toBe(false);
     const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
     expect(eligible).toEqual([]);
-    expect(selectToolsForTurn(eligible, {
+    // Name-only tool doubles: selection here depends on the tool name alone.
+    expect(selectToolsForTurn(eligible as unknown as ToolDefinition[], {
       message,
       mandatoryToolNames: isExplicitGatedToolRequest(message)
         ? ['search_skills', 'create_skill']
@@ -1026,7 +1028,8 @@ describe('chat prompt packaging', () => {
       message,
       'normal',
     );
-    const selected = selectToolsForTurn(provider.getAllTools(), { message });
+    // The calculator fixture declares no riskLevel, so it is a full ToolDefinition.
+    const selected = selectToolsForTurn(provider.getAllTools() as ToolDefinition[], { message });
 
     expect(selected.tools.map(tool => tool.name)).toEqual(['calculator']);
   });
