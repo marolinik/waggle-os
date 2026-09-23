@@ -27,7 +27,7 @@ import {
   type HookFn,
 } from '@waggle/agent';
 import type { CronStore, SavePendingActionInput } from '@waggle/core';
-import { RISK_LEVELS, type RiskLevel } from '@waggle/shared';
+import { RISK_LEVELS, type ApprovalClass, type RiskLevel } from '@waggle/shared';
 import { createLogger } from '../logger.js';
 import { classifyGatedTool } from '../approval-grants.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
@@ -126,6 +126,20 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
   if (timeout) clearTimeout(timeout);
   if (abortHandler) options.signal?.removeEventListener('abort', abortHandler);
   return { approved, held, timedOut };
+}
+
+/**
+ * The risk metadata on an approval card. Both sources, the install trust
+ * assessment and the heuristic mapping, always fill the first four fields.
+ */
+interface ApprovalCardTrust {
+  riskLevel: RiskLevel;
+  approvalClass: ApprovalClass;
+  assessmentMode: string;
+  description: string;
+  trustSource?: string;
+  explanation?: string;
+  permissions?: unknown;
 }
 
 /** What one chat turn hands its approval hook. Fields keep the handler's names. */
@@ -338,7 +352,7 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
     // TrustAssessment; all other gated tools get the canonical
     // classifyGatedToolRisk mapping. `description` is the plain-language
     // "what will happen" line the FE card expects (divergence #10).
-    let trustMeta: Record<string, unknown> | undefined;
+    let trustMeta: ApprovalCardTrust;
     if (toolName === 'install_capability') {
       try {
         const skillNameRaw = input.name as string ?? '';
@@ -381,14 +395,13 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
           reason: `${toolName} could not be trust-assessed, so it was not run.`,
         };
       }
-    }
-    // Track A review: for any non-install gated tool, derive risk
-    // heuristically so approvalClass is NEVER absent
-    // (an absent approvalClass would let the FE offer "Always allow" on a
-    // critical op — fail-open). trustSource is OMITTED here: there is no real
-    // provenance signal for a bash/git/connector call, and stamping
-    // 'local_user' was a false claim on the trust surface (review #3).
-    if (!trustMeta) {
+    } else {
+      // Track A review: for any non-install gated tool, derive risk
+      // heuristically so approvalClass is NEVER absent
+      // (an absent approvalClass would let the FE offer "Always allow" on a
+      // critical op — fail-open). trustSource is OMITTED here: there is no real
+      // provenance signal for a bash/git/connector call, and stamping
+      // 'local_user' was a false claim on the trust surface (review #3).
       // `gatedRisk.classified` is true here: an unclassifiable tool was
       // denied at the top of the hook, before any decision site ran.
       trustMeta = {
@@ -420,12 +433,10 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
     // Wait for the client to approve or deny. A configured hold timeout
     // still cancels this live execution, but preserves the proposed call
     // in the durable Approvals inbox for an explicit later decision.
-    const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : toolDescription;
-    const riskLevel = typeof trustMeta?.riskLevel === 'string'
-      && (RISK_LEVELS as readonly string[]).includes(trustMeta.riskLevel)
-      ? trustMeta.riskLevel as RiskLevel
-      : grantRiskLevel;
-    const approvalClass = typeof trustMeta?.approvalClass === 'string' ? trustMeta.approvalClass : 'elevated';
+    // Both card sources fill these, so no fallback is needed (TD-CHAT-31).
+    const summary = trustMeta.description;
+    const riskLevel = trustMeta.riskLevel;
+    const approvalClass = trustMeta.approvalClass;
     const { approved, held, timedOut } = await waitForApprovalDecision({
       pendingApprovals: server.agentState.pendingApprovals,
       cronStore: server.cronStore,
