@@ -4,12 +4,12 @@
  * Tests SSE connection behaviors at the HTTP level:
  * - Connection drop simulation: abort mid-stream, verify agent loop receives abort signal
  * - Notification SSE module exports and event emission
- * - Chat SSE endpoint validation and echo mode
+ * - Chat SSE endpoint validation and setup-required mode
  *
  * Note: Fastify inject() waits for the handler to complete, but SSE endpoints
  * keep the connection open indefinitely. For the notification stream we test
  * the module exports and event bus wiring. For the chat endpoint, inject()
- * works because echo mode (no LLM) completes and closes the stream.
+ * works because setup-required mode (no LLM) completes and closes the stream.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -31,15 +31,15 @@ import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 import { chatSessionStateKey } from '../../src/local/routes/chat-persistence.js';
 
 /**
- * Echo mode forces the chat endpoint to bypass the LLM. The test sets an
+ * Setup-required mode forces the chat endpoint to bypass the LLM. The test sets an
  * intentionally off-spec provider ('none' is not in the LlmProviderStatus
  * union) and an unreachable LiteLLM URL, so the cast at this boundary is
  * deliberate — the runtime value is the test's, not a real provider status.
  */
-const ECHO_MODE_PROVIDER = {
+const SETUP_REQUIRED_PROVIDER = {
   provider: 'none',
   health: 'unavailable',
-  detail: 'Test: force echo mode',
+  detail: 'Test: force setup-required mode',
   checkedAt: new Date().toISOString(),
 } as unknown as LlmProviderStatus;
 
@@ -70,12 +70,12 @@ describe('SSE Stream Resilience', () => {
   // ── Connection drop simulation ──────────────────────────────────
 
   describe('Chat SSE connection drop', () => {
-    it('chat endpoint sets up abort handling and completes in echo mode', async () => {
-      // Force echo mode by marking LLM provider as unavailable AND
+    it('chat endpoint sets up abort handling and completes in setup-required mode', async () => {
+      // Force setup-required mode by marking LLM provider as unavailable AND
       // breaking the health endpoint URL so the HTTP probe also fails
       const prevProvider = server.agentState.llmProvider;
       const prevLitellmUrl = server.localConfig.litellmUrl;
-      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.agentState.llmProvider = SETUP_REQUIRED_PROVIDER;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
       const res = await injectWithAuth(server, {
@@ -88,7 +88,7 @@ describe('SSE Stream Resilience', () => {
       expect(res.statusCode).toBe(200);
       const body = res.body;
 
-      // In echo mode (no LLM), we should see token events and a done event
+      // In setup-required mode (no LLM), we should see token events and a done event
       expect(body).toContain('event: token');
       expect(body).toContain('event: done');
       // The done event must be truthful and must not masquerade as an answer.
@@ -114,7 +114,7 @@ describe('SSE Stream Resilience', () => {
       const expectedRoot = activeWorkspace!.directory
         ?? activeWorkspace!.storagePath
         ?? path.join(tmpDir, 'workspaces', activeWorkspaceId!, 'files');
-      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.agentState.llmProvider = SETUP_REQUIRED_PROVIDER;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1';
 
       try {
@@ -157,10 +157,10 @@ describe('SSE Stream Resilience', () => {
     });
 
     it('setup-required mode explains how to configure a working model', async () => {
-      // Force echo mode: set provider unavailable AND break health probe URL
+      // Force setup-required mode: set provider unavailable AND break health probe URL
       const prevProvider = server.agentState.llmProvider;
       const prevLitellmUrl = server.localConfig.litellmUrl;
-      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.agentState.llmProvider = SETUP_REQUIRED_PROVIDER;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
       const res = await injectWithAuth(server, {
@@ -1463,14 +1463,14 @@ describe('SSE Stream Resilience', () => {
       }
     }, 30_000);
 
-    it('two chat streams complete independently in echo mode', async () => {
-      // Force echo mode: set provider unavailable AND break health probe URL
+    it('two chat streams complete independently in setup-required mode', async () => {
+      // Force setup-required mode: set provider unavailable AND break health probe URL
       const prevProvider = server.agentState.llmProvider;
       const prevLitellmUrl = server.localConfig.litellmUrl;
-      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.agentState.llmProvider = SETUP_REQUIRED_PROVIDER;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
-      // Open two chat requests simultaneously — both should complete in echo mode
+      // Open two chat requests simultaneously — both should complete in setup-required mode
       const [res1, res2] = await Promise.all([
         injectWithAuth(server, {
           method: 'POST',

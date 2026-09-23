@@ -14,7 +14,7 @@ import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, crea
 import { corsOriginAllowed } from './cors-config.js';
 import { getBoundTeamServer } from './team-server-binding.js';
 import { fetchTeamServer } from './team-server-egress.js';
-import { getStorageProvider } from './storage/index.js';
+import { getStorageProvider, resolvePersonalFilesRoot } from './storage/index.js';
 import { isLoopbackBind, resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
 import { MemoryWeaver } from '@waggle/weaver';
@@ -795,9 +795,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   });
   ensureIdentity(orchestrator.getIdentity());
 
-  // Build tools — use a default workspace (homedir), but tools are rebuilt
-  // per-request when a workspace directory is specified in chat.
-  const defaultWorkspace = os.homedir();
+  // Build tools — rooted in the managed personal folder, never the home
+  // directory (TD-CHAT-26); tools are rebuilt per request when a workspace
+  // directory is specified in chat.
+  const defaultWorkspace = resolvePersonalFilesRoot(waggleHome);
   const mindTools = orchestrator.getTools();
   const systemTools = createSystemTools({
     workspace: defaultWorkspace,

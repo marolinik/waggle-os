@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
@@ -555,6 +554,7 @@ export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 export { waitForApprovalDecision } from './chat-approval-hook.js';
 import { createChatApprovalHook } from './chat-approval-hook.js';
 import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
+import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
@@ -1616,7 +1616,7 @@ ${includePersistedMemory
 - Date: ${dateStr}
 - Platform: ${process.platform} (${process.arch})
 - Shell: ${process.platform === 'win32' ? 'cmd.exe (use /t flag for date, time)' : '/bin/sh'}
-- Working directory: ${workspacePath ?? os.homedir()}
+- Working directory: ${workspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir)}
 ${workspacePath
   ? (workspacePath.includes('/files') || workspacePath.includes('\\files')
     ? `- Workspace files: managed storage (${workspacePath})\n- Generated files will appear in managed workspace storage.`
@@ -1999,13 +1999,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Review Critical #1: request-supplied paths stay anchored to dataDir.
     // A workspace directory loaded from persisted config is an explicit user
     // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
-    if (workspacePath) {
-      const resolved = path.resolve(workspacePath);
+    // A trusted config also makes the request's own path irrelevant, and that
+    // path is ignored (pinned in chat-api). Otherwise the body's
+    // `workspacePath` is checked even when the branch above did not adopt it,
+    // so the answer depends on the request, not on which workspace the session
+    // happens to have active (TD-CHAT-44).
+    const requestSuppliedPaths = workspacePathFromTrustedConfig ? [] : [
+      ...(workspacePath ? [workspacePath] : []),
+      ...(typeof explicitWorkspacePath === 'string' && explicitWorkspacePath && explicitWorkspacePath !== workspacePath
+        ? [explicitWorkspacePath]
+        : []),
+    ];
+    for (const candidate of requestSuppliedPaths) {
+      const resolved = path.resolve(candidate);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (!workspacePathFromTrustedConfig
-        && resolved !== allowed
-        && !resolved.startsWith(allowed + path.sep)) {
-        log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
+      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+        log.warn(`[security] Path traversal attempt blocked: ${candidate}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',
           code: 'PATH_TRAVERSAL',
@@ -2213,7 +2222,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           sessionTools = server.agentState.buildToolsForSession(
             sessionOrch,
-            executionWorkspacePath ?? os.homedir(),
+            executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
             authorizedWorkspace ?? undefined,
           );
         } catch (err) {
@@ -2224,7 +2233,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       activeSessionOrch = sessionOrch;
       if (!hasCustomRunner) {
         workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          executionWorkspacePath ?? os.homedir(),
+          executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
           turnSignal,
         );
         const heldScope = workspaceTurnScope;
@@ -2397,15 +2406,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // is observed locally, so it remains authoritative even if startup's
       // cloud-provider status has not yet caught up with onboarding.
       const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
-      let litellmAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
+      let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
       if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
         if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
           // Healthy tracked provider — skip HTTP probe. For litellm the
           // per-request 3s probe raced concurrent completions (uvicorn busy
-          // serving LLM calls), randomly dropping healthy turns into echo mode;
+          // serving LLM calls), randomly dropping healthy turns into the setup-required reply;
           // the health monitor already tracks child liveness.
-          litellmAvailable = true;
+          modelAvailable = true;
         } else {
           try {
             const healthHeaders: Record<string, string> = {};
@@ -2420,7 +2429,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               signal: AbortSignal.any([turnSignal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
-            litellmAvailable = healthRes.ok;
+            modelAvailable = healthRes.ok;
           } catch {
             // LiteLLM not reachable
           }
@@ -2431,7 +2440,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // turn denies conversation history, and emits the terminal `done` event.
       // Resolves false when the turn was aborted before `done` was sent.
       // Does not end the stream: the caller owns `raw.end()`. The two
-      // slash-command callers call it; the setup-required echo caller
+      // slash-command callers call it; the setup-required caller
       // deliberately does not, and reaches the handler's outer `finally`
       // through the skipped agent-loop block instead.
       const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
@@ -2453,7 +2462,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         return true;
       };
 
-      // ── Slash command routing (works even in echo mode) ──
+      // ── Slash command routing (works even when no model is ready) ──
       if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
       const isSlashCommand = commandRegistry.isCommand(message);
@@ -2478,7 +2487,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           : await commandRegistry.execute(message, cmdContext);
 
         // B1-B7: Check if the command wants to be re-processed through the agent loop
-        if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && litellmAvailable) {
+        if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && modelAvailable) {
           // Extract the rewritten message and fall through to agent loop processing
           const rerouted = cmdResult.slice(AGENT_LOOP_REROUTE_PREFIX.length);
           sendEvent('step', { content: `Processing /${message.trim().split(/\s+/)[0].slice(1)} via AI...` });
@@ -2487,7 +2496,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // We achieve this by NOT returning here — the code falls through to the agent loop
           // with the rerouted message replacing the original
           reroutedMessage = rerouted;
-        } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
+        } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !modelAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
@@ -2502,15 +2511,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = reroutedMessage || (!isSlashCommand && litellmAvailable);
-      const shouldEchoMode = !reroutedMessage && !isSlashCommand && !litellmAvailable;
+      const shouldRunAgentLoop = !!reroutedMessage || (!isSlashCommand && modelAvailable);
+      const shouldReplySetupRequired = !reroutedMessage && !isSlashCommand && !modelAvailable;
 
-      if (shouldEchoMode) {
+      if (shouldReplySetupRequired) {
         // Setup-required mode — respond without pretending the user's input
         // was answered. The raw turn is still persisted for continuity.
-        const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
-        // Persist echo response so session continuity is maintained
-        if (!(await streamCannedReply(echoResponse, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
+        const setupRequiredReply = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
+        // Persist the setup-required reply so session continuity is maintained
+        if (!(await streamCannedReply(setupRequiredReply, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
       }
 
       if (shouldRunAgentLoop) {
