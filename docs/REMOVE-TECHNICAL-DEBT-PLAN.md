@@ -183,7 +183,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [ ] R-3: bound the 65 unbounded `.all()` reads, clustered in the memory substrate — touches OSS-mirrored `hive-mind-core`, §7.5 applies, pin each query first (agent, P2)
 - [ ] R-5: Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
 - [ ] R-6: soak test against a large aged `.mind` database — the desktop-shaped replacement for a throughput ramp (agent, P2)
-- [ ] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3)
+- [x] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3) R-4 closed (`bd13c04f`, `/health/ready`); R-7 won't fix (TimeoutError vs AbortError contracts, body-read scope, OSS-mirrored sites; see RELIABILITY.md).
 - [x] Phase 8 pass 1: context map, canonical Domain Glossary, harvest ACL named, `tests/mind-context-boundaries.test.ts` guard (agent, `7910b057`, 2026-09-18)
 - [ ] D-1: extract the `governance` context (`install_audit`, `ai_interactions`) out of the Mind schema — blocked on resolving sticky erasure vs a compliance trail a GDPR erase must not delete (agent, P2)
 - [ ] D-2: 27 technical-only class names (`*Manager`, `*Service`) — mostly infrastructure where the technical name IS the domain term; rename only where a domain term exists (agent, P3)

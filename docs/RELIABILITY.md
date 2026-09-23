@@ -33,7 +33,7 @@ The other six rows transfer unchanged and are scored honestly.
 | 2 | Circuit breakers on critical dependencies | ✗ | **✓** | R-2 — `packages/agent/src/circuit-breaker.ts`, wired at the composition root as `server.llmFetch` |
 | 3 | Pools isolated per dependency | ✗ | n/a | Does not transfer — see scope note. Origin-keyed breaker supplies the property that matters |
 | 4 | Deploy without downtime | ✗ | ✗ | No Tauri updater configured; a fix requires a manual reinstall. **R-5**, release-engineering arc |
-| 5 | Health checks verify dependencies | ✓ | ✓ | Local `/health` validates the Anthropic key live, checks the DB, and degrades honestly instead of reporting `ok`. Server-mode `/health` is shallow — **R-4** |
+| 5 | Health checks verify dependencies | ✓ | ✓ | Local `/health` validates the Anthropic key live, checks the DB, and degrades honestly instead of reporting `ok`. Server-mode `/health` is liveness by design; its readiness is `/health/ready` (R-4, closed) |
 | 6 | Logs, metrics and traces correlated | ✓ | ✓ | `logTurnEvent` stamps `turnId` on every line; `execution_traces` carries outcome, model, tokens and cost per turn |
 | 7 | Load-tested beyond peak | ✗ | **✓** | Does not transfer as written; its real form is a soak against a grown `.mind`, and R-6 built it — `npm run test:soak`, measured at 20k/100k/500k frames. Findings under Query & Resource Findings |
 | 8 | Failure injection practised | ✓ | ✓ | Systematic fault-injection suites: runtime failure, retry chain, post-commit, approval timeout, viewer rejection |
@@ -175,9 +175,9 @@ a bound on the handful of list reads that genuinely grow (`sessions.getActive`, 
   Anthropic key against the provider, checks database health, reports the real listening port, and
   **degrades** (`health: 'degraded'` with an actionable detail string) rather than reporting `ok`
   while broken. This is the shipping surface and it is correct.
-- **Server-mode `/health`** (`packages/server/src/index.ts:84`) returns `{ status: 'ok' }` — the
+- **Server-mode `/health`** (`packages/server/src/index.ts`) stays a shallow liveness check on purpose: Render's `healthCheckPath` points at it and a failing check restarts the service. **Readiness** is `/health/ready` (`src/readiness.ts`, R-4, closed 2026-09-23): Postgres `select 1` and Redis `PING`, each under a 2 s deadline, 200 or 503 with a coarse reason per dependency; errors are logged, never returned.
+  Tracked as **R-4** (closed).
   classic anti-pattern, proving only that the process is breathing. Not on the Windows Solo path.
-  Tracked as **R-4**.
 - **Correlation** is per turn and genuinely end to end: `generateTurnId` mints an id, `logTurnEvent`
   stamps it on every structured line, and `execution_traces` persists outcome, model, token counts
   and cost. There is no `chat.turn.end` event — the trace row is the terminal record (QUIRK,
@@ -206,10 +206,10 @@ Authenticode/signing gates in `docs/production-readiness/09-LAUNCH_RECOMMENDATIO
 | # | Item | Priority | Owner | Note |
 |---|---|---|---|---|
 | R-3 | **Narrowed by R-6; both count paths done.** Not 65 blanket `LIMIT`s: per-turn counts read a trigger-maintained `row_counts` table (14.6 ms → 0.2 ms at 500k), and `FrameStore.getStats()` went 375 ms → 107 ms by indexing `importance` and sourcing `total` from the counter. Left: the few genuinely growing list reads (`sessions.getActive`, `install-audit`, `cron-store`, `file-indexer`) | P2 | agent | Touches OSS-mirrored `hive-mind-core` — §7.5 forward-port applies; pin each query first. ~20 of the 64 are full-scan by contract and must NOT be bounded |
-| R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | Not on the Windows Solo path |
+| R-4 | Make server-mode `/health` deep, or document it as liveness-only | P3 | agent | **Closed 2026-09-23** (`bd13c04f`): `/health/ready` checks Postgres and Redis; `/health` stays liveness because Render restarts on a failing check |
 | R-5 | Updater + fast rollback for the desktop artifact | P2 | founder | Entangled with signing gates; release-engineering arc |
 | R-6 | **done 2026-09-19** — `packages/hive-mind-core/tests/soak/`, `npm run test:soak`, sized by `WAGGLE_SOAK_FRAMES` | — | agent | Own lane (`vitest.soak.config.ts`); excluded from the default gate. Setup bulk-inserts because the subject is the read path, and one test proves a bulk row is indistinguishable from an API row |
-| R-7 | 9 sites bound themselves with hand-rolled `setTimeout`+abort instead of `AbortSignal.timeout` | P3 | agent | Consistency only — they *are* bounded. A Phase 6 DRY finding surfaced during R-1 |
+| R-7 | 9 sites bound themselves with hand-rolled `setTimeout`+abort instead of `AbortSignal.timeout` | P3 | agent | **Won't fix 2026-09-23.** The count is 18, not 9, and the swap is not behavior-neutral: `AbortSignal.timeout` rejects with `TimeoutError` where three sites (`kvark-auth`, `kvark-client`, `channels/chat-client`) map `AbortError` to their timeout message; several sites clear the timer once headers arrive, so a timeout signal would newly abort a slow body read; and six sites are in OSS-mirrored `hive-mind-*` packages (CLAUDE.md §7.5). Every site is bounded, which was the reliability question |
 
 ## Chaos / Failure Injection
 
