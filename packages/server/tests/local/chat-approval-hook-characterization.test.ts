@@ -586,11 +586,11 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
 
-  it('QUIRK (TD-CHAT-50): announces a file for a file tool the turn never transmitted', async () => {
+  it('does not announce a file for a file tool the turn never transmitted', async () => {
     // This wording matches no file-intent bundle, so the turn transmits no
     // tools; the model calls write_file anyway and the executor answers
-    // "Tool not found". That sentence is not read as a failure, so the route
-    // still announces the file.
+    // "Tool not found". Until TD-CHAT-50 that sentence was not read as a
+    // failure, and the route announced a file that was never written.
     stubProvider('write_file', { path: 'untransmitted.txt', content: 'hello' });
     const { status, events } = await runTurn(
       createWorkspace('untransmitted'),
@@ -600,8 +600,8 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(status).toBe(200);
     expect(events.some(e => e.event === 'approval_required')).toBe(false);
     expect(toolResultText(events, 'write_file')).toMatch(/^Tool "write_file" not found./);
-    const created = events.filter(e => e.event === 'file_created').map(e => JSON.parse(e.data));
-    expect(created).toEqual([{ filePath: 'untransmitted.txt', fileAction: 'write' }]);
+    expect(JSON.parse(events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file')!.data).isError).toBe(true);
+    expect(events.some(e => e.event === 'file_created')).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, 'untransmitted.txt'))).toBe(false);
   });
 

@@ -652,6 +652,11 @@ function isReportedToolFailure(result: string): boolean {
   // effect happened" — the `file_created` disclosure, the artifact index — was
   // being told a denied write had succeeded.
   if (trimmed.startsWith('[BLOCKED]')) return true;
+  // The executor's answer to a tool the turn never transmitted. It carries
+  // `succeeded: false`, but `onToolResult` only receives the text, and without
+  // this a file tool the model called anyway was announced as a created file
+  // (TD-CHAT-50).
+  if (/^Tool "[^"]+" not found./.test(trimmed)) return true;
   try {
     const parsed = JSON.parse(trimmed) as { error?: unknown; ok?: unknown; success?: unknown };
     return parsed.ok === false
