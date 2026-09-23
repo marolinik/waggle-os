@@ -254,6 +254,39 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(finalizeOptions(recorder.finalize)[0].output).toBe(NON_RETAINED);
   });
 
+  it('runs a turn untraced when its trace cannot start', async () => {
+    const recorder = spyOnRecorder();
+    recorder.start.mockImplementationOnce(() => { throw new Error('SQLITE_BUSY: database is locked'); });
+    installRunner(() => ({ content: 'answered untraced', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+
+    const { events, done } = await runTurn('trace-start-throws');
+
+    // Until TD-REL-4 the turn was aborted and the client got
+    // 'SQLITE_BUSY: database is locked' verbatim.
+    expect(done?.content).toBe('answered untraced');
+    expect(configs).toHaveLength(1);
+    expect(configs[0].traceRecording).toBeUndefined();
+    expect(events.some(ev => ev.event === 'error')).toBe(false);
+    expect(recorder.finalize).not.toHaveBeenCalled();
+  });
+
+  it('answers a fatal local-database error with a fixed message and code', async () => {
+    // Stands in for any critical-path SQLite write that fails, such as issuing
+    // a capability proposal, which stays fail-closed by design.
+    installRunner(() => {
+      throw Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    });
+
+    const { events } = await runTurn('sqlite-busy-error');
+
+    const errors = events.filter(ev => ev.event === 'error').map(ev => JSON.parse(ev.data) as Record<string, unknown>);
+    // Until TD-REL-4 the client got 'SQLITE_BUSY: database is locked' verbatim.
+    expect(errors).toEqual([{
+      message: 'Waggle could not update its local database just now. Try again in a moment.',
+      code: 'LOCAL_DATABASE_UNAVAILABLE',
+    }]);
+  });
+
   it('runs untraced when no recorder is decorated', async () => {
     const decorated = server.traceRecorder;
     (server as { traceRecorder?: unknown }).traceRecorder = undefined;

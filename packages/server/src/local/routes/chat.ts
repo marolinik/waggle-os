@@ -10,7 +10,7 @@ import type {
   WorkspaceSession,
   WorkspaceSessionActivityLease,
 } from '../workspace-sessions.js';
-import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
+import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt, PERSONAL_COMMAND_WORKSPACE_LABEL } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
@@ -55,11 +55,9 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 
 /** Non-workspace scope for personal audit/collaboration streams (`:` is not a valid workspace id char). */
 const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
-// Workspace label that slash-command handlers interpolate into user-facing
-// prompts when the turn runs in the personal scope. Deliberately not
-// PERSONAL_CHAT_SCOPE_ID: that sentinel names the audit/collaboration stream
-// and must never reach a prompt as if it were a workspace.
-const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
+// Slash commands in the personal scope see PERSONAL_COMMAND_WORKSPACE_LABEL,
+// deliberately not PERSONAL_CHAT_SCOPE_ID: that sentinel names the
+// audit/collaboration stream and must never reach a prompt as a workspace.
 
 type ChatRequestRejection = {
   status: 400 | 403 | 404 | 409;
@@ -381,7 +379,7 @@ function resolveChatWorkspacePaths(
  * the command handlers render verbatim.
  *
  * `executionWorkspaceId` is the workspace the turn runs in, or undefined for a
- * personal turn, in which case commands see `PERSONAL_CHAT_COMMAND_CONTEXT`.
+ * personal turn, in which case commands see `PERSONAL_COMMAND_WORKSPACE_LABEL`.
  */
 export function buildChatCommandContext(input: {
   server: ChatServer;
@@ -400,7 +398,7 @@ export function buildChatCommandContext(input: {
     // Command handlers interpolate this value into user-facing agent
     // instructions. Keep the non-workspace observability sentinel out of
     // those prompts so personal commands cannot target a fake workspace.
-    workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
+    workspaceId: executionWorkspaceId ?? PERSONAL_COMMAND_WORKSPACE_LABEL,
     sessionId,
     searchMemory: async (query: string): Promise<string> => {
       if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.memoryAccessDisabled;
@@ -580,6 +578,28 @@ export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 function isClosedDbError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return /database (connection|handle) is not open|database is closed/i.test(msg);
+}
+
+const CHAT_STORAGE_UNAVAILABLE_MESSAGE = 'Your conversation could not be saved on this device. Check free disk space and folder permissions, then try again.';
+
+/**
+ * A Node system error from the filesystem. `code` and `syscall` alone would
+ * also match a network failure (ECONNREFUSED on `connect`, a socket error on
+ * `read`); only a filesystem error names the `path` it touched.
+ */
+function isLocalStorageFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code, syscall, path: failedPath } = error as NodeJS.ErrnoException;
+  return typeof code === 'string' && typeof syscall === 'string' && typeof failedPath === 'string';
+}
+
+const LOCAL_DATABASE_UNAVAILABLE_MESSAGE = 'Waggle could not update its local database just now. Try again in a moment.';
+
+/** A better-sqlite3 error: its `code` names the SQLite result (SQLITE_BUSY, ...). */
+function isLocalDatabaseFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' && code.startsWith('SQLITE_');
 }
 
 function isIncompleteCompletionError(error: unknown): boolean {
@@ -2073,6 +2093,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
     const turnTrace = new TurnExecutionTrace({
+      onStartError: (error) => {
+        log.warn('[chat] execution trace could not start; the turn runs untraced', {
+          workspaceId: executionScopeId,
+          error,
+        });
+      },
       onFinalizeError: (error, traceId) => {
         log.warn('[chat] execution trace finalize failed; the row stays unfinalized', {
           workspaceId: executionScopeId,
@@ -2498,8 +2524,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // B1-B7: Check if a slash command requested agent-loop rerouting
-      const shouldRunAgentLoop = !!reroutedMessage || (!isSlashCommand && modelAvailable);
-      const shouldReplySetupRequired = !reroutedMessage && !isSlashCommand && !modelAvailable;
+      // A reroute is the command asking for the loop, whatever its body says;
+      // reading the body as a boolean let an empty one end the turn with no
+      // answer and no done (TD-CHAT-25).
+      const hasReroute = reroutedMessage !== undefined;
+      const shouldRunAgentLoop = hasReroute || (!isSlashCommand && modelAvailable);
+      const shouldReplySetupRequired = !hasReroute && !isSlashCommand && !modelAvailable;
 
       if (shouldReplySetupRequired) {
         // Setup-required mode — respond without pretending the user's input
@@ -2511,7 +2541,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
-        const agentMessage = reroutedMessage ?? message;
+        // An empty rerouted body gives the loop nothing to answer, so it gets
+        // the user's own command instead.
+        const agentMessage = reroutedMessage || message;
         const closedWorldRewrite = requestClosedWorldRewrite
           || isClosedWorldRewriteRequest(agentMessage);
 
@@ -2767,8 +2799,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
         // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
-        // — create_skill survives the allowlist — is unit-testable; this block is
-        // !hasCustomRunner-gated and therefore unreachable from route tests).
+        // — create_skill survives the allowlist — is unit-testable). This block
+        // is !hasCustomRunner-gated: route tests reach it only without an
+        // injected runner, as sse-resilience and persona-acceptance do.
         // Resolution order matches buildSystemPrompt (Phase A.2): per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
@@ -4149,6 +4182,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             billingClass: receipt.billingClass,
           })
         ), 0);
+        // Production spend is charged inside the agent loop, through the
+        // modelSpendBudget the route hands it. An injected runner bypasses the
+        // loop and its meter, so only then does the route charge here; doing
+        // it for a production turn would count every call twice (TD-CHAT-8,
+        // pinned in chat-spend-accounting-characterization.test.ts).
         if (hasCustomRunner) {
           for (const receipt of successfulAttemptReceipts) {
             costTracker.addUsage(
@@ -4214,8 +4252,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               for (const entity of entities.slice(0, 10)) {
                 try {
                   knowledge.createEntity(entity.type, entity.name, { confidence: entity.confidence, source: `session:${sessionId}` }, { valid_from: now });
-                } catch {
-                  // Duplicate or schema error — skip silently
+                } catch (entityError) {
+                  // A closed handle is the W4A seam the handler below names;
+                  // swallowing it here hid it (TD-CHAT-24). A duplicate or a
+                  // schema error for one entity is still skipped.
+                  if (isClosedDbError(entityError)) throw entityError;
                 }
               }
             }
@@ -4482,6 +4523,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   seam: 'autoSaveFromExchange',
                   error: e instanceof Error ? e.message : String(e),
                 });
+              } else {
+                // Any other failure (embedding, constraint, a TypeError) drops
+                // a memory write too, and used to do it with no record at all
+                // (TD-REL-3). The turn is already committed; only log.
+                log.warn('[chat] post-commit auto-save failed; the memory write was dropped', {
+                  workspaceId: effectiveWorkspace,
+                  sessionId,
+                  error: e instanceof Error ? e.message : String(e),
+                });
               }
             }
           }
@@ -4598,7 +4648,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
-      if (err instanceof Error) {
+      const storageFailure = isLocalStorageFailure(err);
+      const databaseFailure = !storageFailure && isLocalDatabaseFailure(err);
+      if (storageFailure) {
+        // A failed history read or write: Node's message names the absolute
+        // file, which must not reach the client or the transcript (TD-CHAT-14).
+        errorMessage = CHAT_STORAGE_UNAVAILABLE_MESSAGE;
+      } else if (databaseFailure) {
+        // A critical-path SQLite write that failed (a locked store, say). The
+        // driver's text is internal and is logged above, not sent (TD-REL-4).
+        errorMessage = LOCAL_DATABASE_UNAVAILABLE_MESSAGE;
+      } else if (err instanceof Error) {
         // Clean up common error messages for the user. Authentication and
         // endpoint availability are different recovery paths: never send a
         // user to API-key settings when a local/OpenAI-compatible endpoint is
@@ -4624,7 +4684,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       const budgetCode = isTerminalModelBudgetError(err)
         ? (err as { code: string }).code
-        : undefined;
+        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE'
+          : databaseFailure ? 'LOCAL_DATABASE_UNAVAILABLE' : undefined;
       sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
@@ -4756,7 +4817,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         'sessions',
         `${sessionId}.jsonl`,
       ),
-      { force: true },
+      // A Windows indexer or antivirus can hold the file for a moment; Node
+      // retries EBUSY/EPERM here instead of failing the request with a 500
+      // (TD-REL-5). A lasting failure still throws before any state is evicted,
+      // so the file and the in-process history stay in step.
+      { force: true, maxRetries: 10, retryDelay: 50 },
     );
 
     evictStateKey(scopedStateKey);

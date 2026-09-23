@@ -1673,6 +1673,15 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       `${filler}\nDo not use conversation history — actually, use it.`,
     ];
     primeMemoryDirectiveClassifier();
+    // The bound is relative, measured now on this machine: the same classifier
+    // over the same number of plain messages of the same size. Load slows both
+    // alike, while catastrophic backtracking on a 50 KB input is orders of
+    // magnitude slower, not a few times. An absolute 1000 ms bound failed at
+    // 1012 ms under parallel load (TD-TEST-18). The floor keeps a fast machine
+    // from turning timer noise into a failure.
+    const baselineStartedAt = performance.now();
+    for (let i = 0; i < messages.length; i += 1) classifyExplicitTurnMutationPolicy(filler);
+    const baselineMs = performance.now() - baselineStartedAt;
     const startedAt = performance.now();
     const policies = messages.map(message => classifyExplicitTurnMutationPolicy(message));
     const elapsedMs = performance.now() - startedAt;
@@ -1680,7 +1689,7 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     expect(policies[0]?.denyConversationHistory).toBe(true);
     expect(policies[1]?.denyMemoryRead).toBe(true);
     expect(policies[2]?.denyConversationHistory).toBe(false);
-    expect(elapsedMs).toBeLessThan(1_000);
+    expect(elapsedMs).toBeLessThan(Math.max(1_000, baselineMs * 10));
 
     const attributedTranscript = Array.from(
       { length: 200 },
