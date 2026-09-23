@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -101,6 +101,13 @@ function openAiToolSseResponse(name: string): Response {
 describe('Chat Streaming API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+
+  // The /api/chat limiter keeps state across tests. Reset it before every one,
+  // rather than in the 31 tests that happened to need it (TD-TEST-4). The eight
+  // fixture-free tests at the top run before `server` exists.
+  beforeEach(() => {
+    if (server) resetRateLimiter(server);
+  });
 
   it('forces only one affirmative, available read-only tool directive', () => {
     const available = [
@@ -1034,7 +1041,6 @@ describe('Chat Streaming API', () => {
   }, 20_000);
 
   it('keeps failed-attempt output out of the fallback response stream', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
@@ -1111,7 +1117,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('falls back from a blank no-tool response without leaking provisional text', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
@@ -1176,7 +1181,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('terminates truthfully when both the primary and configured fallback are blank', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
@@ -1241,7 +1245,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('does not replay completed tools when a terminal response is blank', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
@@ -2377,7 +2380,6 @@ describe('Chat Streaming API', () => {
     _case,
     thrownMessage,
   ) => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Endpoint outage ${_case} ${Date.now()}`,
@@ -2423,7 +2425,6 @@ describe('Chat Streaming API', () => {
   });
 
   it.each(['', ' \n\t'])('rejects a blank successful agent response %j', async (blankContent) => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const blankTag = blankContent.length === 0 ? 'empty' : 'whitespace';
     const workspaceId = server.workspaceManager.create({
@@ -2480,7 +2481,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('persists an assistant error turn when generation fails', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Error response ${Date.now()}`,
@@ -2524,7 +2524,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('atomically replaces the exact assistant retry pair and invokes the runner once', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Structured retry success ${Date.now()}`,
@@ -2581,7 +2580,6 @@ describe('Chat Streaming API', () => {
     ['count', 4, `${GENERATION_FAILED_PREFIX}temporary failure`],
     ['content', 2, `${GENERATION_FAILED_PREFIX}different failure`],
   ])('fails closed when structured retry %s is stale', async (_case, expectedMessageCount, expectedAssistantContent) => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Structured retry stale ${_case} ${Date.now()}`,
@@ -2639,7 +2637,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('does not replace a prior failed pair for a legacy retry with a different message', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Legacy retry preservation ${Date.now()}`,
@@ -2676,7 +2673,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('runs a structured retry without reading or rewriting durable history when history is denied', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Denied structured retry ${Date.now()}`,
@@ -2731,7 +2727,6 @@ describe('Chat Streaming API', () => {
   // When the model call throws, the happy-path write-back never runs — so the
   // route persists the raw user turn directly, else "remembers everything" breaks.
   it('persists a failed raw turn in the authorized active workspace, never personal memory (#3)', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const activeWorkspaceId = server.agentState.activeWorkspaceId;
     expect(activeWorkspaceId).toBeTruthy();
@@ -2788,7 +2783,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('binds failed-turn memory to the authorized workspace instead of mutable active state', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const originalWorkspaceId = server.agentState.activeWorkspaceId;
     const nonce = Date.now();
@@ -2850,7 +2844,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps an implicit failed turn bound when the global active workspace changes mid-request', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const originalWorkspaceId = server.agentState.activeWorkspaceId;
     const nonce = Date.now();
@@ -2924,7 +2917,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps a failed broad no-change request in chat history without writing it to memory', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const sessionId = `no-mutation-failure-${Date.now()}`;
     const seed = `Analyze this release plan (${Date.now()}). Do not create or edit anything.`;
@@ -2960,7 +2952,6 @@ describe('Chat Streaming API', () => {
   // endpoint (graceful degradation / sovereignty), NOT LiteLLM which doesn't have
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
   it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
-    resetRateLimiter(server);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
@@ -3080,7 +3071,6 @@ describe('Chat Streaming API', () => {
   it.each(['workspace', 'workspaceId'] as const)(
     'rejects unknown %s before running or persisting chat',
     async (workspaceField) => {
-      resetRateLimiter(server);
       const workspaceId = `unknown-${workspaceField.toLowerCase()}-${Date.now()}`;
       const sessionId = `unknown-session-${Date.now()}`;
       const originalRunner = server.agentRunner;
@@ -3133,7 +3123,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('persists the authoritative resolved model through live and cold history reads', async () => {
-    resetRateLimiter(server);
     const sessionId = `model-provenance-${Date.now()}`;
     const authorizedWorkspace = server.agentState.activeWorkspaceId;
     expect(authorizedWorkspace).toBeTruthy();
@@ -3201,7 +3190,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('persists only completed acquire_capability receipts through live and cold history', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const sessionId = `capability-receipt-${Date.now()}`;
     const workspaceId = server.agentState.activeWorkspaceId;
@@ -3304,7 +3292,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('isolates simultaneous turns that reuse one session id across workspaces', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const sessionId = `shared-session-${nonce}`;
     const workspaceA = server.workspaceManager.create({
@@ -3372,7 +3359,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps simultaneous sessions in the same workspace independent', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const workspace = server.workspaceManager.create({
       name: `Shared workspace ${nonce}`,
@@ -3447,7 +3433,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('rejects clear during an active turn then removes warm and cold history', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const workspace = server.workspaceManager.create({
       name: `Active clear workspace ${nonce}`,
@@ -3575,7 +3560,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('enforces a supplied-only verifier boundary for an injected runner', async () => {
-    resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const sessionId = `supplied-only-${Date.now()}`;
     const stateKey = chatSessionStateKey('default', sessionId);
@@ -3622,8 +3606,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('passes signal to agent runner for client disconnect abort', async () => {
-    // Reset rate limiter — previous tests may have exhausted the /api/chat limit (10/min)
-    resetRateLimiter(server);
     let capturedSignal: AbortSignal | undefined;
     const originalRunner = server.agentRunner;
 
@@ -3652,7 +3634,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps the authorized implicit workspace request-scoped when the global active workspace changes', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const memberWorkspace = server.workspaceManager.create({
       name: `Chat auth member ${nonce}`,
@@ -3736,7 +3717,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps the same implicit session isolated when the active workspace changes', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const workspaceA = server.workspaceManager.create({
       name: `Implicit history A ${nonce}`,
@@ -3843,7 +3823,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('binds implicit persona and model policy to the authorized workspace', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const memberWorkspace = server.workspaceManager.create({
       name: `Implicit policy member ${nonce}`,
@@ -4037,7 +4016,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('rejects a viewer workspace whose literal generated id is default', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const memberWorkspace = server.workspaceManager.create({
       name: `Literal default control ${nonce}`,
@@ -4067,7 +4045,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps omitted-workspace history out of a managed viewer workspace named default', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const memberWorkspace = server.workspaceManager.create({
       name: `Implicit history member ${nonce}`,
@@ -4152,7 +4129,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('retries omitted-workspace history without rewriting a managed viewer workspace named default', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const memberWorkspace = server.workspaceManager.create({
       name: `Implicit retry member ${nonce}`,
@@ -4242,7 +4218,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('separates a managed literal-default workspace from personal legacy-default session state', async () => {
-    resetRateLimiter(server);
     const nonce = Date.now();
     const previousActiveWorkspace = server.agentState.activeWorkspaceId;
     expect(previousActiveWorkspace).toBeTruthy();
