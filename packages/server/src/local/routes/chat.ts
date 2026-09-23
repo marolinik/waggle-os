@@ -4140,6 +4140,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             billingClass: receipt.billingClass,
           })
         ), 0);
+        // Production spend is charged inside the agent loop, through the
+        // modelSpendBudget the route hands it. An injected runner bypasses the
+        // loop and its meter, so only then does the route charge here; doing
+        // it for a production turn would count every call twice (TD-CHAT-8,
+        // pinned in chat-spend-accounting-characterization.test.ts).
         if (hasCustomRunner) {
           for (const receipt of successfulAttemptReceipts) {
             costTracker.addUsage(
