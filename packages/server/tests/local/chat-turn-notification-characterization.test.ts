@@ -51,9 +51,10 @@ describe('POST /api/chat finished-turn notification (characterization)', () => {
     return body.notifications.map(n => n.title).filter(title => title.includes(' finished in '));
   }
 
-  it('notifies after an interactive turn', async () => {
+  it('does not notify after an interactive turn, whose answer is already on screen', async () => {
     const added = await finishedNotificationsAfter({ message: 'What is on my plate?', session: 'notify-interactive' });
-    expect(added).toEqual(['Agent finished in Default Workspace']);
+    // Until TD-CHAT-12 every interactive reply also wrote an inbox entry.
+    expect(added).toEqual([]);
   });
 
   it('notifies after an automation turn', async () => {

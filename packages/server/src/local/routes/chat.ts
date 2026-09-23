@@ -4435,18 +4435,24 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         'Personal';
         const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
         const toolCount = (result.toolsUsed ?? []).length;
-        try {
-          emitNotification(server, {
-            title: `${agentName} finished in ${wsName}`,
-            body: toolCount > 0
-              ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
-              : `${resolvedModel} · response ready`,
-            category: 'agent',
-          actionUrl: effectiveWorkspace
-            ? `/workspaces/${effectiveWorkspace}/chat`
-            : '/',
-          });
-        } catch { /* best-effort notification projection */ }
+        // Only a turn nobody is watching notifies: automation, channel and
+        // headless review turns. An interactive turn's answer is already on
+        // screen, and an inbox entry for every reply is noise (TD-CHAT-12,
+        // founder 2026-09-23).
+        if (isAutomatedTurn) {
+          try {
+            emitNotification(server, {
+              title: `${agentName} finished in ${wsName}`,
+              body: toolCount > 0
+                ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
+                : `${resolvedModel} · response ready`,
+              category: 'agent',
+            actionUrl: effectiveWorkspace
+              ? `/workspaces/${effectiveWorkspace}/chat`
+              : '/',
+            });
+          } catch { /* best-effort notification projection */ }
+        }
 
         // Auto-save is post-commit enrichment: the assistant history, success
         // trace, token stream, and done event above already describe one
