@@ -2064,6 +2064,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
     const turnTrace = new TurnExecutionTrace({
+      onStartError: (error) => {
+        log.warn('[chat] execution trace could not start; the turn runs untraced', {
+          workspaceId: executionScopeId,
+          error,
+        });
+      },
       onFinalizeError: (error, traceId) => {
         log.warn('[chat] execution trace finalize failed; the row stays unfinalized', {
           workspaceId: executionScopeId,

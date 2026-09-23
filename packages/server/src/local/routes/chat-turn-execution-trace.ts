@@ -16,8 +16,9 @@
  *  - A row is finalized at most once. A finalize that throws does not count, so
  *    a later site still gets its turn — that is how the finally block catches a
  *    failed success finalize (pinned as a QUIRK: it records `abandoned`).
- *  - Finalizing is best-effort and never fails the turn. Starting is not: a
- *    throwing `start` propagates to the route, and the turn is then untraced.
+ *  - Starting and finalizing are both best-effort and never fail the turn. A
+ *    throwing `start` (a locked store, say) leaves the turn untraced; until
+ *    TD-REL-4 it aborted the turn and sent the raw store error to the client.
  *  - The finalize payload is built inside the guarded region, so a throw while
  *    building it (stringifying a hostile error, say) is swallowed with the rest.
  */
@@ -35,6 +36,8 @@ export interface TurnExecutionTraceOptions {
    * route decides how the failure is reported (TD-CHAT-48).
    */
   onFinalizeError?: (error: unknown, traceId: number | undefined) => void;
+  /** Told when starting the row throws; the turn then runs untraced. */
+  onStartError?: (error: unknown) => void;
 }
 
 export class TurnExecutionTrace {
@@ -42,15 +45,23 @@ export class TurnExecutionTrace {
   private handle: TraceHandle | null = null;
   private finalized = false;
   private readonly onFinalizeError: (error: unknown, traceId: number | undefined) => void;
+  private readonly onStartError: (error: unknown) => void;
 
   constructor(options: TurnExecutionTraceOptions = {}) {
     this.onFinalizeError = options.onFinalizeError ?? (() => {});
+    this.onStartError = options.onStartError ?? (() => {});
   }
 
   /** Start the turn's row on `recorder`; with no recorder the turn is untraced. */
   start(recorder: TraceRecorder | null, input: TraceStartInput): void {
-    this.recorder = recorder;
-    this.handle = recorder ? recorder.start(input) : null;
+    try {
+      this.handle = recorder ? recorder.start(input) : null;
+      this.recorder = this.handle ? recorder : null;
+    } catch (error) {
+      this.recorder = null;
+      this.handle = null;
+      try { this.onStartError(error); } catch { /* reporting is best-effort too */ }
+    }
   }
 
   /** The row id, once a trace has started. */

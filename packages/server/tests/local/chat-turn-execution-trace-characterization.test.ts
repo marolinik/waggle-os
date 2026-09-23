@@ -251,17 +251,20 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(finalizeOptions(recorder.finalize)[0].output).toBe(NON_RETAINED);
   });
 
-  it('QUIRK (TD-REL-4): a trace start that throws aborts the turn and sends the raw store error', async () => {
+  it('runs a turn untraced when its trace cannot start', async () => {
     const recorder = spyOnRecorder();
     recorder.start.mockImplementationOnce(() => { throw new Error('SQLITE_BUSY: database is locked'); });
-    installRunner(() => ({ content: 'never reached', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+    installRunner(() => ({ content: 'answered untraced', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
 
     const { events, done } = await runTurn('trace-start-throws');
 
-    expect(done).toBeUndefined();
-    expect(configs).toHaveLength(0);
-    const errors = events.filter(ev => ev.event === 'error').map(ev => JSON.parse(ev.data) as { message: string });
-    expect(errors.map(err => err.message)).toEqual(['SQLITE_BUSY: database is locked']);
+    // Until TD-REL-4 the turn was aborted and the client got
+    // 'SQLITE_BUSY: database is locked' verbatim.
+    expect(done?.content).toBe('answered untraced');
+    expect(configs).toHaveLength(1);
+    expect(configs[0].traceRecording).toBeUndefined();
+    expect(events.some(ev => ev.event === 'error')).toBe(false);
+    expect(recorder.finalize).not.toHaveBeenCalled();
   });
 
   it('runs untraced when no recorder is decorated', async () => {
