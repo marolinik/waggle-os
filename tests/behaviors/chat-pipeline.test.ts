@@ -224,7 +224,7 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     // Inject the echo runner — bypasses LiteLLM health check and real LLM calls
     serverInst.agentRunner = echoRunner;
 
-    // Mark the LLM provider as healthy so the route doesn't enter echo mode
+    // Mark the LLM provider as healthy so the route doesn't enter setup-required mode
     serverInst.agentState.llmProvider = {
       provider: 'anthropic-proxy',
       health: 'healthy',

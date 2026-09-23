@@ -18,7 +18,7 @@ Best for a VPS or homelab, where you want a headless server rather than the desk
 curl -fsSL https://raw.githubusercontent.com/marolinik/waggle-os/main/install.sh | bash
 ```
 
-The installer checks prerequisites (Node.js 20+, git — no sudo), clones the repo, builds the packages and web UI, then starts the sidecar and prints its URL (`http://127.0.0.1:3333`). A short wizard (all Enter-defaulted) lets you change the install dir, port, and data dir; add `--yes` to accept every default non-interactively. It boots in echo mode with zero API keys, so the UI works right away — add a provider key later under **Settings → API Keys**.
+The installer checks prerequisites (Node.js 20+, git — no sudo), clones the repo, builds the packages and web UI, then starts the sidecar and prints its URL (`http://127.0.0.1:3333`). A short wizard (all Enter-defaulted) lets you change the install dir, port, and data dir; add `--yes` to accept every default non-interactively. It boots in setup-required mode with zero API keys, so the UI works right away — add a provider key later under **Settings → API Keys**.
 
 Manage the server afterward with `scripts/waggle-server.sh {start|stop|status|logs}`. Windows users should use the desktop app (Option 2) — the one-line installer targets Linux and macOS only.
 
