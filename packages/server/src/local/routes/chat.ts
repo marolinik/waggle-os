@@ -566,6 +566,7 @@ import {
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
+import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
 import { TurnResources } from './chat-turn-resources.js';
@@ -2013,7 +2014,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (event === 'token' && firstTokenAt === null) {
         firstTokenAt = performance.now();
       }
-      raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!writeSseEvent(raw, event, data)) {
+        log.warn('[chat] SSE reader stopped reading; closed the stream and aborted the turn', {
+          maxBufferedBytes: SSE_MAX_BUFFERED_BYTES,
+        });
+      }
     };
     const throwIfTurnAborted = (): void => {
       if (turnSignal.aborted) {
