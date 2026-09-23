@@ -50,7 +50,7 @@ describe('POST /api/chat personal-scope root (characterization)', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
-  it('roots a personal turn in the user home directory', async () => {
+  it('roots a personal turn in managed storage under the data directory', async () => {
     const configs: AgentLoopConfig[] = [];
     loop.runAgentLoop.mockImplementation(async (config: AgentLoopConfig) => {
       configs.push(config);
@@ -65,10 +65,12 @@ describe('POST /api/chat personal-scope root (characterization)', () => {
       expect(res.statusCode).toBe(200);
       expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
 
-      // QUIRK (TD-CHAT-26): the comment above the personal path resolution says
-      // never fall back to the home directory; both roots do.
-      expect(createScope.mock.calls.map(([root]) => root)).toEqual([os.homedir()]);
-      expect(configs[0].systemPrompt).toContain(`- Working directory: ${os.homedir()}`);
+      // Until TD-CHAT-26 both roots were the user's home directory, against
+      // the comment that says never to fall back to it.
+      const personalRoot = path.join(tmpDir, 'personal', 'files');
+      expect(createScope.mock.calls.map(([root]) => root)).toEqual([personalRoot]);
+      expect(configs[0].systemPrompt).toContain(`- Working directory: ${personalRoot}`);
+      expect(fs.existsSync(personalRoot)).toBe(true);
     } finally {
       createScope.mockRestore();
     }

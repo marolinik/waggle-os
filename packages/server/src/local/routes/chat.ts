@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
@@ -555,6 +554,7 @@ export type { ApprovalTimeoutPolicy } from './chat-turn-policy.js';
 export { waitForApprovalDecision } from './chat-approval-hook.js';
 import { createChatApprovalHook } from './chat-approval-hook.js';
 import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
+import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
@@ -1603,7 +1603,7 @@ ${includePersistedMemory
 - Date: ${dateStr}
 - Platform: ${process.platform} (${process.arch})
 - Shell: ${process.platform === 'win32' ? 'cmd.exe (use /t flag for date, time)' : '/bin/sh'}
-- Working directory: ${workspacePath ?? os.homedir()}
+- Working directory: ${workspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir)}
 ${workspacePath
   ? (workspacePath.includes('/files') || workspacePath.includes('\\files')
     ? `- Workspace files: managed storage (${workspacePath})\n- Generated files will appear in managed workspace storage.`
@@ -2200,7 +2200,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           sessionTools = server.agentState.buildToolsForSession(
             sessionOrch,
-            executionWorkspacePath ?? os.homedir(),
+            executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
             authorizedWorkspace ?? undefined,
           );
         } catch (err) {
@@ -2211,7 +2211,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       activeSessionOrch = sessionOrch;
       if (!hasCustomRunner) {
         workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          executionWorkspacePath ?? os.homedir(),
+          executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
           turnSignal,
         );
         const heldScope = workspaceTurnScope;
