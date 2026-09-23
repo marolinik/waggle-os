@@ -20,6 +20,7 @@ import {
   isExplicitDecisionMatrixSkillDirective,
 } from '../../src/local/routes/chat.js';
 import { closeAuditDb, getAuditDb } from '../../src/local/routes/events.js';
+import { getGovernancePermissions } from '../../src/local/routes/chat-governance.js';
 import {
   chatSessionStateKey,
   loadSessionMessages,
@@ -4079,6 +4080,16 @@ describe('persona acceptance prompt budget', () => {
       });
       waggleConfig.setTeamServer({ url: teamServerUrl, token: 'privacy-test-token' });
       waggleConfig.save();
+
+      // Warm the governance cache through the same fetch spy the turn would
+      // use. The route refuses a team turn whose policies cannot be fetched
+      // under a 5 s deadline, and an instrumented, loaded event loop can
+      // miss it even though the spy answers at once (TD-TEST-16). The turn
+      // then reads the cached answer it would have cached itself.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const lookup = await getGovernancePermissions(tmpDir, collaborationWorkspaceId, 'member');
+        if (lookup.status !== 'unavailable') break;
+      }
 
       testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
         capturedConfig = config;
