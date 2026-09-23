@@ -153,7 +153,7 @@ afterEach(() => {
 });
 
 describe('isolated Fleet execution', () => {
-  it('QUIRK (CA-5b): an isolated run finalizes its trace without the tool calls the loop recorded', async () => {
+  it('keeps the tool calls the loop recorded when an isolated run finalizes its trace', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-trace-'));
     tempDirs.push(dataDir);
     const traceMind = new MindDB(path.join(dataDir, 'traces.mind'));
@@ -184,9 +184,11 @@ describe('isolated Fleet execution', () => {
       const traceId = Number(registry.get(runId)?.result?.traceId);
       const trace = traceStore.queryParsed({}).find((row) => row.id === traceId);
       expect(trace?.outcome).toBe('success');
-      // The loop's tool call sits in the recorder's buffer, and the executor
-      // finalizes through the store directly, so it is never flushed.
-      expect(trace?.payload.toolCalls).toEqual([]);
+      // The loop's tool call sits in the shared recorder's buffer. Until CA-5b
+      // the executor finalized through the store directly and dropped it.
+      expect(trace?.payload.toolCalls).toEqual([
+        expect.objectContaining({ tool: 'read_file', args: { path: 'README.md' }, result: 'readme contents', ok: true }),
+      ]);
       await server.close();
     } finally {
       traceMind.close();
