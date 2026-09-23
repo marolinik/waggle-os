@@ -14,14 +14,14 @@
  * 400 response.
  *
  * This test uses the real wired server (buildLocalServer) so the actual route +
- * the real chat-persistence boundary are exercised. Echo mode is forced (LLM
+ * the real chat-persistence boundary are exercised. Setup-required mode is forced (LLM
  * provider unavailable + unreachable litellm URL) so a VALID request completes
  * and returns 200 rather than hanging on a live stream.
  *
  * Asserts:
  *   (a) a malicious `workspace` / `session` yields 400 and writes NOTHING
  *       outside the workspaces/sessions root, and
- *   (b) a normal valid `workspace`/`session` is NOT rejected (echo-mode 200) and
+ *   (b) a normal valid `workspace`/`session` is NOT rejected (setup-required 200) and
  *       the session file lands UNDER the workspaces root, as expected.
  *
  * Also unit-tests the raw chat-persistence path builder to make the escape that
@@ -62,11 +62,11 @@ describe('R6-001 — POST /api/chat session-persistence path traversal guard', (
     ).agentState.activeWorkspaceId;
     if (!validWorkspaceId) throw new Error('Expected a boot-created active workspace');
 
-    // Force echo mode so a VALID chat request completes instead of streaming
+    // Force setup-required mode so a VALID chat request completes instead of streaming
     // against a live LLM: mark the provider unavailable AND point the litellm
     // health probe at an unreachable port (mirrors sse-resilience.test.ts).
     (server as unknown as { agentState: { llmProvider: unknown } }).agentState.llmProvider = {
-      provider: 'none', health: 'unavailable', detail: 'Test: force echo mode',
+      provider: 'none', health: 'unavailable', detail: 'Test: force setup-required mode',
       checkedAt: new Date().toISOString(),
     };
     (server as unknown as { localConfig: { litellmUrl: string } }).localConfig.litellmUrl =
@@ -116,14 +116,14 @@ describe('R6-001 — POST /api/chat session-persistence path traversal guard', (
     expect(res.statusCode).toBe(400);
   });
 
-  it('does NOT reject a normal valid `workspace`/`session` (echo-mode 200)', async () => {
+  it('does NOT reject a normal valid `workspace`/`session` (setup-required 200)', async () => {
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'hello world', workspace: validWorkspaceId, session: 'sess-valid' },
     });
 
-    // Valid segments pass the guard; echo mode completes the stream → 200.
+    // Valid segments pass the guard; setup-required mode completes the stream → 200.
     expect(res.statusCode).not.toBe(400);
     expect(res.statusCode).toBe(200);
 

@@ -81,7 +81,7 @@ These are the exact event names emitted via `sendEvent(event, data)`. The fronte
 }
 ```
 
-> Note: in echo mode and command-only paths, `done` carries `usage: { prompt_tokens, completion_tokens, total_tokens }` (all 0) and `toolsUsed: []` — a **different usage shape** than the agent-loop `done` (`inputTokens`/`outputTokens`). The frontend should tolerate both.
+> Note: in setup-required mode and command-only paths, `done` carries `usage: { prompt_tokens, completion_tokens, total_tokens }` (all 0) and `toolsUsed: []` — a **different usage shape** than the agent-loop `done` (`inputTokens`/`outputTokens`). The frontend should tolerate both.
 
 ### What happens inside one chat turn (server-side, in order)
 
@@ -90,8 +90,8 @@ These are the exact event names emitted via `sendEvent(event, data)`. The fronte
 3. Resolve model with fallback chain: explicit → workspace → config default → `claude-sonnet-4-6`; apply budget-model and smart-routing (`routeMessage`) overrides.
 4. Load/create session history (RAM cache `sessionHistories`, else `loadSessionMessages` from disk); push user message; `persistMessage` to `.jsonl`.
 5. Create a per-session `Orchestrator` scoped to the workspace mind (`sessionManager.getOrCreate`), else fall back to the shared singleton.
-6. Probe LiteLLM availability → choose **agent-loop**, **echo mode**, or **slash-command** path.
-7. **Slash command?** → run via `commandRegistry.execute` (works even in echo mode). Result either streams as `token`s + `done`, or — if prefixed `AGENT_LOOP_REROUTE::` — falls through to the agent loop with a rewritten message.
+6. Probe LiteLLM availability → choose **agent-loop**, **setup-required**, or **slash-command** path.
+7. **Slash command?** → run via `commandRegistry.execute` (works even in setup-required mode). Result either streams as `token`s + `done`, or — if prefixed `AGENT_LOOP_REROUTE::` — falls through to the agent loop with a rewritten message.
 8. Agent-loop path: auto-recall memory (`auto_recall` tool events), GEPA expand (first message only), ambiguity guard, build system prompt (persona + profile + skills + workspace-now + behavioral spec), filter tools by persona/availability, register the `pre:tool` confirmation hook, compress context, then call `runAgentLoop` with `stream: true` and `onToken`/`onToolUse`/`onToolResult` callbacks that emit the SSE events above.
 9. Credential-pool key rotation + model fallback on retryable errors.
 10. Post-processing: cost tracking, trace finalize, auto-save memory, skill distillation, KG entity extraction, correction detection, regulated-persona disclaimers, grounding hedge notes.
