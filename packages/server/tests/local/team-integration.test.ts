@@ -242,7 +242,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
 
     // Find the registration call (not audit event calls or health checks)
     const registrationCalls = mockFetch.mock.calls.filter(
-      ([url]: [string]) => typeof url === 'string' && url.includes('/entities'),
+      ([url]: unknown[]) => typeof url === 'string' && url.includes('/entities'),
     );
 
     expect(registrationCalls.length).toBeGreaterThanOrEqual(1);
@@ -324,7 +324,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(res.json().error).toMatch(/configured team server/i);
     expect(server.workspaceManager.list()).toHaveLength(workspaceCount);
     expect(mockFetch.mock.calls.filter(
-      ([url]: [string]) => typeof url === 'string' && url.includes('/entities'),
+      ([url]: unknown[]) => typeof url === 'string' && url.includes('/entities'),
     )).toHaveLength(0);
   });
 
@@ -383,7 +383,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
 
     // No calls to /entities endpoint
     const registrationCalls = mockFetch.mock.calls.filter(
-      ([url]: [string]) => typeof url === 'string' && url.includes('/entities'),
+      ([url]: unknown[]) => typeof url === 'string' && url.includes('/entities'),
     );
     expect(registrationCalls).toHaveLength(0);
   });

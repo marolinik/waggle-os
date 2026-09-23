@@ -31,7 +31,7 @@ const { syncRoutes } = await import('../../src/stripe/sync.js');
 
 function buildServer(dataDir: string): FastifyInstance {
   const server = Fastify();
-  server.decorate('localConfig', { dataDir });
+  server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
   server.register(syncRoutes);
   return server;
 }

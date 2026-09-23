@@ -36,10 +36,11 @@ describe('workspace lifecycle routes', () => {
     closeWorkspaceMind = vi.fn();
     server = Fastify({ logger: false });
     server.decorate('workspaceManager', manager);
+    // Deliberate partial double: only the members the workspace routes read.
     server.decorate('agentState', {
       activateWorkspaceMind: () => undefined,
       closeWorkspaceMind,
-    });
+    } as unknown as FastifyInstance['agentState']);
     // localConfig intentionally absent — see file header.
     await server.register(workspaceRoutes);
   });

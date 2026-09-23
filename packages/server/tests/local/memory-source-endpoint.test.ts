@@ -12,21 +12,24 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { MindDB, FrameStore, SessionStore, RawArchive, withArchiveUid } from '@waggle/core';
+import type { MultiMind } from '@waggle/core';
 import { memoryCenterRoutes } from '../../src/local/routes/memory-center.js';
+import type { AgentState } from '../../src/local/index.js';
 
 function createTestServer(db: MindDB, wsDbs: Record<string, MindDB> = {}) {
   const server = Fastify({ logger: false });
+  // Deliberate partial doubles: the memory-center route reads only these members.
   server.decorate('multiMind', {
     personal: db,
     getFrameStore: (label: string) => (label === 'personal' ? new FrameStore(db) : undefined),
     search: () => [],
     workspace: undefined,
     setWorkspace: () => {},
-  });
+  } as unknown as MultiMind);
   server.decorate('agentState', {
     getWorkspaceMindDb: (id: string) => wsDbs[id],
     listWorkspaces: () => [],
-  });
+  } as unknown as AgentState);
   // localConfig intentionally absent → emitAuditEvent is a safe no-op.
   server.register(memoryCenterRoutes);
   return server;

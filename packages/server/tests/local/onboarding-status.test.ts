@@ -8,7 +8,7 @@
  * brand-new production install (S4 founder flag, confirmed in P4).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -20,9 +20,12 @@ import {
 
 function createTestServer(dataDir: string, db: MindDB, workspaces: Array<{ id: string }>) {
   const server = Fastify({ logger: false });
-  server.decorate('localConfig', { dataDir });
-  server.decorate('multiMind', { personal: db });
-  server.decorate('workspaceManager', { list: () => workspaces });
+  // Deliberate partial doubles: only the members the onboarding routes read.
+  server.decorate('localConfig', { dataDir } as unknown as FastifyInstance['localConfig']);
+  server.decorate('multiMind', { personal: db } as unknown as FastifyInstance['multiMind']);
+  server.decorate('workspaceManager', {
+    list: () => workspaces,
+  } as unknown as FastifyInstance['workspaceManager']);
   server.register(onboardingRoutes);
   return server;
 }

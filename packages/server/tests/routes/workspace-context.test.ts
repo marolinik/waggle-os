@@ -240,6 +240,10 @@ describe('workspace-context', () => {
         activeThreads: ['Architecture planning (2h ago)', 'Memory model design (yesterday)'],
         progressItems: ['[blocker] Waiting for API key', '[task] Implement search', '[completed] Setup CI'],
         nextActions: ['Resolve: Waiting for API key', 'Implement search'],
+        // Fields formatWorkspaceNowPrompt ignores (empty greeting is skipped).
+        greeting: '',
+        pendingTasks: [],
+        upcomingSchedules: [],
       };
 
       const result = formatWorkspaceNowPrompt(block);
@@ -267,6 +271,10 @@ describe('workspace-context', () => {
         activeThreads: [],
         progressItems: [],
         nextActions: [],
+        // Fields formatWorkspaceNowPrompt ignores (empty greeting is skipped).
+        greeting: '',
+        pendingTasks: [],
+        upcomingSchedules: [],
       };
 
       const result = formatWorkspaceNowPrompt(block);
@@ -287,6 +295,10 @@ describe('workspace-context', () => {
         activeThreads: [],
         progressItems: [],
         nextActions: [],
+        // Fields formatWorkspaceNowPrompt ignores (empty greeting is skipped).
+        greeting: '',
+        pendingTasks: [],
+        upcomingSchedules: [],
       };
 
       const result = formatWorkspaceNowPrompt(block);

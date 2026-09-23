@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { MindDB, ImprovementSignalStore } from '@waggle/core';
 import { feedbackRoutes } from '../../src/local/routes/feedback.js';
 
@@ -18,14 +18,15 @@ import { feedbackRoutes } from '../../src/local/routes/feedback.js';
 function createTestServer(db: MindDB) {
   const server = Fastify({ logger: false });
   const signalStore = new ImprovementSignalStore(db);
+  // Deliberate partial doubles: only the members the feedback routes read.
   server.decorate('multiMind', {
     personal: db,
-  });
+  } as unknown as FastifyInstance['multiMind']);
   server.decorate('agentState', {
     orchestrator: {
       getImprovementSignals: () => signalStore,
     },
-  });
+  } as unknown as FastifyInstance['agentState']);
   server.register(feedbackRoutes);
   return { server, signalStore };
 }

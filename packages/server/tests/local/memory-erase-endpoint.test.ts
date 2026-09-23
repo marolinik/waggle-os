@@ -23,17 +23,18 @@ import { memoryCenterRoutes } from '../../src/local/routes/memory-center.js';
 
 function createTestServer(db: MindDB, wsDbs: Record<string, MindDB> = {}) {
   const server = Fastify({ logger: false });
+  // Partial test doubles: the memory-center routes read only these members.
   server.decorate('multiMind', {
     personal: db,
     getFrameStore: (label: string) => (label === 'personal' ? new FrameStore(db) : undefined),
     search: () => [],
     workspace: undefined,
     setWorkspace: () => {},
-  });
+  } as never);
   server.decorate('agentState', {
     getWorkspaceMindDb: (id: string) => wsDbs[id],
     listWorkspaces: () => [],
-  });
+  } as never);
   // localConfig intentionally absent → emitAuditEvent is a safe no-op.
   server.register(memoryCenterRoutes);
   return server;
