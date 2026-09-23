@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { FastifyInstance } from 'fastify';
+import type { ImprovementSignalStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 
 /**
@@ -32,7 +33,8 @@ describe('pre:memory-write capability-symptom lint (handler integration)', () =>
 
   it('cancels a capability-failure symptom write and records an improvement signal', async () => {
     const { hookRegistry, orchestrator } = server.agentState;
-    const store = orchestrator.getImprovementSignals();
+    // The orchestrator exposes the write port; the live store also supports reads.
+    const store = orchestrator.getImprovementSignals() as ImprovementSignalStore;
     const before = store.getByCategory('capability_gap').length;
 
     const result = await hookRegistry.fire('pre:memory-write', {

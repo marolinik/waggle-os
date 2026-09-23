@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type LightMyRequestResponse } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { MindDB } from '@waggle/core';
 import type { ExternalRunEvent, ExternalToolRunRequest, ExternalToolRunResult } from '@waggle/agent';
-import type { CollaborationWorkerRun } from '@waggle/shared';
+import type {
+  CollaborationRunAttribution,
+  CollaborationRunMemoryRefs,
+  CollaborationWorkerRun,
+} from '@waggle/shared';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
 import { externalToolRunRoutes } from '../../src/local/routes/external-tool-runs.js';
@@ -407,7 +411,7 @@ describe('external tool run routes', () => {
       dataDir?: string;
       credentialWasActive: boolean;
     }> = [];
-    const memoryRuns: Array<{ id: string; attribution?: typeof attribution }> = [];
+    const memoryRuns: Array<{ id: string; attribution?: CollaborationRunAttribution }> = [];
     const healthyExecutorIds: string[] = [];
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
@@ -1249,9 +1253,9 @@ describe('external tool run routes', () => {
         stdoutTail: '{"payloads":[{"text":"fixture read"}]}', stderrTail: '', durationMs: 1,
       };
     });
-    const recorder = vi.fn(async ({ run }: { run: CollaborationWorkerRun }) => ({
+    const recorder = vi.fn(async ({ run }: { run: CollaborationWorkerRun }): Promise<CollaborationRunMemoryRefs> => ({
       status: 'complete', personalFrameIds: [1], workspaceFrameIds: { [run.workspaceId]: [2] },
-    } as const));
+    }));
     server.decorate('externalResultRecorder', recorder);
     await server.register(externalToolRunRoutes);
 
@@ -1586,7 +1590,7 @@ describe('external tool run routes', () => {
     });
     server.decorate('externalToolRunner', runner);
     await server.register(externalToolRunRoutes);
-    let pending: ReturnType<typeof server.inject> | null = null;
+    let pending: Promise<LightMyRequestResponse> | null = null;
 
     try {
       pending = server.inject({

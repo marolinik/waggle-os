@@ -188,7 +188,7 @@ describe('Provider API', () => {
 
         expect(openai.hasKey).toBe(true);
         expect(openai.modelsSource).toBe('provider-api');
-        expect(openai.models.map((model) => model.id)).toContain('openai/provider-model-added-at-runtime');
+        expect(openai.models.map((model: ProviderModelResponse) => model.id)).toContain('openai/provider-model-added-at-runtime');
       } finally {
         fetchSpy.mockRestore();
         delete process.env.OPENAI_API_KEY;
@@ -206,7 +206,7 @@ describe('Provider API', () => {
 
       expect(anthropic.modelsSource).toBe('provider-api');
       expect(anthropic.models.length).toBeGreaterThan(0);
-      expect(anthropic.models.map((model) => model.id)).toContain('anthropic/provider-model-added-at-runtime');
+      expect(anthropic.models.map((model: ProviderModelResponse) => model.id)).toContain('anthropic/provider-model-added-at-runtime');
       for (const m of anthropic.models) {
         expect(m.id).toBeDefined();
         expect(m.name).toBeDefined();
@@ -229,7 +229,7 @@ describe('Provider API', () => {
         const alibaba = providers.find((p: ProviderResponse) => p.id === 'alibaba');
 
         expect(alibaba.modelsSource).toBe('provider-api');
-        expect(alibaba.models.map((model) => model.id)).toContain('alibaba/provider-model-added-at-runtime');
+        expect(alibaba.models.map((model: ProviderModelResponse) => model.id)).toContain('alibaba/provider-model-added-at-runtime');
       } finally {
         fetchSpy.mockRestore();
         server.vault!.delete('alibaba');

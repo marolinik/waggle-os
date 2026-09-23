@@ -119,7 +119,7 @@ describe('VectorEnrichmentService', () => {
     expect(stopped).toBe(false);
     pass.resolve(backfillResult());
     await expect(stopping).resolves.toBeUndefined();
-    await expect(run).resolves.toMatchObject<Partial<VectorEnrichmentRunResult>>({ mindsVisited: 1 });
+    await expect(run).resolves.toMatchObject({ mindsVisited: 1 } satisfies Partial<VectorEnrichmentRunResult>);
   });
 
   it('does not let a stalled provider reprobe block shutdown for an empty mind', async () => {
@@ -151,10 +151,10 @@ describe('VectorEnrichmentService', () => {
     await Promise.resolve();
 
     expect(reprobe).not.toHaveBeenCalled();
-    await expect(run).resolves.toMatchObject<Partial<VectorEnrichmentRunResult>>({
+    await expect(run).resolves.toMatchObject({
       mindsVisited: 1,
       passes: 1,
-    });
+    } satisfies Partial<VectorEnrichmentRunResult>);
     await expect(service.stop()).resolves.toBeUndefined();
   });
 });

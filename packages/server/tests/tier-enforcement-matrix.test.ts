@@ -30,7 +30,7 @@ interface GatedEndpoint {
   method: 'GET' | 'POST';
   url: string;
   minTier: Tier;
-  body?: unknown;
+  body?: Record<string, unknown>;
 }
 
 // Matches TIER_ORDER in @waggle/shared/tiers.ts. TRIAL ranks with ENTERPRISE

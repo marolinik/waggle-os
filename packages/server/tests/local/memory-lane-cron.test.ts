@@ -122,8 +122,8 @@ describe('runMemoryLaneExtraction', () => {
   it('holds the watermark and commits nothing until every completion is terminal', async () => {
     seedSourceFrames(8);
     let truncateFacts = true;
-    const integrityCheckedLLM: LLMCallFn = async (prompt: string) => {
-      const content = await mockLLM(prompt);
+    const integrityCheckedLLM: LLMCallFn = async (prompt, model) => {
+      const content = await mockLLM(prompt, model);
       return parseOpenAiTextCompletion({
         choices: [{
           finish_reason: truncateFacts && prompt.includes('synthesis-level memory facts')

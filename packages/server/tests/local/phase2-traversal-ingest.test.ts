@@ -28,13 +28,14 @@ function buildServer(dataDir: string): FastifyInstance {
   // Minimal decorators the ingest handler reads. The traversal guard fires
   // before any of these are touched; for the valid-path case the registry
   // write needs localConfig.dataDir and the memory block needs agentState.
-  s.decorate('localConfig', { dataDir });
+  // Partial test doubles (see above), hence the casts.
+  s.decorate('localConfig', { dataDir } as never);
   s.decorate('agentState', {
     activateWorkspaceMind: () => {},
     orchestrator: {
       autoSaveFromExchange: async () => {},
     },
-  });
+  } as never);
 
   s.register(ingestRoutes);
   return s;

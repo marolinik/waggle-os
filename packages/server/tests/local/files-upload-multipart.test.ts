@@ -12,10 +12,11 @@ describe('files upload multipart route', () => {
   beforeEach(async () => {
     dataDir = mkdtempSync(join(tmpdir(), 'waggle-files-upload-'));
     server = Fastify({ logger: false });
-    server.decorate('localConfig', { dataDir });
+    // Partial test doubles: the file routes read only the fields supplied here.
+    server.decorate('localConfig', { dataDir } as never);
     server.decorate('workspaceManager', {
       get: () => ({ id: 'ws-upload', storageType: 'virtual' }),
-    });
+    } as never);
     await server.register(fileRoutes);
     await server.ready();
   });

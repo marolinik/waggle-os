@@ -5,13 +5,14 @@ import type { FastifyInstance } from 'fastify';
 import { FrameStore, MindDB, SessionStore, WaggleConfig } from '@waggle/core';
 import { Orchestrator, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
 import { MarketplaceInstaller } from '@waggle/marketplace';
+import type { PluginTool } from '@waggle/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 import {
   CANONICAL_VERIFIER_REPORT,
   renderVerifierReportEnvelope,
 } from '../../../../tests/vision/verifier-contract.js';
-import { buildLocalServer } from '../../src/local/index.js';
+import { buildLocalServer, type LlmProviderStatus } from '../../src/local/index.js';
 import {
   bindExactWorkspaceMemorySearchTool,
   isBoundedExactPersistedMemoryLookup,
@@ -416,7 +417,7 @@ describe('persona acceptance prompt budget', () => {
       ]);
       expect(capturedConfig!.toolChoice).toBeUndefined();
       const boundReadSkill = capturedConfig!.tools.find(tool => tool.name === 'read_skill')!;
-      expect((boundReadSkill.parameters.properties?.name as { enum?: string[] }).enum).toEqual([
+      expect(((boundReadSkill.parameters.properties as Record<string, unknown> | undefined)?.name as { enum?: string[] }).enum).toEqual([
         'decision-matrix',
       ]);
       await expect(boundReadSkill.execute({ name: 'project-kickoff' })).resolves.toMatch(
@@ -495,7 +496,7 @@ describe('persona acceptance prompt budget', () => {
     expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['read_skill']);
     expect(capturedConfig!.toolChoice).toBe('read_skill');
     expect(capturedConfig!.maxOutputTokens).toBe(1_536);
-    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+    expect(((capturedConfig!.tools[0].parameters.properties as Record<string, unknown> | undefined)?.name as { enum?: string[] }).enum)
       .toEqual(['decision-matrix']);
   });
 
@@ -520,7 +521,7 @@ describe('persona acceptance prompt budget', () => {
     expect(capturedConfig).not.toBeNull();
     expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['read_skill']);
     expect(capturedConfig!.requiredToolSequence).toBeUndefined();
-    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+    expect(((capturedConfig!.tools[0].parameters.properties as Record<string, unknown> | undefined)?.name as { enum?: string[] }).enum)
       .toEqual(['risk-assessment']);
   });
 
@@ -547,7 +548,7 @@ describe('persona acceptance prompt budget', () => {
 
     expect(response.statusCode).toBe(200);
     expect(capturedConfig).not.toBeNull();
-    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+    expect(((capturedConfig!.tools[0].parameters.properties as Record<string, unknown> | undefined)?.name as { enum?: string[] }).enum)
       .toEqual(['risk-assessment']);
   });
 
@@ -1727,10 +1728,11 @@ describe('persona acceptance prompt budget', () => {
         return 'external plugin result';
       }),
     };
+    // Raw, un-normalized plugin tool: riskLevel is deliberately left undeclared.
     const pluginTools = vi.spyOn(
       server.agentState.pluginRuntimeManager,
       'getAllTools',
-    ).mockReturnValue([externalWebFetch]);
+    ).mockReturnValue([externalWebFetch as PluginTool]);
 
     testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(config);
@@ -4690,12 +4692,13 @@ describe('persona acceptance prompt budget', () => {
     const previousProvider = server.agentState.llmProvider;
     const previousLiteLlmUrl = server.localConfig.litellmUrl;
     try {
+      // Deliberately off-spec provider ('none' is not in the LlmProviderStatus union).
       server.agentState.llmProvider = {
         provider: 'none',
         health: 'unavailable',
         detail: 'Test: force setup-required mode',
         checkedAt: new Date().toISOString(),
-      };
+      } as unknown as LlmProviderStatus;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1';
 
       const denied = await injectWithAuth(server, {

@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
+import type { InjectOptions } from 'fastify';
+import type { VaultStore } from '@waggle/core';
+import type { AgentState } from '../../src/local/index.js';
 import { securityMiddleware } from '../../src/local/security-middleware.js';
 import { browserExtRoutes } from '../../src/local/routes/browser-ext.js';
 import {
@@ -22,12 +25,14 @@ async function createBrowserExtServer() {
       vaultEntries.set(name, { value, metadata });
     },
     delete: (name: string) => vaultEntries.delete(name),
-  });
+    // Deliberate partial double: the routes read only get/set/delete and `value`.
+  } as unknown as VaultStore);
   server.decorate('agentState', {
     wsSessionToken: TEST_TOKEN,
     browserCompanionCredentialHash: hashBrowserCompanionCredential(TEST_BROWSER_TOKEN),
     activeWorkspaceId: 'workspace-1',
-  });
+    // Deliberate partial double: the auth path reads only these fields.
+  } as unknown as AgentState);
   await server.register(securityMiddleware, {
     sessionToken: TEST_TOKEN,
     authenticateBrowserCompanionToken: (token) => (
@@ -322,7 +327,7 @@ describe('Browser Companion auth bootstrap', () => {
     }
   });
 
-  it.each([
+  it.each<[NonNullable<InjectOptions['method']>, string]>([
     ['GET', '/api/memory/frames'],
     ['GET', '/api/private'],
     ['HEAD', '/api/browser-ext/health'],

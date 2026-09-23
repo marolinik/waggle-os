@@ -32,7 +32,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 
 // ── Gate: self-skip when the smoke env isn't configured ────────
 
@@ -84,7 +84,7 @@ if (!SHOULD_RUN) {
       ]);
 
       const Stripe = (stripeModule as unknown as { default: typeof import('stripe').default }).default;
-      stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-03-31.basil' });
+      stripe = new Stripe(STRIPE_KEY, { apiVersion: '2026-08-26.dahlia' });
 
       server = await buildLocalServer({ dataDir: tmpDir });
       // Attach the helper so individual tests don't re-import.
@@ -110,7 +110,7 @@ if (!SHOULD_RUN) {
       return JSON.parse(raw) as Record<string, unknown>;
     }
 
-    function postWebhook(rawEvent: unknown, signatureOverride?: string): ReturnType<FastifyInstance['inject']> {
+    function postWebhook(rawEvent: unknown, signatureOverride?: string): Promise<LightMyRequestResponse> {
       const payload = JSON.stringify(rawEvent);
       const sig = signatureOverride ?? stripe.webhooks.generateTestHeaderString({
         payload,

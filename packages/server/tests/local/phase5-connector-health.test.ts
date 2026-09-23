@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import type { ConnectorRegistry } from '@waggle/agent';
 import { connectorRoutes } from '../../src/local/routes/connectors.js';
 
 // The raw secret that a throwing connector might leak through an error message.
 // The route must NEVER echo this back to the client.
 const RAW_INTERNAL_DETAIL = 'ECONNREFUSED 10.0.0.5:5432 (db password=hunter2)';
+
+// Each `connectorRegistry` below is a deliberate partial double: the health
+// route reads only getDefinitions/get/healthCheck.
 
 /**
  * Build a Fastify instance with `connectorRoutes` registered and a stub
@@ -19,7 +23,7 @@ async function buildServerWithThrowingRegistry(): Promise<FastifyInstance> {
     healthCheck: async () => {
       throw new Error(RAW_INTERNAL_DETAIL);
     },
-  });
+  } as unknown as ConnectorRegistry);
   await fastify.register(connectorRoutes);
   await fastify.ready();
   return fastify;
@@ -70,7 +74,7 @@ describe('GET /api/connectors/:id/health — throwing connector (R1-009)', () =>
       getDefinitions: () => [],
       get: (_id: string) => ({ id: _id }),
       healthCheck: async () => null,
-    });
+    } as unknown as ConnectorRegistry);
     await fastify.register(connectorRoutes);
     await fastify.ready();
     try {
@@ -92,7 +96,7 @@ describe('GET /api/connectors/:id/health — throwing connector (R1-009)', () =>
         status: 'connected',
         lastChecked: new Date().toISOString(),
       }),
-    });
+    } as unknown as ConnectorRegistry);
     await fastify.register(connectorRoutes);
     await fastify.ready();
     try {
