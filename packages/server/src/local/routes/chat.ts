@@ -569,6 +569,7 @@ import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.
 import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
+import { TurnAttemptState } from './chat-turn-attempt-state.js';
 import { TurnModelSelection } from './chat-turn-model-selection.js';
 import { TurnResources } from './chat-turn-resources.js';
 
@@ -2102,7 +2103,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     };
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     const usageLedger = new TurnUsageLedger();
-    const failedAttemptToolsUsed = new Set<string>();
     let responseCommitted = false;
 
     // Mutable conversation-local state cannot accept two overlapping turns.
@@ -3498,17 +3498,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         windowedMessages = windowedMessages.map(({ role, content }) => ({ role, content }));
 
         // Build agent loop config — with windowed conversation history + hooks
-        let bufferedAgentTokens: string[] = [];
-        let reasoningActivitySent = false;
-        let modelRequestSent = false;
-        let modelResponseActivitySent = false;
-        let modelActivitySent = false;
-        let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
-        let pendingCapabilityToolResults: Array<{
-          input: Record<string, unknown>;
-          output: string;
-          duration?: number;
-        }> = [];
+        const attemptState = new TurnAttemptState();
         const toolActivity = new TurnToolActivity({
           explicitReadOnlyToolChoice,
           requiredToolSequence,
@@ -3550,16 +3540,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           turnId, // propagate trace ID into the loop (H-AUDIT-1)
 
           onModelActivity: () => {
-            if (modelResponseActivitySent || turnSignal.aborted) return;
-            modelResponseActivitySent = true;
+            if (turnSignal.aborted || !attemptState.claimOnce('modelResponding')) return;
             sendEvent('step', {
               content: 'Model is responding; verifying the answer before display…',
               phase: 'model_active',
             });
           },
           onReasoningActivity: () => {
-            if (reasoningActivitySent || turnSignal.aborted) return;
-            reasoningActivitySent = true;
+            if (turnSignal.aborted || !attemptState.claimOnce('reasoning')) return;
             sendEvent('step', { content: 'Thinking through your request…' });
           },
           onRetry: (notice: string) => {
@@ -3568,14 +3556,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToken: (token: string) => {
             if (firstTokenAt === null) firstTokenAt = performance.now();
-            if (token.length > 0 && !modelActivitySent && !turnSignal.aborted) {
-              modelActivitySent = true;
+            if (token.length > 0 && !turnSignal.aborted && attemptState.claimOnce('modelStreaming')) {
               sendEvent('step', {
                 content: 'Writing the answer…',
                 phase: 'model_streaming',
               });
             }
-            bufferedAgentTokens.push(token);
+            attemptState.bufferToken(token);
           },
           onGiveUp: (giveUpMessage: string) => {
             // The tiered loop-guard aborted the run after a
@@ -3633,7 +3620,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             // Send tool_result SSE event so client can update status + show result
             if (name === 'acquire_capability') {
               if (createPersistedCapabilityReceipt(input, result)) {
-                pendingCapabilityToolResults.push({ input, output: result, duration });
+                attemptState.addPendingCapability({ input, output: result, duration });
               } else {
                 sendEvent('tool_result', {
                   name,
@@ -3785,24 +3772,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sendEvent('step', { content: `⬡ Switched to ${announcement.model} — ${announcement.reason}` });
         };
 
-        let initialActivityDeadlineAvailable = true;
         const runAgentAttempt = async (config: typeof runConfig) => {
           toolActivity.assertReplayable();
-          bufferedAgentTokens = [];
-          capabilityReceipt = null;
-          pendingCapabilityToolResults = [];
+          attemptState.beginAttempt();
           const attemptModel = config.billingModel ?? modelSelection.model;
           usageLedger.beginAttempt(attemptModel, config.modelSpendBillingClass ?? 'priced');
           announceModelSwitch(attemptModel);
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
-          const initialModelActivityTimeoutMs = initialActivityDeadlineAvailable
+          const initialModelActivityTimeoutMs = attemptState.takeInitialActivityDeadline()
             ? attemptBaseConfig.initialModelActivityTimeoutMs
             : undefined;
-          initialActivityDeadlineAvailable = false;
           const strictToolRetryContext = toolActivity.strictContinuation(agentMessage);
           let attemptedResult: AgentResponse;
-          if (!modelRequestSent && !turnSignal.aborted) {
-            modelRequestSent = true;
+          if (!turnSignal.aborted && attemptState.claimOnce('modelRequested')) {
             sendEvent('step', {
               content: 'Sending your request to the model…',
               phase: 'model_requested',
@@ -3828,12 +3810,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           } catch (error) {
             const failedUsage = getFailedCompletionUsage(error);
-            const failedTools = (error as { toolsUsed?: unknown } | null | undefined)?.toolsUsed;
-            if (Array.isArray(failedTools)) {
-              for (const tool of failedTools) {
-                if (typeof tool === 'string' && tool.trim()) failedAttemptToolsUsed.add(tool.trim());
-              }
-            }
+            attemptState.recordFailedTools((error as { toolsUsed?: unknown } | null | undefined)?.toolsUsed);
             usageLedger.recordFailedAttempt(failedUsage, {
               estimated: (error as { usageEstimated?: unknown }).usageEstimated === true,
             });
@@ -3864,7 +3841,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : attemptedResult;
           if (!completedResult.content.trim()) {
             const emptyError = emptyModelResponseError(completedResult);
-            for (const tool of completedResult.toolsUsed) failedAttemptToolsUsed.add(tool);
+            attemptState.recordFailedToolNames(completedResult.toolsUsed);
             // `emptyModelResponseError` builds the error here and never marks it
             // estimated, so this attempt is always a counted one.
             usageLedger.recordFailedAttempt(getFailedCompletionUsage(emptyError));
@@ -4036,16 +4013,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // still be interrupted. Preserve usage before any further awaited work.
         result = {
           ...result,
-          toolsUsed: [...new Set([...failedAttemptToolsUsed, ...(result.toolsUsed ?? [])])],
+          toolsUsed: attemptState.toolsUsedWith(result.toolsUsed),
         };
         usageLedger.completeAttempt(result.usage, modelSelection.model);
 
-        const capabilityToolResults = pendingCapabilityToolResults as Array<{
-          input: Record<string, unknown>;
-          output: string;
-          duration?: number;
-        }>;
-        for (const capabilityToolResult of capabilityToolResults) {
+        for (const capabilityToolResult of attemptState.takePendingCapabilities()) {
           const issued = await issueCapabilityProposalFromToolResult({
             store: server.capabilityProposalStore,
             workspaceId: activeWorkspaceId,
@@ -4055,10 +4027,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
           // Marketplace output is proposal-bound; bundled starter-pack output
           // remains a trusted completed receipt without marketplace lifecycle.
-          capabilityReceipt = createPersistedCapabilityReceipt(
+          attemptState.offerCapabilityReceipt(createPersistedCapabilityReceipt(
             capabilityToolResult.input,
             issued.output,
-          ) ?? capabilityReceipt;
+          ));
           sendEvent('tool_result', {
             name: 'acquire_capability',
             result: issued.output,
@@ -4067,7 +4039,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
           throwIfTurnAborted();
         }
-        pendingCapabilityToolResults = [];
 
         // Unregister the per-request approval hook, so the outer finally's
         // defensive cleanup is a no-op on the happy path.
@@ -4289,7 +4260,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           role: 'assistant',
           content: finalContent,
           model: modelSelection.model,
-          ...(capabilityReceipt ? { tools: [capabilityReceipt] } : {}),
+          ...(attemptState.capabilityReceipt ? { tools: [attemptState.capabilityReceipt] } : {}),
         };
         if (!turnMutationPolicy.denyConversationHistory) {
           history.push(assistantMessage);
@@ -4316,13 +4287,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // the HTTP boundary so token events contain only the exact content in
         // the authoritative done event. Preserve the original chunking when it
         // already matches the fully post-processed response.
-        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
-          ? bufferedAgentTokens
-          : finalContent ? [finalContent] : [];
-        for (const token of finalTokenChunks) {
+        for (const token of attemptState.takeFinalTokenChunks(finalContent)) {
           sendEvent('token', { content: token });
         }
-        bufferedAgentTokens = [];
 
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage ? resultCost : undefined;
