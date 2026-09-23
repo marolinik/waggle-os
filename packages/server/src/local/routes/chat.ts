@@ -593,6 +593,15 @@ function isLocalStorageFailure(error: unknown): boolean {
   return typeof code === 'string' && typeof syscall === 'string' && typeof failedPath === 'string';
 }
 
+const LOCAL_DATABASE_UNAVAILABLE_MESSAGE = 'Waggle could not update its local database just now. Try again in a moment.';
+
+/** A better-sqlite3 error: its `code` names the SQLite result (SQLITE_BUSY, ...). */
+function isLocalDatabaseFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' && code.startsWith('SQLITE_');
+}
+
 function isIncompleteCompletionError(error: unknown): boolean {
   return typeof error === 'object'
     && error !== null
@@ -2084,6 +2093,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // the 'pending' state and EvalDatasetBuilder skips it, starving the
     // evolution loop of negative examples.
     const turnTrace = new TurnExecutionTrace({
+      onStartError: (error) => {
+        log.warn('[chat] execution trace could not start; the turn runs untraced', {
+          workspaceId: executionScopeId,
+          error,
+        });
+      },
       onFinalizeError: (error, traceId) => {
         log.warn('[chat] execution trace finalize failed; the row stays unfinalized', {
           workspaceId: executionScopeId,
@@ -4237,8 +4252,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               for (const entity of entities.slice(0, 10)) {
                 try {
                   knowledge.createEntity(entity.type, entity.name, { confidence: entity.confidence, source: `session:${sessionId}` }, { valid_from: now });
-                } catch {
-                  // Duplicate or schema error — skip silently
+                } catch (entityError) {
+                  // A closed handle is the W4A seam the handler below names;
+                  // swallowing it here hid it (TD-CHAT-24). A duplicate or a
+                  // schema error for one entity is still skipped.
+                  if (isClosedDbError(entityError)) throw entityError;
                 }
               }
             }
@@ -4505,6 +4523,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   seam: 'autoSaveFromExchange',
                   error: e instanceof Error ? e.message : String(e),
                 });
+              } else {
+                // Any other failure (embedding, constraint, a TypeError) drops
+                // a memory write too, and used to do it with no record at all
+                // (TD-REL-3). The turn is already committed; only log.
+                log.warn('[chat] post-commit auto-save failed; the memory write was dropped', {
+                  workspaceId: effectiveWorkspace,
+                  sessionId,
+                  error: e instanceof Error ? e.message : String(e),
+                });
               }
             }
           }
@@ -4622,10 +4649,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       const storageFailure = isLocalStorageFailure(err);
+      const databaseFailure = !storageFailure && isLocalDatabaseFailure(err);
       if (storageFailure) {
         // A failed history read or write: Node's message names the absolute
         // file, which must not reach the client or the transcript (TD-CHAT-14).
         errorMessage = CHAT_STORAGE_UNAVAILABLE_MESSAGE;
+      } else if (databaseFailure) {
+        // A critical-path SQLite write that failed (a locked store, say). The
+        // driver's text is internal and is logged above, not sent (TD-REL-4).
+        errorMessage = LOCAL_DATABASE_UNAVAILABLE_MESSAGE;
       } else if (err instanceof Error) {
         // Clean up common error messages for the user. Authentication and
         // endpoint availability are different recovery paths: never send a
@@ -4652,7 +4684,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       const budgetCode = isTerminalModelBudgetError(err)
         ? (err as { code: string }).code
-        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE' : undefined;
+        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE'
+          : databaseFailure ? 'LOCAL_DATABASE_UNAVAILABLE' : undefined;
       sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
@@ -4784,7 +4817,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         'sessions',
         `${sessionId}.jsonl`,
       ),
-      { force: true },
+      // A Windows indexer or antivirus can hold the file for a moment; Node
+      // retries EBUSY/EPERM here instead of failing the request with a 500
+      // (TD-REL-5). A lasting failure still throws before any state is evicted,
+      // so the file and the in-process history stay in step.
+      { force: true, maxRetries: 10, retryDelay: 50 },
     );
 
     evictStateKey(scopedStateKey);
