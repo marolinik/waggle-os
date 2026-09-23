@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -390,7 +390,12 @@ export function buildChatCommandContext(input: {
       if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.memoryAccessDisabled;
       try {
         const recall = await orchestrator.recallMemory(query);
-        if (recall.count === 0) return COMMAND_CONTEXT_SENTINEL.noMemories;
+        if (recall.count === 0) {
+          // recallMemory reports its own failure as an empty result (TD-CHAT-29).
+          return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
+            ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
+            : COMMAND_CONTEXT_SENTINEL.noMemories;
+        }
         const items = (recall.recalled ?? []).slice(0, 5);
         return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
       } catch {

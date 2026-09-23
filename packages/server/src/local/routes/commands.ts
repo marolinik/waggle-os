@@ -10,7 +10,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
-import { COMMAND_CONTEXT_SENTINEL, type Orchestrator } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, type Orchestrator } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 
@@ -64,7 +64,12 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       searchMemory: async (query: string): Promise<string> => {
         try {
           const recall = await commandOrch.recallMemory(query);
-          if (recall.count === 0) return COMMAND_CONTEXT_SENTINEL.noMemories;
+          if (recall.count === 0) {
+          // recallMemory reports its own failure as an empty result (TD-CHAT-29).
+          return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
+            ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
+            : COMMAND_CONTEXT_SENTINEL.noMemories;
+        }
           const items = (recall.recalled ?? []).slice(0, 5);
           return items.map((item, i) => `${i + 1}. ${item}`).join('\n');
         } catch {
