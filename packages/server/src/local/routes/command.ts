@@ -30,7 +30,7 @@ import fs from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
 import type { CommandResult, Command } from '@waggle/shared';
 import type { Orchestrator, LoadedSkill } from '@waggle/agent';
-import { loadSkills } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, loadSkills } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { searchSessions } from './session-utils.js';
 import { interpretCommand } from '../command-interpret.js';
@@ -256,11 +256,16 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       searchMemory: async (query: string): Promise<string> => {
         try {
           const recall = await commandOrch.recallMemory(query);
-          if (recall.count === 0) return 'No relevant memories found.';
+          if (recall.count === 0) {
+          // recallMemory reports its own failure as an empty result (TD-CHAT-29).
+          return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
+            ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
+            : COMMAND_CONTEXT_SENTINEL.noMemories;
+        }
           const items = (recall.recalled ?? []).slice(0, 5);
           return items.map((item, i) => `${i + 1}. ${item}`).join('\n');
         } catch {
-          return 'Memory search unavailable.';
+          return COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable;
         }
       },
       getWorkspaceState: async (): Promise<string> => {
@@ -271,7 +276,7 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
           activateWorkspaceMind: server.agentState.activateWorkspaceMind,
           cronSchedules: server.cronStore.list(),
         });
-        if (!block) return 'No workspace state available.';
+        if (!block) return COMMAND_CONTEXT_SENTINEL.noWorkspaceState;
         return formatWorkspaceNowPrompt(block);
       },
       listSkills: (): string[] => {

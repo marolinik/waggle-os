@@ -155,6 +155,9 @@ export interface OrchestratorLayers extends MemoryLayerPorts {
   improvementSignals: ImprovementSignalPort;
 }
 
+/** What `recallMemory` returns as `text` when recall itself failed (count 0). */
+export const MEMORY_RECALL_UNAVAILABLE_TEXT = '[Memory recall temporarily unavailable. Proceed without prior context.]';
+
 export class Orchestrator {
   private db: MindDB;
   private embedder: Embedder;
@@ -966,7 +969,7 @@ export class Orchestrator {
       // to confabulate "I don't remember" instead of recalling real memory.
       logger.error('recallMemory failed', err);
       return {
-        text: '[Memory recall temporarily unavailable. Proceed without prior context.]',
+        text: MEMORY_RECALL_UNAVAILABLE_TEXT,
         count: 0,
         recalled: [],
         recalledFrames: [],

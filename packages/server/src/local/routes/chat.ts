@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -399,22 +399,27 @@ export function buildChatCommandContext(input: {
     workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
     sessionId,
     searchMemory: async (query: string): Promise<string> => {
-      if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
+      if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.memoryAccessDisabled;
       try {
         const recall = await orchestrator.recallMemory(query);
-        if (recall.count === 0) return 'No relevant memories found.';
+        if (recall.count === 0) {
+          // recallMemory reports its own failure as an empty result (TD-CHAT-29).
+          return recall.text === MEMORY_RECALL_UNAVAILABLE_TEXT
+            ? COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable
+            : COMMAND_CONTEXT_SENTINEL.noMemories;
+        }
         const items = (recall.recalled ?? []).slice(0, 5);
         return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
       } catch {
-        return 'Memory search unavailable.';
+        return COMMAND_CONTEXT_SENTINEL.memorySearchUnavailable;
       }
     },
     getWorkspaceState: async (): Promise<string> => {
-      if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
+      if (!persistedMemoryReadAllowed) return COMMAND_CONTEXT_SENTINEL.workspaceStateDisabled;
       if (!allowsConversationHistory(turnMutationPolicy)) {
-        return 'Conversation-derived workspace state is disabled for this turn.';
+        return COMMAND_CONTEXT_SENTINEL.conversationStateDisabled;
       }
-      if (!executionWorkspaceId) return 'No workspace state available.';
+      if (!executionWorkspaceId) return COMMAND_CONTEXT_SENTINEL.noWorkspaceState;
       const block = buildWorkspaceNowBlock({
         dataDir: server.localConfig.dataDir,
         workspaceId: executionWorkspaceId,
@@ -422,7 +427,7 @@ export function buildChatCommandContext(input: {
         activateWorkspaceMind: server.agentState.activateWorkspaceMind,
         cronSchedules: server.cronStore.list(),
       });
-      if (!block) return 'No workspace state available.';
+      if (!block) return COMMAND_CONTEXT_SENTINEL.noWorkspaceState;
       return formatWorkspaceNowPrompt(block);
     },
     listSkills: (): string[] => {

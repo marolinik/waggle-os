@@ -252,11 +252,8 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
 
   it('/memory <query> is refused when the turn denies persisted memory reads', async () => {
     const { content } = await commandTurn('/memory architecture - do not use my saved memory');
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-2): the deny suffix is part of the query
-    // text echoed back in the heading.
-    expect(content).toBe(
-      '## Memory Search: "architecture - do not use my saved memory"\n\nPersisted memory access is disabled for this turn.',
-    );
+    // Until TD-CHAT-2 the heading echoed the query, deny phrase included.
+    expect(content).toBe('## Memory Search\n\nPersisted memory access is disabled for this turn.');
   });
 
   it('/status on a fresh personal chat reports only the skills count', async () => {
@@ -264,15 +261,24 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
     expect(content).toBe(`## Status Report\n\n**Skills loaded:** ${server.agentState.skills.length}`);
   });
 
-  it('/status with persisted memory denied leaks the disabled sentinel as a report section', async () => {
+  // A denied read is shown as a notice (italic), never as workspace state and
+  // never as a fresh workspace. Until TD-CHAT-1 the commands recognised only
+  // the no-state sentinel and presented the notice as a report section.
+  it('/status with persisted memory denied shows the denial as a notice', async () => {
     const { content } = await commandTurn('/status - do not use my saved memory');
-    // QUIRK (docs/TECH-DEBT.md TD-CHAT-1): getWorkspaceState() returns the
-    // "disabled" sentinel, and statusCommand only filters the
-    // 'No workspace state available.' sentinel, so the disabled notice is
-    // rendered as if it were workspace state. Pinned, not fixed.
     expect(content).toBe(
-      '## Status Report\n\nPersisted workspace state is disabled for this turn.\n\n**Skills loaded:** 0',
+      '## Status Report\n\n_Persisted workspace state is disabled for this turn._\n\n**Skills loaded:** 0',
     );
+  });
+
+  it('/catchup with persisted memory denied shows the denial as a notice', async () => {
+    const { content } = await commandTurn('/catchup - do not use my saved memory');
+    expect(content).toBe('## Catch-Up Briefing\n\n_Persisted workspace state is disabled for this turn._');
+  });
+
+  it('/now with persisted memory denied shows the denial as a notice', async () => {
+    const { content } = await commandTurn('/now - do not use my saved memory');
+    expect(content).toBe('## Right Now\n\n_Persisted workspace state is disabled for this turn._');
   });
 });
 
