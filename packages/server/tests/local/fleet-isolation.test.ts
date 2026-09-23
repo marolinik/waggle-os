@@ -3,11 +3,12 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { FrameStore, MindDB, MultiMindCache } from '@waggle/core';
+import { ExecutionTraceStore, FrameStore, MindDB, MultiMindCache } from '@waggle/core';
 import {
   createSubAgentTools,
   createWorkflowTools,
   setPersonaDataDir,
+  TraceRecorder,
   type AgentLoopConfig,
   type AgentResponse,
   type ToolDefinition,
@@ -61,6 +62,9 @@ async function createSavedAgentHarness(
     personalMind?: MindDB;
     workspaceMind?: MindDB;
     useRealResultRecorder?: boolean;
+    /** Decorates `traceStore` and a shared `traceRecorder`, as the composition root does. */
+    traceStore?: ExecutionTraceStore;
+    runner?: (config: AgentLoopConfig) => Promise<AgentResponse>;
   } = {},
 ) {
   const workspaceDir = path.join(dataDir, 'project');
@@ -113,8 +117,13 @@ async function createSavedAgentHarness(
     }),
     buildToolsForSession: () => options.tools ?? [],
   } as never);
+  if (options.traceStore) {
+    server.decorate('traceStore', options.traceStore);
+    server.decorate('traceRecorder', new TraceRecorder(options.traceStore));
+  }
   server.decorate('agentRunner', async (config: AgentLoopConfig) => {
     runnerConfigs.push(config);
+    if (options.runner) return options.runner(config);
     return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
   });
   if (!options.useRealResultRecorder) {
@@ -144,6 +153,46 @@ afterEach(() => {
 });
 
 describe('isolated Fleet execution', () => {
+  it('QUIRK (CA-5b): an isolated run finalizes its trace without the tool calls the loop recorded', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-trace-'));
+    tempDirs.push(dataDir);
+    const traceMind = new MindDB(path.join(dataDir, 'traces.mind'));
+    try {
+      const traceStore = new ExecutionTraceStore(traceMind);
+      const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir, {
+        traceStore,
+        // What the real agent loop does with `traceRecording`: it wires the
+        // recorder's callbacks and reports each tool call through them.
+        runner: async (config) => {
+          const recording = config.traceRecording!;
+          const wired = recording.recorder.wireAgentLoopCallbacks(recording.handle);
+          wired.onToolUse('read_file', { path: 'README.md' });
+          wired.onToolResult('read_file', { path: 'README.md' }, 'readme contents');
+          return { content: 'Done', toolsUsed: ['read_file'], usage: { inputTokens: 1, outputTokens: 1 } };
+        },
+      });
+
+      const spawned = await server.inject({
+        method: 'POST', url: '/api/fleet/spawn',
+        payload: { task: 'Read the readme', agentId: 'trace-pin', parentWorkspaceId: 'workspace-1' },
+      });
+      expect(spawned.statusCode).toBe(202);
+      const runId = String(spawned.json().runId);
+      await waitFor(() => registry.get(runId)?.status === 'completed', 'traced run did not complete');
+      expect(runnerConfigs[0].traceRecording).toBeDefined();
+
+      const traceId = Number(registry.get(runId)?.result?.traceId);
+      const trace = traceStore.queryParsed({}).find((row) => row.id === traceId);
+      expect(trace?.outcome).toBe('success');
+      // The loop's tool call sits in the recorder's buffer, and the executor
+      // finalizes through the store directly, so it is never flushed.
+      expect(trace?.payload.toolCalls).toEqual([]);
+      await server.close();
+    } finally {
+      traceMind.close();
+    }
+  });
+
   it.each([
     ['permissions', 'permissions', { permissions: { arbitraryGrant: true } }],
     ['manual autonomy', 'autonomyLevel', { autonomyLevel: 'manual' }],
