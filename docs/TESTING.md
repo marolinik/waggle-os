@@ -127,6 +127,7 @@ behavior. Risk = blast radius if a refactor silently changes it.
   already-built `dist/`, so it typechecks against the declarations a change just replaced and
   exits 0 while CI fails. The chain rebuilds `shared -> ... -> agent -> server` in order and sees
   the new types. Cost it once (~1-2 min) rather than through a red CI run. TD-TEST-12.
+- **Soak lane: `npm run test:soak`** (`vitest.soak.config.ts`, R-6). It builds an aged `.mind` of `WAGGLE_SOAK_FRAMES` frames (default 20000) by bulk insert and times the substrate read paths a desktop turn hits. The default `npm test` excludes `packages/hive-mind-core/tests/soak/**` and CI does not run it; run it after changing a substrate query or index.
 - **Server tests are typechecked by `npm run typecheck:server-tests`**, not by `build:packages` —
   `packages/server/tsconfig.json` excludes `tests/`. Every server test file is checked except
   `start-trial.test.ts`, which imports `apps/web/vite.config.ts` across two `vite` installs
