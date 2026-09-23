@@ -69,6 +69,8 @@ Six of these need a founder decision before the work can start: TD-CHAT-26, TD-C
 TD-CHAT-43, TD-CHAT-45, R-5, D-1. Batching those six into one decision round removes the
 largest scheduling risk in this plan.
 
+**Decision round held 2026-09-23** (recorded in the tracker's decision log): TD-CHAT-26 → managed personal folder; TD-CHAT-43 → won't fix; TD-CHAT-45 → stays open; R-5 and D-1 → stay in W5. TD-CHAT-36 needs no new ruling.
+
 ## Definition of done
 
 The review is closed when all of these hold:
