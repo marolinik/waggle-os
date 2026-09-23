@@ -187,7 +187,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [ ] R-6: soak test against a large aged `.mind` database — the desktop-shaped replacement for a throughput ramp (agent, P2)
 - [x] R-4 / R-7: shallow server-mode `/health`; 9 hand-rolled `setTimeout`+abort sites (agent, P3) R-4 closed (`bd13c04f`, `/health/ready`); R-7 won't fix (TimeoutError vs AbortError contracts, body-read scope, OSS-mirrored sites; see RELIABILITY.md).
 - [x] Phase 8 pass 1: context map, canonical Domain Glossary, harvest ACL named, `tests/mind-context-boundaries.test.ts` guard (agent, `7910b057`, 2026-09-18)
-- [ ] D-1: extract the `governance` context (`install_audit`, `ai_interactions`) out of the Mind schema — unblocked 2026-09-23: the erase keeps the trail and pseudonymizes the subject in it (agent, P2)
+- [x] D-1: `governance` context extracted to `packages/core/src/governance/`, and erase routes pseudonymize the `ai_interactions` trail (agent, `00668050` + `250d92f2` + `b2dfc021` + `b35003a5` + `893b485e` + `35b3cb0e`, 2026-09-23)
 - [ ] D-2: 27 technical-only class names (`*Manager`, `*Service`) — mostly infrastructure where the technical name IS the domain term; rename only where a domain term exists (agent, P3)
 - [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
   - [x] TD-CHAT-3 slice 1, usage accounting -> `TurnUsageLedger` (agent, `6611389b` + `1c24fdf0`, 2026-09-21)

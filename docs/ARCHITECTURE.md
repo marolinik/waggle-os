@@ -504,7 +504,7 @@ explicitly governed — it is the one place a vendor concept could leak in for a
 because it is the least entangled:
 
 - It is already OSS-excluded, so extraction *removes* work from the curated forward-port instead
-  of adding it. `CLAUDE.md` §7.5 currently documents an interleaved strip of the `install_audit`
+  of adding it. `CLAUDE.md` §7.5 documented an interleaved strip of the `install_audit`
   DDL out of `mind/{schema,db}.ts` that "a file filter cannot catch". Extracting the context makes
   that strip a file boundary instead of a hand edit.
 - Its consumers are narrow: `packages/core/src/compliance/` and `install-audit.ts`.
@@ -512,9 +512,38 @@ because it is the least entangled:
   backup expectations, and an audit trail arguably should not live in a file that a
   memory-erasure command can rewrite.
 
-Not proposed for execution now, and deliberately: the erasure surface (`erased_subjects`, sticky
-erasure) crosses `memory` and `harvest`, and a compliance trail that a GDPR erase must *not*
-delete needs that interaction thought through first.
+**D-1 — done 2026-09-23.** The founder resolved the erasure question: a GDPR erase keeps the
+trail and pseudonymizes its subject. What shipped:
+
+- The DDL, migrations and crash recovery of both tables live in `packages/core/src/governance/`
+  (`schema.ts`, `ensure-schema.ts`). Each governance store calls `ensureGovernanceSchema` from
+  its constructor, and `mind/{schema,db}.ts` declare neither table (`250d92f2`, `b2dfc021`).
+- Existing `personal.mind` files open unchanged: same SQLite file, no data migration. The golden
+  schema-object pin held across the move (`00668050`).
+- `install_audit` had two drifting migration copies; one now remains. Its rebuild sentinel is
+  "any stored CHECK list lags its canonical `@waggle/shared` list".
+- `pseudonymizeInteractions` (`893b485e`): the prompt and answer text become a marker,
+  `risk_context` is cleared, and the session id (plus the workspace id on a workspace erase)
+  becomes a keyed HMAC-SHA256 pseudonym. The key is held in the vault. `tools_called` (tool names
+  only) and every audit column are kept. A WHEN-guarded `ai_interactions_no_update` trigger
+  permits only that transition; DELETE stays absolute.
+- `DELETE /api/chat/history` and `DELETE /api/workspaces/:id` pseudonymize before they remove
+  anything (`35b3cb0e`). `oss-drift-check.mjs` forbids both tables in the mirror (`b35003a5`).
+
+Founder rulings (2026-09-23):
+
+- The full data-dir wipe stays total: the trail goes with `personal.mind`.
+- `MindErasure` (subject erase) has no governance effect, because the rows carry no subject link.
+- No production writer of `ai_interactions` is added, so pseudonymization is latent until one is.
+
+Residuals:
+
+- A restore from a pre-erase backup brings back un-pseudonymized rows, the same residual as
+  `raw_archive`.
+- `install_audit` `source`/`detail` may hold a local path with the OS user name. It is not
+  pseudonymized; the table has no subject column.
+- The vault key is listed on the Vault screen as `governance:pseudonym-key`. Deleting it
+  anonymizes the pseudonyms.
 
 ### Ubiquitous language: what is already good
 

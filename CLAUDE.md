@@ -570,12 +570,13 @@ The prior text here claimed the mirror is produced by `scripts/oss-subtree-split
 - Files: `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`,
   `compliance/**` (vault/compliance live in `@waggle/core`; the other three are barrel-exported
   from `hive-mind-core` but stripped on export). Enforced by the script's abort guard.
-- **Interleaved:** the `install_audit` table DDL + its rebuild migration inside
-  `mind/{schema.ts,db.ts}` are ALSO excluded (capability-install trust trail / EU-AI-Act
-  compliance — Waggle governance, not generic substrate). A file filter cannot catch this; only
-  the curated edit strips it. **Consequence:** substrate changes confined to `install_audit`
-  (e.g. P5/D4 `'uninstalled'`, #15 `trust_source` CHECK) have **nowhere to land on the mirror —
-  do NOT treat them as a pending OSS port.**
+- **Governance context:** the `install_audit` and `ai_interactions` DDL, migrations and
+  GDPR pseudonymization live in `packages/core/src/governance/` since D-1 (2026-09-23), no
+  longer interleaved in `mind/{schema.ts,db.ts}`. They are Waggle governance (capability-install
+  trust trail, EU AI Act Art. 12 log), not generic substrate, and the curated port no longer
+  hand-strips anything from those two files. `oss-drift-check.mjs` forbids both tables in the
+  mirror's `mind/db.ts`/`mind/schema.ts` and any `governance/` path. **Consequence:** changes
+  to either table have **nowhere to land on the mirror — do NOT treat them as a pending OSS port.**
 === END CORRECTION ===
 
 **To work on the substrate or publish the OSS mirror:** see
