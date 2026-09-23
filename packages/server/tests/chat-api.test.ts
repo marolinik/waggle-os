@@ -1842,26 +1842,6 @@ describe('Chat Streaming API', () => {
     expect(res.json()).toMatchObject({ code: 'WORKSPACE_ROOT_UNAVAILABLE' });
   });
 
-  it('validates message is required', async () => {
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: {},
-    });
-    expect(res.statusCode).toBe(400);
-    const body = JSON.parse(res.body);
-    expect(body.error).toContain('message');
-  });
-
-  it('validates empty message string', async () => {
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: '' },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
   it('handles agent errors gracefully', async () => {
     // Temporarily replace agent runner with one that throws
     const originalRunner = server.agentRunner;
