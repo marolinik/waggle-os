@@ -39,9 +39,6 @@ import { NON_RETAINED_TURN_CONTENT, type TurnRetention } from './chat-turn-reten
 // Same logger name as the handler, so the hook's warnings keep their source.
 const log = createLogger('chat');
 
-// Read once at plugin registration — consistent for the lifetime of the server
-const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
-
 const APPROVAL_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface ApprovalWaitOptions {
@@ -142,6 +139,8 @@ export interface ChatApprovalHookTurn {
   autonomyLevel: AutonomyLevel;
   proposeHeldTurn: boolean | undefined;
   approvalTimeoutPolicy: ApprovalTimeoutPolicy;
+  /** `WAGGLE_AUTO_APPROVE` test mode, read when the plugin registered. */
+  autoApprove: boolean;
   retention: TurnRetention;
   turnSignal: AbortSignal;
   sendEvent: (event: string, data: unknown) => void;
@@ -159,13 +158,13 @@ export function createChatApprovalHook(turn: ChatApprovalHookTurn): HookFn {
     autonomyLevel,
     proposeHeldTurn,
     approvalTimeoutPolicy,
+    autoApprove,
     retention,
     turnSignal,
     sendEvent,
     retainedTurnJson,
     retainedTurnText,
   } = turn;
-  const autoApprove = AUTO_APPROVE;
   return async (ctx) => {
     if (turnSignal.aborted) {
       return { cancel: true, reason: 'Chat or workspace cancelled' };

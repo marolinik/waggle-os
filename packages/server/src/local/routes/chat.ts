@@ -1074,6 +1074,9 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     log.warn(`[chat] ${chatHistoryLayout.reason}`);
   }
   const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
+  // Read with the timeout policy, once per registration, not at module import
+  // (TD-CHAT-11). Test mode only.
+  const autoApprove = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
   let persistedTraceBoundaryId = 0;
   try {
     persistedTraceBoundaryId = server.traceStore?.getLatestId() ?? 0;
@@ -2701,6 +2704,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           autonomyLevel,
           proposeHeldTurn,
           approvalTimeoutPolicy,
+          autoApprove,
           retention,
           turnSignal,
           sendEvent,
