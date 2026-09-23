@@ -86,6 +86,40 @@ describe('POST /api/chat request validation (characterization)', () => {
     expect(body).toEqual({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
   });
 
+  describe('message length limit (WAGGLE_MAX_MESSAGE_LENGTH, read per request)', () => {
+    const original = process.env.WAGGLE_MAX_MESSAGE_LENGTH;
+    afterEach(() => {
+      if (original === undefined) delete process.env.WAGGLE_MAX_MESSAGE_LENGTH;
+      else process.env.WAGGLE_MAX_MESSAGE_LENGTH = original;
+    });
+
+    it('rejects a message over the default 50000 characters', async () => {
+      delete process.env.WAGGLE_MAX_MESSAGE_LENGTH;
+      const { status, body } = await post({ message: 'x'.repeat(50_001) });
+      expect(status).toBe(400);
+      expect(body).toEqual({ error: 'Message too long (50001 chars, max 50000)', code: 'MESSAGE_TOO_LONG' });
+    });
+
+    it('applies a numeric override', async () => {
+      process.env.WAGGLE_MAX_MESSAGE_LENGTH = '10';
+      const { status, body } = await post({ message: 'x'.repeat(11) });
+      expect(status).toBe(400);
+      expect(body).toEqual({ error: 'Message too long (11 chars, max 10)', code: 'MESSAGE_TOO_LONG' });
+    });
+
+    it('QUIRK (TD-CHAT-5): a non-numeric override removes the limit', async () => {
+      process.env.WAGGLE_MAX_MESSAGE_LENGTH = 'fifty-thousand';
+      const runnerCallsBefore = runnerCalls;
+      const res = await injectWithAuth(server, {
+        method: 'POST', url: '/api/chat', payload: { message: 'x'.repeat(50_001) },
+      });
+      // parseInt yields NaN, every length comparison is false, and the request
+      // reaches the runner.
+      expect(res.statusCode).toBe(200);
+      expect(runnerCalls).toBe(runnerCallsBefore + 1);
+    });
+  });
+
   it.each([
     ['workspace', { workspace: 123 }],
     ['workspaceId', { workspaceId: { id: 'x' } }],

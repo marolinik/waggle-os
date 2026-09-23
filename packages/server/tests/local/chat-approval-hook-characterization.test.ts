@@ -651,3 +651,88 @@ describe('POST /api/chat pre-tool approval hook (characterization)', () => {
     expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
   });
 });
+
+/**
+ * The `hold` timeout action, which needs its own server: the timeout policy is
+ * resolved once when the chat plugin registers, and the suite above runs with
+ * `deny`. A held approval leaves the live turn and parks the call in the
+ * durable Approvals inbox.
+ */
+describe('POST /api/chat pre-tool approval hook, hold timeout action (characterization)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+  let originalFetch: typeof globalThis.fetch;
+  const originalTimeout = process.env.WAGGLE_APPROVAL_TIMEOUT_MS;
+  const originalTimeoutAction = process.env.WAGGLE_APPROVAL_TIMEOUT_ACTION;
+
+  beforeAll(async () => {
+    process.env.WAGGLE_APPROVAL_TIMEOUT_MS = '300';
+    process.env.WAGGLE_APPROVAL_TIMEOUT_ACTION = 'hold';
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-approval-hold-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+    server.vault.set('anthropic', 'sk-approval-hold-pin');
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test',
+      checkedAt: new Date().toISOString(),
+    };
+    new WaggleConfig(tmpDir).save();
+    originalFetch = globalThis.fetch;
+  });
+
+  afterAll(async () => {
+    globalThis.fetch = originalFetch;
+    if (originalTimeout === undefined) delete process.env.WAGGLE_APPROVAL_TIMEOUT_MS;
+    else process.env.WAGGLE_APPROVAL_TIMEOUT_MS = originalTimeout;
+    if (originalTimeoutAction === undefined) delete process.env.WAGGLE_APPROVAL_TIMEOUT_ACTION;
+    else process.env.WAGGLE_APPROVAL_TIMEOUT_ACTION = originalTimeoutAction;
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
+  });
+
+  it('moves an unanswered card to the Approvals inbox and blocks the live call', async () => {
+    const args = { path: 'held.txt', content: 'hello' };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: Array<{ role?: string }> };
+      const toolAnswered = (body.messages ?? []).some(m => m.role === 'tool');
+      return toolAnswered ? textResponse('done') : toolCallResponse('write_file', args);
+    }) as typeof globalThis.fetch;
+    const workspaceId = server.workspaceManager.create({
+      name: `approval hold ${Date.now()}`, group: 'test', directory: tmpDir,
+    }).id;
+
+    resetRateLimiter(server);
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Write hello into notes.txt', workspace: workspaceId, session: 'approval-hold', model: 'claude-sonnet-4-6' },
+    });
+    server.sessionManager.close(workspaceId);
+    expect(res.statusCode).toBe(200);
+    const events = parseSSE(res.body);
+
+    const approval = events.find(e => e.event === 'approval_required');
+    expect(approval).toBeDefined();
+    const requestId = JSON.parse(approval!.data).requestId as string;
+
+    const held = events.find(e => e.event === 'approval_held');
+    expect(held).toBeDefined();
+    const heldPayload = JSON.parse(held!.data) as Record<string, unknown>;
+    expect(heldPayload).toMatchObject({ requestId, toolName: 'write_file', held: true, message: 'Moved to Approvals inbox' });
+    expect(typeof heldPayload.expiresAt).toBe('string');
+
+    expect(events.some(e => e.event === 'step'
+      && JSON.parse(e.data).content === '⏸ write_file moved to Approvals inbox')).toBe(true);
+    const toolResult = events.find(e => e.event === 'tool_result' && JSON.parse(e.data).name === 'write_file');
+    expect(JSON.parse(toolResult!.data).result).toBe('[BLOCKED] Approval for write_file moved to Approvals inbox');
+    expect(fs.existsSync(path.join(tmpDir, 'held.txt'))).toBe(false);
+    expect(JSON.parse(events.find(e => e.event === 'done')!.data).toolsUsed).toEqual([]);
+  });
+});
