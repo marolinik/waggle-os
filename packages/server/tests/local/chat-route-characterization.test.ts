@@ -174,6 +174,41 @@ describe('POST /api/chat request validation (characterization)', () => {
       expect(body.code).toBe('PATH_TRAVERSAL');
     });
 
+    // TD-CHAT-44: the same request, `workspace: 'default'` (no managed default)
+    // with a path outside the data directory, answered by session state.
+    it("refuses an outside path sent with workspace 'default' when no workspace is active", async () => {
+      server.agentState.activeWorkspaceId = null;
+      const outside = path.join(os.tmpdir(), 'waggle-traversal-default-idle');
+
+      const { status, body } = await post({ message: 'traversal attempt', workspace: 'default', workspacePath: outside });
+
+      expect(status).toBe(400);
+      expect(body.code).toBe('PATH_TRAVERSAL');
+    });
+
+    it("QUIRK (TD-CHAT-44): ignores the same outside path when a workspace is active", async () => {
+      const active = server.workspaceManager.create({ name: `traversal active ${Date.now()}`, group: 'test' });
+      server.agentState.activeWorkspaceId = active.id;
+      try {
+        resetRateLimiter(server);
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message: 'traversal attempt',
+            workspace: 'default',
+            workspacePath: path.join(os.tmpdir(), 'waggle-traversal-default-active'),
+            session: 'traversal-active',
+          },
+        });
+        // The virtual-storage branch never reads the request's path, and the
+        // turn runs in the active workspace instead.
+        expect(res.statusCode).toBe(200);
+      } finally {
+        server.agentState.activeWorkspaceId = null;
+      }
+    });
+
     it('runs a turn for a path inside the data directory', async () => {
       const inside = path.join(tmpDir, 'workspaces', 'anchored-files');
       fs.mkdirSync(inside, { recursive: true });
