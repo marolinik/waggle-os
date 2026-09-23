@@ -107,16 +107,12 @@ describe('POST /api/chat request validation (characterization)', () => {
       expect(body).toEqual({ error: 'Message too long (11 chars, max 10)', code: 'MESSAGE_TOO_LONG' });
     });
 
-    it('QUIRK (TD-CHAT-5): a non-numeric override removes the limit', async () => {
-      process.env.WAGGLE_MAX_MESSAGE_LENGTH = 'fifty-thousand';
-      const runnerCallsBefore = runnerCalls;
-      const res = await injectWithAuth(server, {
-        method: 'POST', url: '/api/chat', payload: { message: 'x'.repeat(50_001) },
-      });
-      // parseInt yields NaN, every length comparison is false, and the request
-      // reaches the runner.
-      expect(res.statusCode).toBe(200);
-      expect(runnerCalls).toBe(runnerCallsBefore + 1);
+    it.each(['fifty-thousand', '0', '-5'])('falls back to the default for an override of %j', async (configured) => {
+      // Until TD-CHAT-5 a non-numeric value became NaN and removed the limit.
+      process.env.WAGGLE_MAX_MESSAGE_LENGTH = configured;
+      const { status, body } = await post({ message: 'x'.repeat(50_001) });
+      expect(status).toBe(400);
+      expect(body).toEqual({ error: 'Message too long (50001 chars, max 50000)', code: 'MESSAGE_TOO_LONG' });
     });
   });
 

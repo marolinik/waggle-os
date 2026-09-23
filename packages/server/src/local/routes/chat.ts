@@ -142,7 +142,7 @@ export function validateChatRequestFields(
   if (typeof message !== 'string') {
     return reject(400, { error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
   }
-  const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
+  const MAX_MESSAGE_LENGTH = resolveMaxMessageLength(process.env.WAGGLE_MAX_MESSAGE_LENGTH);
   if (message.length > MAX_MESSAGE_LENGTH) {
     return reject(400, { error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
   }
@@ -187,6 +187,18 @@ export function validateChatRequestFields(
     assertSafeSegment(value, field);
   }
   return { selectedSkill, retryTarget };
+}
+
+const DEFAULT_MAX_MESSAGE_LENGTH = 50_000;
+
+/**
+ * The configured message limit, or the default when the value is not a
+ * positive integer. `parseInt` alone turned a typo into NaN, every length
+ * comparison was false, and the limit silently disappeared (TD-CHAT-5).
+ */
+function resolveMaxMessageLength(configured: string | undefined): number {
+  const parsed = configured === undefined ? Number.NaN : Number.parseInt(configured, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_MESSAGE_LENGTH;
 }
 
 /**
