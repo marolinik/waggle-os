@@ -68,17 +68,35 @@ describe('POST /api/chat history write failure (characterization)', () => {
     }
   }
 
-  it('QUIRK (TD-CHAT-14): sends the raw fs error, absolute path included, to the client', async () => {
+  const STORAGE_ERROR = {
+    message: 'Your conversation could not be saved on this device. Check free disk space and folder permissions, then try again.',
+    code: 'CHAT_STORAGE_UNAVAILABLE',
+  };
+
+  // Until TD-CHAT-14 both turns below sent Node's raw error, absolute path
+  // included, to the client and wrote it into the transcript.
+  it('answers a failed history write with a fixed message and code, never the path', async () => {
     const errors = await turnFailingPersistCall('Keep this one please', 'history-write-fail', 1);
-    expect(errors).toHaveLength(1);
-    expect(errors[0].message).toContain(LEAKED_PATH);
+    expect(errors).toEqual([STORAGE_ERROR]);
   });
 
-  it('QUIRK (TD-CHAT-21): a slash-command reply whose persist fails also sends the raw fs error', async () => {
+  it('answers a failed slash-command reply write the same way (TD-CHAT-21)', async () => {
     // Call 1 persists the user's turn; call 2 is streamCannedReply persisting
     // the command's answer.
     const errors = await turnFailingPersistCall('/status', 'history-write-fail-command', 2);
-    expect(errors).toHaveLength(1);
-    expect(errors[0].message).toContain(LEAKED_PATH);
+    expect(errors).toEqual([STORAGE_ERROR]);
+  });
+
+  it('keeps the path out of the persisted transcript too', async () => {
+    // Call 1 saves the user's turn; call 2, the assistant's answer, fails.
+    const errors = await turnFailingPersistCall('Keep this one too', 'history-write-fail-transcript', 2);
+    expect(errors).toEqual([STORAGE_ERROR]);
+    const transcriptFile = path.join(
+      tmpDir, 'workspaces', String(server.agentState.activeWorkspaceId), 'sessions', 'history-write-fail-transcript.jsonl',
+    );
+    const transcript = fs.readFileSync(transcriptFile, 'utf8');
+    expect(transcript).not.toContain(LEAKED_PATH);
+    // The failed turn is still recorded, with the fixed message in place of the path.
+    expect(transcript).toContain(STORAGE_ERROR.message);
   });
 });

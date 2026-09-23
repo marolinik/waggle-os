@@ -582,6 +582,19 @@ function isClosedDbError(e: unknown): boolean {
   return /database (connection|handle) is not open|database is closed/i.test(msg);
 }
 
+const CHAT_STORAGE_UNAVAILABLE_MESSAGE = 'Your conversation could not be saved on this device. Check free disk space and folder permissions, then try again.';
+
+/**
+ * A Node system error from the filesystem. `code` and `syscall` alone would
+ * also match a network failure (ECONNREFUSED on `connect`, a socket error on
+ * `read`); only a filesystem error names the `path` it touched.
+ */
+function isLocalStorageFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code, syscall, path: failedPath } = error as NodeJS.ErrnoException;
+  return typeof code === 'string' && typeof syscall === 'string' && typeof failedPath === 'string';
+}
+
 function isIncompleteCompletionError(error: unknown): boolean {
   return typeof error === 'object'
     && error !== null
@@ -4589,7 +4602,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
-      if (err instanceof Error) {
+      const storageFailure = isLocalStorageFailure(err);
+      if (storageFailure) {
+        // A failed history read or write: Node's message names the absolute
+        // file, which must not reach the client or the transcript (TD-CHAT-14).
+        errorMessage = CHAT_STORAGE_UNAVAILABLE_MESSAGE;
+      } else if (err instanceof Error) {
         // Clean up common error messages for the user. Authentication and
         // endpoint availability are different recovery paths: never send a
         // user to API-key settings when a local/OpenAI-compatible endpoint is
@@ -4615,7 +4633,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       const budgetCode = isTerminalModelBudgetError(err)
         ? (err as { code: string }).code
-        : undefined;
+        : storageFailure ? 'CHAT_STORAGE_UNAVAILABLE' : undefined;
       sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
