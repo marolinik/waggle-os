@@ -164,15 +164,6 @@ describe('Chat Streaming API', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-test-'));
 
-    // Create personal.mind with test data
-    const personalPath = path.join(tmpDir, 'personal.mind');
-    const mind = new MindDB(personalPath);
-    const sessions = new SessionStore(mind);
-    const frames = new FrameStore(mind);
-    const s1 = sessions.create('test-project');
-    frames.createIFrame(s1.gop_id, 'Waggle chat test content', 'normal');
-    mind.close();
-
     // Mock agent runner that simulates streaming tokens
     const mockAgentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
       if (config.onToken) {
