@@ -4205,8 +4205,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               for (const entity of entities.slice(0, 10)) {
                 try {
                   knowledge.createEntity(entity.type, entity.name, { confidence: entity.confidence, source: `session:${sessionId}` }, { valid_from: now });
-                } catch {
-                  // Duplicate or schema error — skip silently
+                } catch (entityError) {
+                  // A closed handle is the W4A seam the handler below names;
+                  // swallowing it here hid it (TD-CHAT-24). A duplicate or a
+                  // schema error for one entity is still skipped.
+                  if (isClosedDbError(entityError)) throw entityError;
                 }
               }
             }
@@ -4471,6 +4474,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   workspaceId: effectiveWorkspace,
                   sessionId,
                   seam: 'autoSaveFromExchange',
+                  error: e instanceof Error ? e.message : String(e),
+                });
+              } else {
+                // Any other failure (embedding, constraint, a TypeError) drops
+                // a memory write too, and used to do it with no record at all
+                // (TD-REL-3). The turn is already committed; only log.
+                log.warn('[chat] post-commit auto-save failed; the memory write was dropped', {
+                  workspaceId: effectiveWorkspace,
+                  sessionId,
                   error: e instanceof Error ? e.message : String(e),
                 });
               }
@@ -4747,7 +4759,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         'sessions',
         `${sessionId}.jsonl`,
       ),
-      { force: true },
+      // A Windows indexer or antivirus can hold the file for a moment; Node
+      // retries EBUSY/EPERM here instead of failing the request with a 500
+      // (TD-REL-5). A lasting failure still throws before any state is evicted,
+      // so the file and the in-process history stay in step.
+      { force: true, maxRetries: 10, retryDelay: 50 },
     );
 
     evictStateKey(scopedStateKey);
