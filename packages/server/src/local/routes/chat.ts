@@ -189,6 +189,11 @@ export function validateChatRequestFields(
   return { selectedSkill, retryTarget };
 }
 
+/** Per-word pacing when a canned reply is streamed: slash-command output. */
+const COMMAND_REPLY_WORD_DELAY_MS = 10;
+/** Per-word pacing for the "No AI model is ready" setup reply. */
+const SETUP_REQUIRED_REPLY_WORD_DELAY_MS = 15;
+
 /**
  * Resolves the effective autonomy level for a request. Expired grants fall
  * back to 'normal' — the client may not have auto-reverted yet on its side,
@@ -2439,12 +2444,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !litellmAvailable) {
           const cmdName = message.trim().split(/\s+/)[0];
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
-          if (!(await streamCannedReply(friendlyError, 10))) return;
+          if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
           // Stream the command result as SSE tokens and persist it
-          if (!(await streamCannedReply(cmdResult, 10))) return;
+          if (!(await streamCannedReply(cmdResult, COMMAND_REPLY_WORD_DELAY_MS))) return;
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
@@ -2459,7 +2464,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // was answered. The raw turn is still persisted for continuity.
         const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         // Persist echo response so session continuity is maintained
-        if (!(await streamCannedReply(echoResponse, 15))) return;
+        if (!(await streamCannedReply(echoResponse, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
       }
 
       if (shouldRunAgentLoop) {
