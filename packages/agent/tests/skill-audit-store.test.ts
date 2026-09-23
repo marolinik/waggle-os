@@ -97,7 +97,10 @@ describe('saveSkillAudit (Windows transient locks)', () => {
 
       saveSkillAudit(home, replacement);
 
-      expect(rename).toHaveBeenCalledTimes(3);
+      // Attempts 1-2 are the injected locks. Attempt 3 is a REAL rename, and on a
+      // loaded Windows box a real lock can make the code retry once more, so the
+      // total is a floor, not an exact count (TD-TEST-10).
+      expect(rename.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(wait).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 25);
       expect(wait).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 50);
       expect(loadSkillAudit(home)).toEqual(replacement);

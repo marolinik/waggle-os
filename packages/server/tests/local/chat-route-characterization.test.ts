@@ -258,7 +258,16 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
     };
   });
 
-  afterEach(() => {
+  // `activateWorkspaceMind` also sets the server's closure-held active id and
+  // the orchestrator's workspace mind, which the property reset below cannot
+  // reach. Close every mind a test activated, so no test depends on running
+  // last (TD-TEST-6).
+  const activatedWorkspaceIds: string[] = [];
+
+  afterEach(async () => {
+    for (const workspaceId of activatedWorkspaceIds.splice(0)) {
+      (await server.agentState.closeWorkspaceMind(workspaceId)).release();
+    }
     server.agentState.activeWorkspaceId = null;
   });
 
@@ -308,6 +317,7 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
       directory: path.join(tmpDir, 'no-such-active-dir'),
     });
     expect(server.agentState.activateWorkspaceMind(workspace.id)).toBe(true);
+    activatedWorkspaceIds.push(workspace.id);
     server.agentState.activeWorkspaceId = workspace.id;
     const res = await injectWithAuth(server, {
       method: 'POST',

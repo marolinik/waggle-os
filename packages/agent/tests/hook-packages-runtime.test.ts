@@ -318,7 +318,8 @@ describe('hook package installed lifecycle UX', () => {
         }
       }
     } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+      // A just-exited hook process can still hold node.exe on Windows (EBUSY).
+      fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 300_000);
 
@@ -514,7 +515,9 @@ describe('hook package installed lifecycle UX', () => {
           }
         }
       } finally {
-        await fs.promises.rm(tempRoot, { recursive: true, force: true });
+        // The copied node.exe may still be held by a just-exited child on
+        // Windows (EBUSY on the runner); let rm retry instead of failing the test.
+        await fs.promises.rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
       }
     },
     600_000,
