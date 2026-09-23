@@ -20,8 +20,9 @@
  * get a fresh, complete stream.
  *
  * Injection mechanism mirrors the page.route() pattern in spawn-agent-flow.spec.ts.
- * Runs against the existing :3333 webServer (WAGGLE_ECHO_MODE in CI → the server
- * streams a deterministic "local mode" echo response, used by the recovery test).
+ * Runs against the existing :3333 webServer. In CI no provider key is configured,
+ * so the server streams its deterministic setup-required reply, used by the
+ * recovery test.
  *
  * Run: npx playwright test tests/e2e/failure-injection/network-drop.spec.ts --reporter=list
  */
@@ -187,9 +188,9 @@ test('user can re-send after a dropped stream and get a new complete response', 
   // (4) Re-send — the real server handles it. The recovery CONTRACT is mode-
   // independent: the composer settles (request completed, no hang), a new
   // assistant turn renders, and NO new offline error appears. We deliberately
-  // do NOT assert the echo-only "local mode" string: a live LLM proxy (LiteLLM
-  // on :4000) takes precedence over WAGGLE_ECHO_MODE and returns real model
-  // output, so that copy would make the test environment-dependent.
+  // do NOT assert the setup-required copy: a live LLM proxy (LiteLLM on :4000)
+  // serves the turn when one is running and returns real model output, so that
+  // copy would make the test environment-dependent.
   await input.fill('retry attempt after recovery — please respond');
   await input.press('Enter');
 

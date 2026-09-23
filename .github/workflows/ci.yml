@@ -134,7 +134,6 @@ jobs:
       - name: Run blocking Playwright smoke journeys
         run: npm run test:e2e:smoke
         env:
-          WAGGLE_ECHO_MODE: "1"
           NODE_ENV: test
           WAGGLE_TRUST_LOCALHOST: "1"
 
@@ -173,7 +172,6 @@ jobs:
       - name: Run Playwright E2E tests
         run: npx playwright test tests/e2e/
         env:
-          WAGGLE_ECHO_MODE: "1"
           NODE_ENV: test
           # D1: the e2e suite hits /api/* directly without a bearer token; trust
           # loopback in CI's test server (prod default stays secure). Mirrors
