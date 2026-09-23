@@ -112,9 +112,13 @@ const isPseudonym = (column: string) => `substr(NEW.${column}, 1, ${PSEUDONYM_PR
  *   `workspace_id` changes, from an id to a pseudonym.
  * Every kept column is unchanged in both. An appended tombstone row would
  * leave the original text in place, which is not erasure.
+ *
+ * The permitted-update clause is wrapped in `COALESCE(..., 0)`: SQLite skips a
+ * trigger whose WHEN is NULL, and a comparison against a NULL id (`substr` of
+ * a NULL workspace or session) would otherwise let an update through.
  */
 export const AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL =
-  'CREATE TRIGGER ai_interactions_no_update BEFORE UPDATE ON ai_interactions WHEN NOT ('
+  'CREATE TRIGGER ai_interactions_no_update BEFORE UPDATE ON ai_interactions WHEN NOT COALESCE(('
   + '(OLD.pseudonymized_at IS NULL AND NEW.pseudonymized_at IS NOT NULL AND NEW.pseudonymized_at <> \'\' '
   + `AND NEW.input_text IS '${AI_INTERACTIONS_PSEUDONYMIZED_TEXT}' `
   + `AND NEW.output_text IS '${AI_INTERACTIONS_PSEUDONYMIZED_TEXT}' `
@@ -127,8 +131,8 @@ export const AI_INTERACTIONS_NO_UPDATE_TRIGGER_SQL =
   + 'AND NEW.risk_context IS OLD.risk_context AND NEW.session_id IS OLD.session_id '
   + `AND substr(OLD.workspace_id, 1, ${PSEUDONYM_PREFIX.length}) <> '${PSEUDONYM_PREFIX}' AND ${isPseudonym('workspace_id')} `
   + `AND ${keptUnchanged})`
-  + ') BEGIN SELECT RAISE(ABORT, '
+  + '), 0) BEGIN SELECT RAISE(ABORT, '
   + `'${AI_INTERACTIONS_APPEND_ONLY_MESSAGE}; only a one-time GDPR Art.17 pseudonymization is permitted'); END`;
 
 /** The live no-update trigger is current when it carries this clause. */
-export const AI_INTERACTIONS_NO_UPDATE_SENTINEL = 'OLD.pseudonymized_at IS NULL';
+export const AI_INTERACTIONS_NO_UPDATE_SENTINEL = 'WHEN NOT COALESCE((';

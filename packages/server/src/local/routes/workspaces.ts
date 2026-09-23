@@ -1112,6 +1112,9 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     // GDPR Art.17: the governance trail survives the delete with the workspace
     // and its sessions pseudonymized (D-1). It runs before the delete, so a
     // failure keeps the workspace instead of reporting an erase it did not do.
+    // The converse is accepted: a delete that then fails (for example busy)
+    // leaves the workspace with its trail already pseudonymized, which errs
+    // toward erasure.
     try {
       pseudonymizeInteractions(
         server.multiMind.personal,

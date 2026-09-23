@@ -139,6 +139,20 @@ describe('pseudonymizeInteractions', () => {
     expect(update("UPDATE ai_interactions SET session_id = 'session-1' WHERE id = ?", id)).toThrow(refused);
     expect(update('DELETE FROM ai_interactions WHERE id = ?', id)).toThrow(refused);
   });
+
+  it('refuses updates whose guard clause would evaluate to NULL', () => {
+    // A NULL anywhere in the permitted-update clause must read as "not
+    // permitted": SQLite skips a trigger whose WHEN is NULL, not only FALSE.
+    const refused = /append-only/;
+    const noWorkspace = record(undefined, 'session-2');
+    pseudonymizeInteractions(db, { sessionId: 'session-2' }, KEY);
+    expect(update("UPDATE ai_interactions SET workspace_id = 'pseud:anything' WHERE id = ?", noWorkspace))
+      .toThrow(refused);
+
+    const withSession = record('ws-1', 'session-3');
+    pseudonymizeInteractions(db, { sessionId: 'session-3' }, KEY);
+    expect(update('UPDATE ai_interactions SET session_id = NULL WHERE id = ?', withSession)).toThrow(refused);
+  });
 });
 
 describe('governance on a mind from before D-1', () => {
