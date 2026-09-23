@@ -61,10 +61,10 @@ describe('POST /api/chat rerouted slash commands (characterization)', () => {
     expect(events.some(e => e.event === 'done')).toBe(true);
   });
 
-  it('QUIRK (TD-CHAT-25): an empty rerouted message ends the turn with no answer and no done', async () => {
+  it("answers an empty rerouted message through the loop, on the user's own command", async () => {
+    // Until TD-CHAT-25 the turn ended with no answer and no done.
     const events = await turn('/emptyreroute', 'reroute-empty');
-    expect(runnerMessages).toEqual([]);
-    expect(events.some(e => e.event === 'done')).toBe(false);
-    expect(events.some(e => e.event === 'error')).toBe(false);
+    expect(runnerMessages).toEqual(['/emptyreroute']);
+    expect(events.some(e => e.event === 'done')).toBe(true);
   });
 });
