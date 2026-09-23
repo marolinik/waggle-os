@@ -156,6 +156,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-22 | close-out | **Close every recorded finding first, production after** (founder) | Plan in `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-22.md`: 53 open/partial ledger rows plus CA-5b, R-3/R-4/R-5/R-7, D-1/D-2, in six waves, 26-32 PRs. Six rows need a founder decision and are batched into one round. |
 | 2026-09-23 | 2 (pass 2) | TD-CHAT-3 slice 6 is **not** another Method Object | The five remaining singles (`firstTokenAt`, `turnSignal`, `reroutedMessage`, `responseCommitted`, plus the error-path captures) are not one cohesive cluster, and wrapping them would be the shallow class Phase 4 rejects. They shrink naturally when the handler's phases are extracted, so the next slice is the first control-flow extraction (the 323-line pre:tool approval hook, which needs the ratified `ChatTurnScope` parameter object). TD-CHAT-33's dead write was closed on the way (`f0b0125d` + `a0637b51`). |
 | 2026-09-23 | 2 (pass 2) | The approval hook takes a flat `ChatApprovalHookTurn`, not `ChatTurnScope` (`caf7b6da`) | `ChatTurnScope` (P4-A1) replaces the id derivation in `resolveChatWorkspaceTarget` and rebinds ~20 read sites across the handler; doing it inside a verbatim move would have mixed a rewiring into a structure-only commit. The hook's parameter object keeps the handler's names, so a later `ChatTurnScope` can replace its three id fields in one place. |
+| 2026-09-23 | close-out | **Founder decision round** (four of the six blocked rows) | TD-CHAT-26: a managed personal folder under the data directory replaces the `os.homedir()` fallbacks (behavior change, pin first). TD-CHAT-43: won't fix, the H-AUDIT-1 turn-entry placement stands. TD-CHAT-45: stays open rather than closing as won't fix. R-5 and D-1 stay in the close-out (W5); D-1 still needs the sticky-erasure vs compliance-trail ruling before it starts. TD-CHAT-36 was not asked: the 2026-09-17 ruling already covers its deny posture, to be re-verified in W4. |
 
 ## Next Actions
 
@@ -194,6 +195,8 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
   - [x] TD-CHAT-3 slice 5, releasable resources -> `TurnResources` (agent, `8b683a06` + `0abe3fcc`, 2026-09-22)
   - [x] TD-CHAT-33 dead write closed, and its traversal guard pinned for the first time (agent, `f0b0125d` + `a0637b51`, 2026-09-22)
   - [x] TD-CHAT-3 slice 6, the pre:tool approval hook -> `createChatApprovalHook` (agent, `55b2f19d` + `caf7b6da`, 2026-09-23)
+  - [x] TD-CHAT-3 slice 7, `onToolResult` side effects -> `applyToolResultSideEffects` (agent, `7f1f6f76` + `c71c1454`, 2026-09-23)
+  - [ ] TD-CHAT-3 next: the turn's tool-activity state (explicit read-only choice, required sequence, start times, replay guard) as a Method Object, pinned first (agent, P1)
   - [ ] TD-CHAT-3 control flow: Extract Method on the handler's phases once its state has owners (agent, P1)
   - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)
 - [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
