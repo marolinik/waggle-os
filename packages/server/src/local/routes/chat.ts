@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
 import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, routeMessage, CredentialPool, loadCredentialPool, isBoundedSingleFileRoundTrip, generateTurnId, logTurnEvent, READONLY_TOOLS, type ToolDefinition } from '@waggle/agent';
@@ -550,6 +550,347 @@ import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn 
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
+
+/** The POST /api/chat body. */
+type ChatTurnBody = {
+    message: string;
+    workspace?: string;
+    workspaceId?: string;
+    model?: string;
+    session?: string;
+    /** Browser client alias retained alongside the legacy `session` key. */
+    sessionId?: string;
+    workspacePath?: string;
+    persona?: string;
+    /** Exact installed skill proposed by a first-party starter chip; always validated here. */
+    selectedSkill?: string;
+    /**
+     * Tiered autonomy override, resolved by `resolveAutonomyLevel` at the
+     * top of the handler. When absent or 'normal', the
+     * existing gate applies. 'trusted' or 'yolo' relax the gate per the
+     * rules in needsConfirmationWithAutonomy.
+     * `expiresAt` is a client-supplied deadline — if set and in the past,
+     * the server falls back to 'normal' for safety.
+     */
+    autonomy?: { level: AutonomyLevel; expiresAt?: number };
+    /**
+     * Set by a client Retry after a failed turn. Drops the previously
+     * persisted failed user+assistant pair (RAM + disk) before re-issuing so
+     * a reload doesn't show a duplicate.
+     */
+    retry?: boolean;
+    retryTarget?: RetryTailExpectation;
+    /**
+     * Self-evolution: set by the IdleSessionWatcher's loopback review turn.
+     * A review turn runs headless — no interactive client watches the SSE
+     * stream, so a live approval prompt would auto-deny after the timeout and
+     * the proposal would be lost. When true, a gated proposable tool (e.g.
+     * create_skill) is HELD for durable human approval in Approvals instead of
+     * a live SSE prompt, and any other gated tool is denied. The reviewer can
+     * therefore never write to disk without approval.
+     */
+    proposeHeld?: boolean;
+    /**
+     * Automation-origin memory write-back gate. Set ONLY by
+     * headless/automated callers (idle-watcher review turns, scheduled
+     * loops) — an automated turn re-analyzes existing transcripts, so its
+     * post-response write-back (auto-save, skill distillation, KG
+     * extraction, correction detection) would pollute memory with
+     * re-detected "decisions" and false correction signals. IM channel
+     * adapters must NOT set this: inbound IM messages are real user turns.
+     */
+    origin?: 'automation' | 'router';
+    /**
+     * Originating IM channel of this turn (real platform + chatId).
+     * Set only by ChannelManager.handleInbound via the loopback client —
+     * published as the request-scoped turn origin so create_schedule can
+     * stamp ai_task delivery targets from a trusted snapshot.
+     */
+    channel?: { platform: string; chatId: string };
+};
+
+/**
+ * Resolves a POST /api/chat request before the response is hijacked:
+ * field validation, the workspace and session it names, the turn's mutation
+ * and read-only-tool policy, its persona and retention, the injection scan,
+ * the viewer refusal and the path-traversal check. Returns `{ rejected }`
+ * holding the reply it already sent when the request is refused.
+ *
+ * Extract Method on the handler (TD-CHAT-3 slice 15c); the body is the
+ * handler's own, with each early `return reply…` wrapped as `{ rejected }`.
+ */
+function resolveChatTurnRequest(
+  server: ChatServer,
+  request: FastifyRequest<{ Body: ChatTurnBody }>,
+  reply: FastifyReply,
+  getChatHistoryLayout: () => ReturnType<typeof isolateLegacyDefaultChatSessions>,
+) {
+  // Accept both 'workspace' and 'workspaceId' for backwards compat (P0-4).
+  // `persona` is an optional per-window override — takes precedence
+  // over the workspace's default persona for this single request only.
+  const {
+    message, workspace: workspaceRaw, workspaceId: workspaceIdRaw, model, session,
+    sessionId: sessionIdAlias,
+    workspacePath: explicitWorkspacePath, persona: personaOverride,
+    selectedSkill: selectedSkillRaw,
+    autonomy: autonomyRaw, retry: retryTurn, retryTarget: retryTargetRaw,
+    proposeHeld: proposeHeldTurn,
+    origin, channel: channelMeta,
+  } = request.body ?? {};
+
+  // Reject a malformed request body before resolving the workspace it names.
+  // A syntactically valid unknown workspace still returns 404 below, while
+  // invalid message/session input remains a stable 400 regardless of whether
+  // the named workspace exists.
+  const validatedFields = validateChatRequestFields(
+    {
+      message,
+      workspace: workspaceRaw,
+      workspaceId: workspaceIdRaw,
+      session,
+      sessionId: sessionIdAlias,
+      selectedSkill: selectedSkillRaw,
+      retry: retryTurn,
+      retryTarget: retryTargetRaw,
+    },
+    name => server.agentState.skills.some(skill => skill.name === name),
+  );
+  if (validatedFields.rejection) {
+    return { rejected: reply.status(validatedFields.rejection.status).send(validatedFields.rejection.body) };
+  }
+  const { selectedSkill, retryTarget } = validatedFields;
+
+  const workspace = workspaceRaw ?? workspaceIdRaw;
+  const authorizedWorkspace = getResolvedChatWorkspaceId(request);
+  const requestedSessionId = session ?? sessionIdAlias;
+  if (session !== undefined && sessionIdAlias !== undefined && session !== sessionIdAlias) {
+    return { rejected: reply.status(400).send({
+      error: 'session and sessionId must match when both are provided',
+      code: 'SESSION_ID_CONFLICT',
+    }) };
+  }
+
+  const workspaceTarget = resolveChatWorkspaceTarget(
+    server,
+    workspace,
+    authorizedWorkspace,
+    getChatHistoryLayout,
+  );
+  if (workspaceTarget.rejection) {
+    return { rejected: reply.status(workspaceTarget.rejection.status).send(workspaceTarget.rejection.body) };
+  }
+  const {
+    workspaceConfig,
+    historyTarget,
+    usesNamedWorkspace,
+    historyWorkspaceId,
+    executionWorkspaceId,
+    executionScopeId,
+    executionWorkspaceConfig,
+  } = workspaceTarget;
+  // Automated turns skip the post-response memory write-back seams
+  // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
+  // already sets it, so its review turns are gated even without `origin`.
+  // Compliance execution traces stay ungated. Learned memory, improvement
+  // signals, and skill capture are gated below by the resolved turn policy.
+  const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
+
+  // Resolve the effective autonomy level for this request (the request
+  // body's `autonomy` field documents the levels and the expiry fallback).
+  const autonomyLevel = resolveAutonomyLevel(autonomyRaw);
+
+  // Generate per-turn trace ID at the conceptual turn boundary
+  // (POST /api/chat entry). Propagated explicitly into agent-loop,
+  // orchestrator, retrieval, prompt-assembler, cognify, and each tool
+  // call. Every stage logs a structured event tagged with this turnId
+  // so the full turn graph is reconstructable from a single correlation
+  // key. Also satisfies EU AI Act Art. 14 traceability requirements (H-AUDIT-1).
+  const turnId = generateTurnId();
+  logTurnEvent(turnId, {
+    stage: 'chat.turn.start',
+    workspace: executionWorkspaceId,
+    model,
+    messageChars: (message ?? '').length,
+  });
+
+  // Resolve workspace directory — use explicit path, workspace config, or virtual storage
+  // NEVER fall back to user homedir — use managed storage instead
+  const workspacePaths = resolveChatWorkspacePaths(server, {
+    workspace,
+    workspaceConfig,
+    explicitWorkspacePath,
+    usesNamedWorkspace,
+    authorizedWorkspace,
+  });
+  if (workspacePaths.rejection) {
+    return { rejected: reply.status(workspacePaths.rejection.status).send(workspacePaths.rejection.body) };
+  }
+  const workspacePath = workspacePaths.workspacePath;
+  const { workspacePathFromTrustedConfig, executionWorkspacePath } = workspacePaths;
+
+  // Validation and auth checks remain before reply.hijack(); once hijacked,
+  // reply.status() / reply.send() become no-ops on the raw socket.
+  const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+  const isPlainInteractiveTurn = autonomyLevel === 'normal'
+    && !isAutomatedTurn
+    && turnMutationPolicy.contextScope === 'default';
+  const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
+    message,
+    Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
+  );
+  const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
+    && (!selectedSkill || selectedSkill === 'decision-matrix')
+    && isPlainInteractiveTurn;
+  const boundedExactPersistedMemoryLookup = isBoundedExactPersistedMemoryLookup(message)
+    && isPlainInteractiveTurn;
+  const directReadFileDirective = parseDirectReadFileDirective(message);
+  const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
+    && isPlainInteractiveTurn
+    && Boolean(executionWorkspacePath)
+    ? 'read_file'
+    : undefined;
+  const preScanExplicitReadOnlyToolCandidate = directReadFileCandidate
+    ?? (decisionMatrixToolSequenceRequested
+      ? 'read_skill'
+      : undefined)
+    ?? (selectedSkill ? 'read_skill' : undefined)
+    ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
+    ?? (resolvedReadOnlyToolDirective === 'list_skills'
+      && isPlainInteractiveTurn
+      && detectTaskShape(message).complexity === 'simple'
+      && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
+      ? resolvedReadOnlyToolDirective
+      : undefined);
+  const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
+  const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
+    && !isAutomatedTurn
+    && !shouldUsePersistedMemoryForTurn(message)
+    && !isExplicitMemorySaveRequest(message)
+    && !isExplicitExternalResearchRequest(message)
+    && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
+  const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
+  const turnPersonaId = personaOverride
+    ?? executionWorkspaceConfig?.personaId
+    ?? null;
+  const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
+  const turnPersistence = resolveTurnPersistencePermissions({
+    policy: turnMutationPolicy,
+    isAutomatedTurn,
+    personaIsReadOnly: turnPersona?.isReadOnly === true,
+    closedWorldRewrite: requestClosedWorldRewrite,
+  });
+  // What this turn may leave behind; narrowed once its history is loaded.
+  const retention = new TurnRetention({
+    ...turnPersistence,
+    allowResponseDecoration: allowsPostResponseDecoration(
+      turnMutationPolicy,
+      requestClosedWorldRewrite,
+    ),
+  });
+  const retainedTurnText = (value: string): string => (
+    retention.allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
+  );
+  const retainedTurnJson = (value: unknown): string => (
+    retention.allowDerivedPersistence
+      ? JSON.stringify(value) ?? 'null'
+      : JSON.stringify({ redacted: NON_RETAINED_TURN_CONTENT })
+  );
+
+  // Security: scan for prompt injection patterns
+  const injectionResult = scanForInjection(message, 'user_input');
+  if (injectionResult.score >= 0.7) {
+    // High-confidence injection: block entirely.
+    // Flags NOT included in the client response — the scanner's
+    // internal pattern vocabulary leaks a roadmap for crafting bypassing payloads.
+    log.warn(`[security] Prompt injection BLOCKED (score ${injectionResult.score})`, injectionResult.flags);
+    return { rejected: reply.code(400).send({
+      error: 'Message blocked by security scanner',
+      code: 'INJECTION_DETECTED',
+    }) };
+  } else if (injectionResult.score >= 0.3) {
+    log.warn(`[security] Potential prompt injection detected (score ${injectionResult.score})`, injectionResult.flags);
+  }
+  const warningTierDirectReadFileCandidate = !injectionResult.safe
+    && WARNING_TIER_DIRECT_READ_FILE_INTENT_RE.test(message)
+    && isPlainInteractiveTurn
+    && Boolean(executionWorkspacePath)
+    ? 'read_file'
+    : undefined;
+  const explicitReadOnlyToolCandidate = preScanExplicitReadOnlyToolCandidate
+    ?? warningTierDirectReadFileCandidate;
+
+  // Viewer RBAC runs before reply.hijack() — after hijack,
+  // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
+  if (workspaceConfig?.teamId && workspaceConfig?.teamRole === 'viewer') {
+      return { rejected: reply.status(403).send({
+        error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+        code: 'VIEWER_READ_ONLY',
+      }) };
+  }
+
+  // Request-supplied paths stay anchored to dataDir.
+  // A workspace directory loaded from persisted config is an explicit user
+  // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
+  // A trusted config also makes the request's own path irrelevant, and that
+  // path is ignored (pinned in chat-api). Otherwise the body's
+  // `workspacePath` is checked even when the branch above did not adopt it,
+  // so the answer depends on the request, not on which workspace the session
+  // happens to have active (TD-CHAT-44).
+  const requestSuppliedPaths = workspacePathFromTrustedConfig ? [] : [
+    ...(workspacePath ? [workspacePath] : []),
+    ...(typeof explicitWorkspacePath === 'string' && explicitWorkspacePath && explicitWorkspacePath !== workspacePath
+      ? [explicitWorkspacePath]
+      : []),
+  ];
+  for (const candidate of requestSuppliedPaths) {
+    const resolved = path.resolve(candidate);
+    const allowed = path.resolve(server.localConfig.dataDir);
+    if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+      log.warn(`[security] Path traversal attempt blocked: ${candidate}`);
+      return { rejected: reply.status(400).send({
+        error: 'Invalid workspace path',
+        code: 'PATH_TRAVERSAL',
+      }) };
+    }
+  }
+
+  return {
+    message,
+    model,
+    personaOverride,
+    retryTurn,
+    proposeHeldTurn,
+    channelMeta,
+    selectedSkill,
+    retryTarget,
+    authorizedWorkspace,
+    requestedSessionId,
+    historyTarget,
+    usesNamedWorkspace,
+    historyWorkspaceId,
+    executionWorkspaceId,
+    executionScopeId,
+    executionWorkspaceConfig,
+    isAutomatedTurn,
+    autonomyLevel,
+    turnId,
+    executionWorkspacePath,
+    turnMutationPolicy,
+    decisionMatrixToolSequenceRequested,
+    boundedExactPersistedMemoryLookup,
+    directReadFileDirective,
+    persistedMemoryReadAllowed,
+    toolFreeAdvisoryCandidate,
+    requestClosedWorldRewrite,
+    turnPersonaId,
+    turnPersona,
+    retention,
+    retainedTurnText,
+    retainedTurnJson,
+    injectionResult,
+    explicitReadOnlyToolCandidate,
+  } as const;
+}
 
 export const chatRoutes: FastifyPluginAsync = async (server) => {
   primeMemoryDirectiveClassifier();
@@ -1211,298 +1552,51 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     return `\n\n<turn-context>\n${lines.join('\n')}\n</turn-context>`;
   }
   // POST /api/chat — SSE streaming chat endpoint
-  server.post<{
-    Body: {
-      message: string;
-      workspace?: string;
-      workspaceId?: string;
-      model?: string;
-      session?: string;
-      /** Browser client alias retained alongside the legacy `session` key. */
-      sessionId?: string;
-      workspacePath?: string;
-      persona?: string;
-      /** Exact installed skill proposed by a first-party starter chip; always validated here. */
-      selectedSkill?: string;
-      /**
-       * Tiered autonomy override, resolved by `resolveAutonomyLevel` at the
-       * top of the handler. When absent or 'normal', the
-       * existing gate applies. 'trusted' or 'yolo' relax the gate per the
-       * rules in needsConfirmationWithAutonomy.
-       * `expiresAt` is a client-supplied deadline — if set and in the past,
-       * the server falls back to 'normal' for safety.
-       */
-      autonomy?: { level: AutonomyLevel; expiresAt?: number };
-      /**
-       * Set by a client Retry after a failed turn. Drops the previously
-       * persisted failed user+assistant pair (RAM + disk) before re-issuing so
-       * a reload doesn't show a duplicate.
-       */
-      retry?: boolean;
-      retryTarget?: RetryTailExpectation;
-      /**
-       * Self-evolution: set by the IdleSessionWatcher's loopback review turn.
-       * A review turn runs headless — no interactive client watches the SSE
-       * stream, so a live approval prompt would auto-deny after the timeout and
-       * the proposal would be lost. When true, a gated proposable tool (e.g.
-       * create_skill) is HELD for durable human approval in Approvals instead of
-       * a live SSE prompt, and any other gated tool is denied. The reviewer can
-       * therefore never write to disk without approval.
-       */
-      proposeHeld?: boolean;
-      /**
-       * Automation-origin memory write-back gate. Set ONLY by
-       * headless/automated callers (idle-watcher review turns, scheduled
-       * loops) — an automated turn re-analyzes existing transcripts, so its
-       * post-response write-back (auto-save, skill distillation, KG
-       * extraction, correction detection) would pollute memory with
-       * re-detected "decisions" and false correction signals. IM channel
-       * adapters must NOT set this: inbound IM messages are real user turns.
-       */
-      origin?: 'automation' | 'router';
-      /**
-       * Originating IM channel of this turn (real platform + chatId).
-       * Set only by ChannelManager.handleInbound via the loopback client —
-       * published as the request-scoped turn origin so create_schedule can
-       * stamp ai_task delivery targets from a trusted snapshot.
-       */
-      channel?: { platform: string; chatId: string };
-    };
-  }>('/api/chat', async (request, reply) => {
+  server.post<{ Body: ChatTurnBody }>('/api/chat', async (request, reply) => {
     const totalServerStartedAt = performance.now();
     let firstTokenAt: number | null = null;
     const markFirstToken = (): void => {
       if (firstTokenAt === null) firstTokenAt = performance.now();
     };
 
-    // Accept both 'workspace' and 'workspaceId' for backwards compat (P0-4).
-    // `persona` is an optional per-window override — takes precedence
-    // over the workspace's default persona for this single request only.
+    const resolvedRequest = resolveChatTurnRequest(server, request, reply, getChatHistoryLayout);
+    if ('rejected' in resolvedRequest) return resolvedRequest.rejected;
     const {
-      message, workspace: workspaceRaw, workspaceId: workspaceIdRaw, model, session,
-      sessionId: sessionIdAlias,
-      workspacePath: explicitWorkspacePath, persona: personaOverride,
-      selectedSkill: selectedSkillRaw,
-      autonomy: autonomyRaw, retry: retryTurn, retryTarget: retryTargetRaw,
-      proposeHeld: proposeHeldTurn,
-      origin, channel: channelMeta,
-    } = request.body ?? {};
-
-    // Reject a malformed request body before resolving the workspace it names.
-    // A syntactically valid unknown workspace still returns 404 below, while
-    // invalid message/session input remains a stable 400 regardless of whether
-    // the named workspace exists.
-    const validatedFields = validateChatRequestFields(
-      {
-        message,
-        workspace: workspaceRaw,
-        workspaceId: workspaceIdRaw,
-        session,
-        sessionId: sessionIdAlias,
-        selectedSkill: selectedSkillRaw,
-        retry: retryTurn,
-        retryTarget: retryTargetRaw,
-      },
-      name => server.agentState.skills.some(skill => skill.name === name),
-    );
-    if (validatedFields.rejection) {
-      return reply.status(validatedFields.rejection.status).send(validatedFields.rejection.body);
-    }
-    const { selectedSkill, retryTarget } = validatedFields;
-
-    const workspace = workspaceRaw ?? workspaceIdRaw;
-    const authorizedWorkspace = getResolvedChatWorkspaceId(request);
-    const requestedSessionId = session ?? sessionIdAlias;
-    if (session !== undefined && sessionIdAlias !== undefined && session !== sessionIdAlias) {
-      return reply.status(400).send({
-        error: 'session and sessionId must match when both are provided',
-        code: 'SESSION_ID_CONFLICT',
-      });
-    }
-
-    const workspaceTarget = resolveChatWorkspaceTarget(
-      server,
-      workspace,
+      message,
+      model,
+      personaOverride,
+      retryTurn,
+      proposeHeldTurn,
+      channelMeta,
+      selectedSkill,
+      retryTarget,
       authorizedWorkspace,
-      getChatHistoryLayout,
-    );
-    if (workspaceTarget.rejection) {
-      return reply.status(workspaceTarget.rejection.status).send(workspaceTarget.rejection.body);
-    }
-    const {
-      workspaceConfig,
+      requestedSessionId,
       historyTarget,
       usesNamedWorkspace,
       historyWorkspaceId,
       executionWorkspaceId,
       executionScopeId,
       executionWorkspaceConfig,
-    } = workspaceTarget;
-    // Automated turns skip the post-response memory write-back seams
-    // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
-    // already sets it, so its review turns are gated even without `origin`.
-    // Compliance execution traces stay ungated. Learned memory, improvement
-    // signals, and skill capture are gated below by the resolved turn policy.
-    const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
-
-    // Resolve the effective autonomy level for this request (the request
-    // body's `autonomy` field documents the levels and the expiry fallback).
-    const autonomyLevel = resolveAutonomyLevel(autonomyRaw);
-
-    // Generate per-turn trace ID at the conceptual turn boundary
-    // (POST /api/chat entry). Propagated explicitly into agent-loop,
-    // orchestrator, retrieval, prompt-assembler, cognify, and each tool
-    // call. Every stage logs a structured event tagged with this turnId
-    // so the full turn graph is reconstructable from a single correlation
-    // key. Also satisfies EU AI Act Art. 14 traceability requirements (H-AUDIT-1).
-    const turnId = generateTurnId();
-    logTurnEvent(turnId, {
-      stage: 'chat.turn.start',
-      workspace: executionWorkspaceId,
-      model,
-      messageChars: (message ?? '').length,
-    });
-
-    // Resolve workspace directory — use explicit path, workspace config, or virtual storage
-    // NEVER fall back to user homedir — use managed storage instead
-    const workspacePaths = resolveChatWorkspacePaths(server, {
-      workspace,
-      workspaceConfig,
-      explicitWorkspacePath,
-      usesNamedWorkspace,
-      authorizedWorkspace,
-    });
-    if (workspacePaths.rejection) {
-      return reply.status(workspacePaths.rejection.status).send(workspacePaths.rejection.body);
-    }
-    const workspacePath = workspacePaths.workspacePath;
-    const { workspacePathFromTrustedConfig, executionWorkspacePath } = workspacePaths;
-
-    // Validation and auth checks remain before reply.hijack(); once hijacked,
-    // reply.status() / reply.send() become no-ops on the raw socket.
-    const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
-    const isPlainInteractiveTurn = autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && turnMutationPolicy.contextScope === 'default';
-    const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
-      message,
-      Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
-    );
-    const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
-      && (!selectedSkill || selectedSkill === 'decision-matrix')
-      && isPlainInteractiveTurn;
-    const boundedExactPersistedMemoryLookup = isBoundedExactPersistedMemoryLookup(message)
-      && isPlainInteractiveTurn;
-    const directReadFileDirective = parseDirectReadFileDirective(message);
-    const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
-      && isPlainInteractiveTurn
-      && Boolean(executionWorkspacePath)
-      ? 'read_file'
-      : undefined;
-    const preScanExplicitReadOnlyToolCandidate = directReadFileCandidate
-      ?? (decisionMatrixToolSequenceRequested
-        ? 'read_skill'
-        : undefined)
-      ?? (selectedSkill ? 'read_skill' : undefined)
-      ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
-      ?? (resolvedReadOnlyToolDirective === 'list_skills'
-        && isPlainInteractiveTurn
-        && detectTaskShape(message).complexity === 'simple'
-        && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
-        ? resolvedReadOnlyToolDirective
-        : undefined);
-    const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
-    const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
-      && !isAutomatedTurn
-      && !shouldUsePersistedMemoryForTurn(message)
-      && !isExplicitMemorySaveRequest(message)
-      && !isExplicitExternalResearchRequest(message)
-      && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
-    const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
-    const turnPersonaId = personaOverride
-      ?? executionWorkspaceConfig?.personaId
-      ?? null;
-    const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
-    const turnPersistence = resolveTurnPersistencePermissions({
-      policy: turnMutationPolicy,
       isAutomatedTurn,
-      personaIsReadOnly: turnPersona?.isReadOnly === true,
-      closedWorldRewrite: requestClosedWorldRewrite,
-    });
-    // What this turn may leave behind; narrowed once its history is loaded.
-    const retention = new TurnRetention({
-      ...turnPersistence,
-      allowResponseDecoration: allowsPostResponseDecoration(
-        turnMutationPolicy,
-        requestClosedWorldRewrite,
-      ),
-    });
-    const retainedTurnText = (value: string): string => (
-      retention.allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
-    );
-    const retainedTurnJson = (value: unknown): string => (
-      retention.allowDerivedPersistence
-        ? JSON.stringify(value) ?? 'null'
-        : JSON.stringify({ redacted: NON_RETAINED_TURN_CONTENT })
-    );
-
-    // Security: scan for prompt injection patterns
-    const injectionResult = scanForInjection(message, 'user_input');
-    if (injectionResult.score >= 0.7) {
-      // High-confidence injection: block entirely.
-      // Flags NOT included in the client response — the scanner's
-      // internal pattern vocabulary leaks a roadmap for crafting bypassing payloads.
-      log.warn(`[security] Prompt injection BLOCKED (score ${injectionResult.score})`, injectionResult.flags);
-      return reply.code(400).send({
-        error: 'Message blocked by security scanner',
-        code: 'INJECTION_DETECTED',
-      });
-    } else if (injectionResult.score >= 0.3) {
-      log.warn(`[security] Potential prompt injection detected (score ${injectionResult.score})`, injectionResult.flags);
-    }
-    const warningTierDirectReadFileCandidate = !injectionResult.safe
-      && WARNING_TIER_DIRECT_READ_FILE_INTENT_RE.test(message)
-      && isPlainInteractiveTurn
-      && Boolean(executionWorkspacePath)
-      ? 'read_file'
-      : undefined;
-    const explicitReadOnlyToolCandidate = preScanExplicitReadOnlyToolCandidate
-      ?? warningTierDirectReadFileCandidate;
-
-    // Viewer RBAC runs before reply.hijack() — after hijack,
-    // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
-    if (workspaceConfig?.teamId && workspaceConfig?.teamRole === 'viewer') {
-        return reply.status(403).send({
-          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
-          code: 'VIEWER_READ_ONLY',
-        });
-    }
-
-    // Request-supplied paths stay anchored to dataDir.
-    // A workspace directory loaded from persisted config is an explicit user
-    // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
-    // A trusted config also makes the request's own path irrelevant, and that
-    // path is ignored (pinned in chat-api). Otherwise the body's
-    // `workspacePath` is checked even when the branch above did not adopt it,
-    // so the answer depends on the request, not on which workspace the session
-    // happens to have active (TD-CHAT-44).
-    const requestSuppliedPaths = workspacePathFromTrustedConfig ? [] : [
-      ...(workspacePath ? [workspacePath] : []),
-      ...(typeof explicitWorkspacePath === 'string' && explicitWorkspacePath && explicitWorkspacePath !== workspacePath
-        ? [explicitWorkspacePath]
-        : []),
-    ];
-    for (const candidate of requestSuppliedPaths) {
-      const resolved = path.resolve(candidate);
-      const allowed = path.resolve(server.localConfig.dataDir);
-      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
-        log.warn(`[security] Path traversal attempt blocked: ${candidate}`);
-        return reply.status(400).send({
-          error: 'Invalid workspace path',
-          code: 'PATH_TRAVERSAL',
-        });
-      }
-    }
+      autonomyLevel,
+      turnId,
+      executionWorkspacePath,
+      turnMutationPolicy,
+      decisionMatrixToolSequenceRequested,
+      boundedExactPersistedMemoryLookup,
+      directReadFileDirective,
+      persistedMemoryReadAllowed,
+      toolFreeAdvisoryCandidate,
+      requestClosedWorldRewrite,
+      turnPersonaId,
+      turnPersona,
+      retention,
+      retainedTurnText,
+      retainedTurnJson,
+      injectionResult,
+      explicitReadOnlyToolCandidate,
+    } = resolvedRequest;
 
     // Hijack the response so Fastify doesn't try to send its own reply.
     // All validation + auth above — safe to commit to SSE from here.
