@@ -39,6 +39,17 @@ const SCHEMA = path.join(
   'schema.ts',
 );
 
+/** The governance context's own DDL, extracted from the Mind schema (D-1). */
+const GOVERNANCE_SCHEMA = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'packages',
+  'core',
+  'src',
+  'governance',
+  'schema.ts',
+);
+
 /**
  * The contexts sharing one Mind schema, and the tables each owns.
  *
@@ -77,11 +88,16 @@ const CONTEXT_TABLES: Record<string, readonly string[]> = {
 /** Contexts whose tables must NOT reach the public OSS mirror (CLAUDE.md §7.5). */
 const OSS_EXCLUDED_CONTEXTS = ['evolution', 'governance'] as const;
 
-function declaredTables(): string[] {
-  const source = fs.readFileSync(SCHEMA, 'utf8');
+function tablesDeclaredIn(file: string): string[] {
+  const source = fs.readFileSync(file, 'utf8');
   return [...source.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-z_]+)/g)]
     .map(match => match[1])
     .sort();
+}
+
+/** Every table a Waggle personal.mind carries: the Mind schema plus governance. */
+function declaredTables(): string[] {
+  return [...tablesDeclaredIn(SCHEMA), ...tablesDeclaredIn(GOVERNANCE_SCHEMA)].sort();
 }
 
 function assignedTables(): string[] {
@@ -118,6 +134,16 @@ describe('Mind schema bounded contexts', () => {
       'improvement_signals',
       'install_audit',
     ]);
+  });
+
+  it('declares the governance tables in core/src/governance, never in the Mind schema (D-1)', () => {
+    // Extracting the context turned the curated forward-port's interleaved
+    // hand-strip of the install_audit DDL into a file boundary: the mirrored
+    // schema.ts must never declare a governance table again.
+    expect(tablesDeclaredIn(GOVERNANCE_SCHEMA)).toEqual([...CONTEXT_TABLES.governance].sort());
+    for (const table of CONTEXT_TABLES.governance) {
+      expect(tablesDeclaredIn(SCHEMA)).not.toContain(table);
+    }
   });
 
   it('keeps the Core Domain the largest single context', () => {

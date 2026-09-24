@@ -299,11 +299,14 @@
     ],
     "pathPrefixes": [
       "vault.ts",
-      "compliance/"
+      "compliance/",
+      "governance/"
     ],
     "markers": [
       { "path": "mind/db.ts", "token": "install_audit" },
-      { "path": "mind/schema.ts", "token": "install_audit" }
+      { "path": "mind/schema.ts", "token": "install_audit" },
+      { "path": "mind/db.ts", "token": "ai_interactions" },
+      { "path": "mind/schema.ts", "token": "CREATE TABLE IF NOT EXISTS ai_interactions" }
     ]
   }
 }

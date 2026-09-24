@@ -1,12 +1,11 @@
 /**
  * P7/D15 A3 — drift-lock for the install_audit CHECK constraints.
  *
- * The table is declared in TWO places: install-audit.ts (core, generated from
- * the canonical @waggle/shared arrays) and hive-mind-core/src/mind/schema.ts
- * (a private-monorepo literal). They MUST produce identical CHECK lists or
- * auditStore.record() crashes on one path. The interleaved DDL is stripped from
- * the curated OSS export. This test pins both to the
- * single canonical source, so a drift in either fails CI instead of production.
+ * The table used to be declared in two places, core and a hive-mind-core
+ * literal. Since D-1 the governance context in core is its only owner, and the
+ * Mind schema must not declare it at all. The DDL still pins every CHECK list
+ * to the canonical @waggle/shared arrays, so a drift fails CI instead of
+ * crashing auditStore.record() in production.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -27,19 +26,17 @@ const COLUMNS = [
 
 describe('install_audit CHECK parity (A3)', () => {
   for (const { col, values } of COLUMNS) {
-    const expected = `${col} IN (${sqlInList(values)})`;
-
     it(`core install-audit DDL pins ${col} to the canonical list`, () => {
-      expect(INSTALL_AUDIT_TABLE_SQL).toContain(expected);
-    });
-
-    it(`private substrate schema.ts pins ${col} to the canonical list`, () => {
-      expect(SCHEMA_SQL).toContain(expected);
+      expect(INSTALL_AUDIT_TABLE_SQL).toContain(`${col} IN (${sqlInList(values)})`);
     });
   }
 
-  it('both DDLs accept the P5/D4 uninstalled action', () => {
+  it('accepts the P5/D4 uninstalled action', () => {
     expect(INSTALL_AUDIT_TABLE_SQL).toContain("'uninstalled'");
-    expect(SCHEMA_SQL).toContain("'uninstalled'");
+  });
+
+  it('is not declared by the Mind schema (D-1)', () => {
+    expect(SCHEMA_SQL).not.toMatch(/CREATE TABLE IF NOT EXISTS (install_audit|ai_interactions)\b/);
+    expect(SCHEMA_SQL).not.toMatch(/ON (install_audit|ai_interactions)\b/);
   });
 });

@@ -455,7 +455,9 @@ export function buildChatCommandContext(input: {
 function resolvePersona(id: string) {
   return listPersonas().find(p => p.id === id) ?? null;
 }
-import { FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
+import {
+  FrameStore, SessionStore, WaggleConfig, governancePseudonymKey, pseudonymizeInteractions,
+} from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUseSafe, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
@@ -4750,6 +4752,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         code: 'SESSION_TURN_IN_PROGRESS',
       });
     }
+
+    // GDPR Art.17: the governance trail survives the erase with its subject
+    // pseudonymized (D-1). It runs first, so a failure leaves the history in
+    // place and the request fails instead of reporting an erase it did not do.
+    pseudonymizeInteractions(
+      server.multiMind.personal,
+      { sessionId, workspaceId: historyWorkspaceId },
+      governancePseudonymKey(server.vault),
+    );
 
     fs.rmSync(
       path.join(

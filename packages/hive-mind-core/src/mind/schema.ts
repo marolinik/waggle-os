@@ -217,28 +217,6 @@ CREATE TABLE IF NOT EXISTS improvement_signals (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_category_key ON improvement_signals (category, pattern_key);
 CREATE INDEX IF NOT EXISTS idx_signals_category ON improvement_signals (category, count DESC);
 
--- Layer 6: Install Audit (capability install trust trail)
-CREATE TABLE IF NOT EXISTS install_audit (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-  capability_name TEXT NOT NULL,
-  -- CHECK lists MUST stay in sync with AuditCapabilityType / AuditApprovalClass
-  -- / AuditAction in packages/core/src/install-audit.ts. They drifted once
-  -- (connector/marketplace/blocked missing) and crashed acquire_capability the
-  -- moment marketplace search started returning candidates — see runMigrations().
-  capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp', 'connector', 'marketplace')),
-  source TEXT NOT NULL,
-  version TEXT,
-  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-  trust_source TEXT NOT NULL CHECK (trust_source IN ('builtin', 'starter_pack', 'local_user', 'third_party_verified', 'third_party_unverified', 'unknown', 'security-gate')),
-  approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
-  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked', 'uninstalled')),
-  initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),
-  detail TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_audit_capability ON install_audit (capability_name, action);
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON install_audit (timestamp DESC);
-
 -- Layer 4: Procedures (GEPA-optimized prompt templates)
 CREATE TABLE IF NOT EXISTS procedures (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -252,50 +230,6 @@ CREATE TABLE IF NOT EXISTS procedures (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_procedures_name_model ON procedures (name, model);
-
--- Layer 7: AI Interactions (EU AI Act Art. 12 — automatic event logging)
-CREATE TABLE IF NOT EXISTS ai_interactions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-  workspace_id TEXT,
-  session_id TEXT,
-  model TEXT NOT NULL,
-  provider TEXT NOT NULL,
-  input_tokens INTEGER NOT NULL DEFAULT 0,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
-  cost_usd REAL NOT NULL DEFAULT 0,
-  tools_called TEXT NOT NULL DEFAULT '[]',
-  human_action TEXT CHECK (human_action IN ('approved', 'denied', 'modified', 'none')),
-  risk_context TEXT,
-  imported_from TEXT,
-  persona TEXT,
-  -- Review Critical #3 (compliance): EU AI Act Art. 12.1(a) requires recording
-  -- the actual INPUTS and OUTPUTS of the system, not just token counts. Added
-  -- 2026-04-15; migration for pre-existing DBs in MindDB.runMigrations().
-  input_text TEXT,
-  output_text TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (workspace_id, timestamp);
-CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_interactions_model ON ai_interactions (model);
-
--- Review Critical #1 (compliance): append-only enforcement for the audit log.
--- DDL-level triggers make the database itself refuse UPDATE / DELETE so a motivated
--- auditor's first question ('can rows be silently mutated?') has a concrete 'no'
--- answer. GDPR Art. 17 erasure is handled via a separate pseudonymize_and_tombstone
--- flow that's not yet implemented — when it is, it will replace inputText/outputText
--- with tombstone markers via a fresh INSERT + status flag, NOT by bypassing these
--- triggers.
-CREATE TRIGGER IF NOT EXISTS ai_interactions_no_delete
-BEFORE DELETE ON ai_interactions
-BEGIN
-  SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)');
-END;
-CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update
-BEFORE UPDATE ON ai_interactions
-BEGIN
-  SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)');
-END;
 
 -- Layer 9: Execution Traces (agent run history — foundation for self-evolution)
 CREATE TABLE IF NOT EXISTS execution_traces (
@@ -379,7 +313,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_frame ON memory_frame_chunks (frame_id);
 -- Verbatim Provenance Archive (#7, 2026-06-30): append-only, immutable, full-fidelity
 -- copy of each harvested source item. Distilled/imported frames link back via
 -- memory_frames.metadata.archiveUid. NOT part of the retrieval corpus (no FTS/vec) —
--- audit/reconstruction only. Append-only triggers mirror ai_interactions (Layer 7),
+-- audit/reconstruction only. Append-only by trigger (no UPDATE, no DELETE),
 -- with ONE exception: a one-time GDPR Art.17 redaction (see raw_archive_no_update).
 CREATE TABLE IF NOT EXISTS raw_archive (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
