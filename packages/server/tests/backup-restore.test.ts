@@ -30,6 +30,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
+import { installFakeLlmProvider, markFakeProviderHealthy } from './helpers/fake-llm-provider.js';
 
 function buildUnencryptedBackup(files: Array<{ relativePath: string; content: string }>): string {
   const manifest = {
@@ -435,7 +436,6 @@ describe('Backup & Restore (PM-5)', () => {
   });
 
   it('rejects restore before writing while a chat turn is active', async () => {
-    const originalRunner = server.agentRunner;
     let markTurnStarted!: () => void;
     let releaseTurn!: () => void;
     const turnStarted = new Promise<void>((resolve) => {
@@ -444,15 +444,15 @@ describe('Backup & Restore (PM-5)', () => {
     const turnGate = new Promise<void>((resolve) => {
       releaseTurn = resolve;
     });
-    server.agentRunner = async () => {
-      markTurnStarted();
-      await turnGate;
-      return {
-        content: 'turn complete',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The real agent loop runs; the provider call holds the turn open (TD-CHAT-16).
+    const undoProvider = markFakeProviderHealthy(server);
+    const provider = installFakeLlmProvider({
+      respond: async () => {
+        markTurnStarted();
+        await turnGate;
+        return { type: 'text', content: 'turn complete', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
 
     const markerPath = path.join(tmpDir, 'must-not-restore-during-chat.txt');
     fs.rmSync(markerPath, { force: true });
@@ -485,7 +485,8 @@ describe('Backup & Restore (PM-5)', () => {
     } finally {
       releaseTurn();
       await activeTurn;
-      server.agentRunner = originalRunner;
+      provider.restore();
+      undoProvider();
     }
   });
 
