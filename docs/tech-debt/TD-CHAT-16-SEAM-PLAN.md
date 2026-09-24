@@ -1,6 +1,7 @@
 # TD-CHAT-16 — narrowing the `agentRunner` test seam to the LLM call
 
-Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`).
+Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`,
+PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2`.
 The founder ruled "take it now" on 2026-09-24. The ratified direction: the test seam replaces only
 the model call (fetch-spy style, the real `runAgentLoop` against a stubbed OpenAI-compatible
 provider), no strategy class. The end state has **zero** `hasCustomRunner` reads.
@@ -72,8 +73,8 @@ Install sites that serve `/api/chat` number **108**, in 28 files.
 | scripted tool calls, streamed or JSON | yes (`tool_calls`) |
 | exact usage numbers, multi-chunk streams | yes |
 | compose with a suite's own egress stub | yes (`otherRequest: 'previous'`) |
-| `AgentLoopConfig` fields that never reach the wire: `maxTurns`, `skillDistillationGate`, `modelSpendBudget` identity, `traceRecording`, `modelSpendTraceId`, `governancePolicies`, `maxTokenBudget`, `modelOperationTimeoutMs` | **no — see open question 2** |
-| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53) | **no — see open question 2** |
+| `AgentLoopConfig` fields that never reach the wire: `maxTurns`, `skillDistillationGate`, `modelSpendBudget` identity, `traceRecording`, `modelSpendTraceId`, `governancePolicies`, `maxTokenBudget`, `modelOperationTimeoutMs` | **no — pass-through spy (ruling 2)** |
+| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53) | **no — pass-through spy (ruling 2)** |
 
 ## 3. Design
 
@@ -129,7 +130,7 @@ phases 2–12 is free, so long as no phase mixes a B ruling with a mechanical po
   final phase.
 - The full server suite and `npm run typecheck:server-tests` are green.
 - TESTING.md names the fake provider as the route seam.
-- The fleet/agent-groups decision (open question 1) is recorded.
+- The fleet/agent-groups decision (ruling 1) is recorded.
 
 ## 5. Risks
 
@@ -161,21 +162,17 @@ phases 2–12 is free, so long as no phase mixes a B ruling with a mechanical po
   into the provider call, and the assertions are unchanged.
 - No production code was touched, and no observable result changed.
 
-## 7. Open questions for the founder
+## 7. Founder rulings (2026-09-24)
 
-1. **Fleet and agent groups.** The 29 X injections use `server.agentRunner` as a flagless substitute
-   for `runAgentLoop`, so they do not skip branches. Recommendation: leave them out of TD-CHAT-16,
-   keep the decoration, and add the chat-only grep guard so that a future chat test cannot set it and
-   silently get the real loop.
-2. **Pins that cannot be expressed at the HTTP boundary.** These are the config-only fields and the
-   unreproducible failures listed in §2. Once the flag is gone, substituting the runner no longer
-   skips any route branch. Recommendation: for these pins only, allow a pass-through
-   `vi.mock('@waggle/agent')` spy that records `AgentLoopConfig` and delegates to the real loop, or
-   throws a scripted error. The seam is test-only, and the route still runs in full. The alternative
-   is rewriting each pin against an observable effect, which is more work and loses pins such as the
-   forged-receipt case.
-3. **Rulings on B tests**, needed before phases 3 and 10: chat-api L1647 (`contextMetrics` asserted
-   on the custom path), smart-router L567 (a paid compressor blocked, "zero completion requests"),
-   and turn-failure L73 (a test titled for injected-runner accounting). Once the flag is gone, each of
-   these pins behavior that no longer exists. Ruling needed: delete, or re-pin the production
-   equivalent?
+All three recommendations were accepted.
+
+1. **Fleet and agent groups: keep `server.agentRunner` there.** The 29 X injections stay out of
+   TD-CHAT-16. The final phase adds a guard: no test that posts to `/api/chat` may set it.
+2. **Pins the HTTP boundary cannot express: a pass-through spy is allowed, for those pins only.**
+   `vi.mock('@waggle/agent')` wraps `runAgentLoop`, records the `AgentLoopConfig`, and calls the real
+   loop. It may throw a scripted error only where §2 lists the failure as unreproducible through a
+   provider. Every other pin goes through the fake provider.
+3. **The three B tests are re-pinned to the production-path equivalent, not deleted.** They are
+   chat-api L1647 (`contextMetrics`), smart-router L567 (paid compressor blocked) and turn-failure
+   L73 (failure accounting). Each port pins what the real path does, and the port commit records
+   what changed.
