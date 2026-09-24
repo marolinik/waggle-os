@@ -357,3 +357,27 @@ server landing inside the test's global `fetch` spy. It is recorded, not fixed.
 | chat-turn-execution-trace L163 ("cost read back … raised to spend already recorded") | The runner recorded 0.125 on the trace itself. The real loop charges its own spend onto the same trace, so `done.cost` is 0.125 plus the loop's cost. The other ten pins in the file port mechanically, but the file is held whole. | The spy records 0.125 before calling the real loop. Assert that `done.cost` equals the row's `cost_usd` and exceeds 0.125. |
 | chat-teamsync-push | (a) The pushed content is the real tool result, "Memory saved to workspace mind (…)", not "Saved 1 memory.". (b) The real `save_memory` accepts an empty save, so the failed-save pin cannot be driven by arguments. | (a) Pin the real result text. (b) Fault-inject the mind write, for example a `vi.spyOn` on the frame store that throws. |
 | chat-sse-backpressure | The socket stays open. With a real loop streaming about 3× `SSE_MAX_BUFFERED_BYTES` in 256 KB deltas, the backlog never passes the cap. Cause not confirmed; the likely suspect is that the loop caps or reshapes a multi-MB answer before the route's final write. | Needs investigation before a ruling. |
+
+## 6e. Phase 6 (chat-api slice 1): attempted, stopped
+
+**What I tried.** I replaced the suite's default runner in `beforeAll` with a suite-wide fake
+provider. It streams `Hello ` and `world` with usage 10/5, and the suite was set to
+`markFakeProviderHealthy` and a zero retry backoff.
+
+**Result: 93 of 98 tests pass.**
+- Four tests that still inject their own runner now time out: "publishes safe model activity",
+  "streams retry status before backoff settles", "suppresses late reasoning … after a live client
+  disconnect" and "keeps the authorized implicit workspace request-scoped".
+- One of them never restores its runner, so the next test, "sends done event" (L1647), received
+  that test's `Safe answer`.
+- The healthy provider state or the vault key changes something these hold-open tests depend on.
+  The cause is not isolated yet.
+
+**Decision.** This is not a mechanical port, so chat-api is reverted. The slice needs:
+1. Diagnose the four timeouts with the new suite state applied one change at a time: the vault
+   key, `llmProvider`, the fake fetch, then the backoff seam.
+2. Then do the L1647 re-pin (ruling 3). On the production path, `finalSystemPromptChars` equals the
+   system prompt the fake received, `packageMode` is the real mode rather than `custom`, and the
+   tool counts match the request's `toolNames`.
+
+The slice should probably install the fake per test group rather than suite-wide.
