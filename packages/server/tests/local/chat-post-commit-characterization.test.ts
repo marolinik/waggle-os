@@ -9,12 +9,12 @@
  *
  * The two halves need different harnesses, which is why they are split:
  *
- * - the observer's own failure is reachable with an INJECTED runner, because
- *   the workspace-name read that feeds the completion notification is not
- *   guarded;
- * - the auto-save catch is `!hasCustomRunner` gated like every write-back seam
- *   in this route, so it needs the real agent path and a spy on the
- *   orchestrator method.
+ * - the observer's own failure: the workspace-name read that feeds the
+ *   completion notification is not guarded, so a throwing `listWorkspaces`
+ *   reaches it;
+ * - the auto-save catch, reached through a spy on the orchestrator method.
+ *
+ * Both run the real agent loop against the fake provider (TD-CHAT-16).
  *
  * These pin CURRENT behavior, not a specification.
  */
@@ -23,22 +23,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { Orchestrator } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
-
-function sseBody(...frames: unknown[]): Response {
-  const payload = frames.map(f => `data: ${JSON.stringify(f)}\n\n`).join('') + 'data: [DONE]\n\n';
-  return new Response(payload, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-}
+import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat post-commit block (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let workspaceId: string;
-  let originalFetch: typeof globalThis.fetch;
+  let provider: FakeLlmProvider | undefined;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-postcommit-'));
@@ -57,17 +52,15 @@ describe('POST /api/chat post-commit block (characterization)', () => {
       directory: tmpDir,
     }).id;
     server.agentState.activeWorkspaceId = workspaceId;
-    originalFetch = globalThis.fetch;
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
-    delete server.agentRunner;
+    provider?.restore();
+    provider = undefined;
     vi.restoreAllMocks();
   });
 
   afterAll(async () => {
-    globalThis.fetch = originalFetch;
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
@@ -95,6 +88,8 @@ describe('POST /api/chat post-commit block (characterization)', () => {
     content: string,
   ): void {
     expect(status).toBe(200);
+    // The model was reached: the setup-required reply also streams a done.
+    expect(provider!.requests.length).toBeGreaterThan(0);
     expect(events.some(e => e.event === 'error')).toBe(false);
     const done = events.find(e => e.event === 'done');
     expect(done).toBeDefined();
@@ -109,10 +104,8 @@ describe('POST /api/chat post-commit block (characterization)', () => {
     server.agentState.listWorkspaces = () => {
       throw new Error('workspace registry unavailable');
     };
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: 'committed answer',
-      toolsUsed: [],
-      usage: { inputTokens: 1, outputTokens: 1 },
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'committed answer', usage: { inputTokens: 1, outputTokens: 1 } },
     });
 
     try {
@@ -134,18 +127,9 @@ describe('POST /api/chat post-commit block (characterization)', () => {
     // structured warning that exists to diagnose cache eviction would go quiet.
     const spy = vi.spyOn(Orchestrator.prototype, 'autoSaveFromExchange')
       .mockRejectedValue(new Error(message));
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/api/tags')) {
-        return new Response(JSON.stringify({ models: [] }), {
-          status: 200, headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return sseBody(
-        { choices: [{ delta: { content: 'real path answer' }, finish_reason: null }] },
-        { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 3 } },
-      );
-    }) as typeof globalThis.fetch;
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'real path answer', usage: { inputTokens: 4, outputTokens: 3 } },
+    });
 
     const { status, events } = await runTurn(`post-commit-autosave-${Date.now()}`);
     expectTurnUnaffected(status, events, 'real path answer');

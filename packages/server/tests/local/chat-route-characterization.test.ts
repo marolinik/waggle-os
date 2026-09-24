@@ -11,39 +11,69 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+
+/**
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It records the
+ * `AgentLoopConfig` the route builds, for the one pin that reads a field that
+ * never reaches the wire (`governancePolicies`), and it throws a scripted error
+ * for the one pin whose failure a provider cannot produce (an unclassified
+ * message). Every other turn runs the real loop against the fake provider.
+ */
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as AgentLoopConfig[],
+  failWith: null as Error | null,
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      loopSpy.configs.push(config);
+      if (loopSpy.failWith) throw loopSpy.failWith;
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat request validation (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let runnerCalls = 0;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    // Object seam: the route reads server.agentRunner; a rejected request must
-    // never reach it, so the counter doubles as a sensing point.
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
-      runnerCalls += 1;
-      return { content: 'unreachable', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    // The real agent loop runs against a fake provider (TD-CHAT-16). A rejected
+    // request must never reach the model, so the provider's request count
+    // doubles as the sensing point.
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'reachable' } });
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
-  /** Posts a request that must be rejected before the agent runner seam. */
+  /** Posts a request that must be rejected before the model is called. */
   async function post(payload: Record<string, unknown>) {
-    const runnerCallsBefore = runnerCalls;
+    const modelCallsBefore = provider.requests.length;
     const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload });
-    expect(runnerCalls).toBe(runnerCallsBefore);
+    expect(provider.requests.length).toBe(modelCallsBefore);
     return { status: res.statusCode, body: res.json() as { error?: string; code?: string } };
   }
 
@@ -149,8 +179,8 @@ describe('POST /api/chat request validation (characterization)', () => {
 
   it('accepts a 200-char segment (boundary) and proceeds to the SSE turn', async () => {
     // 200 'a's is a safe segment: the length gate passes and the turn streams
-    // through the agent runner seam exactly once.
-    const runnerCallsBefore = runnerCalls;
+    // through the model exactly once.
+    const modelCallsBefore = provider.requests.length;
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -158,7 +188,7 @@ describe('POST /api/chat request validation (characterization)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(runnerCalls).toBe(runnerCallsBefore + 1);
+    expect(provider.requests.length).toBe(modelCallsBefore + 1);
   });
   /**
    * Review Critical #1: a request-supplied `workspacePath` stays anchored to
@@ -225,6 +255,7 @@ describe('POST /api/chat request validation (characterization)', () => {
       const inside = path.join(tmpDir, 'workspaces', 'anchored-files');
       fs.mkdirSync(inside, { recursive: true });
       resetRateLimiter(server);
+      const modelCallsBefore = provider.requests.length;
 
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -234,6 +265,8 @@ describe('POST /api/chat request validation (characterization)', () => {
 
       expect(res.statusCode).toBe(200);
       expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
+      // The model was reached: the setup-required reply also streams a done.
+      expect(provider.requests.length).toBe(modelCallsBefore + 1);
     });
   });
 });
@@ -241,16 +274,22 @@ describe('POST /api/chat request validation (characterization)', () => {
 describe('POST /api/chat slash-command turns (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-cmd-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
-      throw new Error('slash commands must not reach the agent runner');
-    };
+    // Slash commands must not reach the model (TD-CHAT-16: the real loop is armed).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'unreachable' } });
+  });
+
+  afterEach(() => {
+    expect(provider.requests).toHaveLength(0);
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
@@ -332,13 +371,14 @@ describe('POST /api/chat slash-command turns (characterization)', () => {
 describe('POST /api/chat workspace resolution rejections (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-ws-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
-      throw new Error('a rejected workspace resolution must not reach the agent runner');
-    };
+    // A rejected workspace resolution must not reach the model (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'unreachable' } });
   });
 
   // `activateWorkspaceMind` also sets the server's closure-held active id and
@@ -348,6 +388,7 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
   const activatedWorkspaceIds: string[] = [];
 
   afterEach(async () => {
+    expect(provider.requests).toHaveLength(0);
     for (const workspaceId of activatedWorkspaceIds.splice(0)) {
       (await server.agentState.closeWorkspaceMind(workspaceId)).release();
     }
@@ -355,6 +396,7 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
@@ -415,9 +457,10 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
 /**
  * The governance lookup for a team workspace and the swallow that follows it.
  *
- * The lookup is not gated by the injected-runner flag, so the object seam still
- * runs it and the resolved policies arrive on the config the runner receives —
- * which is the sensing point these pins use.
+ * The resolved policies arrive on the `AgentLoopConfig` the route hands the
+ * loop, a field that never reaches the wire, so the pass-through loop spy at the
+ * top of this file is the sensing point (TD-CHAT-16 ruling 2). The model call
+ * itself goes to the fake provider, and the policy call to the suite's stub.
  *
  * This comment used to say a lookup that throws is swallowed (QUIRK TD-CHAT-23)
  * and that an unreadable payload is cached before validation (QUIRK TD-CHAT-30).
@@ -430,8 +473,8 @@ describe('POST /api/chat workspace resolution rejections (characterization)', ()
 describe('POST /api/chat team governance lookup (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let captured: AgentLoopConfig[];
-  let runnerBehavior: 'ok' | 'throw';
+  let provider: FakeLlmProvider | undefined;
+  const captured = loopSpy.configs;
 
   const POLICY_PATH = '/api/teams/default/capability-policies';
   const TEAM_SERVER_URL = 'https://93.184.216.34';
@@ -440,13 +483,7 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-char-gov-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    captured = [];
-    runnerBehavior = 'ok';
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      captured.push(config);
-      if (runnerBehavior === 'throw') throw new Error('governance characterization runner failure');
-      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    markFakeProviderHealthy(server);
     // The helper builds a fresh WaggleConfig per call and reads it from disk,
     // so the team server only becomes visible once it is saved.
     const config = new WaggleConfig(tmpDir);
@@ -457,7 +494,13 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
   beforeEach(() => {
     resetRateLimiter(server);
     captured.length = 0;
-    runnerBehavior = 'ok';
+    loopSpy.failWith = null;
+  });
+
+  afterEach(() => {
+    provider?.restore();
+    provider = undefined;
+    loopSpy.failWith = null;
   });
 
   afterAll(async () => {
@@ -485,13 +528,19 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     return workspace.id;
   }
 
-  /** Answers the capability-policies call with `payload`; every other host fails. */
+  /**
+   * Answers the capability-policies call with `payload`; every other host fails.
+   * The fake provider sits in front and answers only the model call, so the spy
+   * still sees every other request.
+   */
   function stubPolicyFetch(payload: unknown) {
-    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
       String(input).endsWith(POLICY_PATH)
         ? new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
         : new Response('', { status: 503 })
     ));
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'ok' }, otherRequest: 'previous' });
+    return spy;
   }
 
   /** Counts only the governance calls — the guard layer may reach other hosts. */
@@ -518,6 +567,8 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
       expect(res.statusCode).toBe(200);
       expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
       expect(captured.at(-1)!.governancePolicies).toEqual({ blockedTools: ['bash', 'write_file'] });
+      // The real loop ran and reached the model.
+      expect(provider!.requests.length).toBeGreaterThan(0);
       expect(policyCallCount(fetchSpy)).toBe(1);
       // Locate the governance call by URL: the egress guard may reach other
       // hosts first, so a positional lookup reads the wrong request.
@@ -551,6 +602,7 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
         );
       }
       expect(captured).toHaveLength(0);
+      expect(provider!.requests).toHaveLength(0);
 
       // One call per turn: an unreadable payload is never cached, so a single
       // bad response cannot decide the whole five-minute window.
@@ -574,20 +626,18 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     // WHAT THIS CAN AND CANNOT SEE. The branch decides one value -
     // `governancePolicies` - with three downstream readers: the parent tool
     // filter (`chat.ts:3492-3496`), the spawn list beside it, and
-    // `securityContext.blockedTools` for children (`:3639`). None is reachable
-    // from here: the first two sit inside `if (!hasCustomRunner)`, which the
-    // injected `agentRunner` seam skips wholesale (docs/TESTING.md "Seam
-    // caveat", TD-CHAT-16), and the third is captured by the spawn closure
-    // rather than exposed on `AgentLoopConfig`. `captured.tools` is empty here
-    // for that reason, so an assertion about a tool being present or absent
-    // would be vacuous. Refusing the turn is observable, which is precisely why
-    // the fixed behavior pins more tightly than the bug did.
+    // `securityContext.blockedTools` for children (`:3639`). When this was
+    // written the injected `agentRunner` seam skipped the first two wholesale
+    // (TD-CHAT-16), and the third is captured by the spawn closure rather than
+    // exposed on `AgentLoopConfig`. Refusing the turn is observable, which is
+    // precisely why the fixed behavior pins more tightly than the bug did.
     const workspaceId = createTeamWorkspace('unreachable');
     const downSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => (
       String(input).endsWith(POLICY_PATH)
         ? new Response('gateway down', { status: 502 })
         : new Response('', { status: 503 })
     ));
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'ok' }, otherRequest: 'previous' });
     try {
       const res = await postTurn(workspaceId, 'unreachable governance turn', 'gov-unreachable');
       expect(res.statusCode).toBe(200);
@@ -602,8 +652,9 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
         'Team governance policies could not be reached for this workspace. Check your connection and try again.',
       );
 
-      // The runner is never reached, so no ungoverned turn can have run.
+      // The loop is never reached, so no ungoverned turn can have run.
       expect(captured).toHaveLength(0);
+      expect(provider!.requests).toHaveLength(0);
 
       // The lookup really was attempted - without this the assertions above
       // would also pass for a workspace with no team server at all.
@@ -615,13 +666,15 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
 
   it('persists a failed assistant turn when a team turn errors before commit', async () => {
     // The territory a failing governance lookup reaches once it stops being
-    // swallowed: the pre-commit error path. Triggered here through the runner so
-    // it pins current behavior independently of the governance catch.
+    // swallowed: the pre-commit error path. Triggered here through the loop spy
+    // so it pins current behavior independently of the governance catch. The
+    // message is unclassified on purpose, which no provider reply produces
+    // (TD-CHAT-16 ruling 2).
     const workspaceId = createTeamWorkspace('error-path');
     const session = 'gov-error-path';
     const fetchSpy = stubPolicyFetch([{ role: 'member', blockedTools: [] }]);
     try {
-      runnerBehavior = 'throw';
+      loopSpy.failWith = new Error('governance characterization runner failure');
       const res = await postTurn(workspaceId, 'a team turn that fails before commit', session);
       expect(res.statusCode).toBe(200);
       const events = parseSSE(res.body);

@@ -11,7 +11,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /** Which persistMessage call of the next turn throws (1-based); 0 = none. */
@@ -36,20 +35,29 @@ vi.mock('../../src/local/routes/chat-persistence.js', async (importOriginal) => 
 
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat history write failure (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-history-write-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: 'unreachable', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    // The real agent loop runs; only the model call is scripted (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'unreachable', usage: { inputTokens: 1, outputTokens: 1 } },
     });
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }

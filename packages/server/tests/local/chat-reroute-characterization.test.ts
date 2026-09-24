@@ -12,24 +12,35 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { AGENT_LOOP_REROUTE_PREFIX, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { AGENT_LOOP_REROUTE_PREFIX } from '@waggle/agent';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat rerouted slash commands (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  const runnerMessages: string[] = [];
+  let provider: FakeLlmProvider;
+  let requestsBefore = 0;
+
+  /** The last message of each model request this turn made. */
+  const modelMessages = (): string[] => provider.requests
+    .slice(requestsBefore)
+    .map(request => request.messages.at(-1)?.content ?? '');
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-reroute-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const last = config.messages[config.messages.length - 1] as { content?: unknown };
-      runnerMessages.push(typeof last?.content === 'string' ? last.content : '');
-      return { content: 'rerouted answer', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    // The real agent loop runs; the model request is the sensing point (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'rerouted answer', usage: { inputTokens: 1, outputTokens: 1 } },
+    });
     const registry = server.agentState.commandRegistry;
     registry.register({
       name: 'fullreroute', aliases: [], description: 'test', usage: '/fullreroute',
@@ -42,13 +53,14 @@ describe('POST /api/chat rerouted slash commands (characterization)', () => {
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
   async function turn(message: string, session: string) {
-    runnerMessages.length = 0;
+    requestsBefore = provider.requests.length;
     resetRateLimiter(server);
     const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload: { message, session } });
     expect(res.statusCode).toBe(200);
@@ -57,14 +69,14 @@ describe('POST /api/chat rerouted slash commands (characterization)', () => {
 
   it('runs the agent loop on a rerouted message', async () => {
     const events = await turn('/fullreroute', 'reroute-full');
-    expect(runnerMessages).toEqual(['Summarise the release notes.']);
+    expect(modelMessages()).toEqual(['Summarise the release notes.']);
     expect(events.some(e => e.event === 'done')).toBe(true);
   });
 
   it("answers an empty rerouted message through the loop, on the user's own command", async () => {
     // Until TD-CHAT-25 the turn ended with no answer and no done.
     const events = await turn('/emptyreroute', 'reroute-empty');
-    expect(runnerMessages).toEqual(['/emptyreroute']);
+    expect(modelMessages()).toEqual(['/emptyreroute']);
     expect(events.some(e => e.event === 'done')).toBe(true);
   });
 });

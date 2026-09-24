@@ -200,6 +200,10 @@ describe('installFakeLlmProvider', () => {
       expect(other.status).toBe(202);
       expect(await other.text()).toBe('from the suite stub');
       expect(provider.unexpectedRequests).toEqual([]);
+      // The direct Anthropic API is always the fake's, never the suite stub's.
+      const anthropic = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST' });
+      expect(anthropic.status).toBe(404);
+      expect(provider.unexpectedRequests).toEqual(['https://api.anthropic.com/v1/messages']);
     } finally {
       provider?.restore();
       provider = undefined;

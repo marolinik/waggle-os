@@ -1,6 +1,7 @@
 # TD-CHAT-16 — narrowing the `agentRunner` test seam to the LLM call
 
-Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`).
+Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`,
+PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2`.
 The founder ruled "take it now" on 2026-09-24. The ratified direction: the test seam replaces only
 the model call (fetch-spy style, the real `runAgentLoop` against a stubbed OpenAI-compatible
 provider), no strategy class. The end state has **zero** `hasCustomRunner` reads.
@@ -72,8 +73,8 @@ Install sites that serve `/api/chat` number **108**, in 28 files.
 | scripted tool calls, streamed or JSON | yes (`tool_calls`) |
 | exact usage numbers, multi-chunk streams | yes |
 | compose with a suite's own egress stub | yes (`otherRequest: 'previous'`) |
-| `AgentLoopConfig` fields that never reach the wire: `maxTurns`, `skillDistillationGate`, `modelSpendBudget` identity, `traceRecording`, `modelSpendTraceId`, `governancePolicies`, `maxTokenBudget`, `modelOperationTimeoutMs` | **no — see open question 2** |
-| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53) | **no — see open question 2** |
+| `AgentLoopConfig` fields that never reach the wire: `maxTurns`, `skillDistillationGate`, `modelSpendBudget` identity, `traceRecording`, `modelSpendTraceId`, `governancePolicies`, `maxTokenBudget`, `modelOperationTimeoutMs` | **no — pass-through spy (ruling 2)** |
+| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53), an unclassified error message (chat-route L616) | **no — pass-through spy (ruling 2)** |
 
 ## 3. Design
 
@@ -129,7 +130,7 @@ phases 2–12 is free, so long as no phase mixes a B ruling with a mechanical po
   final phase.
 - The full server suite and `npm run typecheck:server-tests` are green.
 - TESTING.md names the fake provider as the route seam.
-- The fleet/agent-groups decision (open question 1) is recorded.
+- The fleet/agent-groups decision (ruling 1) is recorded.
 
 ## 5. Risks
 
@@ -161,21 +162,118 @@ phases 2–12 is free, so long as no phase mixes a B ruling with a mechanical po
   into the provider call, and the assertions are unchanged.
 - No production code was touched, and no observable result changed.
 
-## 7. Open questions for the founder
+## 6a. Phases 2–3 result
 
-1. **Fleet and agent groups.** The 29 X injections use `server.agentRunner` as a flagless substitute
-   for `runAgentLoop`, so they do not skip branches. Recommendation: leave them out of TD-CHAT-16,
-   keep the decoration, and add the chat-only grep guard so that a future chat test cannot set it and
-   silently get the real loop.
-2. **Pins that cannot be expressed at the HTTP boundary.** These are the config-only fields and the
-   unreproducible failures listed in §2. Once the flag is gone, substituting the runner no longer
-   skips any route branch. Recommendation: for these pins only, allow a pass-through
-   `vi.mock('@waggle/agent')` spy that records `AgentLoopConfig` and delegates to the real loop, or
-   throws a scripted error. The seam is test-only, and the route still runs in full. The alternative
-   is rewriting each pin against an observable effect, which is more work and loses pins such as the
-   forged-receipt case.
-3. **Rulings on B tests**, needed before phases 3 and 10: chat-api L1647 (`contextMetrics` asserted
-   on the custom path), smart-router L567 (a paid compressor blocked, "zero completion requests"),
-   and turn-failure L73 (a test titled for injected-runner accounting). Once the flag is gone, each of
-   these pins behavior that no longer exists. Ruling needed: delete, or re-pin the production
-   equivalent?
+**Helper fix before phase 2 (`b0428d10`).** Once `markFakeProviderHealthy` sets the vault key, the
+GEPA optimizer calls `api.anthropic.com` directly through `@ax-llm/ax`. Behind chat-route's
+governance stub, which answers 503 to every unknown host, the optimizer kept retrying for more than
+200 s and each turn hung. The fake now answers that host itself with a 404 and records the call as
+unexpected, whatever stub sits behind it, so GEPA fails soft at once. This is the GEPA risk in §5
+coming true.
+
+**Phase 2 (`000e44ac`).** Ported chat-route, chat-request-resolution, chat-viewer-rejection,
+chat-history-load and chat-turn-notification.
+- Runner call counters became provider request counts. The "must not reach the runner" sentinels
+  became zero-request assertions.
+- chat-route's governance block uses the ruling-2 pass-through spy. Two pins need it:
+  - L510 reads `governancePolicies`, which never goes on the wire.
+  - L616 needs an unclassified thrown message, which no provider reply produces. It is added to the
+    §2 "cannot produce" list under ruling 2.
+- No assertion changed.
+
+**Phase 3.** Ported chat-post-commit, chat-history-write-failure, chat-reroute and
+chat-regulated-disclaimer.
+- All four passed unchanged on the real path. The B risks did not materialise:
+  - The disclaimer replies trigger neither the schedule nudge nor the grounding hedge.
+  - `persistMessage` call 2 is still the assistant's answer.
+  - The reroute message is still the last message the model receives.
+  - `listWorkspaces` is not read before commit.
+- post-commit's private SSE stub was replaced by the helper.
+
+**Stopped: chat-turn-trace, "emits the same single stage on a turn that succeeds" (L101).** On the
+real path, the turn id carries `["chat.turn.start","agent-loop.enter","agent-loop.exit"]`. The pin
+asserts exactly `["chat.turn.start"]`, and its own comment says the injected runner is why the
+list has one element.
+- The route still emits only `chat.turn.start`. The two extra stages come from the loop, and the
+  pin's comment already predicted them for "a real agent path".
+- Proposed re-pin: filter the stages to `chat.*` and assert `['chat.turn.start']`, which keeps the
+  route-level claim. Also pin that the loop stages follow on success and are absent on the
+  injection-rejected turn. That absence is the TD-CHAT-43 signal the comment describes.
+- This changes an assertion, so the file is left on `agentRunner` until the founder rules. Its
+  other two pins are rejections that would port mechanically.
+
+## 6b. Phase 4 result
+
+Ported chat-retry-chain, chat-attempt-chain, chat-attempt-policy, chat-turn-usage-ledger and
+chat-turn-failure. Each file records the route's attempts and their configs through the ruling-2
+pass-through spy. Every failure a provider can produce now comes from the fake:
+
+| Failure | Scripted reply |
+|---|---|
+| stream interruption | `truncated_stream` with usage; the loop's own INCOMPLETE_COMPLETION matches the replay predicate |
+| rate limit | 429 with `retry-after: 0` on the first key, until the loop's own retries run out |
+| invalid key | 401 on every non-fallback model |
+| endpoint down | `network_error` |
+| a tool ran, then an empty answer | a real `search_memory` call, then `' '` |
+| the budget-exhausting interruption | `truncated_stream` whose usage equals the attempt's own `maxTokenBudget` |
+
+**Inputs changed, assertions kept.** Two pins now send a message that asks for the tool they need:
+
+- attempt-chain "reports tools a failed attempt used" asks for `list_skills`.
+- attempt-policy "empty answer after a tool ran" asks for a memory search.
+
+On the real path a conversational question transmits no tools, so a scripted call to an unoffered
+tool is never counted as used.
+
+attempt-chain "keeps a failed attempt's streamed tokens out" still streams the discarded tokens. The
+cut stream is what discards them now: a provider cannot stream and then answer 429.
+
+**Moved to the spy (ruling 2). No provider reply produces these:**
+
+- Plain INCOMPLETE_COMPLETION with a non-matching message (retry-chain). This was already listed in §2.
+- A 429 whose error carries `toolsUsed` (attempt-chain).
+- An interruption flagged `usageEstimated`: the loop sets that flag only on initial-activity
+  timeouts (usage-ledger).
+- A zero-usage interruption (usage-ledger). When a cut stream reports 0/0, the loop substitutes an
+  estimate; this probe observed 2435/10.
+- turn-failure's eight message-mapping rows. They classify the raw thrown value, and a provider
+  error always reaches the route wrapped as `LLM error (<status>): <body>`.
+
+**Re-pinned under ruling 3 (production equivalent).**
+
+- turn-failure L73 was "charges an injected runner the usage its failed attempt reported" and is now
+  "charges the usage a failed turn's provider responses reported". Two cut streams report 1000/500
+  each, and the daily total rises through the loop's own spend accounting.
+- turn-failure "forwards a daily-budget refusal code" now runs a real hard cap, on its own server
+  with `dailyBudget: 0.000001`. The code and the verbatim forwarding are unchanged. The forwarded
+  message is the cap's own `Daily budget exceeded: $0.0000 / $0.00 (hard cap)` instead of the
+  synthetic `Daily model budget reached`, and the pin now also asserts that no model call was made.
+  **This literal changed and needs review.**
+
+**Real-time backoff.**
+
+- attempt-policy's fallback contrast pin now takes about 22 s, because the loop's own network
+  retries wait 2 + 4 + 8 s. The file took 0.3 s before.
+- attempt-chain's first pin takes about 15–17 s. Most of that is cold start: the file builds a
+  server per test, and the whole file took 13.6 s before.
+- A later phase could inject a retry clock. That is production code, so it is not done here.
+
+**Pre-existing flake, not caused by this branch.** chat-api "translates a validated OpenAI forced
+tool choice for the native Anthropic route" (L1639) expects `fetch` to be called exactly 3 times
+and sometimes sees 4. It failed in 1 of 2 isolated runs of the untouched file on this branch, and in
+the phase 3 wide run.
+
+## 7. Founder rulings (2026-09-24)
+
+All three recommendations were accepted.
+
+1. **Fleet and agent groups: keep `server.agentRunner` there.** The 29 X injections stay out of
+   TD-CHAT-16. The final phase adds a guard: no test that posts to `/api/chat` may set it.
+2. **Pins the HTTP boundary cannot express: a pass-through spy is allowed, for those pins only.**
+   `vi.mock('@waggle/agent')` wraps `runAgentLoop`, records the `AgentLoopConfig`, and calls the real
+   loop. It may throw a scripted error only where §2 lists the failure as unreproducible through a
+   provider. Every other pin goes through the fake provider.
+3. **The three B tests are re-pinned to the production-path equivalent, not deleted.** They are
+   chat-api L1647 (`contextMetrics`), smart-router L567 (paid compressor blocked) and turn-failure
+   L73 (failure accounting). Each port pins what the real path does, and the port commit records
+   what changed.
