@@ -12,6 +12,10 @@
  * against that breaker, keyed by origin, exactly as in production.
  *
  * Requests whose path ends in `/chat/completions` are answered from the script.
+ * Direct calls to `api.anthropic.com` (the GEPA prompt optimizer, enabled by
+ * the vault key `markFakeProviderHealthy` sets) are answered 404 and recorded in
+ * `unexpectedRequests`, always: the optimizer then fails soft at once, where a
+ * suite stub's 503 would send it into its retry backoff for minutes.
  * `/api/tags` (the Ollama model listing) returns `ollamaModels`, `/health/*`
  * returns 200, and anything else goes to `otherRequest` when given, or is
  * answered 404 and recorded in `unexpectedRequests` so a test can assert the
@@ -237,6 +241,10 @@ export function installFakeLlmProvider(options: FakeLlmProviderOptions): FakeLlm
         return jsonResponse({ error: { message: 'fake LLM script exhausted' } }, 500);
       }
       return encodeReply(reply, request);
+    }
+    if (new URL(url, 'http://fake.invalid').hostname === 'api.anthropic.com') {
+      unexpectedRequests.push(url);
+      return jsonResponse({ error: { message: 'fake LLM provider: direct Anthropic API call' } }, 404);
     }
     if (options.otherRequest === 'previous') return originalFetch(input, init);
     if (options.otherRequest) return options.otherRequest(input, init);
