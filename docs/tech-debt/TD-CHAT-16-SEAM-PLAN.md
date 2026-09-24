@@ -259,7 +259,7 @@ cut stream is what discards them now: a provider cannot stream and then answer 4
   server per test, and the whole file took 13.6 s before.
 - A later phase could inject a retry clock. That is production code, so it is not done here.
 
-**Pre-existing flake, not caused by this branch.** chat-api "translates a validated OpenAI forced
+**Pre-existing flake, not caused by this branch (ledgered as TD-TEST-20).** chat-api "translates a validated OpenAI forced
 tool choice for the native Anthropic route" (L1639) expects `fetch` to be called exactly 3 times
 and sometimes sees 4. It failed in 1 of 2 isolated runs of the untouched file on this branch, and in
 the phase 3 wide run.
@@ -291,3 +291,37 @@ All three recommendations were accepted.
    tests so they stop waiting in real time.
 7. **chat-api L1639 flake:** find out whether it is pre-existing. If it is, record it without
    fixing it blindly.
+
+## 6c. Retry clock (ruling 6)
+
+No sleep or delay seam existed in the loop or in `retry-policy.ts`; `waitForRetry` called
+`setTimeout` directly.
+
+**Seam.** `AgentLoopConfig.retryBackoffMs?: (waitMs) => number` maps the policy's backoff to the wait
+actually taken. When it is unset, the loop waits exactly what the policy decided. The chat route
+passes `server.llmRetryBackoffMs`, an optional decoration that is never set in production. Abort
+and deadline checks are unchanged.
+
+**Pins.** The agent pin was written first and failed before the field existed. It checks three things:
+- the policy's schedule of 2 s, 4 s and 8 s reaches the seam, and the seam's answer is the wait taken;
+- with the seam unset, a 2 s backoff still waits 2 s (fake timers);
+- an abort still ends a shortened wait.
+
+A route pin in chat-retry-chain checks that the decoration reaches every attempt's loop config.
+
+**Effect.** Four files set `server.llmRetryBackoffMs = () => 0`:
+
+| File | Before | After |
+|---|---|---|
+| attempt-policy | 16.9 s | 1.0 s |
+| turn-failure | 12.9 s | 2.5 s |
+| attempt-chain | 31.4 s | 18.1 s |
+| usage-ledger | 2.6 s | 1.1 s |
+
+attempt-chain's remainder is first-test cold start; the whole file took 13.6 s before any port.
+Later ports that script failures should set the decoration as well.
+
+**Flake (ruling 7).** TD-TEST-20 is pre-existing by construction. `chore/td-chat-16-seam-p2` has no
+diff from `main` in production source, in `chat-api.test.ts`, in its test utilities or in the
+vitest config, and the failure appeared there. The likely cause is a background fetch from the fresh
+server landing inside the test's global `fetch` spy. It is recorded, not fixed.
