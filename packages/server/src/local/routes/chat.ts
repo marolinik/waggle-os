@@ -455,10 +455,6 @@ import {
   registerChatHistoryRestoreParticipant,
   resolveChatHistoryTarget,
   persistMessage,
-  loadSessionMessages,
-  replaceRetryTailWithUser,
-  retryTailMatches,
-  stripTrailingFailedPair,
   type RetryTailExpectation,
 } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, buildSkillPromptSection } from './chat-context.js';
@@ -476,7 +472,6 @@ import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } 
 import { assertSafeSegment } from './validate.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import {
   EXPLICIT_READ_ONLY_TOOL_NAMES,
   isBoundedExactPersistedMemoryLookup,
@@ -542,6 +537,7 @@ import { handleTurnFailure } from './chat-turn-failure.js';
 import { runAgentTurn } from './chat-agent-run.js';
 import { resolveModelAvailability, selectTurnModel } from './chat-turn-model-routing.js';
 import { acquireTurnSessionRuntime } from './chat-turn-session-runtime.js';
+import { loadTurnHistory } from './chat-turn-history.js';
 import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn } from './chat-turn-completion.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -1753,90 +1749,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
 
-      // A conversation-history denial is a read boundary, not only a prompt-
-      // packaging choice. Do not read or cache the saved transcript for this turn.
-      if (!turnMutationPolicy.denyConversationHistory && !sessionHistories.has(sessionStateKey)) {
-        const saved = loadSessionMessages(
-          sessionPersistenceDataDir, activeWorkspaceId, sessionId
-        );
-        sessionHistories.set(sessionStateKey, saved);
-        touchSessionState(sessionStateKey);
-      }
-      const history = turnMutationPolicy.denyConversationHistory
-        ? []
-        : sessionHistories.get(sessionStateKey)!;
-      activeHistory = turnMutationPolicy.denyConversationHistory ? undefined : history;
-
-      let retryUserAlreadyPersisted = false;
-      if (retryTarget && !turnMutationPolicy.denyConversationHistory) {
-        if (!retryTailMatches(history, message, retryTarget)) {
-          sendEvent('error', {
-            message: 'This conversation changed before Retry could replace it. Reload and try again.',
-            code: 'RETRY_TARGET_STALE',
-          });
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return;
-        }
-        const replacement = replaceRetryTailWithUser(
-          sessionPersistenceDataDir,
-          activeWorkspaceId,
-          sessionId,
-          message,
-          retryTarget,
-        );
-        if (!replacement.ok) {
-          sendEvent('error', {
-            message: 'Retry could not safely replace this conversation. Reload and try again.',
-            code: 'RETRY_TARGET_STALE',
-          });
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return;
-        }
-        history.splice(
-          history.length - replacement.removed,
-          replacement.removed,
-          { role: 'user', content: message },
-        );
-        retryUserAlreadyPersisted = true;
-      }
-
-      // Legacy retry-dedup: older clients only identified failed turns. Drop
-      // the previously persisted failed user+assistant pair (RAM + disk) so a
-      // reload doesn't render it duplicated alongside the fresh turn.
-      if (retryTurn && !retryTarget && !turnMutationPolicy.denyConversationHistory) {
-        const n = history.length;
-        const legacyTailMatches = n >= 2
-          && history[n - 1].role === 'assistant'
-          && typeof history[n - 1].content === 'string'
-          && history[n - 1].content.startsWith(GENERATION_FAILED_PREFIX)
-          && history[n - 2].role === 'user'
-          && history[n - 2].content === message;
-        if (legacyTailMatches && stripTrailingFailedPair(
-          sessionPersistenceDataDir,
-          activeWorkspaceId,
-          sessionId,
-          message,
-        )) {
-          history.splice(n - 2, 2);
-        }
-      }
-
-      // Current-message-only packaging is safe only when there is no prior
-      // conversation to erase. Capability classifiers above separately keep
-      // workspace, memory, connector, and web evidence requests tool-capable.
-      retention.settle({
-        toolFreeAdvisory: toolFreeAdvisoryCandidate && history.length === 0,
-        forcedReadOnlyTurn: (explicitReadOnlyToolCandidate === 'read_file'
-            && directReadFileDirective.kind === 'valid')
-          || explicitReadOnlyToolCandidate === 'search_memory'
-          || decisionMatrixToolSequenceRequested,
+      const historyLoad = loadTurnHistory({
+        sessionHistories, touchSessionState, turnMutationPolicy, sessionStateKey,
+        sessionPersistenceDataDir, activeWorkspaceId, sessionId, message, retryTarget, retryTurn,
+        sendEvent, raw, retention, toolFreeAdvisoryCandidate, explicitReadOnlyToolCandidate,
+        directReadFileDirective, decisionMatrixToolSequenceRequested,
+        setActiveHistory: (value) => { activeHistory = value; },
       });
-
-      // A saved-history opt-out is both a read and retention boundary for this turn.
-      if (!turnMutationPolicy.denyConversationHistory && !retryUserAlreadyPersisted) {
-        history.push({ role: 'user', content: message });
-        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
-      }
+      if (historyLoad.ended) return;
+      const { history } = historyLoad;
 
       const modelAvailable = await resolveModelAvailability({
         server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth,
