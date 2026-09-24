@@ -495,3 +495,27 @@ The injected-runner C tests in chat-api are the next slices.
     workers. This is a pure move with no assertion changes. The test count must be identical before
     and after (98 equals the sum of the parts), and wall time is measured. The split comes before
     chat-api slices 2–3.
+
+## 6i. sse-backpressure re-pin and the chat-api split (rulings 11, 12)
+
+**sse-backpressure.** The cap stays pinned by the `writeSseEvent` unit pins in `chat-sse.test.ts`.
+The route file is now the real-path pin, and it asserts four things:
+- a fake answer of about 3× the cap fails closed in the 2 MiB parser;
+- the turn ends in `error` with no `done`;
+- none of the answer reaches the client;
+- a `connection: close` socket is released.
+
+**chat-api split.** This is a pure move with no assertion changes. `describe('Chat Streaming API')`'s
+setup is repeated in each part, and the trailing describes stay in the first file.
+
+| File | Area | Tests |
+|---|---|---|
+| `chat-api.test.ts` | streaming, attempts, tool choice, plus key routing, context window, tool filtering | 47 |
+| `chat-api-workspace-failures.test.ts` | done event, linked workspaces, failures, traces, tool events | 30 |
+| `chat-api-history-isolation.test.ts` | history, overlapping turns, windowing, implicit workspace | 12 |
+| `chat-api-default-workspace.test.ts` | the "default" workspace, legacy migration | 9 |
+
+The count is 98 before and after. The four parts together took about 78 s wall time, against
+107–135 s for the single file.
+
+Line references to chat-api elsewhere in this plan (L1647, L2681, …) refer to the pre-split file.
