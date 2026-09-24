@@ -19,9 +19,10 @@
  * `onToolResult` reads them. None of this state is reset between attempts:
  * that is what lets a replay see the first attempt's tool activity.
  *
- * It imports nothing. The route decides which tools are side-effecting and how
- * a result is capped for the model, and hands both in.
+ * It imports only the user-facing error marker. The route decides which tools
+ * are side-effecting and how a result is capped for the model, and hands both in.
  */
+import { markUserFacingError } from '@waggle/shared';
 
 export interface TurnToolActivityOptions {
   /** The read-only tool this turn forces, decided before the loop runs. */
@@ -167,20 +168,20 @@ export class TurnToolActivity {
           && this.sequenceResultOrder[index] === name
         ));
       if (!sequenceCompleted) {
-        throw new Error(this.sequenceFailure
+        throw markUserFacingError(new Error(this.sequenceFailure
           ? `Required read-only tool sequence failed: ${this.sequenceFailure}`
-          : 'Required read-only tool sequence did not complete exactly once in order.');
+          : 'Required read-only tool sequence did not complete exactly once in order.'));
       }
     }
     if (this.explicitFailure) {
-      throw new Error(`Required read-only tool ${this.explicitChoice} failed: ${this.explicitFailure}`);
+      throw markUserFacingError(new Error(`Required read-only tool ${this.explicitChoice} failed: ${this.explicitFailure}`));
     }
     if (this.explicitChoice && (
       this.pendingChoice
       || !this.explicitUsed
       || this.explicitResult === null
     )) {
-      throw new Error(`Required read-only tool ${this.explicitChoice} did not complete exactly once.`);
+      throw markUserFacingError(new Error(`Required read-only tool ${this.explicitChoice} did not complete exactly once.`));
     }
   }
 }

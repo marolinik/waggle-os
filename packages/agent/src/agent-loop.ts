@@ -1,5 +1,5 @@
 import type { ToolDefinition } from './tools.js';
-import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
+import { RISK_LEVELS, markUserFacingError, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import { LoopGuard } from './loop-guard.js';
 import { parseChatCompletionStream } from './sse-parser.js';
 import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
@@ -374,7 +374,7 @@ function emptyModelResponseError(
   error.status = 502;
   error.usage = usage;
   error.toolsUsed = [...toolsUsed];
-  return error;
+  return markUserFacingError(error);
 }
 
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
@@ -652,7 +652,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     error.code = 'MODEL_OPERATION_TIMEOUT';
     error.usage = { inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
     error.toolsUsed = [...toolsUsed];
-    return error;
+    return markUserFacingError(error);
   };
   const initialModelActivityTimeoutError = (): Error & {
     code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
@@ -682,7 +682,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       outputTokens: totalOutputTokens,
     };
     error.toolsUsed = [...toolsUsed];
-    return error;
+    return markUserFacingError(error);
   };
   const disarmInitialModelActivityTimeout = (): void => {
     if (!initialModelActivityArmed) return;

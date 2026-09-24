@@ -9,3 +9,4 @@ export * from './tool-detection.js';
 export * from './risk.js';
 export * from './command-intent.js';
 export * from './loop-templates.js';
+export * from './user-facing-error.js';

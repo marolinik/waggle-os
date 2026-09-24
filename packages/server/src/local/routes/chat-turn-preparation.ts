@@ -21,6 +21,7 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
+import { markUserFacingError } from '@waggle/shared';
 import { allowsAutomaticRecall, allowsConversationHistory, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isOfflineOllamaModelReference, isAmbiguousMessage, isWorkspaceCatchUpRequest, selectAdvisoryMaxOutputTokens, AMBIGUITY_PROMPT, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import { loadRecentWorkspaceSessionContext } from './chat-persistence.js';
 import { applyContextWindow } from './chat-context.js';
@@ -740,11 +741,11 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
           : '[chat] governance policies unavailable; refusing the turn',
         { workspaceId: effectiveWorkspace, sessionId, error: lookup.reason },
       );
-      throw new Error(
+      throw markUserFacingError(new Error(
         unreadable
           ? 'Team governance policies could not be verified for this workspace. Try again or contact your team admin.'
           : 'Team governance policies could not be reached for this workspace. Check your connection and try again.',
-      );
+      ));
     }
     governancePolicies = lookup.status === 'policy' ? lookup.policies : undefined;
   }

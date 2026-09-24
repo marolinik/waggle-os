@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isUserFacingError } from '@waggle/shared';
 import { runAgentLoop, type AgentLoopConfig, type PluginToolProvider } from '../src/agent-loop.js';
 import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
@@ -1382,6 +1383,10 @@ describe('runAgentLoop', () => {
         usage: { outputTokens: 0 },
         toolsUsed: [],
       });
+      expect((rejection as Error).message).toBe(
+        'Initial model activity timed out after 30 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(isUserFacingError(rejection)).toBe(true);
       expect((rejection as { usage: { inputTokens: number } }).usage.inputTokens).toBeGreaterThan(0);
     } finally {
       await run;
@@ -1812,6 +1817,7 @@ describe('runAgentLoop', () => {
         usage: { inputTokens: 10, outputTokens: 5 },
         toolsUsed: ['slow_tool'],
       });
+      expect(isUserFacingError(settlement?.value)).toBe(true);
       expect(slowTool.execute).toHaveBeenCalledTimes(1);
     } finally {
       await vi.runAllTimersAsync();
@@ -2235,7 +2241,10 @@ describe('Agent error paths (PRQ-045)', () => {
       },
     ]);
 
-    await expect(runAgentLoop(makeConfig({ fetch }))).rejects.toThrow(/empty assistant response/i);
+    const error = await runAgentLoop(makeConfig({ fetch })).catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/empty assistant response/i);
+    expect(isUserFacingError(error)).toBe(true);
   });
 
   it('retries a Qwen empty-message placeholder once before returning a real answer', async () => {

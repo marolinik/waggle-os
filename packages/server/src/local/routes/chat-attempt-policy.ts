@@ -10,6 +10,7 @@
  * no turn state: the route hands in what it knows.
  */
 import type { AgentResponse } from '@waggle/agent';
+import { markUserFacingError } from '@waggle/shared';
 import { getBillableUsage } from './chat-turn-usage-ledger.js';
 
 export function isIncompleteCompletionError(error: unknown): boolean {
@@ -45,7 +46,7 @@ export function emptyModelResponseError(response: AgentResponse): EmptyModelResp
   error.status = 502;
   error.usage = response.usage;
   error.toolsUsed = [...response.toolsUsed];
-  return error;
+  return markUserFacingError(error);
 }
 
 function isTerminalEmptyModelResponse(error: unknown): boolean {

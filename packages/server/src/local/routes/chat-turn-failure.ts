@@ -11,9 +11,13 @@ import type { ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import type { CostTracker, Orchestrator } from '@waggle/agent';
 import { FrameStore, SessionStore } from '@waggle/core';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+import { GENERATION_FAILED_PREFIX, isUserFacingError } from '@waggle/shared';
 import { createLogger } from '../logger.js';
-import { getFailedCompletionUsage, isTerminalModelBudgetError } from './chat-attempt-policy.js';
+import {
+  getFailedCompletionUsage,
+  isIncompleteCompletionError,
+  isTerminalModelBudgetError,
+} from './chat-attempt-policy.js';
 import { persistMessage } from './chat-persistence.js';
 import { PERSONAL_CHAT_SCOPE_ID } from './chat-scope.js';
 import type { TurnExecutionTrace } from './chat-turn-execution-trace.js';
@@ -36,6 +40,11 @@ function isLocalStorageFailure(error: unknown): boolean {
 }
 
 const LOCAL_DATABASE_UNAVAILABLE_MESSAGE = 'Waggle could not update its local database just now. Try again in a moment.';
+
+const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try sending your message again.';
+
+/** The agent loop's fatal HTTP error: `LLM error (<status>): <provider body>`. */
+const PROVIDER_HTTP_ERROR = /^LLM error \((\d{3})\):/;
 
 /** A better-sqlite3 error: its `code` names the SQLite result (SQLITE_BUSY, ...). */
 function isLocalDatabaseFailure(error: unknown): boolean {
@@ -220,11 +229,27 @@ export function handleTurnFailure(turn: TurnFailureTurn, err: unknown): void {
         errorMessage = 'The request timed out. The model may be overloaded — try again in a moment.';
       } else if (err.message.includes('context_length') || err.message.includes('too many tokens')) {
         errorMessage = 'The conversation is too long for the model. Try clearing the chat and starting fresh.';
-      } else {
+      } else if (PROVIDER_HTTP_ERROR.test(err.message)) {
+        // The provider's response body is internal: it is in the log above,
+        // and only its HTTP status reaches the user (TD-CHAT-15).
+        const status = PROVIDER_HTTP_ERROR.exec(err.message)![1];
+        errorMessage = `The model provider returned an error (HTTP ${status}). Try again or switch model.`;
+      } else if (
+        isUserFacingError(err)
+        || isTerminalModelBudgetError(err)
+        || isIncompleteCompletionError(err)
+      ) {
+        // Written for the user: an error marked at its throw site, or one
+        // classified by the code it already carries (a daily-budget refusal
+        // states the cap it hit; an incomplete completion says the partial
+        // answer was not accepted).
         errorMessage = err.message;
+      } else {
+        // Every other message is internal (TD-CHAT-15). It is logged above.
+        errorMessage = GENERIC_FAILURE_MESSAGE;
       }
     } else {
-      errorMessage = 'Something went wrong. Try sending your message again.';
+      errorMessage = GENERIC_FAILURE_MESSAGE;
     }
     // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
     const budgetCode = isTerminalModelBudgetError(err)
