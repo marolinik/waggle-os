@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, CredentialPool, loadCredentialPool, isBoundedSingleFileRoundTrip, generateTurnId, logTurnEvent, READONLY_TOOLS, type ToolDefinition } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, CredentialPool, loadCredentialPool, isBoundedSingleFileRoundTrip, generateTurnId, logTurnEvent, READONLY_TOOLS, type ToolDefinition } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -186,11 +186,6 @@ function resolveMaxMessageLength(configured: string | undefined): number {
   const parsed = configured === undefined ? Number.NaN : Number.parseInt(configured, 10);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_MESSAGE_LENGTH;
 }
-
-/** Per-word pacing when a canned reply is streamed: slash-command output. */
-const COMMAND_REPLY_WORD_DELAY_MS = 10;
-/** Per-word pacing for the "No AI model is ready" setup reply. */
-const SETUP_REQUIRED_REPLY_WORD_DELAY_MS = 15;
 
 /**
  * Resolves the effective autonomy level for a request. Expired grants fall
@@ -454,11 +449,6 @@ import {
   isolateLegacyDefaultChatSessions,
   registerChatHistoryRestoreParticipant,
   resolveChatHistoryTarget,
-  persistMessage,
-  loadSessionMessages,
-  replaceRetryTailWithUser,
-  retryTailMatches,
-  stripTrailingFailedPair,
   type RetryTailExpectation,
 } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, buildSkillPromptSection } from './chat-context.js';
@@ -475,9 +465,7 @@ import {
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
-import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import {
   EXPLICIT_READ_ONLY_TOOL_NAMES,
   isBoundedExactPersistedMemoryLookup,
@@ -542,6 +530,9 @@ import { PERSONAL_CHAT_SCOPE_ID } from './chat-scope.js';
 import { handleTurnFailure } from './chat-turn-failure.js';
 import { runAgentTurn } from './chat-agent-run.js';
 import { resolveModelAvailability, selectTurnModel } from './chat-turn-model-routing.js';
+import { acquireTurnSessionRuntime } from './chat-turn-session-runtime.js';
+import { loadTurnHistory } from './chat-turn-history.js';
+import { routeTurnCommand } from './chat-turn-command-routing.js';
 import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn } from './chat-turn-completion.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -1646,11 +1637,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // lookups did not influence the answer.
     const turnRecall = new TurnRecalledContext();
 
-    // Rerouted message from slash command processing — set by the
-    // AGENT_LOOP_REROUTE_PREFIX branch of the command dispatch, read by
-    // `hasReroute`/`agentMessage` and the last-user-message swap before the loop.
-    let reroutedMessage: string | undefined;
-
     // The turn's releasable resources are held here so the outer finally's
     // `turnResources.releaseHeld()` can always clean up. The happy path's
     // `turnResources.unhookTools()` alone would leave every exception path
@@ -1686,7 +1672,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
     let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
-    let workspaceTurnScope: WorkspaceTurnScope | undefined;
     const activeSessionId = requestedSessionId ?? historyWorkspaceId;
     const activeWorkspaceId = historyWorkspaceId;
     const activeExecutionWorkspaceId = executionWorkspaceId;
@@ -1739,91 +1724,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
 
-      // Named workspaces must acquire one coherent chat runtime before any
-      // asynchronous model work or conversation mutation. Construction errors
-      // fail closed; mixing a workspace tool pool with the shared orchestrator
-      // would cross memory and mutable agent state.
-      let sessionOrch: Orchestrator = orchestrator;
-      let sessionTools: ToolDefinition[] | undefined;
-      let wsSession: WorkspaceSession | undefined;
-      if (!hasCustomRunner && usesNamedWorkspace) {
-        try {
-          if (!effectiveWorkspace) {
-            throw new Error('Managed workspace identity is unavailable');
-          }
-          if (!server.agentState.getWorkspaceMindDb(effectiveWorkspace)) {
-            throw new Error('Workspace mind is unavailable');
-          }
-          const candidateSession = server.sessionManager.getOrCreate(
-            effectiveWorkspace,
-            () => server.mindCache.acquire(effectiveWorkspace),
-            (m) => server.agentState.createSessionOrchestrator(m),
-            (m, o) => server.agentState.buildToolsForSession(
-              o,
-              executionWorkspacePath ?? effectiveWorkspace,
-              effectiveWorkspace,
-            ),
-            server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
-            () => server.mindCache.release(effectiveWorkspace),
-          );
-          workspaceSessionActivity = server.sessionManager.acquireActivity(effectiveWorkspace);
-          if (!workspaceSessionActivity) {
-            throw new Error(`Workspace session is ${candidateSession.status}`);
-          }
-          const activeWorkspaceSession = workspaceSessionActivity.session;
-          turnSignal = AbortSignal.any([
-            abortController.signal,
-            activeWorkspaceSession.abortController.signal,
-          ]);
-          if (turnSignal.aborted) {
-            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
-          }
-
-          server.mindCache.acquire(effectiveWorkspace);
-          turnResources.holdWorkspaceMindPin(() => server.mindCache.release(effectiveWorkspace));
-          const runtime = acquireChatRuntime(
-            activeWorkspaceSession,
-            sessionId,
-            executionWorkspacePath ?? effectiveWorkspace,
-            effectiveWorkspace,
-          );
-
-          wsSession = activeWorkspaceSession;
-          turnResources.holdChatRuntime(() => releaseChatRuntime(activeWorkspaceSession, sessionId, runtime));
-          sessionOrch = runtime.orchestrator;
-          sessionTools = runtime.tools;
-        } catch (err) {
-          log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
-          throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
-        }
-      } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
-        try {
-          if (authorizedWorkspace) {
-            const requestMind = server.mindCache.acquire(authorizedWorkspace);
-            turnResources.holdSharedMindPin(() => server.mindCache.release(authorizedWorkspace));
-            sessionOrch = server.agentState.createSessionOrchestrator(requestMind);
-          } else {
-            sessionOrch = server.agentState.createSessionOrchestrator();
-          }
-          sessionTools = server.agentState.buildToolsForSession(
-            sessionOrch,
-            executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
-            authorizedWorkspace ?? undefined,
-          );
-        } catch (err) {
-          log.warn(`[session] Failed to create request-scoped chat runtime: ${(err as Error).message}`);
-          throw new Error('Chat workspace is not ready.');
-        }
-      }
-      activeSessionOrch = sessionOrch;
-      if (!hasCustomRunner) {
-        workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
-          turnSignal,
-        );
-        const heldScope = workspaceTurnScope;
-        turnResources.holdTurnScope(() => heldScope.release());
-      }
+      const { sessionOrch, sessionTools, wsSession, workspaceTurnScope } = acquireTurnSessionRuntime({
+        server, orchestrator, hasCustomRunner, usesNamedWorkspace, authorizedWorkspace,
+        effectiveWorkspace, sessionId, executionWorkspacePath, abortController, turnSignal,
+        turnResources, acquireChatRuntime, releaseChatRuntime,
+        setWorkspaceSessionActivity: (lease) => { workspaceSessionActivity = lease; },
+        setTurnSignal: (signal) => { turnSignal = signal; },
+        setActiveSessionOrch: (orch) => { activeSessionOrch = orch; },
+      });
 
       const { budgetModel, modelSelection, resolveModel, hasDistinctConfiguredFallback } = await selectTurnModel({
         server, model, executionWorkspaceConfig, message, getTrackedDailySpend, throwIfTurnAborted,
@@ -1831,184 +1739,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
 
-      // A conversation-history denial is a read boundary, not only a prompt-
-      // packaging choice. Do not read or cache the saved transcript for this turn.
-      if (!turnMutationPolicy.denyConversationHistory && !sessionHistories.has(sessionStateKey)) {
-        const saved = loadSessionMessages(
-          sessionPersistenceDataDir, activeWorkspaceId, sessionId
-        );
-        sessionHistories.set(sessionStateKey, saved);
-        touchSessionState(sessionStateKey);
-      }
-      const history = turnMutationPolicy.denyConversationHistory
-        ? []
-        : sessionHistories.get(sessionStateKey)!;
-      activeHistory = turnMutationPolicy.denyConversationHistory ? undefined : history;
-
-      let retryUserAlreadyPersisted = false;
-      if (retryTarget && !turnMutationPolicy.denyConversationHistory) {
-        if (!retryTailMatches(history, message, retryTarget)) {
-          sendEvent('error', {
-            message: 'This conversation changed before Retry could replace it. Reload and try again.',
-            code: 'RETRY_TARGET_STALE',
-          });
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return;
-        }
-        const replacement = replaceRetryTailWithUser(
-          sessionPersistenceDataDir,
-          activeWorkspaceId,
-          sessionId,
-          message,
-          retryTarget,
-        );
-        if (!replacement.ok) {
-          sendEvent('error', {
-            message: 'Retry could not safely replace this conversation. Reload and try again.',
-            code: 'RETRY_TARGET_STALE',
-          });
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return;
-        }
-        history.splice(
-          history.length - replacement.removed,
-          replacement.removed,
-          { role: 'user', content: message },
-        );
-        retryUserAlreadyPersisted = true;
-      }
-
-      // Legacy retry-dedup: older clients only identified failed turns. Drop
-      // the previously persisted failed user+assistant pair (RAM + disk) so a
-      // reload doesn't render it duplicated alongside the fresh turn.
-      if (retryTurn && !retryTarget && !turnMutationPolicy.denyConversationHistory) {
-        const n = history.length;
-        const legacyTailMatches = n >= 2
-          && history[n - 1].role === 'assistant'
-          && typeof history[n - 1].content === 'string'
-          && history[n - 1].content.startsWith(GENERATION_FAILED_PREFIX)
-          && history[n - 2].role === 'user'
-          && history[n - 2].content === message;
-        if (legacyTailMatches && stripTrailingFailedPair(
-          sessionPersistenceDataDir,
-          activeWorkspaceId,
-          sessionId,
-          message,
-        )) {
-          history.splice(n - 2, 2);
-        }
-      }
-
-      // Current-message-only packaging is safe only when there is no prior
-      // conversation to erase. Capability classifiers above separately keep
-      // workspace, memory, connector, and web evidence requests tool-capable.
-      retention.settle({
-        toolFreeAdvisory: toolFreeAdvisoryCandidate && history.length === 0,
-        forcedReadOnlyTurn: (explicitReadOnlyToolCandidate === 'read_file'
-            && directReadFileDirective.kind === 'valid')
-          || explicitReadOnlyToolCandidate === 'search_memory'
-          || decisionMatrixToolSequenceRequested,
+      const historyLoad = loadTurnHistory({
+        sessionHistories, touchSessionState, turnMutationPolicy, sessionStateKey,
+        sessionPersistenceDataDir, activeWorkspaceId, sessionId, message, retryTarget, retryTurn,
+        sendEvent, raw, retention, toolFreeAdvisoryCandidate, explicitReadOnlyToolCandidate,
+        directReadFileDirective, decisionMatrixToolSequenceRequested,
+        setActiveHistory: (value) => { activeHistory = value; },
       });
-
-      // A saved-history opt-out is both a read and retention boundary for this turn.
-      if (!turnMutationPolicy.denyConversationHistory && !retryUserAlreadyPersisted) {
-        history.push({ role: 'user', content: message });
-        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
-      }
+      if (historyLoad.ended) return;
+      const { history } = historyLoad;
 
       const modelAvailable = await resolveModelAvailability({
         server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth,
       });
 
-      // Streams a canned assistant reply word by word, persists it unless the
-      // turn denies conversation history, and emits the terminal `done` event.
-      // Resolves false when the turn was aborted before `done` was sent.
-      // Does not end the stream: the caller owns `raw.end()`. The two
-      // slash-command callers call it; the setup-required caller
-      // deliberately does not, and reaches the handler's outer `finally`
-      // through the skipped agent-loop block instead.
-      const streamCannedReply = async (text: string, wordDelayMs: number): Promise<boolean> => {
-        for (const word of text.split(' ')) {
-          if (turnSignal.aborted) return false;
-          sendEvent('token', { content: word + ' ' });
-          await new Promise((r) => setTimeout(r, wordDelayMs));
-        }
-        if (turnSignal.aborted) return false;
-        if (!turnMutationPolicy.denyConversationHistory) {
-          history.push({ role: 'assistant', content: text });
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: text });
-        }
-        sendEvent('done', {
-          content: text,
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          toolsUsed: [],
-        });
-        return true;
-      };
-
-      // ── Slash command routing (works even when no model is ready) ──
-      if (turnSignal.aborted) return;
-      const { commandRegistry } = server.agentState;
-      const isSlashCommand = commandRegistry.isCommand(message);
-      if (isSlashCommand) {
-        const cmdContext = buildChatCommandContext({
-          server,
-          orchestrator: sessionOrch,
-          executionWorkspaceId,
-          sessionId,
-          turnMutationPolicy,
-        });
-        const marketplaceSubcommand = message.trim().match(
-          /^\/(?:marketplace|mp|market)\s+(installed|install|sync)\b/i,
-        )?.[1]?.toLowerCase();
-        const blocksMarketplaceRead = marketplaceSubcommand === 'installed'
-          && !persistedMemoryReadAllowed;
-        const blocksMarketplaceMutation = (marketplaceSubcommand === 'install'
-          || marketplaceSubcommand === 'sync')
-          && (!persistedMemoryReadAllowed || !retention.allowDerivedPersistence);
-        const cmdResult = blocksMarketplaceRead || blocksMarketplaceMutation
-          ? 'Persisted marketplace state is disabled for this turn.'
-          : await commandRegistry.execute(message, cmdContext);
-
-        // Check if the command wants to be re-processed through the agent loop
-        if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && modelAvailable) {
-          // Extract the rewritten message and fall through to agent loop processing
-          const rerouted = cmdResult.slice(AGENT_LOOP_REROUTE_PREFIX.length);
-          sendEvent('step', { content: `Processing /${message.trim().split(/\s+/)[0].slice(1)} via AI...` });
-          // Replace the message in history with the original slash command (already persisted)
-          // and process the rewritten message through the agent loop below
-          // We achieve this by NOT returning here — the code falls through to the agent loop
-          // with the rerouted message replacing the original
-          reroutedMessage = rerouted;
-        } else if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && !modelAvailable) {
-          const cmdName = message.trim().split(/\s+/)[0];
-          const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
-          if (!(await streamCannedReply(friendlyError, COMMAND_REPLY_WORD_DELAY_MS))) return;
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return; // explicit terminal — don't fall through to agent loop
-        } else {
-          // Stream the command result as SSE tokens and persist it
-          if (!(await streamCannedReply(cmdResult, COMMAND_REPLY_WORD_DELAY_MS))) return;
-          if (!raw.destroyed && !raw.writableEnded) raw.end();
-          return; // explicit terminal — don't fall through to agent loop
-        }
-      }
-
-      // Check if a slash command requested agent-loop rerouting.
-      // A reroute is the command asking for the loop, whatever its body says;
-      // reading the body as a boolean let an empty one end the turn with no
-      // answer and no done (TD-CHAT-25).
-      const hasReroute = reroutedMessage !== undefined;
-      const shouldRunAgentLoop = hasReroute || (!isSlashCommand && modelAvailable);
-      const shouldReplySetupRequired = !hasReroute && !isSlashCommand && !modelAvailable;
-
-      if (shouldReplySetupRequired) {
-        // Setup-required mode — respond without pretending the user's input
-        // was answered. The raw turn is still persisted for continuity.
-        const setupRequiredReply = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
-        // Persist the setup-required reply so session continuity is maintained
-        if (!(await streamCannedReply(setupRequiredReply, SETUP_REQUIRED_REPLY_WORD_DELAY_MS))) return;
-      }
+      const commandRouting = await routeTurnCommand({
+        server, message, modelAvailable, turnSignal, sendEvent, raw, history, turnMutationPolicy,
+        sessionPersistenceDataDir, activeWorkspaceId, sessionId, sessionOrch, executionWorkspaceId,
+        persistedMemoryReadAllowed, retention, buildChatCommandContext,
+      });
+      if (commandRouting.ended) return;
+      const { shouldRunAgentLoop, reroutedMessage } = commandRouting;
 
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
