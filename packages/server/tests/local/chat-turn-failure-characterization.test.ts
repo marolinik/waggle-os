@@ -57,7 +57,7 @@ describe('POST /api/chat failure before commit (characterization)', () => {
     ['ETIMEDOUT', new Error('connect ETIMEDOUT'), 'The request timed out. The model may be overloaded — try again in a moment.'],
     ['context_length', new Error('context_length_exceeded'), 'The conversation is too long for the model. Try clearing the chat and starting fresh.'],
     ['too many tokens', new Error('too many tokens in request'), 'The conversation is too long for the model. Try clearing the chat and starting fresh.'],
-    ['an unclassified Error', new Error('Provider said no'), 'Provider said no'],
+    ['an unclassified, unmarked Error', new Error('Provider said no'), 'Something went wrong. Try sending your message again.'],
     ['a non-Error throw', 'plain string', 'Something went wrong. Try sending your message again.'],
   ])('maps %s to its user-facing message with no code', async (_label, thrown, message) => {
     expect(await errorEvents(thrown, `failure-${_label.replace(/\W+/g, '-')}`)).toEqual([{ message }]);

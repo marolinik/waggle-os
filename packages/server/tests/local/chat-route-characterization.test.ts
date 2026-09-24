@@ -628,8 +628,8 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
       expect(events.some(e => e.event === 'done')).toBe(false);
       const error = events.find(e => e.event === 'error');
       expect(error).toBeDefined();
-      // The outer catch forwards an unclassified message verbatim (TD-CHAT-15).
-      expect(JSON.parse(error!.data).message).toBe('governance characterization runner failure');
+      // An unclassified, unmarked message is internal: the user gets the generic sentence (TD-CHAT-15).
+      expect(JSON.parse(error!.data).message).toBe('Something went wrong. Try sending your message again.');
     } finally {
       fetchSpy.mockRestore();
     }
@@ -642,7 +642,7 @@ describe('POST /api/chat team governance lookup (characterization)', () => {
     const messages = history.json() as { messages?: Array<{ role: string; content: string }> };
     const assistant = (messages.messages ?? []).filter(m => m.role === 'assistant');
     expect(assistant.at(-1)!.content).toBe(
-      `${GENERATION_FAILED_PREFIX}governance characterization runner failure`,
+      `${GENERATION_FAILED_PREFIX}Something went wrong. Try sending your message again.`,
     );
   });
 });

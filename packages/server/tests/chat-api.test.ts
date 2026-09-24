@@ -1850,7 +1850,7 @@ describe('Chat Streaming API', () => {
       const errorEvents = events.filter(e => e.event === 'error');
       expect(errorEvents.length).toBe(1);
       const errorData = JSON.parse(errorEvents[0].data);
-      expect(errorData.message).toContain('LiteLLM is not available');
+      expect(errorData.message).toBe('Something went wrong. Try sending your message again.');
     } finally {
       server.agentRunner = originalRunner;
     }
@@ -2431,7 +2431,7 @@ describe('Chat Streaming API', () => {
       );
       expect(transcript[0]).toEqual({ role: 'user', content: seed });
       expect(transcript[1].role).toBe('assistant');
-      expect(transcript[1].content).toContain('Generation failed: LiteLLM is not available');
+      expect(transcript[1].content).toBe('Generation failed: Something went wrong. Try sending your message again.');
     } finally {
       server.agentRunner = originalRunner;
     }
