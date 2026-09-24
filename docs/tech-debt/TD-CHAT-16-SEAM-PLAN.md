@@ -417,3 +417,35 @@ claim was wrong.**
   real tool result is an error, and asserts zero entity pushes.
 - The failing save uses distinct content. The first pin's frame would otherwise dedup it into a
   successful "already exists" result.
+
+## 6g. sse-backpressure investigation (ruling 9): not a production bug
+
+**Reproduction.** A probe ran the real loop against a fake provider streaming 96 × 256 KB, about
+3× the 8 MB `SSE_MAX_BUFFERED_BYTES`.
+- The server made one model request.
+- The response body was 475 bytes and ended with
+  `error: LLM stream exceeded the total SSE size limit; partial content was not accepted.`
+- The HTTP response therefore ends normally. The client in the pin never reads it, so the
+  keep-alive socket stays open, which is exactly the "still open" the pin saw.
+
+**Where the close should happen.** `writeSseEvent` (`routes/chat-sse.ts:24-34`) destroys the stream
+once `writableLength` passes 8 MB. On the injected path the runner pushed 24 MB of tokens straight
+into the route, so the cap fired. On the real path the agent's own SSE parser fails closed first,
+at `MAX_TOTAL_SSE_CHARS = 2_097_152` (`packages/agent/src/sse-parser.ts:46,383`). That is 2 MiB,
+below the route's 8 MB cap.
+
+**Conclusion.** Both limits behave as designed, so there is no bug. One provider answer can never
+fill the route's backlog to its cap. The TD-REL-1 cap still guards the cumulative backlog of a long
+turn: tool events, many steps, and the answer.
+
+**Pin decision needed.** The pin as written describes a state that one real answer cannot produce.
+Options:
+- (a) Keep it at the `writeSseEvent` unit level, which already exists.
+- (b) Drive the cumulative backlog through many tool rounds with a paused reader. This is possible
+  but slow and fragile.
+- (c) Keep this one pin on a ruling-2-style spy that drives `onToken` directly. That goes beyond
+  ruling 2, which only allows recording and throwing.
+
+The file stays on `agentRunner` until a ruling. Recommendation: (a) plus one real-path pin showing
+that an oversized provider answer ends in the parser's fail-closed error and that the socket is
+released once the response ends.
