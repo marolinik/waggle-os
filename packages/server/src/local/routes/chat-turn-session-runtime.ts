@@ -14,6 +14,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import type { Orchestrator, ToolDefinition } from '@waggle/agent';
+import { markUserFacingError } from '@waggle/shared';
 import type { WorkspaceSession, WorkspaceSessionActivityLease } from '../workspace-sessions.js';
 import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { resolvePersonalFilesRoot } from '../storage/index.js';
@@ -122,7 +123,7 @@ export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: 
       sessionTools = runtime.tools;
     } catch (err) {
       log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
-      throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
+      throw markUserFacingError(new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`));
     }
   } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
     try {
@@ -140,7 +141,7 @@ export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: 
       );
     } catch (err) {
       log.warn(`[session] Failed to create request-scoped chat runtime: ${(err as Error).message}`);
-      throw new Error('Chat workspace is not ready.');
+      throw markUserFacingError(new Error('Chat workspace is not ready.'));
     }
   }
   setActiveSessionOrch(sessionOrch);
