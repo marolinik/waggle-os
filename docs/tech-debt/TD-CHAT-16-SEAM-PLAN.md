@@ -202,6 +202,67 @@ list has one element.
 - This changes an assertion, so the file is left on `agentRunner` until the founder rules. Its
   other two pins are rejections that would port mechanically.
 
+## 6b. Phase 4 result
+
+Ported chat-retry-chain, chat-attempt-chain, chat-attempt-policy, chat-turn-usage-ledger and
+chat-turn-failure. Each file records the route's attempts and their configs through the ruling-2
+pass-through spy. Every failure a provider can produce now comes from the fake:
+
+| Failure | Scripted reply |
+|---|---|
+| stream interruption | `truncated_stream` with usage; the loop's own INCOMPLETE_COMPLETION matches the replay predicate |
+| rate limit | 429 with `retry-after: 0` on the first key, until the loop's own retries run out |
+| invalid key | 401 on every non-fallback model |
+| endpoint down | `network_error` |
+| a tool ran, then an empty answer | a real `search_memory` call, then `' '` |
+| the budget-exhausting interruption | `truncated_stream` whose usage equals the attempt's own `maxTokenBudget` |
+
+**Inputs changed, assertions kept.** Two pins now send a message that asks for the tool they need:
+
+- attempt-chain "reports tools a failed attempt used" asks for `list_skills`.
+- attempt-policy "empty answer after a tool ran" asks for a memory search.
+
+On the real path a conversational question transmits no tools, so a scripted call to an unoffered
+tool is never counted as used.
+
+attempt-chain "keeps a failed attempt's streamed tokens out" still streams the discarded tokens. The
+cut stream is what discards them now: a provider cannot stream and then answer 429.
+
+**Moved to the spy (ruling 2). No provider reply produces these:**
+
+- Plain INCOMPLETE_COMPLETION with a non-matching message (retry-chain). This was already listed in §2.
+- A 429 whose error carries `toolsUsed` (attempt-chain).
+- An interruption flagged `usageEstimated`: the loop sets that flag only on initial-activity
+  timeouts (usage-ledger).
+- A zero-usage interruption (usage-ledger). When a cut stream reports 0/0, the loop substitutes an
+  estimate; this probe observed 2435/10.
+- turn-failure's eight message-mapping rows. They classify the raw thrown value, and a provider
+  error always reaches the route wrapped as `LLM error (<status>): <body>`.
+
+**Re-pinned under ruling 3 (production equivalent).**
+
+- turn-failure L73 was "charges an injected runner the usage its failed attempt reported" and is now
+  "charges the usage a failed turn's provider responses reported". Two cut streams report 1000/500
+  each, and the daily total rises through the loop's own spend accounting.
+- turn-failure "forwards a daily-budget refusal code" now runs a real hard cap, on its own server
+  with `dailyBudget: 0.000001`. The code and the verbatim forwarding are unchanged. The forwarded
+  message is the cap's own `Daily budget exceeded: $0.0000 / $0.00 (hard cap)` instead of the
+  synthetic `Daily model budget reached`, and the pin now also asserts that no model call was made.
+  **This literal changed and needs review.**
+
+**Real-time backoff.**
+
+- attempt-policy's fallback contrast pin now takes about 22 s, because the loop's own network
+  retries wait 2 + 4 + 8 s. The file took 0.3 s before.
+- attempt-chain's first pin takes about 15–17 s. Most of that is cold start: the file builds a
+  server per test, and the whole file took 13.6 s before.
+- A later phase could inject a retry clock. That is production code, so it is not done here.
+
+**Pre-existing flake, not caused by this branch.** chat-api "translates a validated OpenAI forced
+tool choice for the native Anthropic route" (L1639) expects `fetch` to be called exactly 3 times
+and sometimes sees 4. It failed in 1 of 2 isolated runs of the untouched file on this branch, and in
+the phase 3 wide run.
+
 ## 7. Founder rulings (2026-09-24)
 
 All three recommendations were accepted.
