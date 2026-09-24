@@ -74,7 +74,7 @@ Install sites that serve `/api/chat` number **108**, in 28 files.
 | exact usage numbers, multi-chunk streams | yes |
 | compose with a suite's own egress stub | yes (`otherRequest: 'previous'`) |
 | `AgentLoopConfig` fields that never reach the wire: `maxTurns`, `skillDistillationGate`, `modelSpendBudget` identity, `traceRecording`, `modelSpendTraceId`, `governancePolicies`, `maxTokenBudget`, `modelOperationTimeoutMs` | **no — pass-through spy (ruling 2)** |
-| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53) | **no — pass-through spy (ruling 2)** |
+| failures a provider cannot produce: forged tool-result pairs (chat-api L2681), SQLITE_BUSY (execution-trace L273), a non-matching INCOMPLETE_COMPLETION message (retry-chain L126), a non-Error throw (turn-failure L53), an unclassified error message (chat-route L616) | **no — pass-through spy (ruling 2)** |
 
 ## 3. Design
 
@@ -161,6 +161,46 @@ phases 2–12 is free, so long as no phase mixes a B ruling with a mechanical po
   "rejects restore before writing while a chat turn is active": the hold-open moved from the runner
   into the provider call, and the assertions are unchanged.
 - No production code was touched, and no observable result changed.
+
+## 6a. Phases 2–3 result
+
+**Helper fix before phase 2 (`b0428d10`).** Once `markFakeProviderHealthy` sets the vault key, the
+GEPA optimizer calls `api.anthropic.com` directly through `@ax-llm/ax`. Behind chat-route's
+governance stub, which answers 503 to every unknown host, the optimizer kept retrying for more than
+200 s and each turn hung. The fake now answers that host itself with a 404 and records the call as
+unexpected, whatever stub sits behind it, so GEPA fails soft at once. This is the GEPA risk in §5
+coming true.
+
+**Phase 2 (`000e44ac`).** Ported chat-route, chat-request-resolution, chat-viewer-rejection,
+chat-history-load and chat-turn-notification.
+- Runner call counters became provider request counts. The "must not reach the runner" sentinels
+  became zero-request assertions.
+- chat-route's governance block uses the ruling-2 pass-through spy. Two pins need it:
+  - L510 reads `governancePolicies`, which never goes on the wire.
+  - L616 needs an unclassified thrown message, which no provider reply produces. It is added to the
+    §2 "cannot produce" list under ruling 2.
+- No assertion changed.
+
+**Phase 3.** Ported chat-post-commit, chat-history-write-failure, chat-reroute and
+chat-regulated-disclaimer.
+- All four passed unchanged on the real path. The B risks did not materialise:
+  - The disclaimer replies trigger neither the schedule nudge nor the grounding hedge.
+  - `persistMessage` call 2 is still the assistant's answer.
+  - The reroute message is still the last message the model receives.
+  - `listWorkspaces` is not read before commit.
+- post-commit's private SSE stub was replaced by the helper.
+
+**Stopped: chat-turn-trace, "emits the same single stage on a turn that succeeds" (L101).** On the
+real path, the turn id carries `["chat.turn.start","agent-loop.enter","agent-loop.exit"]`. The pin
+asserts exactly `["chat.turn.start"]`, and its own comment says the injected runner is why the
+list has one element.
+- The route still emits only `chat.turn.start`. The two extra stages come from the loop, and the
+  pin's comment already predicted them for "a real agent path".
+- Proposed re-pin: filter the stages to `chat.*` and assert `['chat.turn.start']`, which keeps the
+  route-level claim. Also pin that the loop stages follow on success and are absent on the
+  injection-rejected turn. That absence is the TD-CHAT-43 signal the comment describes.
+- This changes an assertion, so the file is left on `agentRunner` until the founder rules. Its
+  other two pins are rejections that would port mechanically.
 
 ## 7. Founder rulings (2026-09-24)
 
