@@ -162,6 +162,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-23 | close-out | **Founder decision round 4** (D-1) | The full data-dir wipe stays total (same SQLite file, no separate governance database); pseudonymization keeps `tools_called` tool names; `MindErasure` gets no governance effect; `ai_interactions` stays latent, with no production writer added before launch |
 | 2026-09-23 | close-out | **Founder decision round 5** | TD-TEST-19 (vite 6 vs 7) deferred post-launch with TD-DEP-2; R-5 (updater and rollback) deferred to the release arc with public signing |
 | 2026-09-24 | close-out | **TD-CHAT-3 closed** (founder) | Slice 16 left the `POST /api/chat` handler as orchestration only (3594 → 362 lines); further shrinking would move glue. The `agentRunner` seam narrowing stays with TD-CHAT-16 |
+| 2026-09-24 | close-out | **TD-CHAT-15 passthrough: hybrid marker** (founder) | A typed class was rejected: the errors are built by factories that decorate a plain `Error` with `code`/`status`. The rules are: (a) a code-bearing error (`INCOMPLETE_COMPLETION`, the budget codes) is classified by `code` in the handler; a plain user-written sentence is marked with `markUserFacingError` at its throw site (in `@waggle/shared`, the lowest package the agent and server both import); everything else gets the generic sentence. (b) A provider HTTP error shows its status only, and the body goes to the log. (c) The change lands now; a conflict with TD-CHAT-16 is resolved by whichever PR merges second. (d) Follow-up: the initial-model-activity timeout ("… retry this turn") is marked user-facing too. |
 
 ## Next Actions
 
@@ -183,7 +184,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] CA-7: layer rule shipped as `@typescript-eslint/no-restricted-imports` over all three policy-graph files; proven non-vacuous on four banned forms (agent, `a40475e2`, 2026-09-18)
 - [x] Phase 6 pass 1: TD-CHAT-18 (`c362ae45`), TD-TEST-5 (`7dca4555`), CA-7 (`a40475e2`); Debt Budget & Broken-Windows Policy ratified; 3 new Adopted Conventions (agent, 2026-09-18)
 - [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
-- [x] TD-CHAT-28 / TD-CHAT-15: consumed. TD-CHAT-28 closed `f6b6b227`; TD-CHAT-15 log half closed 2026-09-19, passthrough half tracked in its row (agent, P2)
+- [x] TD-CHAT-28 / TD-CHAT-15: consumed. TD-CHAT-28 closed `f6b6b227`; TD-CHAT-15 log half closed 2026-09-19, passthrough half closed 2026-09-24 (`6fa0c8ed`) (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
 - [x] R-3: unbounded `.all()` reads. Count paths were done under R-6. `sessions.getActive()` is bounded at its nine first-row callers through `ensureActive()`; `install-audit`, `cron-store` and `file-indexer` are ruled in RELIABILITY.md. No `hive-mind-core` change (agent, `ee6f2d1e`, 2026-09-23)
 - [x] R-5 (deferred to the release arc, founder 2026-09-23): Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
@@ -192,7 +193,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] Phase 8 pass 1: context map, canonical Domain Glossary, harvest ACL named, `tests/mind-context-boundaries.test.ts` guard (agent, `7910b057`, 2026-09-18)
 - [x] D-1: `governance` context extracted to `packages/core/src/governance/`, and erase routes pseudonymize the `ai_interactions` trail (agent, `00668050` + `250d92f2` + `b2dfc021` + `b35003a5` + `893b485e` + `35b3cb0e`, 2026-09-23)
 - [x] D-2: 27 technical-only class names (`*Manager`, `*Service`) — ruled per class in ARCHITECTURE.md; zero renames, none models a glossary concept its name lacks (agent, `7a767570`, 2026-09-23)
-- [ ] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent)
+- [x] Phase 2 pass 2 (later): pin the P1 Characterization Backlog ranges via the fetch-spy harness, then Replace Method with Method Object on the handler (agent; TD-CHAT-3 closed 2026-09-24, PRs #163-#165)
   - [x] TD-CHAT-3 slice 1, usage accounting -> `TurnUsageLedger` (agent, `6611389b` + `1c24fdf0`, 2026-09-21)
   - [x] TD-CHAT-3 slice 2, execution trace -> `TurnExecutionTrace` (agent, `8fe4e797` + `17ce055b`, 2026-09-22)
   - [x] TD-CHAT-3 slice 3, recalled context -> `TurnRecalledContext` (agent, `5237cf62` + `45707fbf`, 2026-09-22)
@@ -204,7 +205,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
   - [x] TD-CHAT-3 slice 8, tool-activity state -> `TurnToolActivity` (agent, `1382cccb` + `69c23a3c`, 2026-09-23)
   - [x] TD-CHAT-3 slices 9-12, attempt/fallback control flow -> `chat-attempt-policy`, `TurnModelSelection`, `TurnAttemptState`, `createAttemptChain` (agent, 2026-09-23/24)
   - [x] TD-CHAT-3 slices 13-16, the handler's phases -> completion, preparation, failure, agent run, request resolution, model routing, session runtime, history load, command routing; handler 3594 -> 362; row CLOSED by founder (agent, PRs #163/#164, 2026-09-24)
-  - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)
+  - [x] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3; closed `70855e2e`, 2026-09-23)
 - [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
 - [x] Review + merge `chore/tech-debt-phase3-chat-clean-code` into `main`; the nine Phase 3 Adopted Conventions ratified as amended by founder delegation (agent, session 0915 S3, 51-agent review; merged via PR #85)

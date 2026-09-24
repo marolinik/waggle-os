@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { FrameStore, MindDB, SessionStore, WaggleConfig } from '@waggle/core';
 import { Orchestrator, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
 import { MarketplaceInstaller } from '@waggle/marketplace';
+import { markUserFacingError } from '@waggle/shared';
 import type { PluginTool } from '@waggle/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
@@ -1323,9 +1324,10 @@ describe('persona acceptance prompt budget', () => {
       const input = { path: 'timeout-side-effect.txt', content: 'written once' };
       config.onToolUse?.('write_file', input);
       config.onToolResult?.('write_file', input, 'File written');
-      throw new Error(
+      // Stands in for the agent loop's timeout factory, which marks it user-facing.
+      throw markUserFacingError(new Error(
         'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
-      );
+      ));
     });
 
     try {
@@ -4607,7 +4609,7 @@ describe('persona acceptance prompt budget', () => {
       },
     });
     expect(failed.statusCode).toBe(200);
-    expect(failed.body).toContain('retry boundary failure');
+    expect(failed.body).toContain('Something went wrong. Try sending your message again.');
 
     capturedConfig = null;
     const deniedRetry = await injectWithAuth(server, {

@@ -1866,7 +1866,7 @@ describe('Chat Streaming API', () => {
       const errorEvents = events.filter(e => e.event === 'error');
       expect(errorEvents.length).toBe(1);
       const errorData = JSON.parse(errorEvents[0].data);
-      expect(errorData.message).toContain('LiteLLM is not available');
+      expect(errorData.message).toBe('Something went wrong. Try sending your message again.');
     } finally {
       server.agentRunner = originalRunner;
     }
@@ -2019,7 +2019,7 @@ describe('Chat Streaming API', () => {
         content: 'Please remember that this turn failed visibly.',
       });
       expect(inMemory[1].role).toBe('assistant');
-      expect(inMemory[1].content).toContain('Generation failed: LLM error (400): invalid tool call arguments');
+      expect(inMemory[1].content).toBe('Generation failed: The model provider returned an error (HTTP 400). Try again or switch model.');
 
       const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
       expect(onDisk).toEqual(inMemory);
@@ -2447,7 +2447,7 @@ describe('Chat Streaming API', () => {
       );
       expect(transcript[0]).toEqual({ role: 'user', content: seed });
       expect(transcript[1].role).toBe('assistant');
-      expect(transcript[1].content).toContain('Generation failed: LiteLLM is not available');
+      expect(transcript[1].content).toBe('Generation failed: Something went wrong. Try sending your message again.');
     } finally {
       server.agentRunner = originalRunner;
     }
