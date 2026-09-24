@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { WorkspaceManager } from '@waggle/core';
+import { MindDB, VaultStore, WorkspaceManager } from '@waggle/core';
 import { workspaceRoutes, toStateItemViews } from '../../src/local/routes/workspaces.js';
 import type { StateItem } from '../../src/local/workspace-state.js';
 
@@ -27,6 +27,7 @@ describe('workspace lifecycle routes', () => {
   let server: FastifyInstance;
   let closeWorkspaceMind: ReturnType<typeof vi.fn>;
   let wsId: string;
+  let personal: MindDB;
 
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-lifecycle-'));
@@ -36,6 +37,11 @@ describe('workspace lifecycle routes', () => {
     closeWorkspaceMind = vi.fn();
     server = Fastify({ logger: false });
     server.decorate('workspaceManager', manager);
+    // A workspace delete pseudonymizes the personal mind's interaction log
+    // with a vault key (D-1), so both are real.
+    personal = new MindDB(path.join(tmpDir, 'personal.mind'));
+    server.decorate('multiMind', { personal } as unknown as FastifyInstance['multiMind']);
+    server.decorate('vault', new VaultStore(tmpDir));
     // Deliberate partial double: only the members the workspace routes read.
     server.decorate('agentState', {
       activateWorkspaceMind: () => undefined,
@@ -47,6 +53,7 @@ describe('workspace lifecycle routes', () => {
 
   afterEach(async () => {
     await server.close();
+    try { personal.close(); } catch { /* a test closed it already */ }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -182,5 +189,17 @@ describe('workspace lifecycle routes', () => {
 
     const after = await server.inject({ method: 'DELETE', url: `/api/workspaces/${wsId}` });
     expect(after.statusCode).toBe(404);
+  });
+
+  it('DELETE keeps the workspace when its interaction log cannot be pseudonymized (D-1)', async () => {
+    const rollback = vi.fn();
+    closeWorkspaceMind.mockResolvedValue({ release: vi.fn(), rollback });
+    personal.close(); // pseudonymization now throws: the database is not open
+
+    const res = await server.inject({ method: 'DELETE', url: `/api/workspaces/${wsId}` });
+    expect(res.statusCode).toBe(500);
+    expect(res.json().error).toBe('governance_pseudonymization_failed');
+    expect(rollback).toHaveBeenCalledTimes(1);
+    expect(manager.get(wsId)).not.toBeNull();
   });
 });

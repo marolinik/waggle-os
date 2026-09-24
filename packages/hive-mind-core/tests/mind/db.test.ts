@@ -104,14 +104,16 @@ describe('MindDB (hive-mind port)', () => {
     const names = new Set(tables.map((t) => t.name));
 
     for (const required of [
-      'ai_interactions',
       'execution_traces',
       'evolution_runs',
       'improvement_signals',
-      'install_audit',
     ]) {
       expect(names.has(required), `Waggle-specific table ${required} must exist`).toBe(true);
     }
+    // The governance tables (install_audit, ai_interactions) are no longer part
+    // of the Mind schema: @waggle/core's governance context creates them (D-1).
+    expect(names.has('install_audit')).toBe(false);
+    expect(names.has('ai_interactions')).toBe(false);
   });
 
   it('supports the memory_frames + FTS5 + sqlite-vec pipeline', () => {

@@ -7,16 +7,16 @@
 
 import type { MindDB } from '@waggle/hive-mind-core';
 import type { AIInteraction, RecordInteractionInput, HumanAction, ModelInventoryEntry, OversightLogEntry } from './types.js';
+import { ensureGovernanceSchema } from '../governance/ensure-schema.js';
 
 export class InteractionStore {
   private db: MindDB;
 
   constructor(db: MindDB) {
     this.db = db;
-    // Review Major #8: previously ensureTable() duplicated the DDL from schema.ts and
-    // drifted whenever the canonical schema changed. Now schema.ts + MindDB.runMigrations()
-    // own the table definition, including the input_text/output_text columns and the
-    // append-only triggers (Critical #1, #3).
+    // The table, its input_text/output_text columns and its append-only
+    // triggers are owned by the governance context (D-1), in one place.
+    ensureGovernanceSchema(db);
   }
 
   /** Record an AI interaction event. */
