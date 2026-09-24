@@ -485,3 +485,13 @@ runs the real loop against the suite's fake.
   - provider tokens still 10/5.
 
 The injected-runner C tests in chat-api are the next slices.
+
+### Fourth round (2026-09-25)
+
+11. **sse-backpressure: option (a).** The cap stays pinned at the `writeSseEvent` unit level, plus
+    one real-path pin: an oversized answer fails closed through the 2 MiB parser and the socket is
+    released.
+12. **Suite time: split `chat-api.test.ts` into 3–4 files by area** so vitest runs them on parallel
+    workers. This is a pure move with no assertion changes. The test count must be identical before
+    and after (98 equals the sum of the parts), and wall time is measured. The split comes before
+    chat-api slices 2–3.
