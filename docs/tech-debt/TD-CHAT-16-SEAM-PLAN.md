@@ -325,3 +325,35 @@ Later ports that script failures should set the decoration as well.
 diff from `main` in production source, in `chat-api.test.ts`, in its test utilities or in the
 vitest config, and the failure appeared there. The likely cause is a background fetch from the fresh
 server landing inside the test's global `fetch` spy. It is recorded, not fixed.
+
+## 6d. Turn-trace and phase 5 result
+
+**Turn-trace (ruling 4), ported.**
+- The success pin filters the turn's stages to `chat.*` and still asserts exactly
+  `['chat.turn.start']`.
+- It now also asserts that `agent-loop.enter` precedes `agent-loop.exit`.
+- The rejected turn asserts that no model call was made.
+
+**Phase 5: two of five ported.**
+- **chat-keyless-billing: ported, all assertions unchanged.** A pass-through spy records the billing
+  model and class for each attempt. Costs match to the digit on the real path, including 0.000078
+  for the priced 11/3 turn, which the loop's own spend accounting now charges. The fake answers the
+  keyless base URL `127.0.0.1:1`.
+- **chat-agent-run: ported.**
+  - The give-up pin scripts nine failing `read_file` calls, with paths outside the workspace, and
+    the real loop guard aborts. **The asserted literal is now the guard's own copy**, "I wasn't able
+    to complete this — the read_file tool failed repeatedly. Try rephrasing …", instead of the
+    synthetic "I stopped after repeated tool failures." The same class of change as the accepted
+    budget message; please review.
+  - The tool-signal pin scripts a real `list_skills {filter:'launch'}` call; its assertion is
+    unchanged.
+  - Both turns now send a message that asks for the tool, because a conversational message
+    transmits no tools.
+
+**Stopped: an observable result changes, so these three files stay on `agentRunner`.**
+
+| File | What changes on the real path | Proposed re-pin |
+|---|---|---|
+| chat-turn-execution-trace L163 ("cost read back … raised to spend already recorded") | The runner recorded 0.125 on the trace itself. The real loop charges its own spend onto the same trace, so `done.cost` is 0.125 plus the loop's cost. The other ten pins in the file port mechanically, but the file is held whole. | The spy records 0.125 before calling the real loop. Assert that `done.cost` equals the row's `cost_usd` and exceeds 0.125. |
+| chat-teamsync-push | (a) The pushed content is the real tool result, "Memory saved to workspace mind (…)", not "Saved 1 memory.". (b) The real `save_memory` accepts an empty save, so the failed-save pin cannot be driven by arguments. | (a) Pin the real result text. (b) Fault-inject the mind write, for example a `vi.spyOn` on the frame store that throws. |
+| chat-sse-backpressure | The socket stays open. With a real loop streaming about 3× `SSE_MAX_BUFFERED_BYTES` in 256 KB deltas, the backlog never passes the cap. Cause not confirmed; the likely suspect is that the loop caps or reshapes a multi-MB answer before the route's final write. | Needs investigation before a ruling. |
