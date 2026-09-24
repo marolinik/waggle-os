@@ -381,3 +381,16 @@ provider. It streams `Hello ` and `world` with usage 10/5, and the suite was set
    tool counts match the request's `toolNames`.
 
 The slice should probably install the fake per test group rather than suite-wide.
+
+### Third round (2026-09-25)
+
+8. **agent-run give-up pin with the loop guard's real text: accepted.**
+9. **Re-pin execution-trace and teamsync-push as proposed.**
+   - execution-trace: `done.cost` is 0.125 plus the loop's own spend.
+   - teamsync-push: the pushed content is the real tool result, and the failed-save case uses fault
+     injection.
+   - **sse-backpressure: the socket that never closes may be a real bug.** Root-cause it first:
+     reproduce it, find where the close should happen, and compare the injected path with the real
+     path. If it is a production bug, stop and report the evidence. Do not fix it silently.
+10. **chat-api: follow the §6e diagnosis order.** Fix the runner leak and the four timeouts first,
+    then port the file in 2–3 slices, including the L1647 re-pin. No suite-wide switch in one go.
