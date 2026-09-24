@@ -14,6 +14,21 @@ import {
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
+function sseEvents(body: string): Array<{ event: string; data: Record<string, unknown> }> {
+  return body.split('\n\n').flatMap((block) => {
+    const event = /^event: (.+)$/m.exec(block)?.[1];
+    const data = /^data: (.+)$/m.exec(block)?.[1];
+    return event && data ? [{ event, data: JSON.parse(data) as Record<string, unknown> }] : [];
+  });
+}
+
+/** The `reason` of every `model_switch` event, in order. */
+function switchReasons(body: string): string[] {
+  return sseEvents(body)
+    .filter((event) => event.event === 'model_switch')
+    .map((event) => String(event.data.reason));
+}
+
 describe('chat smart-router integration', () => {
   const primary = 'ollama/primary-test-model';
   const budget = 'ollama/budget-test-model';
@@ -777,6 +792,135 @@ describe('chat smart-router integration', () => {
       'primary-test-model',
       'fallback-test-model',
     ]);
+    expect(switchReasons(response.body)).toEqual([
+      'Budget 80% reached ($1.00/$1.00)',
+      'ollama/budget-test-model failed; primary selected',
+      'ollama/primary-test-model failed (timeout); configured fallback selected',
+    ]);
+  });
+
+  describe('model selection exits (TD-CHAT-3 slice 10 pins)', () => {
+    const recordingRunner = (attempts: string[], failFirst: number) =>
+      async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+        attempts.push(agentConfig.model);
+        if (attempts.length <= failFirst) {
+          throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
+        }
+        return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+      };
+
+    const overBudget = (setup: (config: WaggleConfig) => void) => {
+      const config = new WaggleConfig(tmpDir);
+      config.setDailyBudget(1);
+      setup(config);
+      config.save();
+      vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+    };
+
+    it('returns to the primary when the over-budget model is unavailable at preflight', async () => {
+      overBudget((config) => config.setBudgetModel('ollama/missing-budget-test-model'));
+      const attempts: string[] = [];
+      server.agentRunner = recordingRunner(attempts, 0);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'budget-unavailable-preflight' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toEqual(['primary-test-model']);
+      expect(switchReasons(response.body)).toEqual([
+        'ollama/missing-budget-test-model unavailable; primary selected',
+      ]);
+    });
+
+    it('uses the configured fallback when both the budget model and the primary are unavailable at preflight', async () => {
+      overBudget((config) => {
+        config.setDefaultModel('ollama/missing-primary-test-model');
+        config.setBudgetModel('ollama/missing-budget-test-model');
+        config.setFallbackModel('ollama/fallback-test-model');
+      });
+      const attempts: string[] = [];
+      server.agentRunner = recordingRunner(attempts, 0);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'budget-and-primary-unavailable' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toEqual(['fallback-test-model']);
+      expect(switchReasons(response.body)).toEqual([
+        'ollama/missing-budget-test-model and ollama/missing-primary-test-model unavailable; configured fallback selected',
+      ]);
+    });
+
+    it('uses the configured fallback when a failed budget run cannot return to an unavailable primary', async () => {
+      overBudget((config) => {
+        config.setDefaultModel('ollama/missing-primary-test-model');
+        config.setFallbackModel('ollama/fallback-test-model');
+      });
+      const attempts: string[] = [];
+      server.agentRunner = recordingRunner(attempts, 1);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'budget-run-primary-unavailable' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toEqual(['budget-test-model', 'fallback-test-model']);
+      expect(switchReasons(response.body)).toEqual([
+        'Budget 80% reached ($1.00/$1.00)',
+        'ollama/budget-test-model failed and ollama/missing-primary-test-model unavailable; configured fallback selected',
+      ]);
+    });
+
+    it('ends the turn when the selected primary is unavailable and no fallback is configured', async () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setDefaultModel('ollama/missing-primary-test-model');
+      config.save();
+      const attempts: string[] = [];
+      server.agentRunner = recordingRunner(attempts, 0);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Analyze this report', session: 'primary-unavailable-no-fallback' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toEqual([]);
+      expect(response.body).toContain('event: error');
+      expect(response.body).not.toContain('event: done');
+      expect(switchReasons(response.body)).toEqual([]);
+    });
+
+    it('reports the model that answered and bills it after a fallback', async () => {
+      const config = new WaggleConfig(tmpDir);
+      config.clearBudgetModel();
+      config.setFallbackModel('ollama/fallback-test-model');
+      config.save();
+      const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
+      const attempts: string[] = [];
+      server.agentRunner = recordingRunner(attempts, 1);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Analyze this report', session: 'fallback-done-model' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+      const done = sseEvents(response.body).find((event) => event.event === 'done');
+      expect(done?.data.model).toBe('ollama/fallback-test-model');
+      expect(addUsage.mock.calls.map((call) => call[0])).toContain('ollama/fallback-test-model');
+      expect(addUsage.mock.calls.at(-1)?.[0]).toBe('ollama/fallback-test-model');
+    });
   });
 
   it('records the actual fallback model across SSE, history, and execution trace', async () => {

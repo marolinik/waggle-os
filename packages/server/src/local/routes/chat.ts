@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, CapabilityRouter, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, filterAvailableTools, isBoundedSingleFileRoundTrip, selectAgentRunBudget, capToolResultForModel, generateTurnId, logTurnEvent, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -12,12 +12,9 @@ import type {
 } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt, PERSONAL_COMMAND_WORKSPACE_LABEL } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
-import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import {
-  issueCapabilityProposalFromToolResult,
-  resolveMarketplaceApprovalIdentity,
   stripCapabilityRequestMarker,
 } from './capability-proposals.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
@@ -460,7 +457,7 @@ import {
 } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUseSafe, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, AMBIGUITY_PROMPT, describeToolUseSafe, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -520,7 +517,6 @@ import {
   resolveExplicitReadOnlyToolChoice,
   shouldRequireCapabilityAcquisitionTools,
   shouldUsePersistedMemoryForTurn,
-  regulatedDisclaimerSuffix,
   resolveApprovalTimeoutPolicy,
   resolveChatAncestry,
   type ApprovalTimeoutPolicy,
@@ -557,41 +553,26 @@ import { applyToolResultSideEffects } from './chat-tool-result-effects.js';
 import { resolvePersonalFilesRoot } from '../storage/index.js';
 import { getBillableUsage, TurnUsageLedger } from './chat-turn-usage-ledger.js';
 import {
-  emptyModelResponseError,
   getFailedCompletionUsage,
   isEmptyModelResponseError,
-  isIncompleteCompletionError,
   isTerminalAttemptError,
   isTerminalModelBudgetError,
-  planInterruptedRetry,
 } from './chat-attempt-policy.js';
 import { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import { TurnRecalledContext } from './chat-turn-recall-context.js';
 import { NON_RETAINED_TURN_CONTENT, TurnRetention } from './chat-turn-retention.js';
 import { SSE_MAX_BUFFERED_BYTES, writeSseEvent } from './chat-sse.js';
 import { createModelHealthProbe } from './chat-model-health.js';
+import { createAttemptChain } from './chat-attempt-chain.js';
 import { TurnToolActivity } from './chat-turn-tool-activity.js';
+import { TurnAttemptState } from './chat-turn-attempt-state.js';
+import { rotateCredentials } from './chat-credential-rotation.js';
+import { TurnModelSelection } from './chat-turn-model-selection.js';
 import { TurnResources } from './chat-turn-resources.js';
+import { isClosedDbError } from './chat-mind-handle.js';
+import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn } from './chat-turn-completion.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
-
-/**
- * W4A diagnostics — the "MindDB flake". A long chat turn holds a workspace
- * MindDB handle obtained from the process-wide MultiMindCache (LRU, maxOpen:20).
- * If ≥20 OTHER workspaces are touched mid-turn (home-briefing fan-out, weaver
- * timers, cross-workspace tools), the cache evicts + `.close()`s THIS turn's
- * handle, and the post-response DB write-backs below throw better-sqlite3's
- * native "The database connection is not open". Those catches are non-blocking
- * and swallow it silently, which is exactly why the flake is invisible. This
- * predicate lets us surface a structured warn at the failure seam WITHOUT
- * changing behavior (the write still fails soft) so the root cause can be
- * confirmed live. The real fix (pin-aware eviction) lives in the OSS substrate
- * (packages/hive-mind-core/src/multi-mind-cache.ts) and is out of scope here.
- */
-function isClosedDbError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
-  return /database (connection|handle) is not open|database is closed/i.test(msg);
-}
 
 const CHAT_STORAGE_UNAVAILABLE_MESSAGE = 'Your conversation could not be saved on this device. Check free disk space and folder permissions, then try again.';
 
@@ -2103,7 +2084,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     };
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     const usageLedger = new TurnUsageLedger();
-    const failedAttemptToolsUsed = new Set<string>();
     let responseCommitted = false;
 
     // Mutable conversation-local state cannot accept two overlapping turns.
@@ -2224,9 +2204,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const budgetThreshold = pilotConfig.getBudgetThreshold();
 
       // Resolve model selection before availability and fallback checks.
-      let resolvedModel = primaryModel;
-      let modelSwitchReason: string | null = null;
-      let budgetModelSelected = false;
+      const modelSelection = new TurnModelSelection({
+        primaryModel,
+        fallbackModel,
+        canonicalize: canonicalizeModelReference,
+      });
+      const resolveModel = (candidate: string) => resolveUsableModel(server, candidate);
       const budgetRoutingAllowed = budgetModel
         ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
         : false;
@@ -2239,44 +2222,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (budgetModel && budgetRoutingAllowed && budgetThresholdReached) {
         const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
-          resolvedModel = routing.model;
-          budgetModelSelected = resolvedModel !== primaryModel;
-          if (budgetModelSelected) {
-            modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-          }
+          modelSelection.selectBudgetModel(
+            routing.model,
+            `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`,
+          );
         }
       }
 
       // ── Model resolution: confirm the selected model is routable; on failure fall
-      // back budget → primary → configured fallback, recording modelSwitchReason ──
-      try {
-        const selectedModelBeforeResolution = resolvedModel.trim();
-        resolvedModel = await resolveUsableModel(server, resolvedModel);
-        const normalizedOnly = resolvedModel
-          === canonicalizeModelReference(selectedModelBeforeResolution);
-        if (!normalizedOnly) {
-          budgetModelSelected = false;
-          modelSwitchReason = `${selectedModelBeforeResolution} unavailable; ${resolvedModel} selected`;
-        }
-      } catch (selectedResolutionError) {
-        const unavailableModel = resolvedModel;
-        if (budgetModelSelected && unavailableModel !== primaryModel) {
-          try {
-            resolvedModel = await resolveUsableModel(server, primaryModel);
-            budgetModelSelected = false;
-            modelSwitchReason = `${unavailableModel} unavailable; primary selected`;
-          } catch (primaryResolutionError) {
-            if (!fallbackModel || fallbackModel === unavailableModel) throw primaryResolutionError;
-            resolvedModel = await resolveUsableModel(server, fallbackModel);
-            budgetModelSelected = false;
-            modelSwitchReason = `${unavailableModel} and ${primaryModel} unavailable; configured fallback selected`;
-          }
-        } else {
-          if (!fallbackModel || fallbackModel === unavailableModel) throw selectedResolutionError;
-          resolvedModel = await resolveUsableModel(server, fallbackModel);
-          modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
-        }
-      }
+      // back budget → primary → configured fallback, recording the switch reason ──
+      await modelSelection.resolvePreflight(resolveModel);
       throwIfTurnAborted();
 
       const configuredFallbackModel = fallbackModel
@@ -2284,7 +2239,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         : null;
       const hasDistinctConfiguredFallback = Boolean(
         configuredFallbackModel
-        && canonicalizeModelReference(resolvedModel) !== configuredFallbackModel,
+        && canonicalizeModelReference(modelSelection.model) !== configuredFallbackModel,
       );
 
       // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
@@ -2380,7 +2335,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // resolveUsableModel() only returns an ollama/* selection after the tag
       // is observed locally, so it remains authoritative even if startup's
       // cloud-provider status has not yet caught up with onboarding.
-      const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
+      const resolvedLocalOllama = modelSelection.model.toLowerCase().startsWith('ollama/');
       let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
       if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
@@ -2699,7 +2654,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // in `rebuildSystemPromptForModel` omits it; appending it again would
         // inject every recalled memory twice.
         let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
-        const initialPromptModel = resolvedModel;
+        const initialPromptModel = modelSelection.model;
         let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
 
         // Register a per-request pre:tool hook for confirmation gates
@@ -2895,7 +2850,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
         let compressionModel = budgetModel
-          && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
+          && canUseBudgetModelWithoutCloudEgress(modelSelection.model, budgetModel)
           ? budgetModel
           : null;
         const liveModelBudget = costTracker.getBudget();
@@ -2906,8 +2861,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !isOfflineOllamaModelReference(compressionModel)) {
           compressionModel = null;
         }
-        const discoveredWindow = getModelContextWindow(resolvedModel);
-        const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
+        const discoveredWindow = getModelContextWindow(modelSelection.model);
+        const isLocalModel = isOfflineOllamaModelReference(modelSelection.model);
         const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
           conservativeDefault: isLocalModel ? 8192 : 128_000,
         });
@@ -3181,7 +3136,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             workspaceId: executionScopeId,
             parentSessionId: sessionId,
             parentTask: agentMessage,
-            model: resolvedModel,
+            model: modelSelection.model,
             runLoop: childAgentRunner,
             runWorkerTransaction: workspaceTurnScope
               ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
@@ -3277,7 +3232,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               taskShape: turnTaskShape,
               turnId,
               recalledText: turnRecall.assemblerText,
-              model: resolvedModel,
+              model: modelSelection.model,
               availableTools: effectiveTools,
             });
             throwIfTurnAborted();
@@ -3417,7 +3372,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 Math.max(0, windowedMessages.length - 1),
               );
           };
-          systemPrompt = await rebuildSystemPromptForModel(resolvedModel);
+          systemPrompt = await rebuildSystemPromptForModel(modelSelection.model);
           throwIfTurnAborted();
           log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }
@@ -3524,17 +3479,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         windowedMessages = windowedMessages.map(({ role, content }) => ({ role, content }));
 
         // Build agent loop config — with windowed conversation history + hooks
-        let bufferedAgentTokens: string[] = [];
-        let reasoningActivitySent = false;
-        let modelRequestSent = false;
-        let modelResponseActivitySent = false;
-        let modelActivitySent = false;
-        let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
-        let pendingCapabilityToolResults: Array<{
-          input: Record<string, unknown>;
-          output: string;
-          duration?: number;
-        }> = [];
+        const attemptState = new TurnAttemptState();
         const toolActivity = new TurnToolActivity({
           explicitReadOnlyToolChoice,
           requiredToolSequence,
@@ -3550,11 +3495,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           fetch: server.llmFetch ?? globalThis.fetch,
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
-          model: resolvedModel,
-          billingModel: resolvedModel,
+          model: modelSelection.model,
+          billingModel: modelSelection.model,
           modelSpendBudget: costTracker,
-          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel)
-            || isExactConfiguredKeylessCompatibleModel(server, resolvedModel)
+          modelSpendBillingClass: isOfflineOllamaModelReference(modelSelection.model)
+            || isExactConfiguredKeylessCompatibleModel(server, modelSelection.model)
             ? 'free'
             : 'priced',
           spendWorkspaceId: executionScopeId,
@@ -3567,7 +3512,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(hasDistinctConfiguredFallback ? { initialModelActivityTimeoutMs: 20_000 } : {}),
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
-          reasoning: reasoningForModelAttempt(resolvedModel),
+          reasoning: reasoningForModelAttempt(modelSelection.model),
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
@@ -3576,16 +3521,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           turnId, // propagate trace ID into the loop (H-AUDIT-1)
 
           onModelActivity: () => {
-            if (modelResponseActivitySent || turnSignal.aborted) return;
-            modelResponseActivitySent = true;
+            if (turnSignal.aborted || !attemptState.claimOnce('modelResponding')) return;
             sendEvent('step', {
               content: 'Model is responding; verifying the answer before display…',
               phase: 'model_active',
             });
           },
           onReasoningActivity: () => {
-            if (reasoningActivitySent || turnSignal.aborted) return;
-            reasoningActivitySent = true;
+            if (turnSignal.aborted || !attemptState.claimOnce('reasoning')) return;
             sendEvent('step', { content: 'Thinking through your request…' });
           },
           onRetry: (notice: string) => {
@@ -3594,14 +3537,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToken: (token: string) => {
             if (firstTokenAt === null) firstTokenAt = performance.now();
-            if (token.length > 0 && !modelActivitySent && !turnSignal.aborted) {
-              modelActivitySent = true;
+            if (token.length > 0 && !turnSignal.aborted && attemptState.claimOnce('modelStreaming')) {
               sendEvent('step', {
                 content: 'Writing the answer…',
                 phase: 'model_streaming',
               });
             }
-            bufferedAgentTokens.push(token);
+            attemptState.bufferToken(token);
           },
           onGiveUp: (giveUpMessage: string) => {
             // The tiered loop-guard aborted the run after a
@@ -3634,7 +3576,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               toolName: name,
               input: retainedTurnJson(disclosedInput),
               sessionId,
-              model: resolvedModel,
+              model: modelSelection.model,
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
@@ -3659,7 +3601,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             // Send tool_result SSE event so client can update status + show result
             if (name === 'acquire_capability') {
               if (createPersistedCapabilityReceipt(input, result)) {
-                pendingCapabilityToolResults.push({ input, output: result, duration });
+                attemptState.addPendingCapability({ input, output: result, duration });
               } else {
                 sendEvent('tool_result', {
                   name,
@@ -3708,7 +3650,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // as a virtual key against its DB, returning "No connected db." (no_db_connection)
         // when no DB is attached. So skip the pool entirely on the LiteLLM path.
         const usingLiteLLM = server.agentState.llmProvider?.provider === 'litellm';
-        const providerName = resolvedModel.startsWith('claude') ? 'anthropic' : resolvedModel.split('/')[0] ?? 'anthropic';
+        const providerName = modelSelection.model.startsWith('claude') ? 'anthropic' : modelSelection.model.split('/')[0] ?? 'anthropic';
         const credPool = usingLiteLLM ? undefined : getCredentialPool(providerName);
         const poolKey = credPool?.getKey();
         const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
@@ -3725,7 +3667,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sessionId,
           personaId: activePersonaId,
           workspaceId: effectiveWorkspace ?? null,
-          model: resolvedModel,
+          model: modelSelection.model,
           input: retainedTurnText(message),
         });
 
@@ -3734,12 +3676,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // The sidecar reaches Ollama directly (as it does for embeddings) — no
         // Docker->host hop, no API key. Strip the 'ollama/' routing prefix to the
         // bare tag Ollama expects (e.g. "llama3.2:latest").
-        const isOllamaModel = resolvedModel.startsWith('ollama/');
+        const isOllamaModel = modelSelection.model.startsWith('ollama/');
         const ollamaUrl = (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1';
 
         const runConfig: typeof agentConfig = {
           ...agentConfig,
-          ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
+          ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: modelSelection.model.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
           modelSpendTraceId: turnTrace.id,
           ...(retention.allowDerivedPersistence && turnTrace.recording
@@ -3777,224 +3719,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
-        const configForModelAttempt = async (
-          logicalModel: string,
-          apiKey = effectiveApiKey,
-        ): Promise<typeof runConfig> => {
-          const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
-          const systemPromptForAttempt = rebuildSystemPromptForModel
-            ? await rebuildSystemPromptForModel(logicalModel)
-            : runConfig.systemPrompt;
-          throwIfTurnAborted();
-          systemPrompt = systemPromptForAttempt;
-          return {
-            ...runConfig,
-            systemPrompt: systemPromptForAttempt,
-            model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
-            billingModel: logicalModel,
-            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel)
-              || isExactConfiguredKeylessCompatibleModel(server, logicalModel)
-              ? 'free'
-              : 'priced',
-            litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
-            litellmApiKey: apiKey,
-            modelOperationTimeoutMs: 100_000,
-            initialModelActivityTimeoutMs: undefined,
-            reasoning: reasoningForModelAttempt(logicalModel),
-          };
-        };
-
-        let announcedModelSwitchKey: string | null = null;
-        const announceModelSwitch = (attemptModel: string) => {
-          if (!modelSwitchReason) return;
-          const switchKey = `${attemptModel}\u0000${modelSwitchReason}`;
-          if (announcedModelSwitchKey === switchKey) return;
-          announcedModelSwitchKey = switchKey;
-          sendEvent('model_switch', { model: attemptModel, reason: modelSwitchReason, primary: primaryModel });
-          sendEvent('step', { content: `⬡ Switched to ${attemptModel} — ${modelSwitchReason}` });
-        };
-
-        let initialActivityDeadlineAvailable = true;
-        const runAgentAttempt = async (config: typeof runConfig) => {
-          toolActivity.assertReplayable();
-          bufferedAgentTokens = [];
-          capabilityReceipt = null;
-          pendingCapabilityToolResults = [];
-          const attemptModel = config.billingModel ?? resolvedModel;
-          usageLedger.beginAttempt(attemptModel, config.modelSpendBillingClass ?? 'priced');
-          announceModelSwitch(attemptModel);
-          const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
-          const initialModelActivityTimeoutMs = initialActivityDeadlineAvailable
-            ? attemptBaseConfig.initialModelActivityTimeoutMs
-            : undefined;
-          initialActivityDeadlineAvailable = false;
-          const strictToolRetryContext = toolActivity.strictContinuation(agentMessage);
-          let attemptedResult: AgentResponse;
-          if (!modelRequestSent && !turnSignal.aborted) {
-            modelRequestSent = true;
-            sendEvent('step', {
-              content: 'Sending your request to the model…',
-              phase: 'model_requested',
-            });
-          }
-          try {
-            attemptedResult = await agentRunner({
-              ...attemptBaseConfig,
-              initialModelActivityTimeoutMs,
-              ...(toolActivity.pendingExplicitToolChoice
-                ? { toolChoice: toolActivity.pendingExplicitToolChoice }
-                : explicitReadOnlyToolChoice
-                  ? {
-                      tools: [],
-                      ...(strictToolRetryContext
-                        ? {
-                            systemPrompt: `${attemptBaseConfig.systemPrompt}\n\n# COMPLETED READ-ONLY TOOL CONTINUATION\nThe requested tool already ran exactly once. No tools remain available; synthesize only from the bounded result in the current messages.`,
-                            messages: [...attemptBaseConfig.messages, strictToolRetryContext],
-                          }
-                        : {}),
-                    }
-                  : {}),
-            });
-          } catch (error) {
-            const failedUsage = getFailedCompletionUsage(error);
-            const failedTools = (error as { toolsUsed?: unknown } | null | undefined)?.toolsUsed;
-            if (Array.isArray(failedTools)) {
-              for (const tool of failedTools) {
-                if (typeof tool === 'string' && tool.trim()) failedAttemptToolsUsed.add(tool.trim());
-              }
-            }
-            usageLedger.recordFailedAttempt(failedUsage, {
-              estimated: (error as { usageEstimated?: unknown }).usageEstimated === true,
-            });
-            throw error;
-          }
-          if (turnSignal.aborted) {
-            usageLedger.completeAttempt(attemptedResult.usage, resolvedModel);
-            throwIfTurnAborted();
-          }
-          toolActivity.assertCompleted();
-          const completedResult = explicitReadOnlyToolChoice === 'read_file'
-            && directReadFileDirective.kind === 'valid'
-            && toolActivity.explicitToolResult !== null
-            ? {
-                ...attemptedResult,
-                content: formatDirectReadFileResponse(
-                  directReadFileDirective,
-                  toolActivity.explicitToolResult,
-                ),
-              }
-            : explicitReadOnlyToolChoice === 'search_memory'
-              && boundedExactPersistedMemoryLookup
-              && toolActivity.explicitToolResult !== null
-              ? {
-                  ...attemptedResult,
-                  content: toolActivity.explicitToolResult,
-                }
-            : attemptedResult;
-          if (!completedResult.content.trim()) {
-            const emptyError = emptyModelResponseError(completedResult);
-            for (const tool of completedResult.toolsUsed) failedAttemptToolsUsed.add(tool);
-            // `emptyModelResponseError` builds the error here and never marks it
-            // estimated, so this attempt is always a counted one.
-            usageLedger.recordFailedAttempt(getFailedCompletionUsage(emptyError));
-            throw emptyError;
-          }
-          return strictToolRetryContext
-            ? {
-                ...completedResult,
-                toolsUsed: Array.from(new Set([
-                  ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
-                  ...completedResult.toolsUsed,
-                ])),
-              }
-            : completedResult;
-        };
-
-        const runModelFallbackChain = async (
-          initialError: unknown,
-          allowNonRetryableConfiguredFallback = false,
-        ) => {
-          if (toolActivity.replayBlocked) throw initialError;
-          // The agent may already have executed tools before detecting a
-          // truncated final completion. Replaying the whole run on another
-          // model would repeat those side effects, so this signal is terminal.
-          if (isTerminalAttemptError(initialError)) {
-            throw initialError;
-          }
-          let failure = initialError;
-          let failedBudgetModel: string | null = null;
-
-          if (budgetModelSelected && resolvedModel !== primaryModel) {
-            failedBudgetModel = resolvedModel;
-            try {
-              resolvedModel = await resolveUsableModel(server, primaryModel);
-              budgetModelSelected = false;
-              modelSwitchReason = `${failedBudgetModel} failed; primary selected`;
-            } catch (primaryResolutionError) {
-              failure = primaryResolutionError;
-              budgetModelSelected = false;
-              if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
-              resolvedModel = await resolveUsableModel(server, fallbackModel);
-              modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
-              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
-            }
-
-            try {
-              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
-            } catch (primaryRunError) {
-              if (toolActivity.replayBlocked) throw primaryRunError;
-              if (isTerminalAttemptError(primaryRunError)) {
-                throw primaryRunError;
-              }
-              failure = primaryRunError;
-            }
-          }
-
-          if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
-            && fallbackModel
-            && fallbackModel !== failedBudgetModel
-            && resolvedModel !== fallbackModel) {
-            const failedModel = resolvedModel;
-            resolvedModel = await resolveUsableModel(server, fallbackModel);
-            modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
-            return await runAgentAttempt(await configForModelAttempt(resolvedModel));
-          }
-
-          throw failure;
-        };
-
         const primaryAttemptStartedAt = performance.now();
-        const runPrimaryWithSafeInterruptedRetry = async (): Promise<AgentResponse> => {
-          try {
-            return await runAgentAttempt(runConfig);
-          } catch (error) {
-            const retryAllowance = planInterruptedRetry({
-              error,
-              maxTokenBudget: runConfig.maxTokenBudget,
-              modelOperationTimeoutMs: runConfig.modelOperationTimeoutMs,
-              elapsedMs: performance.now() - primaryAttemptStartedAt,
-              offersTools: runConfig.tools.length > 0,
-              budgetModelSelected,
-              replayBlocked: toolActivity.replayBlocked,
-              explicitToolWasUsed: toolActivity.explicitToolWasUsed,
-            });
-            if (!retryAllowance) throw error;
-            sendEvent('step', {
-              content: 'Model response was interrupted — retrying once on the same model.',
-            });
-            return await runAgentAttempt({
-              ...runConfig,
-              maxTokenBudget: retryAllowance.maxTokenBudget,
-              modelOperationTimeoutMs: retryAllowance.modelOperationTimeoutMs,
-              ...(runConfig.initialModelActivityTimeoutMs === undefined
-                ? {}
-                : { initialModelActivityTimeoutMs: Math.min(
-                    runConfig.initialModelActivityTimeoutMs,
-                    retryAllowance.modelOperationTimeoutMs,
-                  ) }),
-            });
-          }
-        };
+        const attemptChain = createAttemptChain({
+          server,
+          runConfig,
+          effectiveApiKey,
+          rebuildSystemPromptForModel,
+          ollamaUrl,
+          getLitellmUrl,
+          reasoningForModelAttempt,
+          throwIfTurnAborted,
+          isTurnAborted: () => turnSignal.aborted,
+          sendEvent,
+          agentRunner,
+          agentMessage,
+          explicitReadOnlyToolChoice,
+          directReadFileDirective,
+          formatDirectReadFileResponse,
+          boundedExactPersistedMemoryLookup,
+          toolActivity,
+          attemptState,
+          usageLedger,
+          modelSelection,
+          resolveModel,
+          primaryAttemptStartedAt,
+        });
+        const { runAgentAttempt, runModelFallbackChain, runPrimaryWithSafeInterruptedRetry } = attemptChain;
 
         // ── Run agent with credential pool + fallback chain ──
         let result: AgentResponse;
@@ -4015,471 +3765,42 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           // Report error to credential pool and try next key
           if (credPool && poolKey && !isEmptyModelResponseError(primaryErr)) {
-            let failedKey = poolKey;
-            let credentialError = primaryErr;
-            let credentialResult: AgentResponse | null = null;
-            let poolExhausted = false;
-
-            for (let failureIndex = 0; failureIndex < credPool.size; failureIndex++) {
-              const errorStatus = extractStatusCode(credentialError);
-              if (!errorStatus) break;
-
-              const keyName = credPool.getNameForKey(failedKey) ?? failedKey;
-              const hasMore = credPool.reportError(
-                failedKey,
-                errorStatus,
-                (credentialError as Error).message,
-              );
-              log.warn(`[credential-pool] Key ${keyName} failed (${errorStatus}), cooldown applied. More keys: ${hasMore}`);
-
-              if (!hasMore || failureIndex === credPool.size - 1) {
-                poolExhausted = true;
-                break;
-              }
-
-              const nextKey = credPool.getKey();
-              if (!nextKey) {
-                poolExhausted = true;
-                break;
-              }
-              sendEvent('step', { content: `API key rotated — retrying with next credential` });
-              try {
-                credentialResult = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
-                credPool.reportSuccess(nextKey);
-                break;
-              } catch (nextCredentialError) {
-                if (turnSignal.aborted) throw nextCredentialError;
-                if (toolActivity.replayBlocked) {
-                  throw nextCredentialError;
-                }
-                if (isEmptyModelResponseError(nextCredentialError)) {
-                  credentialError = nextCredentialError;
-                  break;
-                }
-                if (isIncompleteCompletionError(nextCredentialError)
-                  || isTerminalModelBudgetError(nextCredentialError)) {
-                  throw nextCredentialError;
-                }
-                failedKey = nextKey;
-                credentialError = nextCredentialError;
-              }
-            }
-
-            result = credentialResult
-              ?? await runModelFallbackChain(credentialError, poolExhausted);
+            const rotation = await rotateCredentials({
+              pool: credPool,
+              failedKey: poolKey,
+              error: primaryErr,
+              runWithKey: (key) => runAgentAttempt({ ...runConfig, litellmApiKey: key }),
+              isAborted: () => turnSignal.aborted,
+              isReplayBlocked: () => toolActivity.replayBlocked,
+              onRotate: () => sendEvent('step', { content: `API key rotated — retrying with next credential` }),
+              warn: (message) => log.warn(message),
+            });
+            result = rotation.result
+              ?? await runModelFallbackChain(rotation.error, rotation.poolExhausted);
           } else {
             result = await runModelFallbackChain(primaryErr);
           }
         } finally {
           agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
+        // configForModelAttempt rebuilt the prompt for the model that answered.
+        if (attemptChain.lastSystemPrompt !== undefined) systemPrompt = attemptChain.lastSystemPrompt;
 
-        // The model response is complete, but proposal resolution below can
-        // still be interrupted. Preserve usage before any further awaited work.
-        result = {
-          ...result,
-          toolsUsed: [...new Set([...failedAttemptToolsUsed, ...(result.toolsUsed ?? [])])],
+        const completionTurn: TurnCompletionTurn = {
+          server, sendEvent, throwIfTurnAborted, attemptState, usageLedger, modelSelection,
+          turnResources, turnRecall, turnTrace, retention, turnMutationPolicy, costTracker, sessionOrch,
+          hasCustomRunner, isAutomatedTurn, message, history, sessionId, sessionStateKey,
+          sessionToolSequences, sessionPersistenceDataDir, activeWorkspaceId,
+          activeSessionStateWorkspaceId, effectiveWorkspace, executionScopeId, activePersonaId,
+          personaOverride, resolvePersona, accountWorkspaceSessionTokens, retainedTurnText,
+          toolCatalogCount, toolEligibleCount, toolSelectedCount, toolOmittedCount,
+          transmittedToolSchemaChars, systemPrompt, packageMode, selectorLatencyMs, agentLatencyMs,
+          totalServerStartedAt, getFirstTokenAt: () => firstTokenAt,
         };
-        usageLedger.completeAttempt(result.usage, resolvedModel);
-
-        const capabilityToolResults = pendingCapabilityToolResults as Array<{
-          input: Record<string, unknown>;
-          output: string;
-          duration?: number;
-        }>;
-        for (const capabilityToolResult of capabilityToolResults) {
-          const issued = await issueCapabilityProposalFromToolResult({
-            store: server.capabilityProposalStore,
-            workspaceId: activeWorkspaceId,
-            sessionId,
-            output: capabilityToolResult.output,
-            resolveIdentity: (packageId) => resolveMarketplaceApprovalIdentity(server, packageId),
-          });
-          // Marketplace output is proposal-bound; bundled starter-pack output
-          // remains a trusted completed receipt without marketplace lifecycle.
-          capabilityReceipt = createPersistedCapabilityReceipt(
-            capabilityToolResult.input,
-            issued.output,
-          ) ?? capabilityReceipt;
-          sendEvent('tool_result', {
-            name: 'acquire_capability',
-            result: issued.output,
-            duration: capabilityToolResult.duration,
-            isError: false,
-          });
-          throwIfTurnAborted();
-        }
-        pendingCapabilityToolResults = [];
-
-        // Unregister the per-request approval hook, so the outer finally's
-        // defensive cleanup is a no-op on the happy path.
-        turnResources.unhookTools();
-
-        // Track every dispatched attempt against the model that actually ran it.
-        const successfulAttemptReceipts = usageLedger.receipts;
-        const messageBillingClass = usageLedger.messageBillingClass;
-        const turnUsage = usageLedger.total;
-        let resultCost = successfulAttemptReceipts.reduce((total, receipt) => (
-          total + costTracker.calculateUsageCost({
-            model: receipt.model,
-            input: receipt.usage.inputTokens,
-            output: receipt.usage.outputTokens,
-            billingClass: receipt.billingClass,
-          })
-        ), 0);
-        // Production spend is charged inside the agent loop, through the
-        // modelSpendBudget the route hands it. An injected runner bypasses the
-        // loop and its meter, so only then does the route charge here; doing
-        // it for a production turn would count every call twice (TD-CHAT-8,
-        // pinned in chat-spend-accounting-characterization.test.ts).
-        if (hasCustomRunner) {
-          for (const receipt of successfulAttemptReceipts) {
-            costTracker.addUsage(
-              receipt.model,
-              receipt.usage.inputTokens,
-              receipt.usage.outputTokens,
-              executionScopeId,
-              { billingClass: receipt.billingClass },
-            );
-          }
-        }
-
-        // Per-session token accumulation for /api/fleet visibility.
-        // costTracker is per-workspace cost; sessionManager holds per-session
-        // token totals that persist for the life of the active session.
-        accountWorkspaceSessionTokens(
-          usageLedger.total.inputTokens + usageLedger.total.outputTokens,
-        );
-        usageLedger.markAccounted();
-
-        // Commit deferred signal markings now that model call succeeded
-        if (!hasCustomRunner && retention.allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
-
-        // ── Closed learning loop: deterministic skill distillation ──
-        // The runtime — not just the behavioral-spec prose — detects a successful ≥5-tool turn and
-        // surfaces the distillation directive, so the agent reliably authors
-        // a reusable skill via its own create_skill tool. Gated end to
-        // end on the outcome: a refusal / self-incapacity turn yields no plan. The signal
-        // is recorded idempotently (skill_promotion) so recurring workflows
-        // bubble up through the existing actionable-signal substrate.
-        // Skipped whenever learned/derived persistence is disabled.
-        if (!hasCustomRunner && retention.allowDerivedPersistence) {
-          const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
-          if (distillPlan) {
-            sendEvent('step', { content: distillPlan.directive });
-            try {
-              sessionOrch.getImprovementSignals().record(
-                'skill_promotion',
-                distillPlan.patternKey,
-                distillPlan.directive,
-                { sessionId, toolCalls: (result.toolsUsed ?? []).length },
-              );
-            } catch {
-              // Signal recording is best-effort — never fail the response.
-            }
-          }
-        }
-
-        // ── KG auto-extraction (Item 4) ────────────────────────────
-        // Extract named entities from the agent response and add them to the
-        // knowledge graph of the active workspace mind.
-        // Non-blocking — KG enrichment never fails the response.
-        // Skipped whenever learned/derived persistence is disabled; review and
-        // evidence-bounded output must not inflate the knowledge graph.
-        if (!hasCustomRunner && retention.allowDerivedPersistence && result.content && result.content.length > 100) {
-          try {
-            const knowledge = sessionOrch.getKnowledge();
-            const entities = extractEntities(result.content);
-            if (entities.length > 0) {
-              const now = new Date().toISOString();
-              // Cap at 10 entities per turn to avoid KG bloat
-              for (const entity of entities.slice(0, 10)) {
-                try {
-                  knowledge.createEntity(entity.type, entity.name, { confidence: entity.confidence, source: `session:${sessionId}` }, { valid_from: now });
-                } catch (entityError) {
-                  // A closed handle is the W4A seam the handler below names;
-                  // swallowing it here hid it (TD-CHAT-24). A duplicate or a
-                  // schema error for one entity is still skipped.
-                  if (isClosedDbError(entityError)) throw entityError;
-                }
-              }
-            }
-          } catch (e) {
-            if (isClosedDbError(e)) {
-              log.warn('[waggle][W4A] workspace mind handle closed mid-turn during KG extraction', {
-                workspaceId: effectiveWorkspace,
-                sessionId,
-                seam: 'knowledge.createEntity',
-                error: e instanceof Error ? e.message : String(e),
-              });
-            } else {
-              log.info('[waggle] KG extraction error:', e instanceof Error ? e.message : String(e));
-            }
-          }
-        }
-
-        // ── Correction detection ──────────────────────────────────
-        // Analyze user message for corrections and record improvement signals.
-        // Non-blocking — detection failure shouldn't affect the response.
-        // Skipped whenever learned/derived persistence is disabled; a review
-        // instruction can quote old corrections that must not re-fire.
-        if (!hasCustomRunner && retention.allowDerivedPersistence) {
-          try {
-            const signalStore = sessionOrch.getImprovementSignals();
-            analyzeAndRecordCorrection(signalStore, message);
-
-            // Record capability gaps from tool-not-found events
-            const toolNotFoundPattern = /Tool "(.+?)" not found/;
-            if (result.content) {
-              const match = result.content.match(toolNotFoundPattern);
-              if (match) {
-                recordCapabilityGap(signalStore, match[1]);
-              }
-            }
-          } catch {
-            // Non-blocking
-          }
-        }
-
-        // ── Auto skill capture — detect repeatable workflow patterns ──
-        if (!hasCustomRunner
-          && retention.allowDerivedPersistence
-          && result.toolsUsed
-          && result.toolsUsed.length > 0) {
-          try {
-            // Track this session's tool sequence
-            if (!sessionToolSequences.has(sessionStateKey)) {
-              sessionToolSequences.set(sessionStateKey, []);
-            }
-            sessionToolSequences.get(sessionStateKey)!.push(result.toolsUsed);
-
-            // Build history from other sessions in this workspace only.
-            const otherSessions = [...sessionToolSequences.entries()]
-              .filter(([id]) => id !== sessionStateKey
-                && isChatSessionStateKeyForWorkspace(id, activeSessionStateWorkspaceId))
-              .map(([, seqs]) => ({ toolSequence: seqs.flat() }));
-
-            if (otherSessions.length >= 2) {
-              const captureResult = shouldSuggestCapture({
-                messages: history.map((m, _i) => ({
-                  role: m.role,
-                  content: m.content,
-                  toolsUsed: result.toolsUsed,
-                })),
-                sessionHistory: otherSessions,
-              });
-
-              if (captureResult.suggest && captureResult.pattern) {
-                const patternKey = captureResult.pattern.name;
-                sendEvent('notification', {
-                  type: 'workflow_captured',
-                  title: captureResult.notification?.title ?? 'Pattern detected',
-                  message: captureResult.notification?.message ?? captureResult.reason,
-                  pattern: captureResult.pattern,
-                });
-                log.info(`[auto-skill] Suggested capture: ${patternKey}`);
-              }
-            }
-          } catch {
-            // Non-blocking — capture detection failure never affects the response
-          }
-        }
-
-        // Post-processing: append professional disclaimer for regulated personas ONLY when content is substantive
-        let finalContent = result.content;
-        if (retention.allowResponseDecoration && finalContent) {
-          finalContent += regulatedDisclaimerSuffix(finalContent, activePersonaId);
-        }
-
-        // Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-        if (!hasCustomRunner
-          && retention.allowResponseDecoration
-          && finalContent
-          && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
-          finalContent += SCHEDULE_SUGGESTION;
-        }
-
-        // Grounding guard (verification layer): flag quantitative specifics the
-        // reply asserts that are NOT in the recalled memory / user message. Prompt
-        // instructions don't reliably suppress this confabulation (verified live),
-        // so surface high-signal cases honestly rather than let invented numbers
-        // read as recalled facts. Deterministic + cheap. count/money trigger an
-        // honest hedge note; durations/percents only inform the log signal
-        // (noisier — advice timelines like "2 weeks" would false-positive). The
-        // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && retention.allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
-          const grounding = checkGrounding(finalContent, turnRecall.groundingEvidence(message));
-          if (grounding.ungrounded.length > 0) {
-            log.info('[grounding] reply asserts specifics absent from recalled memory', {
-              score: grounding.score,
-              ungrounded: grounding.ungrounded.map((s) => s.text),
-            });
-          }
-          const hedgeWorthy = grounding.ungrounded.filter((s) => s.kind === 'count' || s.kind === 'money');
-          if (hedgeWorthy.length > 0 && process.env.WAGGLE_GROUNDING_HEDGE !== '0') {
-            const items = hedgeWorthy.map((s) => `"${s.text}"`).join(', ');
-            const one = hedgeWorthy.length === 1;
-            finalContent += `\n\n---\n*Note: ${items} ${one ? 'is' : 'are'} not in your saved memory — please treat ${one ? 'it' : 'them'} as an assumption, not a recalled fact.*`;
-          }
-        }
-
-        // Commit the authoritative response before any awaited post-response
-        // enrichment. This keeps a late cancellation from leaving auto-saved
-        // memory or a success trace hidden behind a missing assistant turn.
-        throwIfTurnAborted();
-        const assistantMessage = {
-          role: 'assistant',
-          content: finalContent,
-          model: resolvedModel,
-          ...(capabilityReceipt ? { tools: [capabilityReceipt] } : {}),
-        };
-        if (!turnMutationPolicy.denyConversationHistory) {
-          history.push(assistantMessage);
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
-        }
-
-        // Default trace outcome is success; correction-detector may downgrade
-        // it to corrected on the next turn. The assistant history above is the
-        // durable response commit that this trace describes.
-        const finalizedTrace = turnTrace.finalizeOnce(() => ({
-          outcome: 'success',
-          output: retainedTurnText(finalContent ?? ''),
-          model: usageLedger.attemptModel ?? resolvedModel,
-          tokens: {
-            input: turnUsage.inputTokens,
-            output: turnUsage.outputTokens,
-          },
-          costUsd: resultCost,
-        }));
-        resultCost = finalizedTrace?.cost_usd ?? resultCost;
-
-        // The agent loop streams every model turn, including provisional prose
-        // before tools, retries, and completion-gate corrections. Reconcile at
-        // the HTTP boundary so token events contain only the exact content in
-        // the authoritative done event. Preserve the original chunking when it
-        // already matches the fully post-processed response.
-        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
-          ? bufferedAgentTokens
-          : finalContent ? [finalContent] : [];
-        for (const token of finalTokenChunks) {
-          sendEvent('token', { content: token });
-        }
-        bufferedAgentTokens = [];
-
-        // Send the done event with full response + model info + per-message cost
-        const messageCost = result.usage ? resultCost : undefined;
-        const doneAt = performance.now();
-        sendEvent('done', {
-          content: finalContent,
-          usage: turnUsage,
-          usageEstimated: usageLedger.isEstimated,
-          toolsUsed: result.toolsUsed,
-          model: resolvedModel,
-          billingClass: messageBillingClass,
-          memoryContext: turnRecall.receipt,
-          contextMetrics: {
-            toolCatalogCount,
-            toolEligibleCount,
-            toolSelectedCount,
-            toolOmittedCount,
-            transmittedToolSchemaChars,
-            estimatedToolSchemaTokens: Math.ceil(transmittedToolSchemaChars / 4),
-            finalSystemPromptChars: systemPrompt.length,
-            estimatedSystemPromptTokens: Math.ceil(systemPrompt.length / 4),
-            packageMode,
-            selectorLatencyMs,
-            timeToFirstTokenMs: firstTokenAt === null
-              ? null
-              : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
-            agentLatencyMs,
-            totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
-            providerInputTokens: turnUsage.inputTokens,
-            providerOutputTokens: turnUsage.outputTokens,
-          },
-          ...(messageCost !== undefined && {
-            cost: Math.round(messageCost * 1_000_000) / 1_000_000,
-            tokens: { input: turnUsage.inputTokens, output: turnUsage.outputTokens },
-          }),
-        });
+        const completion = await completeTurnResponse(completionTurn, result);
         responseCommitted = true;
 
-      // Waggle Dance: emit agent completion signal
-      try {
-        emitWaggleSignal({
-          type: 'agent:completed',
-          workspaceId: executionScopeId,
-            content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${turnUsage.outputTokens} tokens`,
-            metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
-          });
-      } catch { /* best-effort activity projection */ }
-
-        // Enriched so the notification identifies which agent/workspace/task and
-        // deep-links to the output (was a generic "Your agent has completed the task").
-      const wsName =
-        server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
-        'Personal';
-        const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
-        const toolCount = (result.toolsUsed ?? []).length;
-        // Only a turn nobody is watching notifies: automation, channel and
-        // headless review turns. An interactive turn's answer is already on
-        // screen, and an inbox entry for every reply is noise (TD-CHAT-12,
-        // founder 2026-09-23).
-        if (isAutomatedTurn) {
-          try {
-            emitNotification(server, {
-              title: `${agentName} finished in ${wsName}`,
-              body: toolCount > 0
-                ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
-                : `${resolvedModel} · response ready`,
-              category: 'agent',
-            actionUrl: effectiveWorkspace
-              ? `/workspaces/${effectiveWorkspace}/chat`
-              : '/',
-            });
-          } catch { /* best-effort notification projection */ }
-        }
-
-        // Auto-save is post-commit enrichment: the assistant history, success
-        // trace, token stream, and done event above already describe one
-        // coherent outcome. Keep this awaited so the workspace mind cannot be
-        // released mid-write, but never turn a late disconnect into a hidden
-        // memory write or contradict the response that was already committed.
-        if (!hasCustomRunner && retention.allowMemoryPersistence) {
-          const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
-          if (!agentAlreadySaved) {
-            try {
-              const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
-                // Frame↔trace backlink — link auto-saved frames to the
-                // turn's execution trace so Memory-Trust can answer why this
-                // memory exists. Undefined when tracing is unavailable.
-                traceId: turnTrace.id?.toString(),
-              });
-              if (saved.length > 0) {
-                log.info(`[chat] auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} after response commit`);
-              }
-            } catch (e) {
-              // Post-commit enrichment is fail-soft. A closed handle indicates
-              // unexpected cache eviction and remains observable for diagnosis.
-              if (isClosedDbError(e)) {
-                log.warn('[waggle][W4A] workspace mind handle closed during post-commit auto-save', {
-                  workspaceId: effectiveWorkspace,
-                  sessionId,
-                  seam: 'autoSaveFromExchange',
-                  error: e instanceof Error ? e.message : String(e),
-                });
-              } else {
-                // Any other failure (embedding, constraint, a TypeError) drops
-                // a memory write too, and used to do it with no record at all
-                // (TD-REL-3). The turn is already committed; only log.
-                log.warn('[chat] post-commit auto-save failed; the memory write was dropped', {
-                  workspaceId: effectiveWorkspace,
-                  sessionId,
-                  error: e instanceof Error ? e.message : String(e),
-                });
-              }
-            }
-          }
-        }
+        await runPostCommitEnrichment(completionTurn, completion);
       }
     } catch (err) {
       if (responseCommitted) {
