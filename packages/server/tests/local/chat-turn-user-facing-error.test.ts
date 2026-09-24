@@ -21,6 +21,7 @@ import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 
 const INCOMPLETE = 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.';
 const PROVIDER_ERROR = 'LLM error (502): {"error":{"message":"upstream exploded at /srv/internal/router.py"}}';
+const PROVIDER_SENTENCE = 'The model provider returned an error (HTTP 502). Try again or switch model.';
 
 describe('POST /api/chat user-facing failure text', () => {
   let server: FastifyInstance;
@@ -70,14 +71,14 @@ describe('POST /api/chat user-facing failure text', () => {
     }]);
   });
 
-  it('forwards a provider HTTP error with its body', async () => {
-    expect(await errorEvents(new Error(PROVIDER_ERROR), 'provider')).toEqual([{ message: PROVIDER_ERROR }]);
+  it('shows a provider HTTP error as its status only, never its body', async () => {
+    expect(await errorEvents(new Error(PROVIDER_ERROR), 'provider')).toEqual([{ message: PROVIDER_SENTENCE }]);
   });
 
   it('persists the text it showed as the failure turn', async () => {
     const session = 'provider-persisted';
     await errorEvents(new Error(PROVIDER_ERROR), session);
     const transcript = loadSessionMessages(tmpDir, server.agentState.activeWorkspaceId!, session);
-    expect(transcript.at(-1)).toEqual({ role: 'assistant', content: `${GENERATION_FAILED_PREFIX}${PROVIDER_ERROR}` });
+    expect(transcript.at(-1)).toEqual({ role: 'assistant', content: `${GENERATION_FAILED_PREFIX}${PROVIDER_SENTENCE}` });
   });
 });

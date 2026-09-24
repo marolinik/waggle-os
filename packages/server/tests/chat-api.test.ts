@@ -2003,7 +2003,7 @@ describe('Chat Streaming API', () => {
         content: 'Please remember that this turn failed visibly.',
       });
       expect(inMemory[1].role).toBe('assistant');
-      expect(inMemory[1].content).toContain('Generation failed: LLM error (400): invalid tool call arguments');
+      expect(inMemory[1].content).toBe('Generation failed: The model provider returned an error (HTTP 400). Try again or switch model.');
 
       const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
       expect(onDisk).toEqual(inMemory);

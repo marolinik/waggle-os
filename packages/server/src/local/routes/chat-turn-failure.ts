@@ -37,6 +37,9 @@ function isLocalStorageFailure(error: unknown): boolean {
 
 const LOCAL_DATABASE_UNAVAILABLE_MESSAGE = 'Waggle could not update its local database just now. Try again in a moment.';
 
+/** The agent loop's fatal HTTP error: `LLM error (<status>): <provider body>`. */
+const PROVIDER_HTTP_ERROR = /^LLM error \((\d{3})\):/;
+
 /** A better-sqlite3 error: its `code` names the SQLite result (SQLITE_BUSY, ...). */
 function isLocalDatabaseFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -220,6 +223,11 @@ export function handleTurnFailure(turn: TurnFailureTurn, err: unknown): void {
         errorMessage = 'The request timed out. The model may be overloaded — try again in a moment.';
       } else if (err.message.includes('context_length') || err.message.includes('too many tokens')) {
         errorMessage = 'The conversation is too long for the model. Try clearing the chat and starting fresh.';
+      } else if (PROVIDER_HTTP_ERROR.test(err.message)) {
+        // The provider's response body is internal: it is in the log above,
+        // and only its HTTP status reaches the user (TD-CHAT-15).
+        const status = PROVIDER_HTTP_ERROR.exec(err.message)![1];
+        errorMessage = `The model provider returned an error (HTTP ${status}). Try again or switch model.`;
       } else {
         errorMessage = err.message;
       }
