@@ -10,6 +10,7 @@ import { getAuditDb } from '../src/local/routes/events.js';
 import { sanitizeFrameContent } from '../src/local/routes/memory.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from './test-utils.js';
+import { installFakeLlmProvider, markFakeProviderHealthy } from './helpers/fake-llm-provider.js';
 
 describe('Local Server Mode', () => {
   let server: FastifyInstance;
@@ -186,33 +187,32 @@ describe('Local Server Mode', () => {
 
   // --- Chat SSE ---
   describe('chat SSE', () => {
-    it('returns SSE stream when agent runner is set', async () => {
+    it('returns SSE stream when the model answers', async () => {
       const workspaceId = server.workspaceManager.create({
         name: 'Chat SSE workspace',
         group: 'test',
       }).id;
 
-      // Inject a mock agent runner for this test
-      server.agentRunner = async (config) => {
-        if (config.onToken) config.onToken('Hi');
-        return {
-          content: 'Hi',
-          toolsUsed: [],
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
-      };
-
-      const res = await injectWithAuth(server, {
-        method: 'POST',
-        url: '/api/chat',
-        payload: { message: 'Hello world', workspace: workspaceId },
+      // The real agent loop runs; only the provider call is scripted (TD-CHAT-16).
+      const undoProvider = markFakeProviderHealthy(server);
+      const provider = installFakeLlmProvider({
+        respond: { type: 'text', content: 'Hi', usage: { inputTokens: 1, outputTokens: 1 } },
       });
-      expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
-      expect(res.body).toContain('event: token');
-      expect(res.body).toContain('event: done');
-
-      // Clean up
-      server.agentRunner = undefined;
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: { message: 'Hello world', workspace: workspaceId },
+        });
+        expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
+        expect(res.body).toContain('event: token');
+        expect(res.body).toContain('event: done');
+        // The model was reached: the setup-required reply also streams a done.
+        expect(provider.requests).toHaveLength(1);
+      } finally {
+        provider.restore();
+        undoProvider();
+      }
     });
 
     it('returns 400 without message', async () => {

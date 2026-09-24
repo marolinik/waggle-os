@@ -9,6 +9,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from './test-utils.js';
+import { installFakeLlmProvider, markFakeProviderHealthy } from './helpers/fake-llm-provider.js';
 
 describe('Workspace & Session API', () => {
   let server: FastifyInstance;
@@ -773,21 +774,19 @@ describe('Workspace & Session API', () => {
     });
     expect(createRes.statusCode).toBe(201);
     const activeSessionId = JSON.parse(createRes.body).id as string;
-    const originalRunner = server.agentRunner;
     let markEntered!: () => void;
     let releaseTurn!: () => void;
     const entered = new Promise<void>((resolve) => { markEntered = resolve; });
     const released = new Promise<void>((resolve) => { releaseTurn = resolve; });
-    server.agentRunner = async (config) => {
-      markEntered();
-      await released;
-      config.onToken?.('completed');
-      return {
-        content: 'completed',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The real agent loop runs; the provider call holds the turn open (TD-CHAT-16).
+    const undoProvider = markFakeProviderHealthy(server);
+    const provider = installFakeLlmProvider({
+      respond: async () => {
+        markEntered();
+        await released;
+        return { type: 'text', content: 'completed', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
     const turn = injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -819,7 +818,8 @@ describe('Workspace & Session API', () => {
     } finally {
       releaseTurn();
       await turn.catch(() => undefined);
-      server.agentRunner = originalRunner;
+      provider.restore();
+      undoProvider();
     }
   });
 
