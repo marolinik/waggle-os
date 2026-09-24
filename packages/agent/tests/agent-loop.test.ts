@@ -1383,6 +1383,10 @@ describe('runAgentLoop', () => {
         usage: { outputTokens: 0 },
         toolsUsed: [],
       });
+      expect((rejection as Error).message).toBe(
+        'Initial model activity timed out after 30 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(isUserFacingError(rejection)).toBe(true);
       expect((rejection as { usage: { inputTokens: number } }).usage.inputTokens).toBeGreaterThan(0);
     } finally {
       await run;
