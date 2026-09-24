@@ -13,22 +13,49 @@
  * every existing test would stay green.
  *
  * This pins the fold itself, which is what any extraction of the cluster has to
- * preserve. The seam is the `server.agentRunner` object seam used by
- * `chat-retry-chain-characterization.test.ts`: a shaped throw drives a real
- * same-model replay without a provider, so attempt 1's usage and attempt 2's
- * usage are both genuinely produced by the route.
+ * preserve. The real agent loop runs against the fake provider (TD-CHAT-16): a
+ * stream cut before `[DONE]` drives a real same-model replay, so attempt 1's
+ * usage and attempt 2's usage are both genuinely produced. The loop never marks
+ * an interruption's usage as estimated, so that one pin throws the shaped error
+ * through the pass-through loop spy (ruling 2).
  *
  * These pin CURRENT behavior, not a specification.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
+
+/**
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It records
+ * each attempt's `AgentLoopConfig`, and throws `failures[n]` on attempt n only
+ * where that failure cannot come from a provider reply. Everything else runs
+ * the real loop against the fake provider.
+ */
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as AgentLoopConfig[],
+  failures: [] as unknown[],
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      const index = loopSpy.configs.push(config) - 1;
+      const failure = loopSpy.failures[index];
+      if (failure !== undefined) throw failure;
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 /**
  * The one error shape the safe-replay predicate accepts: code
@@ -61,7 +88,8 @@ type DoneEvent = {
 describe('POST /api/chat whole-turn usage accounting (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let attempts: AgentLoopConfig[];
+  const attempts = loopSpy.configs;
+  let provider: FakeLlmProvider | undefined;
 
   /** What attempt 2 answers with, so the expected totals are arithmetic. */
   const COMPLETED_USAGE = { inputTokens: 3, outputTokens: 4 };
@@ -80,7 +108,9 @@ describe('POST /api/chat whole-turn usage accounting (characterization)', () => 
   });
 
   afterEach(() => {
-    delete server.agentRunner;
+    provider?.restore();
+    provider = undefined;
+    loopSpy.failures.length = 0;
   });
 
   afterAll(async () => {
@@ -89,18 +119,24 @@ describe('POST /api/chat whole-turn usage accounting (characterization)', () => 
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
-  /** Fails attempt 1 with `error`, answers on every later attempt. */
+  /** Cuts attempt 1's stream after it reported `usage`; attempt 2 answers. */
+  function interruptFirstAttempt(usage: { inputTokens: number; outputTokens: number }) {
+    attempts.length = 0;
+    provider = installFakeLlmProvider({
+      respond: [
+        { type: 'truncated_stream', content: 'partial', usage },
+        { type: 'text', content: 'second attempt answered', usage: { ...COMPLETED_USAGE } },
+      ],
+    });
+  }
+
+  /** Fails attempt 1 with `error` through the loop spy; attempt 2 answers. */
   function failFirstAttempt(error: Error) {
-    attempts = [];
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(config);
-      if (attempts.length === 1) throw error;
-      return {
-        content: 'second attempt answered',
-        toolsUsed: [],
-        usage: { ...COMPLETED_USAGE },
-      };
-    };
+    attempts.length = 0;
+    loopSpy.failures[0] = error;
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'second attempt answered', usage: { ...COMPLETED_USAGE } },
+    });
   }
 
   async function runTurnDone(session: string): Promise<DoneEvent> {
@@ -121,7 +157,7 @@ describe('POST /api/chat whole-turn usage accounting (characterization)', () => 
   }
 
   it('totals a replayed turn as the failed attempt plus the completed attempt', async () => {
-    failFirstAttempt(streamInterruption({ inputTokens: 5, outputTokens: 2 }));
+    interruptFirstAttempt({ inputTokens: 5, outputTokens: 2 });
     const done = await runTurnDone(`usage-total-${Date.now()}`);
 
     // Two attempts really ran, so the total below is a fold and not a passthrough.
@@ -154,6 +190,9 @@ describe('POST /api/chat whole-turn usage accounting (characterization)', () => 
     // so no receipt is written and the total is the completed attempt alone.
     // Same replay path as the first case — only the usage differs, which is what
     // makes the first case's assertion non-vacuous.
+    // A provider cannot produce this: when a cut stream reports 0/0 the loop
+    // substitutes an estimate (TD-CHAT-16 plan §6b), so the zero-usage
+    // interruption is thrown through the loop spy (ruling 2).
     failFirstAttempt(streamInterruption({ inputTokens: 0, outputTokens: 0 }));
     const done = await runTurnDone(`usage-unbillable-${Date.now()}`);
 

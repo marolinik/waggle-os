@@ -12,10 +12,11 @@
  *
  * The pin is HTTP-observable by necessity, not by preference: the map is a
  * `const` inside the handler body, so there is no unit seam to reach it that the
- * move itself would not have to create first. An injected `agentRunner` makes
- * the `done` event content isolate this block exactly - the two neighbouring
- * appenders (the `/schedule` nudge and the grounding hedge) are both
- * `!hasCustomRunner` gated and never run here.
+ * move itself would not have to create first. The real agent loop runs against
+ * the fake provider (TD-CHAT-16), so the two neighbouring appenders run too:
+ * the `/schedule` nudge does not fire on these replies, and the grounding hedge
+ * needs recalled memory, which this fresh workspace does not have. The `done`
+ * content therefore still isolates this block.
  *
  * These pin CURRENT behavior, not a specification.
  */
@@ -24,10 +25,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 /**
  * The exact strings the handler appends today, one per regulated persona.
@@ -42,6 +43,7 @@ describe('POST /api/chat regulated-content disclaimer (characterization)', () =>
   let server: FastifyInstance;
   let tmpDir: string;
   let workspaceId: string;
+  let provider: FakeLlmProvider | undefined;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-disclaimer-'));
@@ -63,7 +65,8 @@ describe('POST /api/chat regulated-content disclaimer (characterization)', () =>
   });
 
   afterEach(() => {
-    delete server.agentRunner;
+    provider?.restore();
+    provider = undefined;
     vi.restoreAllMocks();
   });
 
@@ -75,10 +78,8 @@ describe('POST /api/chat regulated-content disclaimer (characterization)', () =>
 
   /** Runs one turn whose reply is exactly `reply`, under `persona`. */
   async function replyUnder(persona: string | undefined, reply: string): Promise<string> {
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: reply,
-      toolsUsed: [],
-      usage: { inputTokens: 1, outputTokens: 1 },
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: reply, usage: { inputTokens: 1, outputTokens: 1 } },
     });
     resetRateLimiter(server);
     const res = await injectWithAuth(server, {
@@ -97,6 +98,8 @@ describe('POST /api/chat regulated-content disclaimer (characterization)', () =>
     expect(events.some(e => e.event === 'error')).toBe(false);
     const done = events.find(e => e.event === 'done');
     expect(done).toBeDefined();
+    // The model was reached: the setup-required reply also streams a done.
+    expect(provider.requests.length).toBeGreaterThan(0);
     return JSON.parse(done!.data).content as string;
   }
 

@@ -11,35 +11,62 @@
  * the two steps nothing asserts today - the same-model replay after a stream
  * interruption, and the credential rotation that precedes any model switch.
  *
- * The seam is the `server.agentRunner` object seam: `runAgentAttempt` calls the
- * runner directly, so a shaped throw drives the branch without a provider.
+ * The real agent loop runs against the fake provider (TD-CHAT-16): a stream
+ * cut before `[DONE]` is the interruption, a 429 is the rate limit. The
+ * pass-through loop spy counts the route's attempts and reads their configs;
+ * it throws only the plain INCOMPLETE_COMPLETION, whose message no provider
+ * reply produces.
  *
  * These pin CURRENT behavior, not a specification.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
-import { buildLocalServer } from '../../src/local/index.js';
-import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 
 /**
- * The exact error the safe-replay predicate recognises.
- *
- * `isRetryableStreamInterruption` is `INCOMPLETE_COMPLETION` AND a message
- * ending in the parenthesised stream-ended sentence, so both halves matter and
- * a plainer network error takes the throw path instead.
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It records
+ * each attempt's `AgentLoopConfig` (the attempt count, model, key and token
+ * budget the route hands the loop), and throws `failures[n]` on attempt n only
+ * where that failure cannot come from a provider reply. Everything else runs
+ * the real loop against the fake provider.
  */
-function streamInterruption(usedInput: number, usedOutput: number): Error {
-  const error = new Error(
-    'Model stream ended early (stream ended before data: [DONE]); partial content was not accepted.',
-  ) as Error & { code: string; usage: { inputTokens: number; outputTokens: number } };
-  error.code = 'INCOMPLETE_COMPLETION';
-  error.usage = { inputTokens: usedInput, outputTokens: usedOutput };
-  return error;
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as AgentLoopConfig[],
+  failures: [] as unknown[],
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      const index = loopSpy.configs.push(config) - 1;
+      const failure = loopSpy.failures[index];
+      if (failure !== undefined) throw failure;
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
+import { buildLocalServer } from '../../src/local/index.js';
+import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  type FakeLlmProvider,
+  type FakeLlmReply,
+} from '../helpers/fake-llm-provider.js';
+
+/**
+ * A stream cut before `[DONE]`. The loop reports it as INCOMPLETE_COMPLETION
+ * with a message ending in the parenthesised stream-ended sentence: both halves
+ * the safe-replay predicate `isRetryableStreamInterruption` needs.
+ */
+function streamInterruption(usedInput: number, usedOutput: number): FakeLlmReply {
+  return { type: 'truncated_stream', content: 'partial', usage: { inputTokens: usedInput, outputTokens: usedOutput } };
 }
 
 const RETRY_STEP = 'Model response was interrupted — retrying once on the same model.';
@@ -47,7 +74,8 @@ const RETRY_STEP = 'Model response was interrupted — retrying once on the same
 describe('POST /api/chat primary attempt retry (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let attempts: AgentLoopConfig[];
+  const attempts = loopSpy.configs;
+  let provider: FakeLlmProvider | undefined;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-retry-'));
@@ -66,7 +94,9 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
   });
 
   afterEach(() => {
-    delete server.agentRunner;
+    provider?.restore();
+    provider = undefined;
+    loopSpy.failures.length = 0;
   });
 
   afterAll(async () => {
@@ -75,18 +105,14 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
   });
 
-  /** Fails attempt 1 with `error`, answers on every later attempt. */
-  function failFirstAttempt(error: Error) {
-    attempts = [];
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(config);
-      if (attempts.length === 1) throw error;
-      return {
-        content: 'second attempt answered',
-        toolsUsed: [],
-        usage: { inputTokens: 3, outputTokens: 4 },
-      };
-    };
+  const SECOND_ATTEMPT: FakeLlmReply = {
+    type: 'text', content: 'second attempt answered', usage: { inputTokens: 3, outputTokens: 4 },
+  };
+
+  /** Fails the first provider request with `first`; every later request answers. */
+  function failFirstRequest(first: FakeLlmReply) {
+    attempts.length = 0;
+    provider = installFakeLlmProvider({ respond: [first, SECOND_ATTEMPT] });
   }
 
   async function runTurn(message: string, session: string) {
@@ -100,7 +126,7 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
   }
 
   it('replays once on the same model after a stream interruption', async () => {
-    failFirstAttempt(streamInterruption(3, 1));
+    failFirstRequest(streamInterruption(3, 1));
     const { status, events } = await runTurn(
       'In one sentence, what is a monorepo?',
       `retry-replay-${Date.now()}`,
@@ -128,7 +154,9 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
     // one takes the throw path and whatever the chain does next.
     const plain = new Error('Model stream ended early.') as Error & { code: string };
     plain.code = 'INCOMPLETE_COMPLETION';
-    failFirstAttempt(plain);
+    attempts.length = 0;
+    loopSpy.failures[0] = plain;
+    provider = installFakeLlmProvider({ respond: SECOND_ATTEMPT });
     const { status, events } = await runTurn(
       'In one sentence, what is a monorepo?',
       `retry-plain-${Date.now()}`,
@@ -145,10 +173,16 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
     // A status-carrying failure is the pool's business: it reports the key,
     // takes the next one and replays on the SAME model. Only when the pool is
     // out of keys does the model fallback chain get a turn.
-    const rateLimited = new Error('Rate limit exceeded') as Error & { status: number; statusCode: number };
-    rateLimited.status = 429;
-    rateLimited.statusCode = 429;
-    failFirstAttempt(rateLimited);
+    // The first key is rate limited on every request, so the loop's own 429
+    // retries run out and the attempt fails with a 429-carrying error.
+    attempts.length = 0;
+    let firstKey: string | null | undefined;
+    provider = installFakeLlmProvider({
+      respond: (request) => {
+        firstKey ??= request.authorization;
+        return request.authorization === firstKey ? { type: 'http_error', status: 429, message: 'Rate limit exceeded', headers: { 'retry-after': '0' } } : SECOND_ATTEMPT;
+      },
+    });
     const { status, events } = await runTurn(
       'In one sentence, what is a monorepo?',
       `retry-rotate-${Date.now()}`,
