@@ -97,6 +97,8 @@ describe('POST /api/chat whole-turn usage accounting (characterization)', () => 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-usage-'));
     server = await buildLocalServer({ dataDir: tmpDir });
+    // Scripted provider failures must not sleep through real backoff (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
     server.vault.set('anthropic', 'sk-usage-pin');
     server.agentState.llmProvider = {
       provider: 'anthropic-proxy',

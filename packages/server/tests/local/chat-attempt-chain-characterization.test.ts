@@ -81,6 +81,8 @@ describe('POST /api/chat attempt chain (characterization)', () => {
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-attempt-chain-'));
     server = await buildLocalServer({ dataDir: tmpDir });
+    // Scripted provider failures must not sleep through real backoff (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
     // Two keys before the first turn: the pool is memoised per provider.
     server.vault.set('anthropic', 'sk-chain-pin-1');
     server.vault.set('anthropic-2', 'sk-chain-pin-2');
