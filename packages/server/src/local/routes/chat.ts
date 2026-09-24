@@ -475,7 +475,6 @@ import {
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
-import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import {
@@ -542,6 +541,7 @@ import { PERSONAL_CHAT_SCOPE_ID } from './chat-scope.js';
 import { handleTurnFailure } from './chat-turn-failure.js';
 import { runAgentTurn } from './chat-agent-run.js';
 import { resolveModelAvailability, selectTurnModel } from './chat-turn-model-routing.js';
+import { acquireTurnSessionRuntime } from './chat-turn-session-runtime.js';
 import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn } from './chat-turn-completion.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -1686,7 +1686,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
     let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
-    let workspaceTurnScope: WorkspaceTurnScope | undefined;
     const activeSessionId = requestedSessionId ?? historyWorkspaceId;
     const activeWorkspaceId = historyWorkspaceId;
     const activeExecutionWorkspaceId = executionWorkspaceId;
@@ -1739,91 +1738,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
 
-      // Named workspaces must acquire one coherent chat runtime before any
-      // asynchronous model work or conversation mutation. Construction errors
-      // fail closed; mixing a workspace tool pool with the shared orchestrator
-      // would cross memory and mutable agent state.
-      let sessionOrch: Orchestrator = orchestrator;
-      let sessionTools: ToolDefinition[] | undefined;
-      let wsSession: WorkspaceSession | undefined;
-      if (!hasCustomRunner && usesNamedWorkspace) {
-        try {
-          if (!effectiveWorkspace) {
-            throw new Error('Managed workspace identity is unavailable');
-          }
-          if (!server.agentState.getWorkspaceMindDb(effectiveWorkspace)) {
-            throw new Error('Workspace mind is unavailable');
-          }
-          const candidateSession = server.sessionManager.getOrCreate(
-            effectiveWorkspace,
-            () => server.mindCache.acquire(effectiveWorkspace),
-            (m) => server.agentState.createSessionOrchestrator(m),
-            (m, o) => server.agentState.buildToolsForSession(
-              o,
-              executionWorkspacePath ?? effectiveWorkspace,
-              effectiveWorkspace,
-            ),
-            server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
-            () => server.mindCache.release(effectiveWorkspace),
-          );
-          workspaceSessionActivity = server.sessionManager.acquireActivity(effectiveWorkspace);
-          if (!workspaceSessionActivity) {
-            throw new Error(`Workspace session is ${candidateSession.status}`);
-          }
-          const activeWorkspaceSession = workspaceSessionActivity.session;
-          turnSignal = AbortSignal.any([
-            abortController.signal,
-            activeWorkspaceSession.abortController.signal,
-          ]);
-          if (turnSignal.aborted) {
-            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
-          }
-
-          server.mindCache.acquire(effectiveWorkspace);
-          turnResources.holdWorkspaceMindPin(() => server.mindCache.release(effectiveWorkspace));
-          const runtime = acquireChatRuntime(
-            activeWorkspaceSession,
-            sessionId,
-            executionWorkspacePath ?? effectiveWorkspace,
-            effectiveWorkspace,
-          );
-
-          wsSession = activeWorkspaceSession;
-          turnResources.holdChatRuntime(() => releaseChatRuntime(activeWorkspaceSession, sessionId, runtime));
-          sessionOrch = runtime.orchestrator;
-          sessionTools = runtime.tools;
-        } catch (err) {
-          log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
-          throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
-        }
-      } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
-        try {
-          if (authorizedWorkspace) {
-            const requestMind = server.mindCache.acquire(authorizedWorkspace);
-            turnResources.holdSharedMindPin(() => server.mindCache.release(authorizedWorkspace));
-            sessionOrch = server.agentState.createSessionOrchestrator(requestMind);
-          } else {
-            sessionOrch = server.agentState.createSessionOrchestrator();
-          }
-          sessionTools = server.agentState.buildToolsForSession(
-            sessionOrch,
-            executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
-            authorizedWorkspace ?? undefined,
-          );
-        } catch (err) {
-          log.warn(`[session] Failed to create request-scoped chat runtime: ${(err as Error).message}`);
-          throw new Error('Chat workspace is not ready.');
-        }
-      }
-      activeSessionOrch = sessionOrch;
-      if (!hasCustomRunner) {
-        workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
-          turnSignal,
-        );
-        const heldScope = workspaceTurnScope;
-        turnResources.holdTurnScope(() => heldScope.release());
-      }
+      const { sessionOrch, sessionTools, wsSession, workspaceTurnScope } = acquireTurnSessionRuntime({
+        server, orchestrator, hasCustomRunner, usesNamedWorkspace, authorizedWorkspace,
+        effectiveWorkspace, sessionId, executionWorkspacePath, abortController, turnSignal,
+        turnResources, acquireChatRuntime, releaseChatRuntime,
+        setWorkspaceSessionActivity: (lease) => { workspaceSessionActivity = lease; },
+        setTurnSignal: (signal) => { turnSignal = signal; },
+        setActiveSessionOrch: (orch) => { activeSessionOrch = orch; },
+      });
 
       const { budgetModel, modelSelection, resolveModel, hasDistinctConfiguredFallback } = await selectTurnModel({
         server, model, executionWorkspaceConfig, message, getTrackedDailySpend, throwIfTurnAborted,
