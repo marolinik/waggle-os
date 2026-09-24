@@ -1,7 +1,8 @@
 # TD-CHAT-16 — narrowing the `agentRunner` test seam to the LLM call
 
 Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`,
-PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2`.
+PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2` (PR #167); retry clock,
+turn-trace and phases 5–6 on `chore/td-chat-16-seam-p3`.
 The founder ruled "take it now" on 2026-09-24. The ratified direction: the test seam replaces only
 the model call (fetch-spy style, the real `runAgentLoop` against a stubbed OpenAI-compatible
 provider), no strategy class. The end state has **zero** `hasCustomRunner` reads.
@@ -277,3 +278,16 @@ All three recommendations were accepted.
    chat-api L1647 (`contextMetrics`), smart-router L567 (paid compressor blocked) and turn-failure
    L73 (failure accounting). Each port pins what the real path does, and the port commit records
    what changed.
+
+### Second round (2026-09-24, after PR #167)
+
+4. **chat-turn-trace L101: port it.** The existing assertion is kept, filtered to the `chat.*`
+   stages (still exactly `['chat.turn.start']`). A new assertion checks that `agent-loop.enter` and
+   `agent-loop.exit` follow on the success turn.
+5. **Budget-refusal re-pin against the real cap's own message: accepted.**
+6. **Injectable retry clock: yes, as its own phase, before any further ports.** It is a minimal
+   production seam, a backoff delay function passed through the loop config or retry policy, with
+   no abstraction beyond a function parameter. It is pinned first, then used by the fake-provider
+   tests so they stop waiting in real time.
+7. **chat-api L1639 flake:** find out whether it is pre-existing. If it is, record it without
+   fixing it blindly.
