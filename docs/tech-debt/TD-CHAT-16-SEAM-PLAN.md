@@ -471,3 +471,17 @@ place. Two independent causes, and no runner leak of its own.
 
 With both fixes and the default runner still injected, chat-api passes 98/98. The next slice
 removes the default runner.
+
+**Slice 1: the default runner is removed.** Every chat-api turn without its own injected runner now
+runs the real loop against the suite's fake.
+- 97 of 98 passed unchanged, including the exact two-token stream, L2614 (`gpt-4o` provenance and
+  exact persisted content) and the trace counters.
+- L1647 was re-pinned per ruling 3. The metrics now describe the real package:
+  - `packageMode: 'compact'`;
+  - a positive tool catalog, with 0 tools eligible, selected or transmitted, matching the request's
+    empty `tools`;
+  - `finalSystemPromptChars` equal to the system prompt the fake received, with the token estimate
+    derived from it;
+  - provider tokens still 10/5.
+
+The injected-runner C tests in chat-api are the next slices.
