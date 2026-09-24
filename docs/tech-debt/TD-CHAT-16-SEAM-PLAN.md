@@ -394,3 +394,26 @@ The slice should probably install the fake per test group rather than suite-wide
      path. If it is a production bug, stop and report the evidence. Do not fix it silently.
 10. **chat-api: follow the §6e diagnosis order.** Fix the runner leak and the four timeouts first,
     then port the file in 2–3 slices, including the L1647 re-pin. No suite-wide switch in one go.
+
+## 6f. Re-pins (ruling 9)
+
+**execution-trace: ported. The L163 assertion is unchanged, `done.cost === 0.125`, and my §6d
+claim was wrong.**
+- The spy's pre-loop hook records 0.125 on the trace the route hands the loop. The real loop then
+  runs against the fake provider.
+- The loop does not write its own spend to the trace row. Trace-owned spend is recorded by the
+  built-in proxy when it serves the call, and the fake answers `/chat/completions` in the proxy's
+  place.
+- So the read-back is still exactly 0.125, which is also what the row holds. The "0.125 plus the
+  loop's spend" premise in §6d was an unverified guess, and no assertion changed.
+- The other ten pins ported mechanically:
+  - scripted provider replies where possible;
+  - the ruling-2 spy for unclassified messages and SQLITE_BUSY.
+
+**teamsync-push: ported.**
+- The success pin asserts that the pushed content equals the real `save_memory` result the turn
+  reported, which starts with `Memory saved to workspace mind (`.
+- The failure pin fault-injects the mind write (`CognifyPipeline.prototype.cognify` rejects), so the
+  real tool result is an error, and asserts zero entity pushes.
+- The failing save uses distinct content. The first pin's frame would otherwise dedup it into a
+  successful "already exists" result.
