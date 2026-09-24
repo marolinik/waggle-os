@@ -197,4 +197,33 @@ describe('POST /api/chat primary attempt retry (characterization)', () => {
     expect(events.some(e => e.event === 'model_switch')).toBe(false);
     expect(events.some(e => e.event === 'done')).toBe(true);
   });
+  it('hands the loop the server retry-backoff seam, which sees the policy wait', async () => {
+    // TD-CHAT-16 retry clock: the route passes `server.llmRetryBackoffMs` into
+    // every attempt's loop config. A 503 then an answer makes the loop back off
+    // once, for the policy's 2s, which the seam turns into no wait at all.
+    const policyWaits: number[] = [];
+    server.llmRetryBackoffMs = (waitMs) => {
+      policyWaits.push(waitMs);
+      return 0;
+    };
+    attempts.length = 0;
+    provider = installFakeLlmProvider({
+      respond: [{ type: 'http_error', status: 503, message: 'overloaded' }, SECOND_ATTEMPT],
+    });
+    try {
+      const started = Date.now();
+      const { status, events } = await runTurn(
+        'In one sentence, what is a monorepo?',
+        `retry-backoff-seam-${Date.now()}`,
+      );
+      expect(status).toBe(200);
+      expect(events.some(e => e.event === 'done')).toBe(true);
+      expect(attempts).toHaveLength(1);
+      expect(attempts[0].retryBackoffMs).toBe(server.llmRetryBackoffMs);
+      expect(policyWaits).toEqual([2_000]);
+      expect(Date.now() - started).toBeLessThan(2_000);
+    } finally {
+      delete server.llmRetryBackoffMs;
+    }
+  });
 });
