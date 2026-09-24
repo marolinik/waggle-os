@@ -162,6 +162,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-23 | close-out | **Founder decision round 4** (D-1) | The full data-dir wipe stays total (same SQLite file, no separate governance database); pseudonymization keeps `tools_called` tool names; `MindErasure` gets no governance effect; `ai_interactions` stays latent, with no production writer added before launch |
 | 2026-09-23 | close-out | **Founder decision round 5** | TD-TEST-19 (vite 6 vs 7) deferred post-launch with TD-DEP-2; R-5 (updater and rollback) deferred to the release arc with public signing |
 | 2026-09-24 | close-out | **TD-CHAT-3 closed** (founder) | Slice 16 left the `POST /api/chat` handler as orchestration only (3594 → 362 lines); further shrinking would move glue. The `agentRunner` seam narrowing stays with TD-CHAT-16 |
+| 2026-09-24 | close-out | **TD-CHAT-15 passthrough: hybrid marker** (founder) | A typed class was rejected: the errors are built by factories that decorate a plain `Error` with `code`/`status`. The rules are: (a) a code-bearing error (`INCOMPLETE_COMPLETION`, the budget codes) is classified by `code` in the handler; a plain user-written sentence is marked with `markUserFacingError` at its throw site (in `@waggle/shared`, the lowest package the agent and server both import); everything else gets the generic sentence. (b) A provider HTTP error shows its status only, and the body goes to the log. (c) The change lands now; a conflict with TD-CHAT-16 is resolved by whichever PR merges second. |
 
 ## Next Actions
 
@@ -183,7 +184,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
 - [x] CA-7: layer rule shipped as `@typescript-eslint/no-restricted-imports` over all three policy-graph files; proven non-vacuous on four banned forms (agent, `a40475e2`, 2026-09-18)
 - [x] Phase 6 pass 1: TD-CHAT-18 (`c362ae45`), TD-TEST-5 (`7dca4555`), CA-7 (`a40475e2`); Debt Budget & Broken-Windows Policy ratified; 3 new Adopted Conventions (agent, 2026-09-18)
 - [x] TD-TEST-11: server tests typechecked by `typecheck:server-tests`; 55 of the 56 baseline files fixed, `start-trial.test.ts` left for TD-TEST-19 (agent, `f40b5119`, 2026-09-23)
-- [x] TD-CHAT-28 / TD-CHAT-15: consumed. TD-CHAT-28 closed `f6b6b227`; TD-CHAT-15 log half closed 2026-09-19, passthrough half tracked in its row (agent, P2)
+- [x] TD-CHAT-28 / TD-CHAT-15: consumed. TD-CHAT-28 closed `f6b6b227`; TD-CHAT-15 log half closed 2026-09-19, passthrough half closed 2026-09-24 (`6fa0c8ed`) (agent, P2)
 - [x] Phase 7 pass 1: R-1 deadlines on the last 24 outbound calls; R-2 model-endpoint circuit breaker; `docs/RELIABILITY.md` created (agent, 2026-09-18)
 - [x] R-3: unbounded `.all()` reads. Count paths were done under R-6. `sessions.getActive()` is bounded at its nine first-row callers through `ensureActive()`; `install-audit`, `cron-store` and `file-indexer` are ruled in RELIABILITY.md. No `hive-mind-core` change (agent, `ee6f2d1e`, 2026-09-23)
 - [x] R-5 (deferred to the release arc, founder 2026-09-23): Tauri updater + fast rollback for the desktop artifact — entangled with the signing gates (founder, P2)
