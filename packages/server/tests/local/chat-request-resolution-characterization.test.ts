@@ -13,23 +13,27 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat request resolution (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let runnerCalls = 0;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-request-resolution-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async () => {
-      runnerCalls += 1;
-      return { content: 'unreachable', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    // The real agent loop runs; the provider call is the sensing point (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'resolved' } });
   });
 
   afterAll(async () => {
-    server.agentRunner = undefined;
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* EBUSY on Windows */ }
@@ -47,7 +51,7 @@ describe('POST /api/chat request resolution (characterization)', () => {
       error: 'session and sessionId must match when both are provided',
       code: 'SESSION_ID_CONFLICT',
     });
-    expect(runnerCalls).toBe(0);
+    expect(provider.requests).toHaveLength(0);
   });
 
   it('accepts the same value under both names', async () => {
@@ -58,6 +62,6 @@ describe('POST /api/chat request resolution (characterization)', () => {
       payload: { message: 'hello there', session: 'gamma', sessionId: 'gamma' },
     });
     expect(res.statusCode).toBe(200);
-    expect(runnerCalls).toBe(1);
+    expect(provider.requests).toHaveLength(1);
   });
 });

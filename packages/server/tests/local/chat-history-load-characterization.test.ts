@@ -10,12 +10,11 @@
  *
  * These pin CURRENT behavior, not a specification.
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentResponse } from '@waggle/agent';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { buildLocalServer } from '../../src/local/index.js';
 import {
@@ -24,6 +23,7 @@ import {
   persistMessage,
 } from '../../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import { installFakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat history load (characterization)', () => {
   let server: FastifyInstance;
@@ -57,10 +57,8 @@ describe('POST /api/chat history load (characterization)', () => {
     persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: 'a later turn' });
     const sessionFile = path.join(tmpDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`);
     const diskBefore = fs.readFileSync(sessionFile);
-    const runner = vi.fn(async (): Promise<AgentResponse> => ({
-      content: 'must not run', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
-    }));
-    server.agentRunner = runner;
+    // The real agent loop is armed; the model must never be called (TD-CHAT-16).
+    const provider = installFakeLlmProvider({ respond: { type: 'text', content: 'must not run' } });
 
     try {
       resetRateLimiter(server);
@@ -87,11 +85,12 @@ describe('POST /api/chat history load (characterization)', () => {
         message: 'Retry could not safely replace this conversation. Reload and try again.',
         code: 'RETRY_TARGET_STALE',
       });
-      expect(runner).not.toHaveBeenCalled();
+      expect(provider.requests).toHaveLength(0);
       // Neither copy of the conversation changed.
       expect(fs.readFileSync(sessionFile)).toEqual(diskBefore);
       expect(server.agentState.sessionHistories.get(stateKey)).toEqual(cached);
     } finally {
+      provider.restore();
       server.agentState.sessionHistories.delete(stateKey);
     }
   });

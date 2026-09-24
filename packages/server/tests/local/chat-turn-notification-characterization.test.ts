@@ -11,25 +11,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat finished-turn notification (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-turn-notification-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: 'Here is the answer.',
-      toolsUsed: [],
-      usage: { inputTokens: 5, outputTokens: 5 },
+    // The real agent loop runs; only the model call is scripted (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'Here is the answer.', usage: { inputTokens: 5, outputTokens: 5 } },
     });
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
@@ -37,10 +43,13 @@ describe('POST /api/chat finished-turn notification (characterization)', () => {
 
   async function finishedNotificationsAfter(payload: Record<string, unknown>): Promise<string[]> {
     const before = await listFinished();
+    const requestsBefore = provider.requests.length;
     resetRateLimiter(server);
     const res = await injectWithAuth(server, { method: 'POST', url: '/api/chat', payload });
     expect(res.statusCode).toBe(200);
     expect(parseSSE(res.body).some(e => e.event === 'done')).toBe(true);
+    // The model was reached: the setup-required reply also streams a done.
+    expect(provider.requests.length).toBe(requestsBefore + 1);
     const after = await listFinished();
     return after.slice(0, after.length - before.length);
   }

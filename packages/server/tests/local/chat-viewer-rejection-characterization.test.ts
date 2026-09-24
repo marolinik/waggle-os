@@ -15,28 +15,33 @@
  * the assertion is on the string: without it the pin cannot tell which layer
  * replied, and would still pass if the resolver's copy were deleted.
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth } from '../test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat viewer rejection inside the path resolver (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-viewer-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
-      throw new Error('a rejected viewer turn must not reach the agent runner');
-    };
+    // A rejected viewer turn must never reach the model (TD-CHAT-16).
+    provider = installFakeLlmProvider({ respond: { type: 'text', content: 'unreachable' } });
+  });
+
+  afterEach(() => {
+    expect(provider.requests).toHaveLength(0);
   });
 
   afterAll(async () => {
+    provider.restore();
     server.agentState.activeWorkspaceId = null;
     await server.close();
     await new Promise(r => setTimeout(r, 100));
