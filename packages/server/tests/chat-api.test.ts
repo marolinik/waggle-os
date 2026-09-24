@@ -28,6 +28,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
@@ -97,6 +98,8 @@ function openAiToolSseResponse(name: string): Response {
 describe('Chat Streaming API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
+  let provider: FakeLlmProvider;
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
@@ -179,9 +182,28 @@ describe('Chat Streaming API', () => {
 
     server = await buildLocalServer({ dataDir: tmpDir });
     server.agentRunner = mockAgentRunner;
+    // Healthy built-in proxy WITHOUT a vault key: a key would enable the GEPA
+    // optimizer, whose direct Anthropic calls hang behind the per-test fetch
+    // stubs that answer 503 to unknown hosts (TD-CHAT-16 §6h).
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    server.llmRetryBackoffMs = () => 0;
+    provider = installFakeLlmProvider({
+      respond: {
+        type: 'text',
+        content: 'Hello world',
+        chunks: ['Hello ', 'world'],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      // Several tests call this server over real HTTP with `fetch`; only model
+      // calls (and the direct Anthropic API) belong to the fake.
+      otherRequest: 'previous',
+    });
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     // Small delay to release file locks on Windows
     await new Promise(r => setTimeout(r, 100));

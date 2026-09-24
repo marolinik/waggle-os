@@ -449,3 +449,25 @@ Options:
 The file stays on `agentRunner` until a ruling. Recommendation: (a) plus one real-path pin showing
 that an oversized provider answer ends in the parser's fail-closed error and that the socket is
 released once the response ends.
+
+## 6h. chat-api: the four timeouts diagnosed (ruling 10, step 1)
+
+I re-applied the §6e suite state one change at a time, with the injected default runner kept in
+place. Two independent causes, and no runner leak of its own.
+1. **The vault key hangs L3125 through GEPA.** `markFakeProviderHealthy` sets the vault `anthropic`
+   key, which enables GEPA. L3125 already runs the real loop behind its own `fetch` stub, which
+   answers 503 to every host but `/api/tags`. GEPA's direct Anthropic calls then retry for longer
+   than the test timeout.
+   - Fix: the suite marks the built-in proxy healthy *without* a vault key. Model availability
+     needs only the provider health.
+2. **The fake answers the tests' own loopback HTTP with a 404.** Three hold-open tests ("safe model
+   activity", "retry status before backoff", "late output after disconnect") call the suite's
+   server over real HTTP with the global `fetch`. The fake answered those requests 404, so the
+   route was never reached.
+   - Fix: the suite installs the fake with `otherRequest: 'previous'`. Model calls and the Anthropic
+     API go to the fake; everything else uses the real `fetch`, as before.
+3. **The "runner leak" into L1647 (`Safe answer`) was a side effect** of the "safe model activity"
+   timeout, not a separate defect.
+
+With both fixes and the default runner still injected, chat-api passes 98/98. The next slice
+removes the default runner.
