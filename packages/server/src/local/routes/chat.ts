@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, routeMessage, CredentialPool, loadCredentialPool, isBoundedSingleFileRoundTrip, generateTurnId, logTurnEvent, READONLY_TOOLS, type ToolDefinition } from '@waggle/agent';
+import { COMMAND_CONTEXT_SENTINEL, MEMORY_RECALL_UNAVAILABLE_TEXT, runAgentLoop, recordCapabilityGap, lintMemoryWrite, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, CredentialPool, loadCredentialPool, isBoundedSingleFileRoundTrip, generateTurnId, logTurnEvent, READONLY_TOOLS, type ToolDefinition } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type {
   WorkspaceSession,
@@ -444,10 +444,9 @@ export function buildChatCommandContext(input: {
 function resolvePersona(id: string) {
   return listPersonas().find(p => p.id === id) ?? null;
 }
-import { WaggleConfig } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, isExplicitToolFreeAdvisoryRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, classifyExplicitTurnMutationPolicy, isExplicitToolFreeAdvisoryRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   isChatSessionStateKeyForWorkspace,
@@ -474,10 +473,6 @@ import {
 } from './chat-prompt-packaging.js';
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
-import {
-  canonicalizeModelReference,
-  resolveUsableModel,
-} from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
@@ -541,11 +536,11 @@ import {
   parseDirectReadFileDirective,
 } from './chat-bounded-read-tools.js';
 import { createModelHealthProbe } from './chat-model-health.js';
-import { TurnModelSelection } from './chat-turn-model-selection.js';
 import { TurnResources } from './chat-turn-resources.js';
 import { PERSONAL_CHAT_SCOPE_ID } from './chat-scope.js';
 import { handleTurnFailure } from './chat-turn-failure.js';
 import { runAgentTurn } from './chat-agent-run.js';
+import { resolveModelAvailability, selectTurnModel } from './chat-turn-model-routing.js';
 import { completeTurnResponse, runPostCommitEnrichment, type TurnCompletionTurn } from './chat-turn-completion.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -1829,52 +1824,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         turnResources.holdTurnScope(() => heldScope.release());
       }
 
-      // ── Model Pilot: resolve model with fallback chain ──
-      const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
-      const wsModelConfig = executionWorkspaceConfig?.model;
-      const primaryModel = model ?? wsModelConfig ?? pilotConfig.getDefaultModel() ?? 'claude-sonnet-4-6';
-      const fallbackModel = pilotConfig.getFallbackModel();
-      const budgetModel = pilotConfig.getBudgetModel();
-      const budgetThreshold = pilotConfig.getBudgetThreshold();
-
-      // Resolve model selection before availability and fallback checks.
-      const modelSelection = new TurnModelSelection({
-        primaryModel,
-        fallbackModel,
-        canonicalize: canonicalizeModelReference,
+      const { budgetModel, modelSelection, resolveModel, hasDistinctConfiguredFallback } = await selectTurnModel({
+        server, model, executionWorkspaceConfig, message, getTrackedDailySpend, throwIfTurnAborted,
       });
-      const resolveModel = (candidate: string) => resolveUsableModel(server, candidate);
-      const budgetRoutingAllowed = budgetModel
-        ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
-        : false;
-      const dailyBudget = pilotConfig.getDailyBudget() ?? 0;
-      const spent = getTrackedDailySpend(dailyBudget > 0);
-      const budgetThresholdReached = dailyBudget > 0
-        && spent / dailyBudget >= budgetThreshold;
-
-      // Classify first: spend pressure must never downgrade consequential work.
-      if (budgetModel && budgetRoutingAllowed && budgetThresholdReached) {
-        const routing = routeMessage(message, primaryModel, budgetModel);
-        if (routing.reason === 'simple_turn') {
-          modelSelection.selectBudgetModel(
-            routing.model,
-            `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`,
-          );
-        }
-      }
-
-      // ── Model resolution: confirm the selected model is routable; on failure fall
-      // back budget → primary → configured fallback, recording the switch reason ──
-      await modelSelection.resolvePreflight(resolveModel);
-      throwIfTurnAborted();
-
-      const configuredFallbackModel = fallbackModel
-        ? canonicalizeModelReference(fallbackModel)
-        : null;
-      const hasDistinctConfiguredFallback = Boolean(
-        configuredFallbackModel
-        && canonicalizeModelReference(modelSelection.model) !== configuredFallbackModel,
-      );
 
       // Viewer RBAC already ran before reply.hijack(), in the `VIEWER_READ_ONLY` check.
 
@@ -1963,34 +1915,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
       }
 
-      // Check whether the configured LLM path can serve a completion. Process
-      // liveness is insufficient for the built-in proxy because it also runs
-      // normally before a cloud credential or local model has been configured.
-      // resolveUsableModel() only returns an ollama/* selection after the tag
-      // is observed locally, so it remains authoritative even if startup's
-      // cloud-provider status has not yet caught up with onboarding.
-      const resolvedLocalOllama = modelSelection.model.toLowerCase().startsWith('ollama/');
-      let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
-      if (!hasCustomRunner && !resolvedLocalOllama) {
-        const llmStatus = server.agentState.llmProvider;
-        if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
-          // Healthy tracked provider — skip HTTP probe. For litellm the
-          // per-request 3s probe raced concurrent completions (uvicorn busy
-          // serving LLM calls), randomly dropping healthy turns into the setup-required reply;
-          // the health monitor already tracks child liveness.
-          modelAvailable = true;
-        } else {
-          const healthHeaders: Record<string, string> = {};
-          const token = server.agentState.wsSessionToken;
-          if (token) {
-            healthHeaders['Authorization'] = `Bearer ${token}`;
-          }
-          const healthPath = llmStatus.provider === 'anthropic-proxy'
-            ? '/health/readiness'
-            : '/health/liveliness';
-          modelAvailable = await probeModelHealth(llmStatus, `${getLitellmUrl()}${healthPath}`, healthHeaders);
-        }
-      }
+      const modelAvailable = await resolveModelAvailability({
+        server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth,
+      });
 
       // Streams a canned assistant reply word by word, persists it unless the
       // turn denies conversation history, and emits the terminal `done` event.
