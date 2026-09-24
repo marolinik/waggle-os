@@ -161,6 +161,7 @@ Nothing above is lost: every item is a Next Action below with an owner and a pri
 | 2026-09-23 | close-out | **Founder decision round 3** | TD-CHAT-19: one comment-only sweep is allowed (tags become intent; a paired hoist/cleanup comment names its counterpart symbol), replacing the "never as a sweep" rule. TD-TEST-2: a coverage ratchet on `routes/chat*.ts` in the existing CI step, not a full or nightly coverage job. |
 | 2026-09-23 | close-out | **Founder decision round 4** (D-1) | The full data-dir wipe stays total (same SQLite file, no separate governance database); pseudonymization keeps `tools_called` tool names; `MindErasure` gets no governance effect; `ai_interactions` stays latent, with no production writer added before launch |
 | 2026-09-23 | close-out | **Founder decision round 5** | TD-TEST-19 (vite 6 vs 7) deferred post-launch with TD-DEP-2; R-5 (updater and rollback) deferred to the release arc with public signing |
+| 2026-09-24 | close-out | **TD-CHAT-3 closed** (founder) | Slice 16 left the `POST /api/chat` handler as orchestration only (3594 → 362 lines); further shrinking would move glue. The `agentRunner` seam narrowing stays with TD-CHAT-16 |
 
 ## Next Actions
 
@@ -201,8 +202,8 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
   - [x] TD-CHAT-3 slice 6, the pre:tool approval hook -> `createChatApprovalHook` (agent, `55b2f19d` + `caf7b6da`, 2026-09-23)
   - [x] TD-CHAT-3 slice 7, `onToolResult` side effects -> `applyToolResultSideEffects` (agent, `7f1f6f76` + `c71c1454`, 2026-09-23)
   - [x] TD-CHAT-3 slice 8, tool-activity state -> `TurnToolActivity` (agent, `1382cccb` + `69c23a3c`, 2026-09-23)
-  - [ ] TD-CHAT-3 next: the remaining attempt/fallback control flow (`runAgentAttempt`, `runModelFallbackChain`, the credential-pool loop), then the handler's phases (agent, P1)
-  - [ ] TD-CHAT-3 control flow: Extract Method on the handler's phases once its state has owners (agent, P1)
+  - [x] TD-CHAT-3 slices 9-12, attempt/fallback control flow -> `chat-attempt-policy`, `TurnModelSelection`, `TurnAttemptState`, `createAttemptChain` (agent, 2026-09-23/24)
+  - [x] TD-CHAT-3 slices 13-16, the handler's phases -> completion, preparation, failure, agent run, request resolution, model routing, session runtime, history load, command routing; handler 3594 -> 362; row CLOSED by founder (agent, PRs #163/#164, 2026-09-24)
   - [ ] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3)
 - [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
