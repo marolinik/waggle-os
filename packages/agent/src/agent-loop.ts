@@ -682,7 +682,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       outputTokens: totalOutputTokens,
     };
     error.toolsUsed = [...toolsUsed];
-    return error;
+    return markUserFacingError(error);
   };
   const disarmInitialModelActivityTimeout = (): void => {
     if (!initialModelActivityArmed) return;
