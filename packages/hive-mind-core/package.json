@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@waggle/shared": "*",
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.3.0",
     "better-sqlite3": "^12.6.2",
     "cron-parser": "^4.9.0",
     "sqlite-vec": "^0.1.7-alpha.2",
