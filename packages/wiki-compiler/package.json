@@ -20,7 +20,7 @@
     "@waggle/shared": "*"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.2",
     "typescript": "^5.8.3"
   },
   "license": "MIT"
