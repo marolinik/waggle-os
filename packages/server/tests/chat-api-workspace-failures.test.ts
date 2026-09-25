@@ -26,7 +26,7 @@ import os from 'node:os';
 import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
-import { getPersona, runAgentLoop, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { getPersona, runAgentLoop, type AgentLoopConfig } from '@waggle/agent';
 import { applyPersonaToolFilter } from '../src/local/persona-tool-filter.js';
 import {
   applyContextWindow,
@@ -386,25 +386,22 @@ describe('Chat Streaming API', () => {
     }
   });
 
-  // Held on the injected runner (TD-CHAT-16 §6k): the real loop rejects a
-  // blank no-tool answer itself, with its own message, before this route
-  // branch can see it. Awaiting a founder ruling.
+  // Re-pinned on the real path (TD-CHAT-16 ruling 13): the loop rejects a
+  // blank no-tool answer itself, with its own message.
   it.each(['', ' \n\t'])('rejects a blank successful agent response %j', async (blankContent) => {
-    const originalRunner = server.agentRunner;
     const blankTag = blankContent.length === 0 ? 'empty' : 'whitespace';
     const workspaceId = server.workspaceManager.create({
       name: `Blank ${blankTag} ${Date.now()}`,
       group: 'test',
     }).id;
     const sessionId = `blank-session-${blankTag}-${Date.now()}`;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onToken?.('unsafe provisional');
-      return {
-        content: blankContent,
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    const requestsBefore = provider.requests.length;
+    provider.respondWith({
+      type: 'text',
+      content: blankContent,
+      chunks: blankContent ? [blankContent] : [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
 
     try {
       const res = await injectWithAuth(server, {
@@ -423,7 +420,9 @@ describe('Chat Streaming API', () => {
       expect(events.filter(event => event.event === 'token')).toHaveLength(0);
       const errorEvents = events.filter(event => event.event === 'error');
       expect(errorEvents).toHaveLength(1);
-      expect(JSON.parse(errorEvents[0].data).message).toContain('empty response');
+      expect(JSON.parse(errorEvents[0].data).message)
+        .toBe('LLM returned an empty assistant response with no tool calls');
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
 
       const inMemory = server.agentState.sessionHistories.get(
         chatSessionStateKey(workspaceId, sessionId),
@@ -434,14 +433,15 @@ describe('Chat Streaming API', () => {
         content: 'Return a substantive response.',
       });
       expect(inMemory[1]).toMatchObject({ role: 'assistant' });
-      expect(inMemory[1].content).toContain(`${GENERATION_FAILED_PREFIX}Model returned an empty response`);
-      expect(inMemory[1].content).not.toContain('unsafe provisional');
+      expect(inMemory[1].content)
+        .toBe(`${GENERATION_FAILED_PREFIX}LLM returned an empty assistant response with no tool calls`);
       expect(inMemory.some(message => message.role === 'assistant' && !message.content.trim())).toBe(false);
 
       const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
       expect(onDisk).toEqual(inMemory);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
     }
   });
 
@@ -983,25 +983,27 @@ describe('Chat Streaming API', () => {
     expect(afterCounts.pending).toBe(beforeCounts.pending);
   });
 
-  // Held on the injected runner (TD-CHAT-16 §6k): on the real path the route's
-  // auto-recall adds its own `auto_recall` tool event before the model's, so
-  // the exact count of one changes. Awaiting a founder ruling.
+  // Re-pinned on the real path (TD-CHAT-16 ruling 14): the model makes a real
+  // scripted web_search call, and the route's auto-recall streams its own
+  // tool event first. The search host is answered here, keeping the turn off
+  // the network.
   it('streams tool use events', async () => {
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      if (config.onToken) config.onToken('Search results: ...');
-      if (config.onToolUse) config.onToolUse('web_search', { query: 'waggle bees' });
-      return {
-        content: 'Search results: ...',
-        toolsUsed: ['web_search'],
-        usage: { inputTokens: 20, outputTokens: 15 },
-      };
-    };
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).startsWith('https://html.duckduckgo.com/')) {
+        return new Response('<html></html>', { status: 200 });
+      }
+      return fakeFetch(input, init);
+    });
+    provider.respondWith([
+      { type: 'tool_calls', calls: [{ name: 'web_search', args: { query: 'waggle bees' } }] },
+      { type: 'text', content: 'Search results: ...', usage: { inputTokens: 20, outputTokens: 15 } },
+    ]);
     try {
       const res = await injectWithAuth(server, {
         method: 'POST',
         url: '/api/chat',
-        payload: { message: 'Search for waggle bees' },
+        payload: { message: 'Search the web for waggle bees' },
       });
 
       const events = parseSSE(res.body);
@@ -1010,8 +1012,8 @@ describe('Chat Streaming API', () => {
       expect(JSON.parse(tokenEvents[0].data).content).toBe('Search results: ...');
 
       const toolEvents = events.filter(e => e.event === 'tool');
-      expect(toolEvents.length).toBe(1);
-      const toolData = JSON.parse(toolEvents[0].data);
+      expect(toolEvents.map(event => JSON.parse(event.data).name)).toEqual(['auto_recall', 'web_search']);
+      const toolData = JSON.parse(toolEvents[1].data);
       expect(toolData.name).toBe('web_search');
       expect(toolData.input).toEqual({ query: 'waggle bees' });
 
@@ -1019,7 +1021,8 @@ describe('Chat Streaming API', () => {
       const doneData = JSON.parse(doneEvents[0].data);
       expect(doneData.toolsUsed).toEqual(['web_search']);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      fetchSpy.mockRestore();
     }
   });
 

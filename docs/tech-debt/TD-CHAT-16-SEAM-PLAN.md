@@ -616,3 +616,38 @@ of a worker out-of-memory crash, not a test failure.
 - 9/9 in the file; history-isolation 12/12.
 
 Verification: typecheck:server-tests and lint are clean. Wide run 2784/2784 (191 files), 630 s.
+
+### Fifth round (2026-09-25)
+
+13. **Blank-answer pins:** covers workspace-failures ×2 and the chat-api double-blank test. Pin
+    the loop's real rejection, `LLM returned an empty assistant response with no tool calls`.
+14. **"streams tool use events":** assert the ordered tool events `['auto_recall', 'web_search']`.
+15. **Forged acquire_capability receipt:**
+    - The positive receipt comes from a real, scripted `acquire_capability` call.
+    - The forgery cases move to a unit test of the receipt check.
+
+## 6m. Held tests ported (rulings 13–15)
+
+**workspace-failures: no injected runner remains; 30/30.**
+- The blank-answer pins run the real loop with a blank provider answer. They now assert the loop's
+  exact error message, `LLM returned an empty assistant response with no tool calls`, in the
+  error event and in the persisted turn. There is still no token and no done event.
+- "streams tool use events" makes a real scripted `web_search` call, with the search host answered
+  in-test. It asserts the ordered events `['auto_recall', 'web_search']`; the input, token and
+  `toolsUsed` assertions are unchanged.
+
+**history-isolation receipt pin: no injected runner remains; 12/12.**
+- The model makes two real `acquire_capability` calls. Each need names a marketplace skill, with
+  its words in a different order, and the real tool answers both with an installable marketplace
+  proposal.
+- Both proposals are issued. The persisted receipt is the second call's, live and cold, and the
+  forged final answer is persisted as text only.
+- The assertion that the streamed result differs from the raw tool result was dropped: no fixed
+  raw result exists any more. `proposalId` and `expiresAt` in the issued output still show that the
+  route rewrote it.
+- The forgery cases now pin `createPersistedCapabilityReceipt` directly, in
+  `local/chat-persistence.test.ts`: mismatched route, missing package identity, over-long need,
+  ordinary result, marker not at the end, error result, missing need, and non-object input. That
+  file also adds the positive marketplace and starter-pack cases.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794 (191 files), 365 s.
