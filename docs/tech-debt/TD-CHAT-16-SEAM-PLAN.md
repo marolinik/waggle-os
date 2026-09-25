@@ -485,3 +485,54 @@ runs the real loop against the suite's fake.
   - provider tokens still 10/5.
 
 The injected-runner C tests in chat-api are the next slices.
+
+### Fourth round (2026-09-25)
+
+11. **sse-backpressure: option (a).** The cap stays pinned at the `writeSseEvent` unit level, plus
+    one real-path pin: an oversized answer fails closed through the 2 MiB parser and the socket is
+    released.
+12. **Suite time: split `chat-api.test.ts` into 3–4 files by area** so vitest runs them on parallel
+    workers. This is a pure move with no assertion changes. The test count must be identical before
+    and after (98 equals the sum of the parts), and wall time is measured. The split comes before
+    chat-api slices 2–3.
+
+## 6i. sse-backpressure re-pin and the chat-api split (rulings 11, 12)
+
+**sse-backpressure.** The cap stays pinned by the `writeSseEvent` unit pins in `chat-sse.test.ts`.
+The route file is now the real-path pin, and it asserts four things:
+- a fake answer of about 3× the cap fails closed in the 2 MiB parser;
+- the turn ends in `error` with no `done`;
+- none of the answer reaches the client;
+- a `connection: close` socket is released.
+
+**chat-api split.** This is a pure move with no assertion changes. `describe('Chat Streaming API')`'s
+setup is repeated in each part, and the trailing describes stay in the first file.
+
+| File | Area | Tests |
+|---|---|---|
+| `chat-api.test.ts` | streaming, attempts, tool choice, plus key routing, context window, tool filtering | 47 |
+| `chat-api-workspace-failures.test.ts` | done event, linked workspaces, failures, traces, tool events | 30 |
+| `chat-api-history-isolation.test.ts` | history, overlapping turns, windowing, implicit workspace | 12 |
+| `chat-api-default-workspace.test.ts` | the "default" workspace, legacy migration | 9 |
+
+The count is 98 before and after. The four parts together took about 78 s wall time, against
+107–135 s for the single file.
+
+Line references to chat-api elsewhere in this plan (L1647, L2681, …) refer to the pre-split file.
+
+## 6j. chat-api slice 2: `chat-api-default-workspace.test.ts`
+
+Four echo-style injections now run the real loop. They are the pre-split tests at L3552, L3636,
+L3725 and L3835 (the last on its own `migrationServer`).
+- The suite's fake is switched per test with `provider.respondWith`. It echoes
+  `reply:<last non-system message>` and records the conversation that reached the model.
+- It goes back to `DEFAULT_REPLY` in each `finally`.
+- All assertions are unchanged, including the exact persisted history and the absence of cross-scope
+  messages. 9/9 pass.
+
+**Left on `agentRunner` in this file:**
+- **L3390 / personal-server.** Class C+B: an exact-argument `costTracker.addUsage` spy, which is
+  route-side accounting, plus a hand-driven `onSkillDistillationFire`. This needs a ruling-3-style
+  re-pin, or the ruling-2 spy for the distillation callback.
+- The `runOverlappingTurns` helper copied into the prologue. It is unused in this file and goes
+  with the history-isolation slice.
