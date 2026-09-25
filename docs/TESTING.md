@@ -6,7 +6,8 @@ Safety-net record for the `/remove-technical-debt` journey (tracker:
 ## Test Strategy
 
 - **Pyramid.** Vitest unit + route-level integration through `buildLocalServer` (Fastify
-  `inject`, real SQLite in a temp `dataDir`, LLM replaced at the `server.agentRunner` seam);
+  `inject`, real SQLite in a temp `dataDir`, the model call replaced by the fake provider on
+  `globalThis.fetch`, the real agent loop running);
   Playwright API/E2E on top. `npm run test -- --run` is the deterministic gate; infra suites
   (Postgres/Redis) and `packages/server/tests/performance/**` run in dedicated lanes.
 - **Runtime.** Run tests under **Node 22.23.2** (the packaged sidecar runtime). The fnm default
@@ -21,21 +22,26 @@ Safety-net record for the `/remove-technical-debt` journey (tracker:
   `docs/TECH-DEBT.md` ledger row, never fixed in the same commit.
 - **Pinch points for `routes/chat.ts`.** The 3594-line `POST /api/chat` handler (measured from the
   `}>('/api/chat', …)` line to the `// DELETE /api/chat/history` comment at base `44baa77d`) is reachable
-  only through HTTP, but two seams make that cheap: (1) `server.agentRunner` — an object seam
-  the route reads per turn, so a test-supplied runner replaces the whole agent loop and doubles
-  as a sensing point; (2) `commandRegistry.isCommand(message)` — slash commands terminate before
+  only through HTTP, but two seams make that cheap: (1) the fake model provider
+  (`packages/server/tests/helpers/fake-llm-provider.ts`) — a link seam on `globalThis.fetch`
+  that answers `/chat/completions` from a script (text, streams, tool calls, HTTP and network
+  errors, truncated streams, hangs) and records every request, so the real `runAgentLoop` and
+  every route branch run while the test controls only the model; (2) `commandRegistry.isCommand(message)` — slash commands terminate before
   the agent loop, so `/skills`, `/status`, `/memory` exercise the request/persistence/SSE path
   with zero LLM involvement. Message-text classifiers (`chat-helpers.ts`) select most branches,
   so a directive suffix such as `- do not use my saved memory` steers the turn-mutation policy
   from the request body alone.
-- **Seam caveat.** Setting `server.agentRunner` flips `hasCustomRunner`, which skips roughly two
-  thirds of the handler's side effects: tool-pool construction, automatic recall, GEPA expansion,
-  the pre-tool approval hook, knowledge-graph entity writes, correction detection, auto-save, and
-  the retry / model-fallback / credential-rotation chain (`runAgentAttempt` 4806,
-  `runModelFallbackChain` 4967, 5064–5146). The only harness that reaches those is the
-  **link seam on `globalThis.fetch`** (8 tests in `chat-api.test.ts` stub the OpenAI-compatible
-  provider and let the real `runAgentLoop` run). New pins for that region must use the fetch-spy
-  shape, not `agentRunner`.
+- **Seam rules (TD-CHAT-16, closed 2026-09-26).** `POST /api/chat` never reads
+  `server.agentRunner`; it always runs `runAgentLoop`. `server.agentRunner` remains only for the
+  fleet and agent-group routes. `chat-runner-seam-guard.test.ts` fails if a test that posts to
+  `/api/chat` installs a runner. Every port asserts the fake was called
+  (`provider.requests.length`), because the setup-required reply also streams `token`/`done`.
+  Pass `markFakeProviderHealthy(server)` or a healthy `llmProvider` so the model-health gate lets
+  the turn through. Failure pins that script 5xx or network errors need their own server: the
+  `llmFetch` circuit breaker is per origin and lives as long as the server. Loop configuration that
+  never reaches the wire (`maxTurns`, the spend budget, trace recording), and failures no provider
+  reply can produce, are pinned through a pass-through spy on `runAgentLoop` (ruling 2), not a
+  replacement.
 - **Nested closures reachable only over HTTP** (no direct unit path): `buildSystemPrompt` 1852,
   `buildTurnContextSuffix` 2156, `acquireChatRuntime` / `releaseChatRuntime` 1641 / 1683,
   `pruneChatRuntimes` 1632, `loadProfile` 1687, the state-key helpers 1745–1774, the pre-tool

@@ -19,7 +19,6 @@ import {
   isTerminalModelBudgetError,
 } from './chat-attempt-policy.js';
 import { persistMessage } from './chat-persistence.js';
-import { PERSONAL_CHAT_SCOPE_ID } from './chat-scope.js';
 import type { TurnExecutionTrace } from './chat-turn-execution-trace.js';
 import type { TurnRetention } from './chat-turn-retention.js';
 import { getBillableUsage, type TurnUsageLedger } from './chat-turn-usage-ledger.js';
@@ -66,12 +65,10 @@ export interface TurnFailureTurn {
   costTracker: CostTracker;
   turnTrace: TurnExecutionTrace;
   retention: TurnRetention;
-  hasCustomRunner: boolean;
   usesNamedWorkspace: boolean;
   historyWorkspaceId: string;
   activeWorkspaceId: string;
   activeSessionId: string;
-  activeExecutionWorkspaceId: string | undefined;
   sessionPersistenceDataDir: string;
   activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
   activeSessionOrch: Orchestrator | undefined;
@@ -87,9 +84,9 @@ export interface TurnFailureTurn {
 export function handleTurnFailure(turn: TurnFailureTurn, err: unknown): void {
   const {
     server, raw, sendEvent, turnSignal, responseCommitted, turnId, message,
-    usageLedger, costTracker, turnTrace, retention, hasCustomRunner,
+    usageLedger, costTracker, turnTrace, retention,
     usesNamedWorkspace, historyWorkspaceId, activeWorkspaceId, activeSessionId,
-    activeExecutionWorkspaceId, sessionPersistenceDataDir, activeHistory,
+    sessionPersistenceDataDir, activeHistory,
     activeSessionOrch, accountWorkspaceSessionTokens, retainedTurnText,
   } = turn;
     if (responseCommitted) {
@@ -136,17 +133,6 @@ export function handleTurnFailure(turn: TurnFailureTurn, err: unknown): void {
             billingClass: receipt.billingClass,
           })
         ), 0);
-        if (!usageLedger.isAccounted && hasCustomRunner) {
-          for (const receipt of accountingReceipts) {
-            costTracker.addUsage(
-              receipt.model,
-              receipt.usage.inputTokens,
-              receipt.usage.outputTokens,
-              activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
-              { billingClass: receipt.billingClass },
-            );
-          }
-        }
         if (!usageLedger.isAccounted) {
           accountWorkspaceSessionTokens(
             billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,

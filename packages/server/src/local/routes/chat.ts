@@ -481,7 +481,6 @@ import {
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
-export { shouldPackageSystemPromptForTurn } from './chat-turn-preparation.js';
 export {
   bindExactWorkspaceMemorySearchTool,
   boundDirectReadFilePathsMatch,
@@ -1713,19 +1712,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     activeChatTurns.add(activeSessionStateKey);
     touchSessionState(activeSessionStateKey);
-    const hasCustomRunner = !!server.agentRunner;
-    const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
+    // TD-CHAT-16: the chat route always runs the real loop. Tests replace
+    // the model call (fake provider), not the loop.
+    const agentRunner: AgentRunner = runAgentLoop;
 
     try {
-      requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
+      requestHookRegistry = hookRegistry.fork();
 
-      // Resolve the agent runner (injectable for tests)
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
 
       const { sessionOrch, sessionTools, wsSession, workspaceTurnScope } = acquireTurnSessionRuntime({
-        server, orchestrator, hasCustomRunner, usesNamedWorkspace, authorizedWorkspace,
+        server, orchestrator, usesNamedWorkspace, authorizedWorkspace,
         effectiveWorkspace, sessionId, executionWorkspacePath, abortController, turnSignal,
         turnResources, acquireChatRuntime, releaseChatRuntime,
         setWorkspaceSessionActivity: (lease) => { workspaceSessionActivity = lease; },
@@ -1750,7 +1749,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const { history } = historyLoad;
 
       const modelAvailable = await resolveModelAvailability({
-        server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth,
+        server, modelSelection, getLitellmUrl, probeModelHealth,
       });
 
       const commandRouting = await routeTurnCommand({
@@ -1795,7 +1794,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           executionWorkspacePath,
           explicitReadOnlyToolCandidate,
           getLitellmUrl,
-          hasCustomRunner,
           history,
           injectionResult,
           isAutomatedTurn,
@@ -1853,7 +1851,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const completionTurn: TurnCompletionTurn = {
           server, sendEvent, throwIfTurnAborted, attemptState, usageLedger, modelSelection,
           turnResources, turnRecall, turnTrace, retention, turnMutationPolicy, costTracker, sessionOrch,
-          hasCustomRunner, isAutomatedTurn, message, history, sessionId, sessionStateKey,
+          isAutomatedTurn, message, history, sessionId, sessionStateKey,
           sessionToolSequences, sessionPersistenceDataDir, activeWorkspaceId,
           activeSessionStateWorkspaceId, effectiveWorkspace, executionScopeId, activePersonaId,
           personaOverride, resolvePersona, accountWorkspaceSessionTokens, retainedTurnText,
@@ -1869,9 +1867,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     } catch (err) {
       handleTurnFailure({
         server, raw, sendEvent, turnSignal, responseCommitted, turnId, message,
-        usageLedger, costTracker, turnTrace, retention, hasCustomRunner,
+        usageLedger, costTracker, turnTrace, retention,
         usesNamedWorkspace, historyWorkspaceId, activeWorkspaceId, activeSessionId,
-        activeExecutionWorkspaceId, sessionPersistenceDataDir, activeHistory,
+        sessionPersistenceDataDir, activeHistory,
         activeSessionOrch, accountWorkspaceSessionTokens, retainedTurnText,
       }, err);
     } finally {

@@ -935,3 +935,58 @@ Verification: lint is clean; typecheck:server-tests shows only two `ioredis` res
 the worktree's incomplete `node_modules`. Every changed file, chat-pipeline, app e2e and the guard
 pass. Wide run 4265/4270 before the guard edit: the guard (fixed since) and four failures from
 missing local packages (`ioredis`, `@vitejs/plugin-react-swc`, `better-sqlite3`), none in a touched file.
+
+## 6t. Phase 13: the behavior switch
+
+`chat.ts` now sets `hasCustomRunner = false` and `agentRunner = runAgentLoop` at the source, so
+`POST /api/chat` never reads `server.agentRunner`. The branches the flag guards are dead but still
+in place; phases 14 and 15 delete them. `server.agentRunner` stays for fleet and agent groups
+(ruling 1).
+
+Verification: lint is clean. `typecheck:server-tests` shows only the two `ioredis` resolution errors
+(the package is absent from local `node_modules`, main checkout included). Full server suite plus
+`tests/behaviors` and app e2e: 4347/4352, 378 s. The failures: four from missing local packages
+(`entrypoint`, `start-trial`, two `tauri-config`), the same as before the switch. The fifth is one
+`agents.test.ts` PATCH that returned 500 under load. That file never posts to `/api/chat`, and it
+passes 33/33 in three isolated runs.
+
+## 6u. Phase 14: the dead branches in preparation, session runtime and model routing
+
+`hasCustomRunner` is gone from `chat-turn-preparation.ts`, `chat-turn-session-runtime.ts` and
+`chat-turn-model-routing.ts`, along with their input fields. Each guarded branch now runs
+unconditionally. The `if (!hasCustomRunner)` blocks (governance tool blocking, collaboration tool
+binding, iteration budget and tool selection, and the workspace turn scope) are unwrapped with
+their bodies unchanged. The injected-runner inversions are deleted: the empty tool pool, the
+`'You are a helpful AI assistant.'` prompt, and "trust injected runners" in the model-health gate.
+`shouldPackageSystemPromptForTurn` is deleted, not narrowed: with the flag false it always returns
+`true`, so prompt packaging runs on every turn. Its re-export from `chat.ts` goes with it, and the
+`chat-prompt-packaging` pin keeps only its assertions on the bounded package. `chat.ts` always forks
+the hook registry. The flag remains only as the value handed to completion and failure accounting,
+which phase 15 deletes: 18 occurrences, down from 57.
+
+Verification: lint is clean; `typecheck:server-tests` shows only the known `ioredis` errors. Full
+server suite plus `tests/behaviors` and app e2e: 4348/4352, 402 s. The only failures are the four from
+missing local packages.
+
+## 6v. Phase 15: completion and failure, and the close-out
+
+`hasCustomRunner` is gone from `chat-turn-completion.ts`, `chat-turn-failure.ts` and `chat.ts`.
+`packages/server/src` now reads it 0 times. The route-side cost accounting, which ran only for an
+injected runner, is deleted from completion and failure. Spend is charged inside the loop
+(TD-CHAT-8), as it already was for every production turn. The other completion branches (surfaced
+signals, skill distillation, KG entity writes, correction detection, auto skill capture, schedule
+suffix, grounding hedge, auto-save) run on every turn, still gated by retention. Deleting the flag
+left three names unused, and they are removed: the `executionScopeId` destructure in
+`completeTurnResponse`, and `activeExecutionWorkspaceId` and `PERSONAL_CHAT_SCOPE_ID` in failure. The
+two comments that cited the flag (`held-action-executor.ts`, `persona-tool-filter.ts`) are rewritten.
+The comments in ten characterization test files still mention the flag, as history of why each file
+chose its harness; they describe the past accurately and stay. `docs/TESTING.md` names the fake
+provider as the route seam, and TD-CHAT-16 is closed in `docs/TECH-DEBT.md`.
+
+Exit criteria (§4): `grep -rn hasCustomRunner packages/server/src` returns 0. The seam guard keeps
+`/api/chat` tests off the runner. The fleet and agent-groups decision is ruling 1. TESTING.md names
+the fake provider. The suite is green apart from missing local packages.
+
+Verification: lint is clean; `typecheck:server-tests` shows only the known `ioredis` errors. Full
+server suite plus `tests/behaviors` and app e2e: 4348/4352, 455 s. The only failures are the four from
+missing local packages.

@@ -2,9 +2,7 @@
  * Per-turn persona tool policy for the local chat route.
  *
  * Extracted from routes/chat.ts so the closed-learning-loop guarantee is
- * unit-testable: the persona-filter block in chat.ts is gated on
- * `!hasCustomRunner`, and test harnesses inject a custom runner — so a route
- * test cannot reach it. Lifting the policy here lets us assert the behavior
+ * unit-testable. Lifting the policy here lets us assert the behavior
  * directly (and lock it against regression at the exact break point).
  */
 

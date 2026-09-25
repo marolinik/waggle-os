@@ -33,7 +33,6 @@ export interface TurnSessionRuntimeInput<R extends AcquiredChatRuntime> {
   server: FastifyInstance;
   /** The shared orchestrator, kept when no runtime is built for the turn. */
   orchestrator: Orchestrator;
-  hasCustomRunner: boolean;
   usesNamedWorkspace: boolean;
   authorizedWorkspace: string | null | undefined;
   effectiveWorkspace: string | undefined;
@@ -57,14 +56,13 @@ export interface TurnSessionRuntimeInput<R extends AcquiredChatRuntime> {
 
 export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: TurnSessionRuntimeInput<R>) {
   const {
-    server, orchestrator, hasCustomRunner, usesNamedWorkspace, authorizedWorkspace,
+    server, orchestrator, usesNamedWorkspace, authorizedWorkspace,
     effectiveWorkspace, sessionId, executionWorkspacePath, abortController, turnResources,
     acquireChatRuntime, releaseChatRuntime,
     setWorkspaceSessionActivity, setTurnSignal, setActiveSessionOrch,
   } = input;
   let { turnSignal } = input;
   let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
-  let workspaceTurnScope: WorkspaceTurnScope | undefined;
 
   // Named workspaces must acquire one coherent chat runtime before any
   // asynchronous model work or conversation mutation. Construction errors
@@ -73,7 +71,7 @@ export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: 
   let sessionOrch: Orchestrator = orchestrator;
   let sessionTools: ToolDefinition[] | undefined;
   let wsSession: WorkspaceSession | undefined;
-  if (!hasCustomRunner && usesNamedWorkspace) {
+  if (usesNamedWorkspace) {
     try {
       if (!effectiveWorkspace) {
         throw new Error('Managed workspace identity is unavailable');
@@ -125,7 +123,7 @@ export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: 
       log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
       throw markUserFacingError(new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`));
     }
-  } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
+  } else if (authorizedWorkspace !== undefined) {
     try {
       if (authorizedWorkspace) {
         const requestMind = server.mindCache.acquire(authorizedWorkspace);
@@ -145,14 +143,11 @@ export function acquireTurnSessionRuntime<R extends AcquiredChatRuntime>(input: 
     }
   }
   setActiveSessionOrch(sessionOrch);
-  if (!hasCustomRunner) {
-    workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-      executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
-      turnSignal,
-    );
-    const heldScope = workspaceTurnScope;
-    turnResources.holdTurnScope(() => heldScope.release());
-  }
+  const workspaceTurnScope: WorkspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
+    executionWorkspacePath ?? resolvePersonalFilesRoot(server.localConfig.dataDir),
+    turnSignal,
+  );
+  turnResources.holdTurnScope(() => workspaceTurnScope.release());
 
   return { sessionOrch, sessionTools, wsSession, workspaceTurnScope };
 }
