@@ -31,7 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WaggleConfig } from '@waggle/core';
 import { FEATURE_FLAGS } from '@waggle/agent';
-import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
+import type { AgentLoopConfig, ToolDefinition } from '@waggle/agent';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
@@ -40,13 +40,16 @@ import {
   shouldRequireCapabilityAcquisitionTools,
 } from '../src/local/routes/chat.js';
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
-import { injectWithAuth, resetRateLimiter } from './test-utils.js';
+import { getAuthToken, injectWithAuth, resetRateLimiter } from './test-utils.js';
 import {
   installFakeLlmProvider,
   markFakeProviderHealthy,
   type FakeLlmProvider,
   type FakeLlmReply,
 } from './helpers/fake-llm-provider.js';
+
+/** The real fetch, for the one pin that calls the suite's server over HTTP. */
+const realFetch = globalThis.fetch;
 
 function sseEvents(body: string): Array<{ event: string; data: Record<string, unknown> }> {
   return body.split('\n\n').flatMap((block) => {
@@ -134,8 +137,6 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     server.agentState.costTracker.setBudget(null, 'soft');
-    // Tests not yet ported inject their own runner; none may leak into the next.
-    server.agentRunner = undefined;
     provider = installFakeLlmProvider({
       respond: (request) => {
         completionRequests.push({ url: request.url, model: request.model });
@@ -777,50 +778,86 @@ describe('chat smart-router integration', () => {
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 13_500, output: 500 });
   });
 
-  it('persists returned usage before completing a client-cancelled run', async () => {
+  it('records what a run cancelled by the client mid-stream consumed', async () => {
     const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      Object.defineProperty(agentConfig.signal!, 'aborted', {
-        value: true,
-        configurable: true,
-      });
+    const usageEntriesBefore = server.agentState.costTracker.getUsageEntries().length;
+    let markPaused!: () => void;
+    let releaseModel!: () => void;
+    const paused = new Promise<void>(resolve => { markPaused = resolve; });
+    const modelGate = new Promise<void>(resolve => { releaseModel = resolve; });
+    let modelSignal: AbortSignal | undefined;
+    // TD-CHAT-16 ruling 16: the client disconnects while the model is
+    // mid-answer; the stream would report 20 000 / 1 000 only at its end.
+    reply = (request) => {
+      modelSignal = (request as { signal?: AbortSignal }).signal;
       return {
-        content: 'partial output that must not be committed',
-        toolsUsed: [],
+        type: 'stream',
+        parts: [
+          { content: 'partial output that must not be committed' },
+          { pause: () => { markPaused(); return modelGate; } },
+          { content: ' and the rest' },
+        ],
         usage: { inputTokens: 20_000, outputTokens: 1_000 },
       };
     };
+    const controller = new AbortController();
+    let body = '';
 
-    const response = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Analyze this report', session: 'cancelled-run-usage' },
-    });
+    try {
+      const baseUrl = server.server.listening
+        ? `http://127.0.0.1:${(server.server.address() as { port: number }).port}`
+        : await server.listen({ host: '127.0.0.1', port: 0 });
+      const response = await realFetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${getAuthToken(server)}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ message: 'Analyze this report', session: 'cancelled-run-usage' }),
+        signal: controller.signal,
+      });
+      const reader = response.body!.getReader();
+      await paused;
+      const decoder = new TextDecoder();
+      const chunk = await reader.read();
+      if (!chunk.done) body += decoder.decode(chunk.value);
+      controller.abort();
+      await vi.waitFor(() => expect(modelSignal?.aborted).toBe(true), { timeout: 3_000 });
+      releaseModel();
+      await vi.waitFor(() => {
+        const [trace] = server.traceStore.query({ sessionId: 'cancelled-run-usage', limit: 1 });
+        expect(trace?.outcome).toBe('abandoned');
+      }, { timeout: 5_000 });
+    } finally {
+      controller.abort();
+      releaseModel();
+    }
 
-    expect(response.statusCode).toBe(200);
-    expect(response.body).not.toContain('event: error');
-    expect(response.body).not.toContain('event: done');
-    expect(calculateUsageCost).toHaveBeenCalledWith({
-      model: 'ollama/primary-test-model',
-      input: 20_000,
-      output: 1_000,
-      billingClass: 'free',
-    });
-    expect(addUsage).toHaveBeenCalledWith(
-      'ollama/primary-test-model',
-      20_000,
-      1_000,
-      activeWorkspaceId,
-      { billingClass: 'free' },
+    expect(completionRequests).toHaveLength(1);
+    expect(body).not.toContain('event: error');
+    expect(body).not.toContain('event: done');
+    // The stream never reached its usage frame. The route charges nothing
+    // itself; the loop's spend meter commits its own estimate for the
+    // cancelled call, once, against the primary. The estimate is not the
+    // 20 000 / 1 000 the stream would have reported. The tracker's own
+    // budget sums still call calculateUsageCost over stored entries, so pin
+    // only that the unreported usage was never costed.
+    expect(calculateUsageCost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ input: 20_000, output: 1_000 }),
     );
-    const [persistedTrace] = server.traceStore.query({
-      sessionId: 'cancelled-run-usage',
-      limit: 1,
-    });
-    expect(persistedTrace.cost_usd).toBe(0);
-    expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 20_000, output: 1_000 });
+    expect(addUsage).not.toHaveBeenCalled();
+    const entries = server.agentState.costTracker.getUsageEntries().slice(usageEntriesBefore);
+    expect(entries).toEqual([expect.objectContaining({
+      model: 'ollama/primary-test-model',
+      workspaceId: activeWorkspaceId,
+      billingClass: 'free',
+    })]);
+    expect(entries[0].input).toBeGreaterThan(0);
+    expect(entries[0].output).toBeGreaterThan(0);
+    expect([entries[0].input, entries[0].output]).not.toEqual([20_000, 1_000]);
+    // The abandoned trace records no tokens: none were reported to the route.
+    const [persistedTrace] = server.traceStore.query({ sessionId: 'cancelled-run-usage', limit: 1 });
     expect(persistedTrace.outcome).toBe('abandoned');
+    expect(persistedTrace.cost_usd).toBe(0);
+    expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 0, output: 0 });
   });
 
   it('uses the configured fallback only after both budget and primary runs fail', async () => {

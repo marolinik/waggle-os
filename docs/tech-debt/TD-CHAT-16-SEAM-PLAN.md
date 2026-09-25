@@ -914,3 +914,24 @@ needed:
 
 Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline, app e2e and the
 guard 2835/2835 (194 files), 464 s.
+
+### Sixth round (2026-09-25)
+
+16. **smart-router client-cancelled usage:** re-pin on a real mid-stream abort and assert what is
+    actually recorded, plus a unit test for the accounting function.
+17. **team-integration cross-server token:** pin the real governance refusal at route level, and
+    move the push-guard assertion to a unit test of the push guard.
+18. **user-facing-error provider pins: both.** Pin a non-retried status (400) for "The model
+    provider returned an error (HTTP 400)…", and pin the real 502 path's final message.
+19. **app e2e scenarios 10 and 10b:** re-pin on the real pre-tool approval hook.
+
+Landed in p9. Ruling 16 pins that the unreported 20 000 / 1 000 usage is never costed, not that
+`calculateUsageCost` is never called: the tracker's own budget sums call it over stored entries.
+Ruling 19 gates `write_file`, not `bash`: `bash` is not in the default workspace tool set, and a bare
+"Write …" message selects no tools, so the turn asks to create the file. With all five held pins
+ported, the seam guard's allowlist is down to the fleet and agent-group runs in `local-mode.test.ts`.
+
+Verification: lint is clean; typecheck:server-tests shows only two `ioredis` resolution errors from
+the worktree's incomplete `node_modules`. Every changed file, chat-pipeline, app e2e and the guard
+pass. Wide run 4265/4270 before the guard edit: the guard (fixed since) and four failures from
+missing local packages (`ioredis`, `@vitejs/plugin-react-swc`, `better-sqlite3`), none in a touched file.

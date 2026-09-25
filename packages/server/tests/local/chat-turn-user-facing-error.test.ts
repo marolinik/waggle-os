@@ -9,9 +9,10 @@
  * The real agent loop runs against the fake provider (TD-CHAT-16): the
  * pricing refusal is the loop's own. The loop never reports an "assistant
  * refusal" reason, so that failure is thrown by the pass-through spy (ruling
- * 2). The two provider-error pins are held on `server.agentRunner` for a
- * ruling: a real 502 exhausts the loop's retries and reaches the user as
- * "endpoint not responding", not as the provider-error sentence (plan §6r).
+ * 2). The provider-error pins script real provider answers (ruling 18): a
+ * status the loop does not retry (400) reaches the user as the provider-error
+ * sentence, and a 502 the loop retries to its cap reaches the user as
+ * "endpoint not responding".
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,7 +32,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { buildLocalServer } from '../../src/local/index.js';
@@ -40,9 +40,10 @@ import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 const INCOMPLETE = 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.';
-const PROVIDER_ERROR = 'LLM error (502): {"error":{"message":"upstream exploded at /srv/internal/router.py"}}';
+const PROVIDER_BODY = 'upstream exploded at /srv/internal/router.py';
 const UNPRICED_MODEL = 'unpriced-test-model';
-const PROVIDER_SENTENCE = 'The model provider returned an error (HTTP 502). Try again or switch model.';
+const PROVIDER_SENTENCE = 'The model provider returned an error (HTTP 400). Try again or switch model.';
+const ENDPOINT_SENTENCE = 'The model endpoint is not responding. It may be down or restarting. Check Settings > Models, then try again.';
 
 describe('POST /api/chat user-facing failure text', () => {
   let server: FastifyInstance;
@@ -64,7 +65,6 @@ describe('POST /api/chat user-facing failure text', () => {
     provider?.restore();
     provider = undefined;
     loopSpy.failure = undefined;
-    server.agentRunner = undefined;
   });
 
   afterAll(async () => {
@@ -73,11 +73,10 @@ describe('POST /api/chat user-facing failure text', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* EBUSY on Windows */ }
   });
 
-  /** Held (plan §6r): an injected runner throws the wrapped provider error. */
-  function providerFails() {
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => {
-      throw new Error(PROVIDER_ERROR);
-    };
+  /** The provider answers every model call with this status and an internal body. */
+  function providerFails(status: number): FakeLlmProvider {
+    provider = installFakeLlmProvider({ respond: { type: 'http_error', status, message: PROVIDER_BODY } });
+    return provider;
   }
 
   async function errorEvents(session: string) {
@@ -117,16 +116,27 @@ describe('POST /api/chat user-facing failure text', () => {
     }
   });
 
-  it('shows a provider HTTP error as its status only, never its body', async () => {
-    providerFails();
+  it('shows a provider HTTP error the loop does not retry as its status only, never its body', async () => {
+    const fake = providerFails(400);
     expect(await errorEvents('provider')).toEqual([{ message: PROVIDER_SENTENCE }]);
+    expect(fake.requests).toHaveLength(1);
   });
 
   it('persists the text it showed as the failure turn', async () => {
     const session = 'provider-persisted';
-    providerFails();
+    providerFails(400);
     await errorEvents(session);
     const transcript = loadSessionMessages(tmpDir, server.agentState.activeWorkspaceId!, session);
     expect(transcript.at(-1)).toEqual({ role: 'assistant', content: `${GENERATION_FAILED_PREFIX}${PROVIDER_SENTENCE}` });
+  });
+
+  // Last in the file: its retried 5xx answers count against the server's
+  // model-endpoint circuit breaker.
+  it('shows a 502 the loop retries to its cap as the endpoint not responding', async () => {
+    const fake = providerFails(502);
+    const events = await errorEvents('provider-502');
+    expect(events).toEqual([{ message: ENDPOINT_SENTENCE }]);
+    expect(JSON.stringify(events)).not.toContain(PROVIDER_BODY);
+    expect(fake.requests.length).toBeGreaterThan(1);
   });
 });
