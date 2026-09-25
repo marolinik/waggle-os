@@ -1,4 +1,25 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+
+/**
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It records the
+ * `AgentLoopConfig` the route builds, for the verifier pin that reads fields
+ * which never reach the wire (`maxTurns`, `skillDistillationGate`). Every turn
+ * runs the real loop against the fake provider.
+ */
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as import('@waggle/agent').AgentLoopConfig[],
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: import('@waggle/agent').AgentLoopConfig) => {
+      loopSpy.configs.push(config);
+      return actual.runAgentLoop(config);
+    },
+  };
+});
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -28,7 +49,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
-import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
+import { installFakeLlmProvider, type FakeLlmProvider, type FakeLlmReply } from './helpers/fake-llm-provider.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
@@ -103,6 +124,12 @@ describe('Chat Streaming API', () => {
   let tmpDir: string;
   /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
   let provider: FakeLlmProvider;
+  const DEFAULT_REPLY: FakeLlmReply = {
+    type: 'text',
+    content: 'Hello world',
+    chunks: ['Hello ', 'world'],
+    usage: { inputTokens: 10, outputTokens: 5 },
+  };
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
@@ -114,7 +141,6 @@ describe('Chat Streaming API', () => {
     first: { message: string; workspace: string; session: string },
     second: { message: string; workspace: string; session: string },
   ) {
-    const originalRunner = server.agentRunner;
     const captured = new Map<string, Array<{ role: string; content: string }>>();
     let entered = 0;
     let releaseFirst!: () => void;
@@ -124,18 +150,21 @@ describe('Chat Streaming API', () => {
     const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
     const bothEntered = new Promise<void>((resolve) => { resolveBothEntered = resolve; });
 
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const turnMessage = config.messages.at(-1)?.content ?? '';
-      captured.set(turnMessage, config.messages.map(({ role, content }) => ({ role, content })));
+    // Both turns run the real loop; the fake holds each model call open and
+    // records the conversation it received (TD-CHAT-16).
+    provider.respondWith(async (request) => {
+      const conversation = request.messages.filter(m => m.role !== 'system');
+      const turnMessage = conversation.at(-1)?.content ?? '';
+      captured.set(turnMessage, conversation);
       entered += 1;
       if (entered === 2) resolveBothEntered();
       await (turnMessage === first.message ? firstGate : secondGate);
       return {
+        type: 'text',
         content: `reply:${turnMessage}`,
-        toolsUsed: [],
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
 
     const firstRequest = injectWithAuth(server, {
       method: 'POST',
@@ -163,7 +192,10 @@ describe('Chat Streaming API', () => {
     } finally {
       releaseFirst();
       releaseSecond();
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      // Real workspace turns hold live sessions, which the tier caps.
+      server.sessionManager.close(first.workspace);
+      server.sessionManager.close(second.workspace);
     }
   }
 
@@ -181,12 +213,7 @@ describe('Chat Streaming API', () => {
     };
     server.llmRetryBackoffMs = () => 0;
     provider = installFakeLlmProvider({
-      respond: {
-        type: 'text',
-        content: 'Hello world',
-        chunks: ['Hello ', 'world'],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      },
+      respond: DEFAULT_REPLY,
       // Several tests call this server over real HTTP with `fetch`; only model
       // calls (and the direct Anthropic API) belong to the fake.
       otherRequest: 'previous',
@@ -272,6 +299,9 @@ describe('Chat Streaming API', () => {
     ]);
   });
 
+  // Held on the injected runner (TD-CHAT-16 §2, §6l): the forged, unpaired and
+  // mismatched tool-result callbacks it drives are exactly what a real loop can
+  // never emit, and ruling 2 lets the spy record or throw, not drive callbacks.
   it('persists only completed acquire_capability receipts through live and cold history', async () => {
     const originalRunner = server.agentRunner;
     const sessionId = `capability-receipt-${Date.now()}`;
@@ -525,7 +555,6 @@ describe('Chat Streaming API', () => {
     });
     const sessionId = `active-clear-${nonce}`;
     const message = `active clear marker ${nonce}`;
-    const originalRunner = server.agentRunner;
     let releaseTurn!: () => void;
     let markEntered!: () => void;
     const entered = new Promise<void>(resolve => {
@@ -534,16 +563,16 @@ describe('Chat Streaming API', () => {
     const released = new Promise<void>(resolve => {
       releaseTurn = resolve;
     });
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+    // The fake holds the real loop's model call open (TD-CHAT-16).
+    provider.respondWith(async () => {
       markEntered();
       await released;
-      config.onToken?.('active-clear-finished');
       return {
+        type: 'text',
         content: 'active-clear-finished',
-        toolsUsed: [],
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
     const turn = injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -591,23 +620,19 @@ describe('Chat Streaming API', () => {
     } finally {
       releaseTurn();
       await turn.catch(() => undefined);
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspace.id);
     }
   });
 
-  it('passes windowed messages to agent runner when history exceeds MAX_CONTEXT_MESSAGES', async () => {
+  it('passes windowed messages to the model when history exceeds MAX_CONTEXT_MESSAGES', async () => {
     let capturedMessages: Array<{ role: string; content: string }> | undefined;
-    const originalRunner = server.agentRunner;
-
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedMessages = config.messages;
-      if (config.onToken) config.onToken('ok');
-      return {
-        content: 'ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The real loop runs; the conversation is read off the wire, after the
+    // system prompt the loop puts first (TD-CHAT-16).
+    provider.respondWith((request) => {
+      capturedMessages = request.messages.slice(1);
+      return { type: 'text', content: 'ok', usage: { inputTokens: 1, outputTokens: 1 } };
+    });
     try {
       // Build a session with 60 messages (30 user + 30 assistant pairs)
       const sessionId = 'window-test-' + Date.now();
@@ -638,29 +663,26 @@ describe('Chat Streaming API', () => {
       // Last message should be the latest user message
       expect(capturedMessages![capturedMessages!.length - 1].content).toBe('final message');
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
     }
   });
 
-  it('enforces a supplied-only verifier boundary for an injected runner', async () => {
-    const originalRunner = server.agentRunner;
+  it('enforces a supplied-only verifier boundary', async () => {
     const sessionId = `supplied-only-${Date.now()}`;
     const stateKey = chatSessionStateKey('default', sessionId);
     const message = 'Use only the supplied evidence. Return exactly one JSON envelope and no text before or after. Evidence: the focused test passed.';
-    let capturedConfig: AgentLoopConfig | undefined;
 
     server.agentState.sessionHistories.set(stateKey, [
       { role: 'user', content: 'AMBIENT_SECRET: claim the release is ready.' },
       { role: 'assistant', content: 'Untrusted prior answer.' },
     ]);
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedConfig = config;
-      return {
-        content: '{"verdict":"supported"}',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The real loop runs. Messages, tools and the system prompt are read off
+    // the wire; the spy records the two config fields that never reach it.
+    const configsBefore = loopSpy.configs.length;
+    const requestsBefore = provider.requests.length;
+    provider.respondWith({
+      type: 'text', content: '{"verdict":"supported"}', usage: { inputTokens: 1, outputTokens: 1 },
+    });
 
     try {
       const res = await injectWithAuth(server, {
@@ -670,50 +692,40 @@ describe('Chat Streaming API', () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(capturedConfig).toBeDefined();
-      expect(capturedConfig!.messages).toEqual([{ role: 'user', content: message }]);
-      expect(capturedConfig!.tools).toEqual([]);
+      expect(provider.requests.length - requestsBefore).toBe(1);
+      const sent = provider.requests.at(-1)!;
+      const capturedConfig = loopSpy.configs.at(-1);
+      expect(loopSpy.configs.length).toBeGreaterThan(configsBefore);
+      expect(sent.messages.filter(m => m.role !== 'system')).toEqual([{ role: 'user', content: message }]);
+      expect(sent.toolNames).toEqual([]);
       expect(capturedConfig!.maxTurns).toBe(1);
       expect(capturedConfig!.skillDistillationGate).toBe(false);
-      expect(capturedConfig!.systemPrompt).toContain('## Persona: Verifier');
-      expect(capturedConfig!.systemPrompt).toContain('# SUPPLIED-ONLY EVIDENCE BOUNDARY');
-      expect(capturedConfig!.systemPrompt).not.toContain('AMBIENT_SECRET');
+      expect(sent.systemPrompt).toContain('## Persona: Verifier');
+      expect(sent.systemPrompt).toContain('# SUPPLIED-ONLY EVIDENCE BOUNDARY');
+      expect(sent.systemPrompt).not.toContain('AMBIENT_SECRET');
 
       const done = parseSSE(res.body).find(event => event.event === 'done');
       expect(done).toBeDefined();
       expect(JSON.parse(done!.data).content).toBe('{"verdict":"supported"}');
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       server.agentState.sessionHistories.delete(stateKey);
     }
   });
 
-  it('passes signal to agent runner for client disconnect abort', async () => {
-    let capturedSignal: AbortSignal | undefined;
-    const originalRunner = server.agentRunner;
+  it('passes an abort signal to the model call for client disconnect abort', async () => {
+    const requestsBefore = provider.requests.length;
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Hello' },
+    });
 
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedSignal = config.signal;
-      if (config.onToken) config.onToken('ok');
-      return {
-        content: 'ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-    try {
-      await injectWithAuth(server, {
-        method: 'POST',
-        url: '/api/chat',
-        payload: { message: 'Hello' },
-      });
-
-      // The agent runner should have received an AbortSignal
-      expect(capturedSignal).toBeDefined();
-      expect(capturedSignal).toBeInstanceOf(AbortSignal);
-    } finally {
-      server.agentRunner = originalRunner;
-    }
+    // The real loop's model request carries an AbortSignal (TD-CHAT-16).
+    expect(provider.requests.length).toBeGreaterThan(requestsBefore);
+    const capturedSignal = provider.requests.at(-1)!.signal;
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
   });
 
   it('keeps the authorized implicit workspace request-scoped when the global active workspace changes', async () => {
@@ -735,7 +747,6 @@ describe('Chat Streaming API', () => {
     const memoryMarker = `request-scoped memory ${nonce}`;
     const originalCreateSessionOrchestrator =
       server.agentState.createSessionOrchestrator;
-    const originalRunner = server.agentRunner;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
@@ -766,7 +777,6 @@ describe('Chat Streaming API', () => {
       }
       return requestOrchestrator;
     }) as typeof server.agentState.createSessionOrchestrator;
-    server.agentRunner = undefined as unknown as typeof server.agentRunner;
 
     try {
       const response = await injectWithAuth(server, {
@@ -794,8 +804,9 @@ describe('Chat Streaming API', () => {
     } finally {
       server.agentState.createSessionOrchestrator =
         originalCreateSessionOrchestrator;
-      server.agentRunner = originalRunner;
       fetchSpy.mockRestore();
+      server.sessionManager.close(memberWorkspace.id);
+      server.sessionManager.close(viewerWorkspace.id);
     }
   });
 
@@ -816,21 +827,18 @@ describe('Chat Streaming API', () => {
     const sessionId = `implicit-switch-${nonce}`;
     const messageA = `implicit A marker ${nonce}`;
     const messageB = `implicit B marker ${nonce}`;
-    const originalRunner = server.agentRunner;
     const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
 
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedMessages.push(
-        config.messages.map(({ role, content }) => ({ role, content })),
-      );
-      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
-      config.onToken?.(content);
+    // The real loop runs; the fake echoes the turn's own message (TD-CHAT-16).
+    provider.respondWith((request) => {
+      const conversation = request.messages.filter(m => m.role !== 'system');
+      capturedMessages.push(conversation);
       return {
-        content,
-        toolsUsed: [],
+        type: 'text',
+        content: `reply:${conversation.at(-1)?.content ?? ''}`,
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
 
     try {
       expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
@@ -901,7 +909,9 @@ describe('Chat Streaming API', () => {
         coldHistoryB.json().messages.map((entry: { content: string }) => entry.content),
       ).toEqual([messageB, `reply:${messageB}`]);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceA.id);
+      server.sessionManager.close(workspaceB.id);
     }
   });
 
@@ -918,9 +928,11 @@ describe('Chat Streaming API', () => {
       model: 'ollama/member-policy-model:latest',
     });
 
-    const originalRunner = server.agentRunner;
+    // Model calls still reach the suite's fake, which records the real loop's
+    // wire request (TD-CHAT-16).
+    const fakeFetch = globalThis.fetch;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (input) => {
+      async (input, init) => {
         if (String(input).endsWith('/api/tags')) {
           return new Response(JSON.stringify({
             models: [
@@ -928,21 +940,16 @@ describe('Chat Streaming API', () => {
             ],
           }), { status: 200 });
         }
+        if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
         return new Response('', { status: 503 });
       },
     );
-    let capturedConfig: AgentLoopConfig | undefined;
+    const requestsBefore = provider.requests.length;
 
     expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedConfig = config;
-      config.onToken?.('policy-bound');
-      return {
-        content: 'policy-bound',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    provider.respondWith({
+      type: 'text', content: 'policy-bound', usage: { inputTokens: 1, outputTokens: 1 },
+    });
 
     try {
       const response = await injectWithAuth(server, {
@@ -955,13 +962,15 @@ describe('Chat Streaming API', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(capturedConfig).toBeDefined();
-      expect(capturedConfig!.systemPrompt).toContain('## Persona: Planner');
-      expect(capturedConfig!.systemPrompt).not.toContain('## Persona: Writer');
-      expect(capturedConfig!.model).toBe('member-policy-model:latest');
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
+      const sent = provider.requests.at(-1)!;
+      expect(sent.systemPrompt).toContain('## Persona: Planner');
+      expect(sent.systemPrompt).not.toContain('## Persona: Writer');
+      expect(sent.model).toBe('member-policy-model:latest');
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       fetchSpy.mockRestore();
+      server.sessionManager.close(memberWorkspace.id);
     }
   });
 });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
-import { getPersona, runAgentLoop, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { getPersona, runAgentLoop } from '@waggle/agent';
 import { applyPersonaToolFilter } from '../src/local/persona-tool-filter.js';
 import {
   applyContextWindow,
@@ -116,63 +116,6 @@ describe('Chat Streaming API', () => {
     resetRateLimiter(server);
   });
 
-  async function runOverlappingTurns(
-    first: { message: string; workspace: string; session: string },
-    second: { message: string; workspace: string; session: string },
-  ) {
-    const originalRunner = server.agentRunner;
-    const captured = new Map<string, Array<{ role: string; content: string }>>();
-    let entered = 0;
-    let releaseFirst!: () => void;
-    let releaseSecond!: () => void;
-    let resolveBothEntered!: () => void;
-    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
-    const bothEntered = new Promise<void>((resolve) => { resolveBothEntered = resolve; });
-
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const turnMessage = config.messages.at(-1)?.content ?? '';
-      captured.set(turnMessage, config.messages.map(({ role, content }) => ({ role, content })));
-      entered += 1;
-      if (entered === 2) resolveBothEntered();
-      await (turnMessage === first.message ? firstGate : secondGate);
-      return {
-        content: `reply:${turnMessage}`,
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-
-    const firstRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: first,
-    });
-    const secondRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: second,
-    });
-
-    try {
-      const completedBeforeOverlap = Promise.race([firstRequest, secondRequest]).then(() => {
-        if (entered < 2) throw new Error('A chat request completed before both turns overlapped');
-      });
-      await Promise.race([bothEntered, completedBeforeOverlap]);
-
-      // Finish the second turn first to prove completion order cannot swap state.
-      releaseSecond();
-      const secondResponse = await secondRequest;
-      releaseFirst();
-      const firstResponse = await firstRequest;
-      return { captured, firstResponse, secondResponse };
-    } finally {
-      releaseFirst();
-      releaseSecond();
-      server.agentRunner = originalRunner;
-    }
-  }
-
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-test-'));
 
@@ -233,8 +176,11 @@ describe('Chat Streaming API', () => {
       model: managedModel,
     });
 
+    // Model calls reach the suite's fake, which records the real loop's wire
+    // requests (TD-CHAT-16).
+    const fakeFetch = globalThis.fetch;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (input) => {
+      async (input, init) => {
         if (String(input).endsWith('/api/tags')) {
           return new Response(JSON.stringify({
             models: [
@@ -243,53 +189,64 @@ describe('Chat Streaming API', () => {
             ],
           }), { status: 200 });
         }
+        if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
         return new Response('', { status: 503 });
       },
     );
-    const usageSpy = vi.spyOn(personalServer.agentState.costTracker, 'addUsage');
-    const capturedConfigs: AgentLoopConfig[] = [];
-    personalServer.agentRunner = async (
-      runnerConfig: AgentLoopConfig,
-    ): Promise<AgentResponse> => {
-      capturedConfigs.push(runnerConfig);
-      runnerConfig.onToken?.('personal-policy-bound');
-      return {
-        content: 'personal-policy-bound',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
+    personalServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
     };
+    personalServer.llmRetryBackoffMs = () => 0;
+    // Re-pinned on the production path (TD-CHAT-16 §6l). The route no longer
+    // charges an injected runner's usage: the loop's own spend meter records
+    // every model call. And skill distillation fires for real: a turn that
+    // asks for memory search makes five search_memory calls, then answers, and
+    // the loop's D1 gate calls the route's onSkillDistillationFire.
+    const usageSpy = vi.spyOn(personalServer.agentState.costTracker, 'addUsage');
+    const costTracker = personalServer.agentState.costTracker;
+    provider.respondWith((request) => (
+      request.toolNames.includes('search_memory') && !request.messages.some(m => m.role === 'tool')
+        ? {
+          type: 'tool_calls',
+          calls: Array.from({ length: 5 }, (_, i) => ({
+            name: 'search_memory', args: { query: `next step ${i}` }, id: `call-step-${i}`,
+          })),
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+        : { type: 'text', content: 'personal-policy-bound', usage: { inputTokens: 1, outputTokens: 1 } }
+    ));
 
     try {
+      const firstTurnStart = provider.requests.length;
+      const entriesBefore = costTracker.getUsageEntries().length;
       const response = await injectWithAuth(personalServer, {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: 'Summarize my next personal step.',
+          message: 'Search memory for my next personal step.',
           session: `personal-policy-${Date.now()}`,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(capturedConfigs).toHaveLength(1);
-      expect(capturedConfigs[0].model).toBe('personal-policy-model:latest');
-      expect(capturedConfigs[0].systemPrompt).not.toContain('## Persona: Writer');
-      expect(usageSpy).toHaveBeenCalledWith(
-        personalModel,
-        1,
-        1,
-        'personal::default',
-        { billingClass: 'free' },
-      );
+      const firstTurn = provider.requests.slice(firstTurnStart);
+      expect(firstTurn.length).toBeGreaterThan(0);
+      expect(firstTurn.map(request => request.model))
+        .toEqual(firstTurn.map(() => 'personal-policy-model:latest'));
+      expect(firstTurn[0].systemPrompt).not.toContain('## Persona: Writer');
+      expect(usageSpy).not.toHaveBeenCalled();
+      expect(costTracker.getUsageEntries().slice(entriesBefore)).toEqual(firstTurn.map(() => (
+        expect.objectContaining({
+          model: personalModel,
+          input: 1,
+          output: 1,
+          workspaceId: 'personal::default',
+          billingClass: 'free',
+        })
+      )));
       expect(personalServer.agentState.activeWorkspaceId).toBeNull();
 
-      expect(capturedConfigs[0].onSkillDistillationFire).toBeTypeOf('function');
-      await capturedConfigs[0].onSkillDistillationFire?.({
-        patternKey: 'personal-pattern',
-        toolsUsed: ['search_memory'],
-        directive: 'Personal skill draft',
-      });
-
+      const commandTurnStart = provider.requests.length;
       const commandResponse = await injectWithAuth(personalServer, {
         method: 'POST',
         url: '/api/chat',
@@ -299,29 +256,25 @@ describe('Chat Streaming API', () => {
         },
       });
       expect(commandResponse.statusCode).toBe(200);
-      const commandPrompt = capturedConfigs[1].messages.at(-1)?.content ?? '';
+      const commandPrompt = provider.requests[commandTurnStart]?.messages
+        .filter(m => m.role !== 'system').at(-1)?.content ?? '';
       expect(commandPrompt).toContain('workspace "Personal"');
       expect(commandPrompt).not.toContain('personal::default');
 
       expect(personalServer.agentState.activateWorkspaceMind('default')).toBe(true);
+      const managedTurnStart = provider.requests.length;
       const managedResponse = await injectWithAuth(personalServer, {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: 'Summarize my managed workspace step.',
+          message: 'Search memory for my managed workspace step.',
           session: `managed-default-policy-${Date.now()}`,
           workspace: 'default',
         },
       });
       expect(managedResponse.statusCode).toBe(200);
-      const managedConfig = capturedConfigs.at(-1)!;
-      expect(managedConfig.model).toContain('managed-default-policy-model:latest');
-      expect(managedConfig.onSkillDistillationFire).toBeTypeOf('function');
-      await managedConfig.onSkillDistillationFire?.({
-        patternKey: 'managed-pattern',
-        toolsUsed: ['search_memory'],
-        directive: 'Managed skill draft',
-      });
+      expect(provider.requests.length).toBeGreaterThan(managedTurnStart);
+      expect(provider.requests.at(-1)!.model).toContain('managed-default-policy-model:latest');
 
       const skillShares = personalServer.signalBus!.query({
         subtype: 'skill_share',
@@ -331,6 +284,7 @@ describe('Chat Streaming API', () => {
         expect.objectContaining({ teamId: 'default' }),
       ]));
     } finally {
+      provider.respondWith(DEFAULT_REPLY);
       usageSpy.mockRestore();
       fetchSpy.mockRestore();
       await personalServer.close();

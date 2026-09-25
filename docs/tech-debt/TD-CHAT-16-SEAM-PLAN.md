@@ -576,3 +576,43 @@ approval pins do (TD-CHAT-32).
 `local-inference-route` hardware and model probes, a 30 s hook timeout under full parallel load.
 That file does not touch chat, and it passed 21/21 when run alone. Two earlier wide attempts died
 of a worker out-of-memory crash, not a test failure.
+
+## 6l. chat-api slice 3b: history-isolation, and the personal-server re-pin
+
+**history-isolation: 7 of 8 injected tests ported, all assertions unchanged.**
+- `runOverlappingTurns` now holds each turn's model call open in the fake and records the
+  conversation that call received. The two overlap pins pass unchanged.
+- The helper was not moved to `tests/helpers`. history-isolation is its only caller. The other
+  three chat-api files carried unused copies: the workspace-failures and default-workspace copies
+  are deleted here, and chat-api.test.ts drops its copy in its own slice.
+- The active-clear pin holds the real model call open. The implicit-session pin echoes the turn.
+- The windowing pin reads the windowed conversation off the wire, after the loop's system prompt.
+  The request-scoped pin had already run the real loop and only lost its `agentRunner = undefined`.
+- The abort-signal pin reads the `AbortSignal` on the real model request.
+- The persona and model policy pin reads the wire system prompt and model.
+- The verifier pin reads messages, tools and the system prompt off the wire. A ruling-2 spy records
+  `maxTurns` and `skillDistillationGate`, which never reach it.
+- Titles that named the runner or "an injected runner" now name the model.
+- Real workspace turns close their sessions (the tier cap, §6k).
+- **Held:** "persists only completed acquire_capability receipts". It drives forged, unpaired and
+  mismatched `onToolResult` calls that a real loop cannot emit. This is the §2 "forged tool-result
+  pairs" case, and ruling 2 allows the spy to record or throw only. It needs a ruling. One
+  option: a real `acquire_capability` call for the positive receipt, with the forgery cases moved
+  to a unit test of the receipt filter.
+
+**default-workspace pre-split L3390 (personal server): re-pinned under ruling 3, no spy.**
+- *Accounting.* The old pin asserted that the route called `costTracker.addUsage(personalModel,
+  1, 1, 'personal::default', {billingClass:'free'})`. That is route-side accounting, which runs
+  only for an injected runner. On the real path the route never calls `addUsage`, and the pin now
+  asserts that. The loop's spend meter records one usage entry per model call, each with the same
+  model, tokens, scope and billing class the old call carried.
+- *Distillation.* The old pin called `onSkillDistillationFire` by hand. Now the turn asks for a
+  memory search, the fake scripts five `search_memory` calls and then an answer, and the loop's own
+  D1 gate fires the route's callback. The final `skill_share` assertion (`personal::default` and
+  `default`) is unchanged and passes on the real trigger.
+- *Inputs changed.* The personal and managed messages now ask for a memory search, because a
+  conversational message transmits no tools. The `/settings` command prompt and the model pins read
+  the wire requests.
+- 9/9 in the file; history-isolation 12/12.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2784/2784 (191 files), 630 s.
