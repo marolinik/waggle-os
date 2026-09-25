@@ -6,7 +6,7 @@
  *   1. Pure function unit tests — `applyContextWindow`, `buildSkillPromptSection`
  *      (no server, instant, deterministic)
  *   2. HTTP integration tests — injection blocking, SSE event sequence,
- *      session history, agentRunner injection seam
+ *      session history, the real agent loop against a fake model provider
  *      (starts `buildLocalServer` on port 0, uses fetch())
  *
  * Why these gaps matter:
@@ -15,13 +15,14 @@
  *   - `buildSkillPromptSection` controls how skills reach the LLM system prompt.
  *   - The HTTP injection blocker is a security gate — it must return 400 before
  *     the agent loop runs.
- *   - The agentRunner seam is the testability contract for all behavioral tests.
+ *   - The fake model provider is the test seam: the real agent loop runs and
+ *     only the model call is scripted (TD-CHAT-16).
  *     If it breaks, the rest of the pipeline is untestable without a real LLM.
  *
  * Run:  npx vitest run tests/behaviors/chat-pipeline.test.ts
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -33,9 +34,12 @@ import {
   MAX_CONTEXT_MESSAGES,
 } from '../../packages/server/src/local/routes/chat.js';
 import { buildLocalServer } from '../../packages/server/src/local/index.js';
-import type { AgentRunner } from '../../packages/server/src/local/routes/chat.js';
-import type { AgentResponse } from '../../packages/agent/src/agent-loop.js';
 import { chatSessionStateKey, loadSessionMessages } from '../../packages/server/src/local/routes/chat-persistence.js';
+import {
+  installFakeLlmProvider,
+  type FakeLlmProvider,
+  type FakeLlmReply,
+} from '../../packages/server/tests/helpers/fake-llm-provider.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,29 +90,12 @@ function parseSSE(body: string): Array<{ type: string; data: unknown }> {
   return events;
 }
 
-/** Dummy AgentRunner that calls onToken and returns a fixed response. */
-const echoRunner: AgentRunner = async (config): Promise<AgentResponse> => {
-  config.onToken?.('Hello ');
-  config.onToken?.('from ');
-  config.onToken?.('Waggle!');
-  return {
-    content: 'Hello from Waggle!',
-    toolsUsed: [],
-    usage: { inputTokens: 10, outputTokens: 20 },
-  };
-};
-
-/** AgentRunner that exercises tool callbacks before returning. */
-const toolRunner: AgentRunner = async (config): Promise<AgentResponse> => {
-  config.onToken?.('I will inspect the relevant memories first. ');
-  config.onToolUse?.('search_memory', { query: 'test query' });
-  config.onToolResult?.('search_memory', { query: 'test query' }, 'Found 2 memories');
-  config.onToken?.('Done.');
-  return {
-    content: 'Done.',
-    toolsUsed: ['search_memory'],
-    usage: { inputTokens: 50, outputTokens: 5 },
-  };
+/** The model's default answer, streamed in three chunks. */
+const ECHO_REPLY: FakeLlmReply = {
+  type: 'text',
+  content: 'Hello from Waggle!',
+  chunks: ['Hello ', 'from ', 'Waggle!'],
+  usage: { inputTokens: 10, outputTokens: 20 },
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -213,6 +200,8 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   let authToken: string;
   let activeWorkspaceId: string;
   let dataDir: string;
+  /** The model: every turn runs the real agent loop against it (TD-CHAT-16). */
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     dataDir = makeTmpDir();
@@ -221,8 +210,9 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     activeWorkspaceId = serverInst.agentState.activeWorkspaceId!;
     expect(activeWorkspaceId).toBeTruthy();
 
-    // Inject the echo runner — bypasses LiteLLM health check and real LLM calls
-    serverInst.agentRunner = echoRunner;
+    // The tests call the server over real HTTP, so only model calls belong
+    // to the fake; everything else uses the real fetch.
+    provider = installFakeLlmProvider({ respond: ECHO_REPLY, otherRequest: 'previous' });
 
     // Mark the LLM provider as healthy so the route doesn't enter setup-required mode
     serverInst.agentState.llmProvider = {
@@ -238,7 +228,12 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     authToken = serverInst.agentState.wsSessionToken;
   }, 30_000);
 
+  afterEach(() => {
+    provider.respondWith(ECHO_REPLY);
+  });
+
   afterAll(async () => {
+    provider?.restore();
     await serverInst?.close();
     for (const d of tmpDirs) {
       try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
@@ -274,16 +269,11 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   ] satisfies Array<[string, string, Record<string, unknown>]>) (
     'returns 400 for %s before running or retaining chat state',
     async (_case, field, payload) => {
-      const originalRunner = serverInst.agentRunner;
       const historyKeysBefore = [...serverInst.agentState.sessionHistories.keys()].sort();
       const workspaceTreeBefore = snapshotFileTree(path.join(dataDir, 'workspaces'));
-      let runnerCalls = 0;
-      serverInst.agentRunner = async (config) => {
-        runnerCalls += 1;
-        return echoRunner(config);
-      };
+      const modelCallsBefore = provider.requests.length;
 
-      try {
+      {
         const res = await fetch(`${baseUrl}/api/chat`, {
           method: 'POST',
           headers: {
@@ -296,11 +286,9 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
         expect(res.status).toBe(400);
         const body = await res.json() as { error: string };
         expect(body.error).toContain(field);
-        expect(runnerCalls).toBe(0);
+        expect(provider.requests.length - modelCallsBefore).toBe(0);
         expect([...serverInst.agentState.sessionHistories.keys()].sort()).toEqual(historyKeysBefore);
         expect(snapshotFileTree(path.join(dataDir, 'workspaces'))).toEqual(workspaceTreeBefore);
-      } finally {
-        serverInst.agentRunner = originalRunner;
       }
     },
   );
@@ -350,22 +338,17 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   // ── SSE stream content ─────────────────────────────────────────────────
 
   it('commits SSE headers before a slow first model token', async () => {
-    const originalRunner = serverInst.agentRunner;
     let releaseRunner!: () => void;
     let resolveStarted!: () => void;
     const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
     const release = new Promise<void>((resolve) => { releaseRunner = resolve; });
 
-    serverInst.agentRunner = async (config): Promise<AgentResponse> => {
+    // The model call is held open until the test releases it.
+    provider.respondWith(async () => {
       resolveStarted();
       await release;
-      config.onToken?.('Delayed response');
-      return {
-        content: 'Delayed response',
-        toolsUsed: [],
-        usage: { inputTokens: 10, outputTokens: 2 },
-      };
-    };
+      return { type: 'text', content: 'Delayed response', usage: { inputTokens: 10, outputTokens: 2 } };
+    });
 
     try {
       const responsePromise = fetch(`${baseUrl}/api/chat`, {
@@ -397,7 +380,6 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       expect(parseSSE(body).some(event => event.type === 'done')).toBe(true);
     } finally {
       releaseRunner?.();
-      serverInst.agentRunner = originalRunner;
     }
   });
 
@@ -446,10 +428,13 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     expect(Array.isArray(done.toolsUsed)).toBe(true);
   });
 
-  it('emits step + tool + tool_result events when runner uses tool callbacks', async () => {
-    // Swap to the tool runner for this test
-    serverInst.agentRunner = toolRunner;
-    try {
+  it('emits step + tool + tool_result events when the model calls a tool', async () => {
+    // The model makes a real search_memory call, then answers.
+    provider.respondWith([
+      { type: 'tool_calls', calls: [{ name: 'search_memory', args: { query: 'test query' } }], usage: { inputTokens: 50, outputTokens: 5 } },
+      { type: 'text', content: 'Done.', usage: { inputTokens: 50, outputTokens: 5 } },
+    ]);
+    {
       const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: {
@@ -459,7 +444,11 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
         body: JSON.stringify({ message: 'search my memory', workspace: 'default' }),
       });
       const body = await res.text();
-      const events = parseSSE(body);
+      // The route's own auto_recall events are left out: the pin is about the
+      // model's tool (TD-CHAT-16, the ruling-4 pattern).
+      const events = parseSSE(body).filter(e => (
+        (e.type !== 'tool' && e.type !== 'tool_result') || (e.data as { name?: string }).name !== 'auto_recall'
+      ));
       const toolIndex = events.findIndex(e => e.type === 'tool');
       const toolResultIndex = events.findIndex(e => e.type === 'tool_result');
       const tokenIndex = events.findIndex(e => e.type === 'token');
@@ -478,16 +467,13 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       expect(tokenContent).toBe('Done.');
       expect(tokenContent).not.toContain('I will inspect');
       expect(tokenContent).toBe(done.content);
-    } finally {
-      // Restore echo runner for subsequent tests even when an assertion fails.
-      serverInst.agentRunner = echoRunner;
+      expect((events[toolIndex].data as { name?: string }).name).toBe('search_memory');
     }
   });
 
   // ── Session history ────────────────────────────────────────────────────
 
   it('aborts active provider/tool work without persisting a partial assistant turn', async () => {
-    const originalRunner = serverInst.agentRunner;
     const session = `session-abort-test-${Date.now()}`;
     const message = 'stop this active tool run';
     let releaseRunner: (() => void) | undefined;
@@ -497,28 +483,30 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     const stopped = new Promise<void>((resolve) => { resolveStopped = resolve; });
     let workTicks = 0;
 
-    serverInst.agentRunner = (config) => new Promise<AgentResponse>((resolve, reject) => {
-      config.onToken?.('partial answer that is not authoritative');
+    // The model streams a provisional answer and then keeps working until its
+    // request is aborted; released, it would finish with a fabricated answer.
+    provider.respondWith((request) => {
       const interval = setInterval(() => { workTicks++; }, 5);
-      resolveStarted();
-
+      const release = new Promise<void>((resolve) => {
+        releaseRunner = () => {
+          clearInterval(interval);
+          resolve();
+        };
+      });
       const stopWork = () => {
         clearInterval(interval);
         resolveStopped();
-        const error = new Error('chat aborted');
-        error.name = 'AbortError';
-        reject(error);
       };
-      if (config.signal?.aborted) stopWork();
-      else config.signal?.addEventListener('abort', stopWork, { once: true });
-
-      releaseRunner = () => {
-        clearInterval(interval);
-        resolve({
-          content: 'fabricated completion after the client left',
-          toolsUsed: ['slow_tool'],
-          usage: { inputTokens: 1, outputTokens: 1 },
-        });
+      if (request.signal?.aborted) stopWork();
+      else request.signal?.addEventListener('abort', stopWork, { once: true });
+      return {
+        type: 'stream',
+        parts: [
+          { content: 'partial answer that is not authoritative' },
+          { pause: () => { resolveStarted(); return release; } },
+          { content: 'fabricated completion after the client left' },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1 },
       };
     });
 
@@ -577,7 +565,6 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       await client?.abortAgent('default');
       await events?.return(undefined);
       releaseRunner?.();
-      serverInst.agentRunner = originalRunner;
       if (previousLocalStorage === undefined) Reflect.deleteProperty(globalThis, 'localStorage');
       else Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: previousLocalStorage });
     }

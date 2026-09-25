@@ -829,3 +829,45 @@ read from the loop's spend entries, which include the fallback model and end wit
 
 Verification: typecheck:server-tests and lint are clean; smart-router plus helpers 87/87 (47 s). Wide run
 2799/2799 (191 files), 345 s.
+
+## 6r. The small /api/chat files: team-integration, user-facing-error, chat-pipeline
+
+The grep for injection sites found one file the §2 inventory predates:
+`local/chat-turn-user-facing-error.test.ts` (TD-CHAT-15, PR #168). It is handled here.
+
+**chat-pipeline (tests/behaviors): no injected runner remains; 30/30.** The echo runner became the
+fake's default answer, streamed as the same three chunks. The exact `Hello from Waggle!` did not
+gain a suffix. The "runner never called" checks on the nine rejected requests became "no model
+request". The slow-first-token pin holds the model call. The tool-events pin makes a real
+`search_memory` call and filters out the route's own `auto_recall` events (the ruling-4 pattern).
+It also asserts that the tool is `search_memory`. The provisional "I will inspect…" token has no
+counterpart, because the fake's tool-call turn carries no content; the pin's "not in the answer"
+check still holds. In the abort pin the model streams a provisional answer, then keeps working
+until its request aborts; "work stops" is now the model request's abort. Every other assertion is
+unchanged.
+
+**user-facing-error: two of four ported.**
+- The pricing refusal is the loop's own: a model the trusted catalog cannot price
+  (`unpriced-test-model`), under a hard daily budget. The code and the verbatim message are
+  unchanged apart from the model name, which was the synthetic `x`. No model request is made.
+- The "assistant refusal" incomplete completion is thrown by a ruling-2 spy (§6q).
+- **Held, two pins: the provider HTTP error and its persisted failure turn.** A real 502 is
+  retried by the loop until its cap, and the user then sees "The model endpoint is not
+  responding. It may be down or restarting. Check Settings > Models, then try again.", not
+  "The model provider returned an error (HTTP 502). Try again or switch model." Only a status the
+  loop does not retry reaches the route as `LLM error (<status>): <body>`. Proposed re-pin: a
+  non-retried status such as 400, keeping the "status only, never the body" claim. The literal
+  would then read `HTTP 400`. Alternatively, pin the 502 path's real sentence.
+
+**team-integration: one of two ported.**
+- The guarded-transport pin makes a real `save_memory` call. The push still goes to the guarded
+  Team transport with the bound token, `redirect: 'manual'` and a dispatcher.
+- **Held: "does not push save_memory with a Team token bound to another server".** On the real
+  path the turn fails the team governance check before the model runs ("Team governance policies
+  could not be reached for this workspace."), so the push guard is never reached. The pin's
+  zero-push assertion still passes, but it would no longer test the guard. Proposed re-pin: keep
+  this route pin as a governance fail-closed pin (the error, no model request), and move the push
+  guard to a unit pin of the TeamSync token binding.
+
+Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline 2829/2829
+(192 files), 389 s.
