@@ -725,3 +725,73 @@ unchanged except the runner's own flags, which became their provider equivalents
 Verification: typecheck:server-tests and lint are clean; chat-api.test.ts 47/47 in three isolated runs.
 Wide run 2797/2798 (191 files), 445 s. The one failure is TD-TEST-20, the known forced-tool-choice
 fetch-count flake (4 calls where 3 are expected), which passed in all three isolated runs.
+
+## 6p. smart-router slice A: the suite default and the first half
+
+**Suite setup.** The suite's default runner and its fetch stub are gone. Each test installs the fake
+provider: every `/chat/completions` request is recorded in `completionRequests` (the variable the
+pins already read) and answered by a per-test `reply`, `ok` with usage 1/1 by default. The Ollama
+listing and the 503 for any other URL are unchanged. A ruling-2 pass-through spy records every
+attempt's `AgentLoopConfig`, because many pins read fields that never reach the wire
+(`billingModel`, `modelSpendBudget` identity, `modelSpendBillingClass`, `spendWorkspaceId`).
+`capturedModel` is now the last attempt's model.
+
+The approval hook runs on the real path, and a turn whose model calls a generator has no operator
+to answer the card: the two artifact pins hung until the test timeout. The suite builds its server
+with the route's existing test-mode auto-approval (`WAGGLE_AUTO_APPROVE`, read once at
+registration). The injected runner skipped the hook entirely, so no pin loses a check it had.
+
+**Ported with every assertion unchanged:** the default-runner pins, including L567 (ruling 3).
+- **L567, the paid compressor.** `completionRequests` is still `[]` on the real path. The
+  priced primary's own turn is refused by the loop's hard cap (the daily total is mocked at the
+  cap), so neither a compression call nor the turn's model call is made. The ruling's
+  production-path equivalent is therefore the unchanged assertion.
+- **Unscoped artifact index; Office and PDF index.** The model makes real `generate_docx`,
+  `generate_pdf`, `generate_xlsx` and `generate_pptx` calls; the second brief is regenerated
+  under the refreshed title; the failing PDF call omits `content`, so the real tool answers
+  `Error: content is required` instead of the forged `Error generating PDF`. The Office message
+  now says "Excel spreadsheet": with plain "Excel" the tool selector did not offer
+  `generate_xlsx`, and the call came back "not found".
+- **Restart carryover.** The restarted server's turns run the real loop; the model is read from
+  the spy.
+- **Failed budget run returns to the primary.** The budget model cannot be reached, and the loop's
+  own transport retries run out.
+- **Budget, then primary, then fallback.** Neither the budget model nor the primary can be reached;
+  the fallback answers. The attempts and the three switch reasons are unchanged. The primary's
+  `(timeout)` reason still holds: the loop's own "could not reach" error carries no status. The pin
+  runs on its own server. On the shared one, its eight transport failures on the Ollama origin
+  left the circuit breaker open: the next two Ollama pins in the file got `Server error 503`
+  retries and no `done`.
+
+**Re-pinned, please review.**
+- **Terminal hard-budget rejection (ruling 5 pattern).** The loop's own cap never refuses a free
+  model, so an Ollama primary cannot produce this refusal. The pin now uses a priced primary,
+  `claude-sonnet-4-6`, with a real hard cap, on its own server. It asserts one attempt on
+  `anthropic/claude-sonnet-4-6`, no model request, an `error` event and `Daily budget exceeded`.
+  The attempted model literal changed from `primary-test-model`. The pin needs its own server
+  because the route caches each provider's credential pool for the server's lifetime: a pool made
+  here with one key starved the credential-exhaustion pin later in the file.
+- **Router budget reads (2 pins).** `getDailyTotal` is read twice per turn on the real path: once
+  by the router and once by the loop's own spend reservation. The pins now count the reads made
+  before the first attempt enters the loop and assert exactly 1. A spy pre-loop hook records the
+  count, as in §6f.
+- **Incomplete budget run (ruling 3).** The budget model's stream is cut before `[DONE]` with
+  usage 13 500 / 500. The route never calls `addUsage` on the real path, and the pin asserts that.
+  The loop's spend meter records one usage entry with the same model, tokens, scope and billing
+  class. `addTokens`, `calculateUsageCost` and the trace assertions are unchanged.
+**Held for a ruling: "persists returned usage before completing a client-cancelled run" (L718).**
+The runner returns a usage of 20 000 / 1 000 and marks the turn's signal aborted as it returns. The
+real loop cannot produce that state. An abort during the stream rejects before the final usage
+frame, so the loop throws a client abort with no usage. The one abort path that carries usage
+(after the body is read, before the post-read work) cannot be hit deterministically. The pin's
+route-side `addUsage` assertion is injected-runner-only accounting as well. Options:
+- (a) re-pin to a real mid-stream client abort, asserting no `done` or `error`, an `abandoned`
+  trace, and the loop's committed estimate instead of 20 000 / 1 000;
+- (b) move the usage-on-abort accounting to a unit pin of the failure module;
+- (c) keep this pin on a ruling-2 spy that returns a response after aborting. That goes beyond
+  ruling 2.
+
+Recommendation: (a) plus (b).
+
+Verification: typecheck:server-tests and lint are clean; smart-router 66/66 (46 s). Wide run 2798/2798
+(191 files), 337 s.
