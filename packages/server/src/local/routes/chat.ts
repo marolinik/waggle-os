@@ -1713,8 +1713,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     activeChatTurns.add(activeSessionStateKey);
     touchSessionState(activeSessionStateKey);
-    const hasCustomRunner = !!server.agentRunner;
-    const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
+    // TD-CHAT-16 phase 13: the chat route always runs the real loop. Tests
+    // replace the model call (fake provider), not the loop. The flag is
+    // false at the source; phases 14-15 delete the branches it guards.
+    const hasCustomRunner = false;
+    const agentRunner: AgentRunner = runAgentLoop;
 
     try {
       requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();

@@ -935,3 +935,17 @@ Verification: lint is clean; typecheck:server-tests shows only two `ioredis` res
 the worktree's incomplete `node_modules`. Every changed file, chat-pipeline, app e2e and the guard
 pass. Wide run 4265/4270 before the guard edit: the guard (fixed since) and four failures from
 missing local packages (`ioredis`, `@vitejs/plugin-react-swc`, `better-sqlite3`), none in a touched file.
+
+## 6t. Phase 13: the behavior switch
+
+`chat.ts` now sets `hasCustomRunner = false` and `agentRunner = runAgentLoop` at the source, so
+`POST /api/chat` never reads `server.agentRunner`. The branches the flag guards are dead but still
+in place; phases 14 and 15 delete them. `server.agentRunner` stays for fleet and agent groups
+(ruling 1).
+
+Verification: lint is clean. `typecheck:server-tests` shows only the two `ioredis` resolution errors
+(the package is absent from local `node_modules`, main checkout included). Full server suite plus
+`tests/behaviors` and app e2e: 4347/4352, 378 s. The failures: four from missing local packages
+(`entrypoint`, `start-trial`, two `tauri-config`), the same as before the switch. The fifth is one
+`agents.test.ts` PATCH that returned 500 under load. That file never posts to `/api/chat`, and it
+passes 33/33 in three isolated runs.
