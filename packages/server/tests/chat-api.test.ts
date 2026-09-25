@@ -5,7 +5,7 @@ import os from 'node:os';
 import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
-import { getPersona, runAgentLoop, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { getPersona, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
 import { applyPersonaToolFilter } from '../src/local/persona-tool-filter.js';
 import {
   applyContextWindow,
@@ -28,7 +28,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
-import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
+import { installFakeLlmProvider, type FakeLlmProvider, type FakeLlmReply } from './helpers/fake-llm-provider.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
@@ -72,97 +72,27 @@ function openAiToolJsonResponse(name: string, args: Record<string, unknown> = {}
   });
 }
 
-function openAiToolSseResponse(name: string): Response {
-  return new Response(
-    `data: ${JSON.stringify({
-      choices: [{
-        delta: {
-          tool_calls: [{
-            index: 0,
-            id: `call-${name}`,
-            type: 'function',
-            function: { name, arguments: '{}' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    })}\n\n`
-      + `data: ${JSON.stringify({
-        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
-        usage: { prompt_tokens: 10, completion_tokens: 2 },
-      })}\n\ndata: [DONE]\n\n`,
-    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-  );
-}
-
 describe('Chat Streaming API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
   let provider: FakeLlmProvider;
+  const DEFAULT_REPLY: FakeLlmReply = {
+    type: 'text',
+    content: 'Hello world',
+    chunks: ['Hello ', 'world'],
+    usage: { inputTokens: 10, outputTokens: 5 },
+  };
+  /** Model names of the fake's requests since `start`, consecutive retries collapsed. */
+  const modelsSince = (start: number): string[] => provider.requests.slice(start)
+    .map(request => request.model)
+    .filter((model, index, models) => model !== models[index - 1]);
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
   beforeEach(() => {
     resetRateLimiter(server);
   });
-
-  async function runOverlappingTurns(
-    first: { message: string; workspace: string; session: string },
-    second: { message: string; workspace: string; session: string },
-  ) {
-    const originalRunner = server.agentRunner;
-    const captured = new Map<string, Array<{ role: string; content: string }>>();
-    let entered = 0;
-    let releaseFirst!: () => void;
-    let releaseSecond!: () => void;
-    let resolveBothEntered!: () => void;
-    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
-    const bothEntered = new Promise<void>((resolve) => { resolveBothEntered = resolve; });
-
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const turnMessage = config.messages.at(-1)?.content ?? '';
-      captured.set(turnMessage, config.messages.map(({ role, content }) => ({ role, content })));
-      entered += 1;
-      if (entered === 2) resolveBothEntered();
-      await (turnMessage === first.message ? firstGate : secondGate);
-      return {
-        content: `reply:${turnMessage}`,
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-
-    const firstRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: first,
-    });
-    const secondRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: second,
-    });
-
-    try {
-      const completedBeforeOverlap = Promise.race([firstRequest, secondRequest]).then(() => {
-        if (entered < 2) throw new Error('A chat request completed before both turns overlapped');
-      });
-      await Promise.race([bothEntered, completedBeforeOverlap]);
-
-      // Finish the second turn first to prove completion order cannot swap state.
-      releaseSecond();
-      const secondResponse = await secondRequest;
-      releaseFirst();
-      const firstResponse = await firstRequest;
-      return { captured, firstResponse, secondResponse };
-    } finally {
-      releaseFirst();
-      releaseSecond();
-      server.agentRunner = originalRunner;
-    }
-  }
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-test-'));
@@ -178,12 +108,7 @@ describe('Chat Streaming API', () => {
     };
     server.llmRetryBackoffMs = () => 0;
     provider = installFakeLlmProvider({
-      respond: {
-        type: 'text',
-        content: 'Hello world',
-        chunks: ['Hello ', 'world'],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      },
+      respond: DEFAULT_REPLY,
       // Several tests call this server over real HTTP with `fetch`; only model
       // calls (and the direct Anthropic API) belong to the fake.
       otherRequest: 'previous',
@@ -636,12 +561,14 @@ describe('Chat Streaming API', () => {
   });
 
   it('falls back from a blank no-tool response without leaking provisional text', async () => {
-    const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
     config.setFallbackModel('ollama/blank-fallback-model');
     config.save();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    // The real loop runs both attempts; model calls reach the suite's fake
+    // (TD-CHAT-16).
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({
           models: [
@@ -650,22 +577,15 @@ describe('Chat Streaming API', () => {
           ],
         }), { status: 200 });
       }
+      if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
       return new Response('', { status: 503 });
     });
-    const modelRequests: string[] = [];
-    const modelFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-      modelRequests.push(body.model ?? '');
-      return modelRequests.length === 1
-        ? openAiSseResponse(' \n')
-        : openAiSseResponse('fallback ok');
-    });
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => runAgentLoop({
-      ...agentConfig,
-      fetch: modelFetch,
-      verificationGate: false,
-      skillDistillationGate: false,
-    });
+    const requestsBefore = provider.requests.length;
+    provider.respondWith(request => (
+      request.model === 'blank-primary-model'
+        ? { type: 'text', content: ' \n', usage: { inputTokens: 10, outputTokens: 2 } }
+        : { type: 'text', content: 'fallback ok', usage: { inputTokens: 10, outputTokens: 2 } }
+    ));
 
     try {
       const response = await injectWithAuth(server, {
@@ -679,7 +599,7 @@ describe('Chat Streaming API', () => {
       });
       const events = parseSSE(response.body);
 
-      expect(modelRequests).toEqual(['blank-primary-model', 'blank-fallback-model']);
+      expect(modelsSince(requestsBefore)).toEqual(['blank-primary-model', 'blank-fallback-model']);
       expect(events.filter(event => event.event === 'error')).toHaveLength(0);
       expect(events.filter(event => event.event === 'token').map(event => JSON.parse(event.data).content))
         .toEqual(['fallback ok']);
@@ -692,15 +612,16 @@ describe('Chat Streaming API', () => {
         .toBe(false);
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       if (previousFallback) config.setFallbackModel(previousFallback);
       else config.clearFallbackModel();
       config.save();
     }
   });
 
+  // Re-pinned on the real path (TD-CHAT-16 ruling 13): both attempts get a
+  // blank provider answer, and the loop rejects each with its own message.
   it('terminates truthfully when both the primary and configured fallback are blank', async () => {
-    const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
     const workspaceId = server.workspaceManager.create({
@@ -708,10 +629,10 @@ describe('Chat Streaming API', () => {
       group: 'test',
     }).id;
     const sessionId = `double-blank-session-${Date.now()}`;
-    const attempts: string[] = [];
     config.setFallbackModel('ollama/double-blank-fallback');
     config.save();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({
           models: [
@@ -720,13 +641,11 @@ describe('Chat Streaming API', () => {
           ],
         }), { status: 200 });
       }
+      if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
       return new Response('', { status: 503 });
     });
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      agentConfig.onToken?.(`unsafe provisional ${attempts.length}`);
-      return { content: ' \n', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    const requestsBefore = provider.requests.length;
+    provider.respondWith({ type: 'text', content: ' \n', usage: { inputTokens: 1, outputTokens: 1 } });
 
     try {
       const response = await injectWithAuth(server, {
@@ -741,30 +660,33 @@ describe('Chat Streaming API', () => {
       });
       const events = parseSSE(response.body);
 
-      expect(attempts).toEqual(['double-blank-primary', 'double-blank-fallback']);
+      expect(modelsSince(requestsBefore)).toEqual(['double-blank-primary', 'double-blank-fallback']);
       expect(events.filter(event => event.event === 'token')).toHaveLength(0);
       expect(events.filter(event => event.event === 'done')).toHaveLength(0);
       expect(events.filter(event => event.event === 'error')).toHaveLength(1);
-      expect(response.body).not.toContain('unsafe provisional');
 
       const inMemory = server.agentState.sessionHistories.get(
         chatSessionStateKey(workspaceId, sessionId),
       ) ?? [];
       expect(inMemory).toHaveLength(2);
-      expect(inMemory[1].content).toContain(`${GENERATION_FAILED_PREFIX}Model returned an empty response`);
+      expect(inMemory[1].content)
+        .toBe(`${GENERATION_FAILED_PREFIX}LLM returned an empty assistant response with no tool calls`);
       expect(inMemory[1].content.trim()).not.toBe('');
       expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
       if (previousFallback) config.setFallbackModel(previousFallback);
       else config.clearFallbackModel();
       config.save();
     }
   });
 
+  // Ported (TD-CHAT-16 §6n): a real search_memory call stands in for the
+  // injected mutate_state tool, and the route's own auto_recall event is
+  // filtered out of the count, as the ruling-4 stage filter does.
   it('does not replay completed tools when a terminal response is blank', async () => {
-    const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
     const workspaceId = server.workspaceManager.create({
@@ -774,7 +696,8 @@ describe('Chat Streaming API', () => {
     const sessionId = `tool-blank-session-${Date.now()}`;
     config.setFallbackModel('ollama/tool-blank-fallback');
     config.save();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({
           models: [
@@ -783,37 +706,22 @@ describe('Chat Streaming API', () => {
           ],
         }), { status: 200 });
       }
+      if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
       return new Response('', { status: 503 });
     });
-    const modelRequests: string[] = [];
-    const mutate = vi.fn(async () => 'mutation completed');
-    const modelFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-      modelRequests.push(body.model ?? '');
-      if (modelRequests.length === 1) return openAiToolSseResponse('mutate_state');
-      if (modelRequests.length === 2) return openAiSseResponse('');
-      return openAiSseResponse('fallback should not run');
-    });
-    const mutationTool: NonNullable<AgentLoopConfig['tools']>[number] = {
-      name: 'mutate_state',
-      description: 'Mutates state exactly once.',
-      parameters: { type: 'object', properties: {} },
-      execute: mutate,
-    };
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => runAgentLoop({
-      ...agentConfig,
-      tools: [mutationTool],
-      fetch: modelFetch,
-      verificationGate: false,
-      skillDistillationGate: false,
-    });
+    const requestsBefore = provider.requests.length;
+    provider.respondWith([
+      { type: 'tool_calls', calls: [{ name: 'search_memory', args: { query: 'completed work' } }] },
+      { type: 'text', content: '', chunks: [] },
+      { type: 'text', content: 'fallback should not run' },
+    ]);
 
     try {
       const response = await injectWithAuth(server, {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: 'Do not repeat completed work.',
+          message: 'Search memory for completed work. Do not repeat completed work.',
           model: 'ollama/tool-blank-primary',
           workspace: workspaceId,
           session: sessionId,
@@ -821,12 +729,14 @@ describe('Chat Streaming API', () => {
       });
       const events = parseSSE(response.body);
 
-      expect(modelRequests).toEqual(['tool-blank-primary', 'tool-blank-primary']);
-      expect(mutate).toHaveBeenCalledTimes(1);
+      const modelToolEvents = (name: string) => events
+        .filter(event => event.event === name && JSON.parse(event.data).name !== 'auto_recall');
+      expect(provider.requests.slice(requestsBefore).map(request => request.model))
+        .toEqual(['tool-blank-primary', 'tool-blank-primary']);
       expect(events.filter(event => event.event === 'done')).toHaveLength(0);
       expect(events.filter(event => event.event === 'error')).toHaveLength(1);
-      expect(events.filter(event => event.event === 'tool')).toHaveLength(1);
-      expect(events.filter(event => event.event === 'tool_result')).toHaveLength(1);
+      expect(modelToolEvents('tool').map(event => JSON.parse(event.data).name)).toEqual(['search_memory']);
+      expect(modelToolEvents('tool_result')).toHaveLength(1);
       expect(events.filter(event => event.event === 'model_switch')).toHaveLength(0);
 
       const inMemory = server.agentState.sessionHistories.get(
@@ -838,7 +748,8 @@ describe('Chat Streaming API', () => {
       expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
       if (previousFallback) config.setFallbackModel(previousFallback);
       else config.clearFallbackModel();
       config.save();
@@ -1473,15 +1384,14 @@ describe('Chat Streaming API', () => {
       role: 'assistant',
       content: 'TRUSTED_PRIOR_ASSISTANT_SENTINEL',
     });
-    let captured: AgentLoopConfig | null = null;
-    trustedServer.agentRunner = async (config): Promise<AgentResponse> => {
-      captured = config;
-      return {
-        content: 'trusted full path',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
+    // The real loop runs; the first model request is read off the wire
+    // (TD-CHAT-16).
+    trustedServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
     };
+    trustedServer.llmRetryBackoffMs = () => 0;
+    const requestsBefore = provider.requests.length;
+    provider.respondWith({ type: 'text', content: 'trusted full path', usage: { inputTokens: 1, outputTokens: 1 } });
 
     try {
       const message = 'Read README.md in this workspace, then return the exact file contents.';
@@ -1498,14 +1408,16 @@ describe('Chat Streaming API', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(captured).not.toBeNull();
-      expect(captured!.systemPrompt).not.toContain('# STRICT READ-ONLY TOOL TURN');
-      expect(captured!.messages).toEqual(expect.arrayContaining([
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
+      const captured = provider.requests[requestsBefore];
+      expect(captured.systemPrompt).not.toContain('# STRICT READ-ONLY TOOL TURN');
+      expect(captured.messages).toEqual(expect.arrayContaining([
         { role: 'user', content: 'TRUSTED_PRIOR_USER_SENTINEL' },
         { role: 'assistant', content: 'TRUSTED_PRIOR_ASSISTANT_SENTINEL' },
         { role: 'user', content: message },
       ]));
     } finally {
+      provider.respondWith(DEFAULT_REPLY);
       await trustedServer.close();
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
@@ -1670,6 +1582,7 @@ describe('Chat LiteLLM key routing (regression: no_db_connection)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let capturedKey: string | undefined;
+  let keyRouteProvider: FakeLlmProvider;
   const MASTER_KEY = 'sk-litellm-master-test';
   const POOL_KEY = 'sk-ant-pool-test';
 
@@ -1687,15 +1600,19 @@ describe('Chat LiteLLM key routing (regression: no_db_connection)', () => {
     // The LiteLLM master key Waggle authenticates to the proxy with.
     server.agentState.litellmApiKey = MASTER_KEY;
 
-    // Capturing runner — records the key the chat route resolved for this turn.
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedKey = config.litellmApiKey;
-      if (config.onToken) config.onToken('ok');
-      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    // The real loop runs against a fake provider, which records the bearer key
+    // each model request carried (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
+    keyRouteProvider = installFakeLlmProvider({
+      respond: request => {
+        capturedKey = request.authorization?.replace(/^Bearer /, '') ?? undefined;
+        return { type: 'text', content: 'ok', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
   });
 
   afterAll(async () => {
+    keyRouteProvider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }

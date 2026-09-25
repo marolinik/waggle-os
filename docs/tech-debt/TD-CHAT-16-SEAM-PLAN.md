@@ -651,3 +651,30 @@ Verification: typecheck:server-tests and lint are clean. Wide run 2784/2784 (191
   file also adds the positive marketplace and starter-pack cases.
 
 Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794 (191 files), 365 s.
+
+## 6n. chat-api slice 3c: `chat-api.test.ts`, first part
+
+Six tests no longer inject a runner, and the unused `runOverlappingTurns` copy is gone.
+`agentRunner = ` sites in the file went from 19 to 9.
+- **Blank no-tool fallback.** Primary answers `' \n'`, fallback answers `fallback ok`. This used
+  to be an injected `runAgentLoop` with its own fetch and gates off; the route's own gates now run.
+  Assertions are unchanged, and the models are read off the wire.
+- **Double blank.** Re-pinned per ruling 13: the persisted turn is the loop's exact rejection.
+  The synthetic `unsafe provisional` token is gone.
+- **Tool then blank.** The injected `mutate_state` tool cannot exist on the real path. The model now
+  makes a real `search_memory` call (the message asks for a memory search) and then answers blank.
+  The pin still asserts one model tool event and one result, no replay and no fallback. It filters
+  out the route's own `auto_recall` events, the way ruling 4 filters to `chat.*` stages.
+  **Please review this filter:** it is the one assertion adaptation in this slice.
+- **Trusted full-history path.** Reads the first wire request.
+- **LiteLLM key routing ×2.** The describe installs its own fake, and the pins read the bearer
+  header each model request carried. The master key and the pool key are asserted unchanged.
+
+**Left: 9 sites in 5 tests.** These are "safe model activity", "safe reasoning activity",
+"retry status before backoff", "late output after disconnect" (2 sites) and "failed-attempt
+output out of the fallback stream". Each drives `onModelActivity`, `onReasoningActivity`,
+`onRetry` or a provisional `<think>` token mid-turn. The helper cannot yet stream a partial
+answer that holds open, or send reasoning deltas. The next slice extends the helper (a gated
+chunked stream plus a reasoning delta), with helper unit tests, and then ports these.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794, 400 s.
