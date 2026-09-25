@@ -69,7 +69,6 @@ export interface TurnCompletionTurn {
   turnMutationPolicy: TurnMutationPolicy;
   costTracker: CostTracker;
   sessionOrch: Orchestrator;
-  hasCustomRunner: boolean;
   isAutomatedTurn: boolean;
   message: string;
   history: ChatHistoryMessage[];
@@ -118,9 +117,9 @@ export async function completeTurnResponse(
   const {
     server, sendEvent, throwIfTurnAborted, attemptState, usageLedger, modelSelection,
     turnResources, turnRecall, turnTrace, retention, turnMutationPolicy, costTracker, sessionOrch,
-    hasCustomRunner, message, history, sessionId, sessionStateKey, sessionToolSequences,
+    message, history, sessionId, sessionStateKey, sessionToolSequences,
     sessionPersistenceDataDir, activeWorkspaceId, activeSessionStateWorkspaceId, effectiveWorkspace,
-    executionScopeId, activePersonaId, accountWorkspaceSessionTokens, retainedTurnText,
+    activePersonaId, accountWorkspaceSessionTokens, retainedTurnText,
     toolCatalogCount, toolEligibleCount, toolSelectedCount, toolOmittedCount,
     transmittedToolSchemaChars, systemPrompt, packageMode, selectorLatencyMs, agentLatencyMs,
     totalServerStartedAt, getFirstTokenAt,
@@ -173,22 +172,9 @@ export async function completeTurnResponse(
       billingClass: receipt.billingClass,
     })
   ), 0);
-  // Production spend is charged inside the agent loop, through the
-  // modelSpendBudget the route hands it. An injected runner bypasses the
-  // loop and its meter, so only then does the route charge here; doing
-  // it for a production turn would count every call twice (TD-CHAT-8,
+  // Spend is charged inside the agent loop, through the modelSpendBudget
+  // the route hands it; the route never charges it again (TD-CHAT-8,
   // pinned in chat-spend-accounting-characterization.test.ts).
-  if (hasCustomRunner) {
-    for (const receipt of successfulAttemptReceipts) {
-      costTracker.addUsage(
-        receipt.model,
-        receipt.usage.inputTokens,
-        receipt.usage.outputTokens,
-        executionScopeId,
-        { billingClass: receipt.billingClass },
-      );
-    }
-  }
 
   // Per-session token accumulation for /api/fleet visibility.
   // costTracker is per-workspace cost; sessionManager holds per-session
@@ -199,7 +185,7 @@ export async function completeTurnResponse(
   usageLedger.markAccounted();
 
   // Commit deferred signal markings now that model call succeeded
-  if (!hasCustomRunner && retention.allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
+  if (retention.allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
 
   // ── Closed learning loop: deterministic skill distillation ──
   // The runtime — not just the behavioral-spec prose — detects a successful ≥5-tool turn and
@@ -209,7 +195,7 @@ export async function completeTurnResponse(
   // is recorded idempotently (skill_promotion) so recurring workflows
   // bubble up through the existing actionable-signal substrate.
   // Skipped whenever learned/derived persistence is disabled.
-  if (!hasCustomRunner && retention.allowDerivedPersistence) {
+  if (retention.allowDerivedPersistence) {
     const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
     if (distillPlan) {
       sendEvent('step', { content: distillPlan.directive });
@@ -232,7 +218,7 @@ export async function completeTurnResponse(
   // Non-blocking — KG enrichment never fails the response.
   // Skipped whenever learned/derived persistence is disabled; review and
   // evidence-bounded output must not inflate the knowledge graph.
-  if (!hasCustomRunner && retention.allowDerivedPersistence && result.content && result.content.length > 100) {
+  if (retention.allowDerivedPersistence && result.content && result.content.length > 100) {
     try {
       const knowledge = sessionOrch.getKnowledge();
       const entities = extractEntities(result.content);
@@ -269,7 +255,7 @@ export async function completeTurnResponse(
   // Non-blocking — detection failure shouldn't affect the response.
   // Skipped whenever learned/derived persistence is disabled; a review
   // instruction can quote old corrections that must not re-fire.
-  if (!hasCustomRunner && retention.allowDerivedPersistence) {
+  if (retention.allowDerivedPersistence) {
     try {
       const signalStore = sessionOrch.getImprovementSignals();
       analyzeAndRecordCorrection(signalStore, message);
@@ -288,8 +274,7 @@ export async function completeTurnResponse(
   }
 
   // ── Auto skill capture — detect repeatable workflow patterns ──
-  if (!hasCustomRunner
-    && retention.allowDerivedPersistence
+  if (retention.allowDerivedPersistence
     && result.toolsUsed
     && result.toolsUsed.length > 0) {
     try {
@@ -338,8 +323,7 @@ export async function completeTurnResponse(
   }
 
   // Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-  if (!hasCustomRunner
-    && retention.allowResponseDecoration
+  if (retention.allowResponseDecoration
     && finalContent
     && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
     finalContent += SCHEDULE_SUGGESTION;
@@ -353,7 +337,7 @@ export async function completeTurnResponse(
   // honest hedge note; durations/percents only inform the log signal
   // (noisier — advice timelines like "2 weeks" would false-positive). The
   // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-  if (!hasCustomRunner && retention.allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
+  if (retention.allowResponseDecoration && finalContent && turnRecall.hasGroundingEvidence) {
     const grounding = checkGrounding(finalContent, turnRecall.groundingEvidence(message));
     if (grounding.ungrounded.length > 0) {
       log.info('[grounding] reply asserts specifics absent from recalled memory', {
@@ -459,7 +443,7 @@ export async function runPostCommitEnrichment(
   completed: CompletedTurnResponse,
 ): Promise<void> {
   const {
-    server, modelSelection, turnTrace, retention, sessionOrch, hasCustomRunner, isAutomatedTurn,
+    server, modelSelection, turnTrace, retention, sessionOrch, isAutomatedTurn,
     message, sessionId, effectiveWorkspace, executionScopeId, personaOverride, resolvePersona,
   } = turn;
   const { result, turnUsage, messageCost } = completed;
@@ -504,7 +488,7 @@ const wsName =
   // coherent outcome. Keep this awaited so the workspace mind cannot be
   // released mid-write, but never turn a late disconnect into a hidden
   // memory write or contradict the response that was already committed.
-  if (!hasCustomRunner && retention.allowMemoryPersistence) {
+  if (retention.allowMemoryPersistence) {
     const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
     if (!agentAlreadySaved) {
       try {

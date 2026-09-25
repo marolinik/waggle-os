@@ -1713,9 +1713,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     activeChatTurns.add(activeSessionStateKey);
     touchSessionState(activeSessionStateKey);
     // TD-CHAT-16: the chat route always runs the real loop. Tests replace
-    // the model call (fake provider), not the loop. The flag remains only
-    // for completion and failure accounting until phase 15 deletes it.
-    const hasCustomRunner = false;
+    // the model call (fake provider), not the loop.
     const agentRunner: AgentRunner = runAgentLoop;
 
     try {
@@ -1853,7 +1851,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const completionTurn: TurnCompletionTurn = {
           server, sendEvent, throwIfTurnAborted, attemptState, usageLedger, modelSelection,
           turnResources, turnRecall, turnTrace, retention, turnMutationPolicy, costTracker, sessionOrch,
-          hasCustomRunner, isAutomatedTurn, message, history, sessionId, sessionStateKey,
+          isAutomatedTurn, message, history, sessionId, sessionStateKey,
           sessionToolSequences, sessionPersistenceDataDir, activeWorkspaceId,
           activeSessionStateWorkspaceId, effectiveWorkspace, executionScopeId, activePersonaId,
           personaOverride, resolvePersona, accountWorkspaceSessionTokens, retainedTurnText,
@@ -1869,9 +1867,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     } catch (err) {
       handleTurnFailure({
         server, raw, sendEvent, turnSignal, responseCommitted, turnId, message,
-        usageLedger, costTracker, turnTrace, retention, hasCustomRunner,
+        usageLedger, costTracker, turnTrace, retention,
         usesNamedWorkspace, historyWorkspaceId, activeWorkspaceId, activeSessionId,
-        activeExecutionWorkspaceId, sessionPersistenceDataDir, activeHistory,
+        sessionPersistenceDataDir, activeHistory,
         activeSessionOrch, accountWorkspaceSessionTokens, retainedTurnText,
       }, err);
     } finally {

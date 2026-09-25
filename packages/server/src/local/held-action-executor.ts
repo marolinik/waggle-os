@@ -115,11 +115,9 @@ export interface ReviewTurnDecision {
  * reviewer can never persist a skill (or send an email) without explicit
  * human approval.
  *
- * Extracted from routes/chat.ts so this trust boundary is unit-testable: the
- * chat.ts pre:tool hook that hosts this branch is only registered when
- * `!hasCustomRunner`, and route-test harnesses inject a custom runner, so the
- * branch is otherwise unreachable in a route test (same rationale as
- * persona-tool-filter.ts).
+ * Extracted from routes/chat.ts so this trust boundary is unit-testable
+ * directly, without driving a headless review turn through the chat route's
+ * pre:tool hook.
  */
 export function decideReviewTurnTool(server: FastifyInstance, input: EnqueueInput): ReviewTurnDecision {
   const { tool } = input;

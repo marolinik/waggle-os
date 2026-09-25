@@ -967,3 +967,26 @@ which phase 15 deletes: 18 occurrences, down from 57.
 Verification: lint is clean; `typecheck:server-tests` shows only the known `ioredis` errors. Full
 server suite plus `tests/behaviors` and app e2e: 4348/4352, 402 s. The only failures are the four from
 missing local packages.
+
+## 6v. Phase 15: completion and failure, and the close-out
+
+`hasCustomRunner` is gone from `chat-turn-completion.ts`, `chat-turn-failure.ts` and `chat.ts`.
+`packages/server/src` now reads it 0 times. The route-side cost accounting, which ran only for an
+injected runner, is deleted from completion and failure. Spend is charged inside the loop
+(TD-CHAT-8), as it already was for every production turn. The other completion branches (surfaced
+signals, skill distillation, KG entity writes, correction detection, auto skill capture, schedule
+suffix, grounding hedge, auto-save) run on every turn, still gated by retention. Deleting the flag
+left three names unused, and they are removed: the `executionScopeId` destructure in
+`completeTurnResponse`, and `activeExecutionWorkspaceId` and `PERSONAL_CHAT_SCOPE_ID` in failure. The
+two comments that cited the flag (`held-action-executor.ts`, `persona-tool-filter.ts`) are rewritten.
+The comments in ten characterization test files still mention the flag, as history of why each file
+chose its harness; they describe the past accurately and stay. `docs/TESTING.md` names the fake
+provider as the route seam, and TD-CHAT-16 is closed in `docs/TECH-DEBT.md`.
+
+Exit criteria (§4): `grep -rn hasCustomRunner packages/server/src` returns 0. The seam guard keeps
+`/api/chat` tests off the runner. The fleet and agent-groups decision is ruling 1. TESTING.md names
+the fake provider. The suite is green apart from missing local packages.
+
+Verification: lint is clean; `typecheck:server-tests` shows only the known `ioredis` errors. Full
+server suite plus `tests/behaviors` and app e2e: 4348/4352, 455 s. The only failures are the four from
+missing local packages.

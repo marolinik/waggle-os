@@ -41,12 +41,10 @@ function cancelledTurn(usageLedger: TurnUsageLedger) {
     retention: new TurnRetention({
       allowMemoryPersistence: true, allowDerivedPersistence: true, allowResponseDecoration: true,
     }),
-    hasCustomRunner: false,
     usesNamedWorkspace: false,
     historyWorkspaceId: 'ws-1',
     activeWorkspaceId: 'ws-1',
     activeSessionId: 'session-1',
-    activeExecutionWorkspaceId: 'ws-1',
     sessionPersistenceDataDir: '/unused',
     activeHistory: undefined,
     activeSessionOrch: undefined,
