@@ -108,7 +108,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
-    "@huggingface/transformers": "3.8.1",
+    "@huggingface/transformers": "4.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-shell": "^2.3.6",
