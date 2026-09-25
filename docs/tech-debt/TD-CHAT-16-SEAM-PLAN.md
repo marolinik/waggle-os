@@ -536,3 +536,83 @@ L3725 and L3835 (the last on its own `migrationServer`).
   re-pin, or the ruling-2 spy for the distillation callback.
 - The `runOverlappingTurns` helper copied into the prologue. It is unused in this file and goes
   with the history-isolation slice.
+
+## 6k. chat-api slice 3a: `chat-api-workspace-failures.test.ts`
+
+17 of the file's 19 injection sites are gone (16 tests and the unused overlap-helper copy); 27 of its 30
+tests no longer inject a runner.
+
+**Ported with every assertion unchanged:**
+- Provider failures come from the fake: a 400 for the failed-turn memory pins, the error-turn pin
+  and the abandoned-trace pin (a 4xx never counts against the circuit breaker), and a hold-open
+  responder for the mid-request workspace switch.
+- The two endpoint-outage cases script the real transport failures: `network_error` with
+  `connect ECONNREFUSED …`, and a 502 whose retry cap the loop's own policy reaches. Each case
+  builds its own server, because four failed attempts per case would open the shared server's
+  breaker for every later pin (§5).
+- Runner call counts became provider request counts: the structured retry calls the model once,
+  a stale retry target or an unknown workspace never calls it. The echo pins and the
+  history-denied retry read the conversation the model received.
+- The Ollama pin now asserts the real wire call: URL `…:11434/v1/chat/completions`, model
+  `llama3.2:latest`.
+- The two titles that named the runner now name the model.
+
+**Ruling 2 spy:** the two pins that assert the generic "Something went wrong" sentence need an
+unclassified thrown message, already on the §2 list.
+
+**Session cap.** A real named-workspace turn holds a workspace session, and the tier caps live
+sessions at 10. The first full run failed from the tenth workspace on with `Workspace "…" is not
+ready for chat.`. The pins that run a workspace turn now close that session in `finally`, as the
+approval pins do (TD-CHAT-32).
+
+**Stopped: an observable result changes, so these two stay on `agentRunner`.**
+
+| Test | What changes on the real path | Proposed re-pin |
+|---|---|---|
+| "rejects a blank successful agent response" (×2) | The loop rejects a blank no-tool answer itself, before the route's own blank check. The error and the persisted turn read `LLM returned an empty assistant response with no tool calls` instead of `Model returned an empty response`. The synthetic `unsafe provisional` token has no real counterpart: a blank answer streams only blank deltas. The route's check stays reachable only when an explicit read-only tool rewrite leaves blank content. | Pin the loop's message (`EMPTY_MODEL_RESPONSE`), with no token and no done event, as with the budget and loop-guard literals. chat-api "terminates truthfully when both … are blank" is the same case. |
+| "streams tool use events" | The route's auto-recall streams its own `auto_recall` tool event before the model's `web_search`, so there are two tool events, not one. Token, input and `toolsUsed` assertions pass unchanged when the model calls a real `web_search` (message "Search the web for …", the search host answered in-test). | Assert the exact ordered tool events `['auto_recall', 'web_search']`, the ruling-4 pattern. |
+
+**Verification.** The file passes 30/30 (75 s). Wide run: 2782/2784. The two failures were
+`local-inference-route` hardware and model probes, a 30 s hook timeout under full parallel load.
+That file does not touch chat, and it passed 21/21 when run alone. Two earlier wide attempts died
+of a worker out-of-memory crash, not a test failure.
+
+## 6l. chat-api slice 3b: history-isolation, and the personal-server re-pin
+
+**history-isolation: 7 of 8 injected tests ported, all assertions unchanged.**
+- `runOverlappingTurns` now holds each turn's model call open in the fake and records the
+  conversation that call received. The two overlap pins pass unchanged.
+- The helper was not moved to `tests/helpers`. history-isolation is its only caller. The other
+  three chat-api files carried unused copies: the workspace-failures and default-workspace copies
+  are deleted here, and chat-api.test.ts drops its copy in its own slice.
+- The active-clear pin holds the real model call open. The implicit-session pin echoes the turn.
+- The windowing pin reads the windowed conversation off the wire, after the loop's system prompt.
+  The request-scoped pin had already run the real loop and only lost its `agentRunner = undefined`.
+- The abort-signal pin reads the `AbortSignal` on the real model request.
+- The persona and model policy pin reads the wire system prompt and model.
+- The verifier pin reads messages, tools and the system prompt off the wire. A ruling-2 spy records
+  `maxTurns` and `skillDistillationGate`, which never reach it.
+- Titles that named the runner or "an injected runner" now name the model.
+- Real workspace turns close their sessions (the tier cap, §6k).
+- **Held:** "persists only completed acquire_capability receipts". It drives forged, unpaired and
+  mismatched `onToolResult` calls that a real loop cannot emit. This is the §2 "forged tool-result
+  pairs" case, and ruling 2 allows the spy to record or throw only. It needs a ruling. One
+  option: a real `acquire_capability` call for the positive receipt, with the forgery cases moved
+  to a unit test of the receipt filter.
+
+**default-workspace pre-split L3390 (personal server): re-pinned under ruling 3, no spy.**
+- *Accounting.* The old pin asserted that the route called `costTracker.addUsage(personalModel,
+  1, 1, 'personal::default', {billingClass:'free'})`. That is route-side accounting, which runs
+  only for an injected runner. On the real path the route never calls `addUsage`, and the pin now
+  asserts that. The loop's spend meter records one usage entry per model call, each with the same
+  model, tokens, scope and billing class the old call carried.
+- *Distillation.* The old pin called `onSkillDistillationFire` by hand. Now the turn asks for a
+  memory search, the fake scripts five `search_memory` calls and then an answer, and the loop's own
+  D1 gate fires the route's callback. The final `skill_share` assertion (`personal::default` and
+  `default`) is unchanged and passes on the real trigger.
+- *Inputs changed.* The personal and managed messages now ask for a memory search, because a
+  conversational message transmits no tools. The `/settings` command prompt and the model pins read
+  the wire requests.
+- 9/9 in the file; history-isolation 12/12.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2784/2784 (191 files), 630 s.
