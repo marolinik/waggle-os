@@ -481,7 +481,6 @@ import {
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
-export { shouldPackageSystemPromptForTurn } from './chat-turn-preparation.js';
 export {
   bindExactWorkspaceMemorySearchTool,
   boundDirectReadFilePathsMatch,
@@ -1713,22 +1712,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
     activeChatTurns.add(activeSessionStateKey);
     touchSessionState(activeSessionStateKey);
-    // TD-CHAT-16 phase 13: the chat route always runs the real loop. Tests
-    // replace the model call (fake provider), not the loop. The flag is
-    // false at the source; phases 14-15 delete the branches it guards.
+    // TD-CHAT-16: the chat route always runs the real loop. Tests replace
+    // the model call (fake provider), not the loop. The flag remains only
+    // for completion and failure accounting until phase 15 deletes it.
     const hasCustomRunner = false;
     const agentRunner: AgentRunner = runAgentLoop;
 
     try {
-      requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
+      requestHookRegistry = hookRegistry.fork();
 
-      // Resolve the agent runner (injectable for tests)
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
 
       const { sessionOrch, sessionTools, wsSession, workspaceTurnScope } = acquireTurnSessionRuntime({
-        server, orchestrator, hasCustomRunner, usesNamedWorkspace, authorizedWorkspace,
+        server, orchestrator, usesNamedWorkspace, authorizedWorkspace,
         effectiveWorkspace, sessionId, executionWorkspacePath, abortController, turnSignal,
         turnResources, acquireChatRuntime, releaseChatRuntime,
         setWorkspaceSessionActivity: (lease) => { workspaceSessionActivity = lease; },
@@ -1753,7 +1751,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const { history } = historyLoad;
 
       const modelAvailable = await resolveModelAvailability({
-        server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth,
+        server, modelSelection, getLitellmUrl, probeModelHealth,
       });
 
       const commandRouting = await routeTurnCommand({
@@ -1798,7 +1796,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           executionWorkspacePath,
           explicitReadOnlyToolCandidate,
           getLitellmUrl,
-          hasCustomRunner,
           history,
           injectionResult,
           isAutomatedTurn,

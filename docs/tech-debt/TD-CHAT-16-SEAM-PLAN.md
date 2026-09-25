@@ -949,3 +949,21 @@ Verification: lint is clean. `typecheck:server-tests` shows only the two `ioredi
 (`entrypoint`, `start-trial`, two `tauri-config`), the same as before the switch. The fifth is one
 `agents.test.ts` PATCH that returned 500 under load. That file never posts to `/api/chat`, and it
 passes 33/33 in three isolated runs.
+
+## 6u. Phase 14: the dead branches in preparation, session runtime and model routing
+
+`hasCustomRunner` is gone from `chat-turn-preparation.ts`, `chat-turn-session-runtime.ts` and
+`chat-turn-model-routing.ts`, along with their input fields. Each guarded branch now runs
+unconditionally. The `if (!hasCustomRunner)` blocks (governance tool blocking, collaboration tool
+binding, iteration budget and tool selection, and the workspace turn scope) are unwrapped with
+their bodies unchanged. The injected-runner inversions are deleted: the empty tool pool, the
+`'You are a helpful AI assistant.'` prompt, and "trust injected runners" in the model-health gate.
+`shouldPackageSystemPromptForTurn` is deleted, not narrowed: with the flag false it always returns
+`true`, so prompt packaging runs on every turn. Its re-export from `chat.ts` goes with it, and the
+`chat-prompt-packaging` pin keeps only its assertions on the bounded package. `chat.ts` always forks
+the hook registry. The flag remains only as the value handed to completion and failure accounting,
+which phase 15 deletes: 18 occurrences, down from 57.
+
+Verification: lint is clean; `typecheck:server-tests` shows only the known `ioredis` errors. Full
+server suite plus `tests/behaviors` and app e2e: 4348/4352, 402 s. The only failures are the four from
+missing local packages.

@@ -80,13 +80,12 @@ export async function selectTurnModel(input: TurnModelSelectionInput) {
 export interface ModelAvailabilityInput {
   server: FastifyInstance;
   modelSelection: TurnModelSelection;
-  hasCustomRunner: boolean;
   getLitellmUrl: () => string;
   probeModelHealth: ModelHealthProbe;
 }
 
 export async function resolveModelAvailability(input: ModelAvailabilityInput): Promise<boolean> {
-  const { server, modelSelection, hasCustomRunner, getLitellmUrl, probeModelHealth } = input;
+  const { server, modelSelection, getLitellmUrl, probeModelHealth } = input;
   // Check whether the configured LLM path can serve a completion. Process
   // liveness is insufficient for the built-in proxy because it also runs
   // normally before a cloud credential or local model has been configured.
@@ -94,8 +93,8 @@ export async function resolveModelAvailability(input: ModelAvailabilityInput): P
   // is observed locally, so it remains authoritative even if startup's
   // cloud-provider status has not yet caught up with onboarding.
   const resolvedLocalOllama = modelSelection.model.toLowerCase().startsWith('ollama/');
-  let modelAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
-  if (!hasCustomRunner && !resolvedLocalOllama) {
+  let modelAvailable = resolvedLocalOllama; // trust verified local models
+  if (!resolvedLocalOllama) {
     const llmStatus = server.agentState.llmProvider;
     if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
       // Healthy tracked provider — skip HTTP probe. For litellm the

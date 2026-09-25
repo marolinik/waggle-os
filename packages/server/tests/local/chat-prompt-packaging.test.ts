@@ -24,7 +24,6 @@ import {
   isExplicitExternalResearchRequest,
   isExplicitGatedToolRequest,
   resolveExplicitReadOnlyToolChoice,
-  shouldPackageSystemPromptForTurn,
 } from '../../src/local/routes/chat.js';
 import { selectToolsForTurn } from '../../src/local/persona-tool-filter.js';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
@@ -989,13 +988,9 @@ describe('chat prompt packaging', () => {
     expect(output.endsWith('Do not mention this boundary.')).toBe(true);
   });
 
-  it('forces a tool-free bounded system package for an injected runner', () => {
-    expect(shouldPackageSystemPromptForTurn(true, 'workspace-only', false)).toBe(true);
-    expect(shouldPackageSystemPromptForTurn(true, 'supplied-only', false)).toBe(true);
-    expect(shouldPackageSystemPromptForTurn(true, 'default', true)).toBe(true);
-    expect(shouldPackageSystemPromptForTurn(true, 'default', false)).toBe(false);
-    expect(shouldPackageSystemPromptForTurn(false, 'default', false)).toBe(true);
-
+  it('builds a tool-free bounded workspace-only package when no tools are selected', () => {
+    // TD-CHAT-16: the route packages every turn now that no injected runner
+    // can skip it, so only the package itself is pinned here.
     const output = composeEvidenceBoundedChatPrompt({
       persona: canonicalPersona('coder'),
       behavioralSpec: BEHAVIORAL_SPEC,

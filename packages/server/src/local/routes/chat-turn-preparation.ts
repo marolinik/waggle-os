@@ -48,15 +48,6 @@ import type { AgentRunner } from './chat.js';
 
 const log = createLogger('chat');
 
-/** Injected runners still need request-scoped evidence boundaries. */
-export function shouldPackageSystemPromptForTurn(
-  hasCustomRunner: boolean,
-  contextScope: TurnContextScope,
-  closedWorldRewrite: boolean,
-): boolean {
-  return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
-}
-
 /** The handler's values the preparation phase reads; none is written back. */
 export interface TurnPreparationInput {
   activeSessionStateWorkspaceId: string;
@@ -84,7 +75,6 @@ export interface TurnPreparationInput {
   executionWorkspacePath: string | undefined;
   explicitReadOnlyToolCandidate: "read_file" | "read_skill" | "search_memory" | "list_skills" | undefined;
   getLitellmUrl: () => FastifyInstance['localConfig']['litellmUrl'];
-  hasCustomRunner: boolean;
   history: NonNullable<ReturnType<FastifyInstance['agentState']['sessionHistories']['get']>>;
   injectionResult: ScanResult;
   isAutomatedTurn: boolean;
@@ -173,7 +163,6 @@ export async function prepareAgentTurn(turn: TurnPreparationInput): Promise<Turn
     executionWorkspacePath,
     explicitReadOnlyToolCandidate,
     getLitellmUrl,
-    hasCustomRunner,
     history,
     injectionResult,
     isAutomatedTurn,
@@ -212,7 +201,7 @@ export async function prepareAgentTurn(turn: TurnPreparationInput): Promise<Turn
 emitWaggleSignal({ type: 'agent:started', workspaceId: executionScopeId, content: retainedTurnText(agentMessage).slice(0, 200) });
 
 // ── Budget check — warn if workspace is over budget ──
-if (!hasCustomRunner && effectiveWorkspace) {
+if (effectiveWorkspace) {
     const wsBudgetConfig = server.workspaceManager?.get(effectiveWorkspace);
     if (wsBudgetConfig?.budget != null && wsBudgetConfig.budget > 0) {
       const wsUsage = costTracker.getWorkspaceCost(effectiveWorkspace);
@@ -228,7 +217,7 @@ if (!hasCustomRunner && effectiveWorkspace) {
   // shared-orchestrator activation only fires as a fallback when
   // session creation failed (wsSession is undefined) — matches the
   // old behavior for default/personal-only chats and broken workspaces.
-if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) {
+if (usesNamedWorkspace && !wsSession && effectiveWorkspace) {
     const activated = server.agentState.activateWorkspaceMind(effectiveWorkspace);
     if (!activated) {
       sendEvent('step', { content: `Warning: could not activate workspace memory for "${effectiveWorkspace}". Using personal memory only.` });
@@ -236,8 +225,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) 
   }
 
   // ── Automatic memory recall ─────────────────────────────
-  if (!hasCustomRunner
-    && !closedWorldRewrite
+  if (!closedWorldRewrite
     && !retention.toolFreeAdvisory
     && !explicitReadOnlyToolCandidate
     && !isCurrentConversationOnlyReferenceRequest(agentMessage)
@@ -317,8 +305,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) 
   // GEPA has no conversation context and will misinterpret them as standalone
   // vague requests, generating phantom instructions the user never intended.
   let gepaExpanded: string | null = null;
-  if (!hasCustomRunner
-    && isFirstUserMessage
+  if (isFirstUserMessage
     && !closedWorldRewrite
     && !retention.toolFreeAdvisory
     && !explicitReadOnlyToolCandidate
@@ -356,7 +343,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) 
     && !closedWorldRewrite
     && !explicitReadOnlyToolCandidate
     && turnMutationPolicy.contextScope === 'default'; // Skip when expansion or an explicit evidence boundary already resolves intent
-  const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
+  const ambiguityPrefix = (shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
   // Track session start on first user message
 if (isFirstUserMessage && server.telemetry) {
@@ -370,8 +357,7 @@ if (isFirstUserMessage && server.telemetry) {
 
   // Template welcome context — inject on first message in a workspace with a template
   let templateContext = '';
-  if (!hasCustomRunner
-    && isFirstUserMessage
+  if (isFirstUserMessage
     && !closedWorldRewrite
     && !retention.toolFreeAdvisory
     && !explicitReadOnlyToolCandidate
@@ -394,8 +380,7 @@ if (isFirstUserMessage && server.telemetry) {
   // to the static system prompt — never block a chat turn on assembler errors.
   const turnTaskShape = detectTaskShape(agentMessage);
   let assembled: AssembledPrompt | null = null;
-  const shouldAssemblePrompt = !hasCustomRunner
-    && turnMutationPolicy.contextScope === 'default'
+  const shouldAssemblePrompt = turnMutationPolicy.contextScope === 'default'
     && persistedMemoryReadAllowed
     && !retention.toolFreeAdvisory
     && !explicitReadOnlyToolCandidate
@@ -405,7 +390,7 @@ if (isFirstUserMessage && server.telemetry) {
   // assembled prompt, so `turnRecall.staticPromptTail(Boolean(assembledForModel))`
   // in `rebuildSystemPromptForModel` omits it; appending it again would
   // inject every recalled memory twice.
-  let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
+  let systemPrompt = '';
   const initialPromptModel = modelSelection.model;
   let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
 
@@ -431,19 +416,17 @@ if (isFirstUserMessage && server.telemetry) {
   if (unregisterToolHook) turnResources.holdToolHook(unregisterToolHook);
 
   // Use workspace-scoped tools if a workspacePath was specified
-if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
+if (usesNamedWorkspace && !sessionTools) {
     throw new Error('Workspace chat runtime is unavailable.');
   }
-  let effectiveTools = hasCustomRunner
-    ? []
-    : sessionTools
-      ?? (executionWorkspacePath
-        ? server.agentState.buildToolsForWorkspace(
-            executionWorkspacePath,
-            sessionOrch,
-            authorizedWorkspace ?? effectiveWorkspace,
-          )
-        : allTools);
+  let effectiveTools = sessionTools
+    ?? (executionWorkspacePath
+      ? server.agentState.buildToolsForWorkspace(
+          executionWorkspacePath,
+          sessionOrch,
+          authorizedWorkspace ?? effectiveWorkspace,
+        )
+      : allTools);
   const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
   let toolCatalogCount = catalogToolNames.size;
   let toolEligibleCount = 0;
@@ -461,15 +444,13 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
   // Filter tools by persona — non-technical personas get a reduced
   // tool set. The always-available + read-only-write-strip policy lives in
   // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
-  // — create_skill survives the allowlist — is unit-testable). This block
-  // is !hasCustomRunner-gated: route tests reach it only without an
-  // injected runner, as sse-resilience and persona-acceptance do.
+  // — create_skill survives the allowlist — is unit-testable).
   // Resolution order matches buildSystemPrompt: per-window
   // override > workspace config.
   const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
   const activePersonaId = turnPersonaId;
   const activePersona = turnPersona;
-  if (!hasCustomRunner && activePersona) {
+  if (activePersona) {
     effectiveTools = applyPersonaToolFilter(
       effectiveTools,
       activePersona,
@@ -477,8 +458,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
     );
   }
 
-  if (!hasCustomRunner
-    && usesNamedWorkspace
+  if (usesNamedWorkspace
     && persistedMemoryReadAllowed
     && allowsConversationHistory(turnMutationPolicy)
     && isWorkspaceCatchUpRequest(agentMessage)) {
@@ -523,7 +503,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
   let spawnAllowedToolNames: ReadonlySet<string> | null = null;
   const externalToolNames = new Set<string>();
   const retrievedToolNames = new Set<string>();
-  if (!hasCustomRunner && !closedWorldRewrite && !retention.toolFreeAdvisory) {
+  if (!closedWorldRewrite && !retention.toolFreeAdvisory) {
     effectiveTools = filterAvailableTools(effectiveTools);
     spawnAvailableTools = effectiveTools;
 
@@ -668,7 +648,7 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
         // tool/connector output, so scan it before it can enter durable
         // memory; fail-soft with the W4A closed-DB guard so persistence
         // never fails the turn.
-        if (!hasCustomRunner && retention.allowMemoryPersistence) {
+        if (retention.allowMemoryPersistence) {
           const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
           if (summaryScan.score >= 0.7) {
             log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
@@ -750,118 +730,116 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
     governancePolicies = lookup.status === 'policy' ? lookup.policies : undefined;
   }
 
-  if (!hasCustomRunner) {
-    // Remove governance-blocked definitions before serialization, while
-    // retaining the executor's deny check as defense in depth.
-    const blockedTools = new Set(governancePolicies?.blockedTools ?? []);
-    if (blockedTools.size > 0) {
-      effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
-      spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
+  // Remove governance-blocked definitions before serialization, while
+  // retaining the executor's deny check as defense in depth.
+  const blockedTools = new Set(governancePolicies?.blockedTools ?? []);
+  if (blockedTools.size > 0) {
+    effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
+    spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
+  }
+  const policyInputTools = effectiveTools;
+  effectiveTools = filterToolsByTurnMutationPolicy(
+    effectiveTools,
+    turnMutationPolicy,
+    externalToolNames,
+  );
+  if ((decisionMatrixToolSequenceRequested || selectedSkill) && turnMutationPolicy.denyMemoryRead) {
+    const builtInReadSkill = policyInputTools.find(tool => (
+      tool.name === 'read_skill' && !externalToolNames.has(tool.name)
+    ));
+    if (builtInReadSkill && !effectiveTools.some(tool => tool.name === 'read_skill')) {
+      // A saved-memory opt-out must not disable an explicitly bounded
+      // installed-skill read. The sequence below binds this built-in
+      // tool to decision-matrix before anything reaches the model.
+      effectiveTools = [...effectiveTools, builtInReadSkill];
     }
-    const policyInputTools = effectiveTools;
-    effectiveTools = filterToolsByTurnMutationPolicy(
-      effectiveTools,
-      turnMutationPolicy,
-      externalToolNames,
-    );
-    if ((decisionMatrixToolSequenceRequested || selectedSkill) && turnMutationPolicy.denyMemoryRead) {
-      const builtInReadSkill = policyInputTools.find(tool => (
-        tool.name === 'read_skill' && !externalToolNames.has(tool.name)
-      ));
-      if (builtInReadSkill && !effectiveTools.some(tool => tool.name === 'read_skill')) {
-        // A saved-memory opt-out must not disable an explicitly bounded
-        // installed-skill read. The sequence below binds this built-in
-        // tool to decision-matrix before anything reaches the model.
-        effectiveTools = [...effectiveTools, builtInReadSkill];
-      }
-    }
-    spawnAvailableTools = filterToolsByTurnMutationPolicy(
-      spawnAvailableTools,
-      turnMutationPolicy,
-      externalToolNames,
-    );
-    spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
+  }
+  spawnAvailableTools = filterToolsByTurnMutationPolicy(
+    spawnAvailableTools,
+    turnMutationPolicy,
+    externalToolNames,
+  );
+  spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
-    const beforeNarrowing = effectiveTools.length;
-    if (decisionMatrixToolSequenceRequested
-      && explicitReadOnlyToolCandidate === 'read_skill') {
-      const sequenceTools = DECISION_MATRIX_TOOL_SEQUENCE.map(name => (
-        effectiveTools.filter(tool => tool.name === name)
-      ));
-      const sequenceAvailable = injectionResult.safe
-        && sequenceTools.every(matches => matches.length === 1);
-      if (sequenceAvailable) {
-        requiredToolSequence = DECISION_MATRIX_TOOL_SEQUENCE;
-        effectiveTools = DECISION_MATRIX_TOOL_SEQUENCE.map((name, index) => sequenceTools[index][0]);
-        effectiveTools = bindExactReadSkillTool(effectiveTools, 'decision-matrix');
-      } else {
-        effectiveTools = [];
-      }
-      explicitReadOnlyToolChoice = undefined;
-    } else if (selectedSkill && explicitReadOnlyToolCandidate === 'read_skill') {
-      explicitReadOnlyToolChoice = injectionResult.safe
-        && effectiveTools.some(tool => tool.name === 'read_skill')
-        ? 'read_skill'
-        : undefined;
-      if (explicitReadOnlyToolChoice) {
-        effectiveTools = bindExactReadSkillTool(effectiveTools, selectedSkill);
-      }
-    } else if (explicitReadOnlyToolCandidate === 'read_file') {
-      explicitReadOnlyToolChoice = injectionResult.safe
-        && directReadFileDirective.kind === 'valid'
-        && turnTaskShape.complexity === 'simple'
-        && effectiveTools.some(tool => tool.name === 'read_file')
-        ? 'read_file'
-        : undefined;
-    } else if (explicitReadOnlyToolCandidate === 'search_memory') {
-      explicitReadOnlyToolChoice = injectionResult.safe
-        && boundedExactPersistedMemoryLookup
-        && effectiveTools.some(tool => tool.name === 'search_memory')
-        ? 'search_memory'
-        : undefined;
-      if (explicitReadOnlyToolChoice) {
-        effectiveTools = bindExactWorkspaceMemorySearchTool(
-          effectiveTools,
-          agentMessage,
-          outcome => { boundedExactMemoryExecutionOutcome = outcome; },
-        );
-      }
+  const beforeNarrowing = effectiveTools.length;
+  if (decisionMatrixToolSequenceRequested
+    && explicitReadOnlyToolCandidate === 'read_skill') {
+    const sequenceTools = DECISION_MATRIX_TOOL_SEQUENCE.map(name => (
+      effectiveTools.filter(tool => tool.name === name)
+    ));
+    const sequenceAvailable = injectionResult.safe
+      && sequenceTools.every(matches => matches.length === 1);
+    if (sequenceAvailable) {
+      requiredToolSequence = DECISION_MATRIX_TOOL_SEQUENCE;
+      effectiveTools = DECISION_MATRIX_TOOL_SEQUENCE.map((name, index) => sequenceTools[index][0]);
+      effectiveTools = bindExactReadSkillTool(effectiveTools, 'decision-matrix');
     } else {
-      explicitReadOnlyToolChoice = injectionResult.safe
-        ? resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools)
-        : undefined;
+      effectiveTools = [];
     }
-    if (requiredToolSequence) {
-      // Exact sequence is already narrowed, ordered, and bound above.
-    } else if (explicitReadOnlyToolCandidate) {
-      effectiveTools = explicitReadOnlyToolChoice
-        ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
-        : [];
-    } else {
-      effectiveTools = explicitReadOnlyToolChoice
-        ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
-        : filterGatedToolsForConversationalTurn(
-          effectiveTools,
-          agentMessage,
-          autonomyLevel,
-          turnMutationPolicy,
-          externalToolNames,
-        );
+    explicitReadOnlyToolChoice = undefined;
+  } else if (selectedSkill && explicitReadOnlyToolCandidate === 'read_skill') {
+    explicitReadOnlyToolChoice = injectionResult.safe
+      && effectiveTools.some(tool => tool.name === 'read_skill')
+      ? 'read_skill'
+      : undefined;
+    if (explicitReadOnlyToolChoice) {
+      effectiveTools = bindExactReadSkillTool(effectiveTools, selectedSkill);
     }
-    if (effectiveTools.length !== beforeNarrowing) {
-      log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
-    }
-
-    if (explicitReadOnlyToolChoice === 'read_file'
+  } else if (explicitReadOnlyToolCandidate === 'read_file') {
+    explicitReadOnlyToolChoice = injectionResult.safe
       && directReadFileDirective.kind === 'valid'
-      && executionWorkspacePath) {
-      effectiveTools = bindDirectReadFileTool(
+      && turnTaskShape.complexity === 'simple'
+      && effectiveTools.some(tool => tool.name === 'read_file')
+      ? 'read_file'
+      : undefined;
+  } else if (explicitReadOnlyToolCandidate === 'search_memory') {
+    explicitReadOnlyToolChoice = injectionResult.safe
+      && boundedExactPersistedMemoryLookup
+      && effectiveTools.some(tool => tool.name === 'search_memory')
+      ? 'search_memory'
+      : undefined;
+    if (explicitReadOnlyToolChoice) {
+      effectiveTools = bindExactWorkspaceMemorySearchTool(
         effectiveTools,
-        executionWorkspacePath,
-        directReadFileDirective.expectedPath,
-        outcome => { directReadFileExecutionOutcome = outcome; },
+        agentMessage,
+        outcome => { boundedExactMemoryExecutionOutcome = outcome; },
       );
     }
+  } else {
+    explicitReadOnlyToolChoice = injectionResult.safe
+      ? resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools)
+      : undefined;
+  }
+  if (requiredToolSequence) {
+    // Exact sequence is already narrowed, ordered, and bound above.
+  } else if (explicitReadOnlyToolCandidate) {
+    effectiveTools = explicitReadOnlyToolChoice
+      ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
+      : [];
+  } else {
+    effectiveTools = explicitReadOnlyToolChoice
+      ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
+      : filterGatedToolsForConversationalTurn(
+        effectiveTools,
+        agentMessage,
+        autonomyLevel,
+        turnMutationPolicy,
+        externalToolNames,
+      );
+  }
+  if (effectiveTools.length !== beforeNarrowing) {
+    log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+  }
+
+  if (explicitReadOnlyToolChoice === 'read_file'
+    && directReadFileDirective.kind === 'valid'
+    && executionWorkspacePath) {
+    effectiveTools = bindDirectReadFileTool(
+      effectiveTools,
+      executionWorkspacePath,
+      directReadFileDirective.expectedPath,
+      outcome => { directReadFileExecutionOutcome = outcome; },
+    );
   }
 
   if (workspaceTurnScope) {
@@ -872,89 +850,85 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
   // Bind collaboration producers to THIS request's workspace, session,
   // security policy, and runner. Static startup tools are replaced only
   // when their names survived persona/availability/intent filtering.
-  if (!hasCustomRunner) {
-    const childAgentRunner = bindModelSpendBudget(
-      agentRunner,
-      costTracker,
-      executionScopeId,
-      listOllamaChatModelIds,
-      () => turnTrace.id,
-      (model) => isExactConfiguredKeylessCompatibleModel(server, model),
-    );
-    effectiveTools = bindChatCollaborationTools({
-      server,
-      visibleTools: effectiveTools,
-      workerTools: spawnAvailableTools,
-      workspaceId: executionScopeId,
-      parentSessionId: sessionId,
-      parentTask: agentMessage,
-      model: modelSelection.model,
-      runLoop: childAgentRunner,
-      runWorkerTransaction: workspaceTurnScope
-        ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
-            tools,
-            operation,
-            externalToolNames,
-          )
-        : undefined,
-      allowDerivedPersistence: retention.allowDerivedPersistence,
-      securityContext: {
-        hooks: requestHookRegistry,
-        blockedTools: governancePolicies?.blockedTools,
-        allowedToolNames: spawnAllowedToolNames,
-      },
-      parentSignal: turnSignal,
-      turnOrigin: {
-        session: sessionId,
-        workspace: effectiveWorkspace ?? null,
-        ...(channelMeta?.platform && channelMeta?.chatId
-          ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
-          : {}),
-      },
-    });
-  }
+  const childAgentRunner = bindModelSpendBudget(
+    agentRunner,
+    costTracker,
+    executionScopeId,
+    listOllamaChatModelIds,
+    () => turnTrace.id,
+    (model) => isExactConfiguredKeylessCompatibleModel(server, model),
+  );
+  effectiveTools = bindChatCollaborationTools({
+    server,
+    visibleTools: effectiveTools,
+    workerTools: spawnAvailableTools,
+    workspaceId: executionScopeId,
+    parentSessionId: sessionId,
+    parentTask: agentMessage,
+    model: modelSelection.model,
+    runLoop: childAgentRunner,
+    runWorkerTransaction: workspaceTurnScope
+      ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
+          tools,
+          operation,
+          externalToolNames,
+        )
+      : undefined,
+    allowDerivedPersistence: retention.allowDerivedPersistence,
+    securityContext: {
+      hooks: requestHookRegistry,
+      blockedTools: governancePolicies?.blockedTools,
+      allowedToolNames: spawnAllowedToolNames,
+    },
+    parentSignal: turnSignal,
+    turnOrigin: {
+      session: sessionId,
+      workspace: effectiveWorkspace ?? null,
+      ...(channelMeta?.platform && channelMeta?.chatId
+        ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
+        : {}),
+    },
+  });
 
   // Iteration budget — prevents runaway agent loops
-  if (!hasCustomRunner) {
-    toolCatalogCount = catalogToolNames.size;
-    toolEligibleCount = effectiveTools.length;
-    const sequenceHistory = sessionToolSequences.get(sessionStateKey);
-    const previousToolSequence = allowsConversationHistory(turnMutationPolicy)
-      ? sequenceHistory?.[sequenceHistory.length - 1] ?? []
-      : [];
-    const recentMessages = allowsConversationHistory(turnMutationPolicy)
-      ? history
-        .slice(0, -1)
-        .filter(entry => entry.role === 'user' || entry.role === 'assistant')
-        .slice(-8)
-        .map(entry => ({ role: entry.role, content: entry.content }))
-      : [];
-    const selectorStartedAt = performance.now();
-    const selection = selectToolsForTurn(effectiveTools, {
-      message: agentMessage,
-      recentMessages,
-      recentToolNames: previousToolSequence,
-      preferredToolNames: activePersona?.tools ?? [],
-      mandatoryToolNames: [
-        ...(requiredToolSequence ?? []),
-        ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
-        ...(shouldUsePersistedMemoryForTurn(agentMessage) ? ['search_memory'] : []),
-        ...(shouldRequireCapabilityAcquisitionTools(agentMessage, effectiveTools)
-          && !turnMutationPolicy.denyAllMutations
-          && !activePersona?.isReadOnly
-          ? ['search_skills', 'create_skill']
-          : []),
-      ],
-      externalToolNames: [...externalToolNames],
-      retrievedToolNames: [...retrievedToolNames],
-    });
-    selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
-    effectiveTools = selection.tools;
-    toolSelectedCount = effectiveTools.length;
-    toolOmittedCount = selection.omittedCount;
-    transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
-    log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
-  }
+  toolCatalogCount = catalogToolNames.size;
+  toolEligibleCount = effectiveTools.length;
+  const sequenceHistory = sessionToolSequences.get(sessionStateKey);
+  const previousToolSequence = allowsConversationHistory(turnMutationPolicy)
+    ? sequenceHistory?.[sequenceHistory.length - 1] ?? []
+    : [];
+  const recentMessages = allowsConversationHistory(turnMutationPolicy)
+    ? history
+      .slice(0, -1)
+      .filter(entry => entry.role === 'user' || entry.role === 'assistant')
+      .slice(-8)
+      .map(entry => ({ role: entry.role, content: entry.content }))
+    : [];
+  const selectorStartedAt = performance.now();
+  const selection = selectToolsForTurn(effectiveTools, {
+    message: agentMessage,
+    recentMessages,
+    recentToolNames: previousToolSequence,
+    preferredToolNames: activePersona?.tools ?? [],
+    mandatoryToolNames: [
+      ...(requiredToolSequence ?? []),
+      ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
+      ...(shouldUsePersistedMemoryForTurn(agentMessage) ? ['search_memory'] : []),
+      ...(shouldRequireCapabilityAcquisitionTools(agentMessage, effectiveTools)
+        && !turnMutationPolicy.denyAllMutations
+        && !activePersona?.isReadOnly
+        ? ['search_skills', 'create_skill']
+        : []),
+    ],
+    externalToolNames: [...externalToolNames],
+    retrievedToolNames: [...retrievedToolNames],
+  });
+  selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
+  effectiveTools = selection.tools;
+  toolSelectedCount = effectiveTools.length;
+  toolOmittedCount = selection.omittedCount;
+  transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
+  log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
   if (requiredToolSequence) {
     const selectedSequenceTools = requiredToolSequence.map(name => (
       effectiveTools.filter(tool => tool.name === name)
@@ -1026,112 +1000,105 @@ if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
   // Package the prompt only after the executable tool set is final. A
   // genuinely conversational turn can stay compact; every tool-bearing,
   // agentic, sensitive, or complex turn retains the full operating spec.
-  if (shouldPackageSystemPromptForTurn(
-    hasCustomRunner,
-    turnMutationPolicy.contextScope,
-    closedWorldRewrite,
-  )) {
-    const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
-      || shouldUsePersistedMemoryForTurn(agentMessage)
-      || isExplicitMemorySaveRequest(agentMessage)
-      || isExplicitExternalResearchRequest(agentMessage);
-    const selectedPackageMode = selectChatPromptPackageMode({
-      message: agentMessage,
-      selectedToolCount: effectiveTools.length,
-      autonomyLevel,
-      isAutomatedTurn,
-      explicitCapabilityRequest,
-      taskComplexity: turnTaskShape.complexity,
-      suspiciousInjection: !injectionResult.safe,
-      selectedToolsReadOnly: effectiveTools.length > 0
-        && effectiveTools.every(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name)),
-      explicitReadOnlyToolChoice: explicitReadOnlyToolChoice === explicitReadOnlyToolCandidate
-        ? explicitReadOnlyToolChoice
-        : undefined,
-      explicitReadOnlyToolSequence: decisionMatrixToolSequenceRequested
-        ? DECISION_MATRIX_TOOL_SEQUENCE
-        : undefined,
-      explicitToolFreeAdvisory: retention.toolFreeAdvisory,
-      exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
-        || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
-    });
-    packageMode = selectedPackageMode;
-    rebuildSystemPromptForModel = async (logicalModel: string): Promise<string> => {
-      let assembledForModel = assembled;
-      if (assembled && logicalModel !== initialPromptModel) {
-        try {
-          assembledForModel = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
-            taskShape: turnTaskShape,
-            turnId,
-            recalledText: turnRecall.assemblerText,
-            model: logicalModel,
-            availableTools: effectiveTools,
-          });
-          throwIfTurnAborted();
-          log.info(
-            `[prompt-assembler] rebuilt turn=${turnId.slice(0, 8)} model=${logicalModel} `
-            + `tier=${assembledForModel.debug.tier} chars=${assembledForModel.debug.totalChars}`,
-          );
-        } catch (err) {
-          throwIfTurnAborted();
-          log.warn(`[prompt-assembler] fallback rebuild failed, using static prompt: ${(err as Error).message}`);
-          assembledForModel = null;
-        }
-      }
-
-      const packagedSystemPrompt = buildSystemPrompt(
-        sessionOrch,
-    executionWorkspacePath,
-        sessionId,
-        history.length,
-        effectiveWorkspace,
-        personaOverride,
-        assembledForModel,
-        selectedPackageMode,
-        closedWorldRewrite,
-        turnMutationPolicy.contextScope,
-        effectiveTools.length,
-        decisionMatrixToolSequenceRequested
-          ? undefined
-          : explicitReadOnlyToolChoice ?? explicitReadOnlyToolCandidate,
-        decisionMatrixToolSequenceRequested ? DECISION_MATRIX_TOOL_SEQUENCE : undefined,
-        logicalModel,
-        activeSessionStateWorkspaceId,
-        retention.toolFreeAdvisory || Boolean(
-          explicitReadOnlyToolCandidate
-          && !explicitReadOnlyToolChoice
-          && !requiredToolSequence,
-        ),
-        persistedMemoryReadAllowed,
-        allowsConversationHistory(turnMutationPolicy),
-        effectiveTools,
-      );
-      const hasSpecialEvidenceBoundary = turnMutationPolicy.contextScope !== 'default'
-        || closedWorldRewrite
-        || retention.toolFreeAdvisory
-        || Boolean(explicitReadOnlyToolCandidate);
-      const basePrompt = hasSpecialEvidenceBoundary
-        ? packagedSystemPrompt
-        : ambiguityPrefix
-          + packagedSystemPrompt
-          + templateContext
-          + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
-          + turnRecall.staticPromptTail(Boolean(assembledForModel));
-      return hasSpecialEvidenceBoundary
-        ? basePrompt
-        : basePrompt + buildTurnContextSuffix(
-          sessionId,
-          Math.max(0, windowedMessages.length - 1),
+  const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
+    || shouldUsePersistedMemoryForTurn(agentMessage)
+    || isExplicitMemorySaveRequest(agentMessage)
+    || isExplicitExternalResearchRequest(agentMessage);
+  const selectedPackageMode = selectChatPromptPackageMode({
+    message: agentMessage,
+    selectedToolCount: effectiveTools.length,
+    autonomyLevel,
+    isAutomatedTurn,
+    explicitCapabilityRequest,
+    taskComplexity: turnTaskShape.complexity,
+    suspiciousInjection: !injectionResult.safe,
+    selectedToolsReadOnly: effectiveTools.length > 0
+      && effectiveTools.every(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name)),
+    explicitReadOnlyToolChoice: explicitReadOnlyToolChoice === explicitReadOnlyToolCandidate
+      ? explicitReadOnlyToolChoice
+      : undefined,
+    explicitReadOnlyToolSequence: decisionMatrixToolSequenceRequested
+      ? DECISION_MATRIX_TOOL_SEQUENCE
+      : undefined,
+    explicitToolFreeAdvisory: retention.toolFreeAdvisory,
+    exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
+      || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
+  });
+  packageMode = selectedPackageMode;
+  rebuildSystemPromptForModel = async (logicalModel: string): Promise<string> => {
+    let assembledForModel = assembled;
+    if (assembled && logicalModel !== initialPromptModel) {
+      try {
+        assembledForModel = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+          taskShape: turnTaskShape,
+          turnId,
+          recalledText: turnRecall.assemblerText,
+          model: logicalModel,
+          availableTools: effectiveTools,
+        });
+        throwIfTurnAborted();
+        log.info(
+          `[prompt-assembler] rebuilt turn=${turnId.slice(0, 8)} model=${logicalModel} `
+          + `tier=${assembledForModel.debug.tier} chars=${assembledForModel.debug.totalChars}`,
         );
-    };
-    systemPrompt = await rebuildSystemPromptForModel(modelSelection.model);
-    throwIfTurnAborted();
-    log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
-  }
+      } catch (err) {
+        throwIfTurnAborted();
+        log.warn(`[prompt-assembler] fallback rebuild failed, using static prompt: ${(err as Error).message}`);
+        assembledForModel = null;
+      }
+    }
+
+    const packagedSystemPrompt = buildSystemPrompt(
+      sessionOrch,
+  executionWorkspacePath,
+      sessionId,
+      history.length,
+      effectiveWorkspace,
+      personaOverride,
+      assembledForModel,
+      selectedPackageMode,
+      closedWorldRewrite,
+      turnMutationPolicy.contextScope,
+      effectiveTools.length,
+      decisionMatrixToolSequenceRequested
+        ? undefined
+        : explicitReadOnlyToolChoice ?? explicitReadOnlyToolCandidate,
+      decisionMatrixToolSequenceRequested ? DECISION_MATRIX_TOOL_SEQUENCE : undefined,
+      logicalModel,
+      activeSessionStateWorkspaceId,
+      retention.toolFreeAdvisory || Boolean(
+        explicitReadOnlyToolCandidate
+        && !explicitReadOnlyToolChoice
+        && !requiredToolSequence,
+      ),
+      persistedMemoryReadAllowed,
+      allowsConversationHistory(turnMutationPolicy),
+      effectiveTools,
+    );
+    const hasSpecialEvidenceBoundary = turnMutationPolicy.contextScope !== 'default'
+      || closedWorldRewrite
+      || retention.toolFreeAdvisory
+      || Boolean(explicitReadOnlyToolCandidate);
+    const basePrompt = hasSpecialEvidenceBoundary
+      ? packagedSystemPrompt
+      : ambiguityPrefix
+        + packagedSystemPrompt
+        + templateContext
+        + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
+        + turnRecall.staticPromptTail(Boolean(assembledForModel));
+    return hasSpecialEvidenceBoundary
+      ? basePrompt
+      : basePrompt + buildTurnContextSuffix(
+        sessionId,
+        Math.max(0, windowedMessages.length - 1),
+      );
+  };
+  systemPrompt = await rebuildSystemPromptForModel(modelSelection.model);
+  throwIfTurnAborted();
+  log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
 
   // Build routing suggestions from the exact executable/serialized set.
-  const capabilityRouter = hasCustomRunner
-    || retention.toolFreeAdvisory
+  const capabilityRouter = retention.toolFreeAdvisory
     || Boolean(explicitReadOnlyToolCandidate)
     || !persistedMemoryReadAllowed
     || !allowsConversationHistory(turnMutationPolicy)
