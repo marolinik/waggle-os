@@ -871,3 +871,46 @@ unchanged.
 
 Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline 2829/2829
 (192 files), 389 s.
+
+## 6s. app e2e, the seam guard, and what blocks the production removal
+
+**app/tests/e2e/chat.test.ts: two of four ported.**
+- Scenario 4 streams `Hello ` + `world` from the fake, with every assertion unchanged, and also
+  asserts one model request.
+- Scenario 9 has the model really call `read_file` and then `write_file`. The route's own
+  `auto_recall` tool event is filtered out (the ruling-4 pattern). The tool names, the read path
+  and `toolsUsed` are unchanged. The message now also asks for the write, because a read request
+  transmits no write tool. The service is built with the test-mode auto-approval, as in §6p.
+- **Held: scenarios 10 and 10b, the "external mutation gate".** Their `gate:request` /
+  `gate:response` exchange on the event bus exists only inside the injected runner. The real
+  approval hook never emits either event: it sends `approval_required` and waits on the pending
+  approval that `POST /api/approval/:id` answers. So there is no production path to port them
+  onto. Proposed re-pin: drive the real hook. A `bash` call in a turn without auto-approval
+  should show `approval_required` and finish once the approval is answered; a denial should show
+  the refusal. `chat-approval-hook-characterization` already pins much of this.
+
+**Guard (`chat-runner-seam-guard.test.ts`, ruling 1).** It scans every test file under
+`packages`, `tests`, `app/tests` and `apps` that mentions `/api/chat`, and counts its runner
+installs (`.agentRunner = …`, apart from `undefined` and saved-original restores, and
+`decorate('agentRunner', …)`). The counts must equal an allowlist:
+- `local-mode.test.ts`, 6 installs: fleet and agent-group runs (ruling 1);
+- the held pins: smart-router 1, team-integration 1, user-facing-error 1, app e2e 2.
+
+The list is a ratchet. When a held pin is ported, its count drops, and the guard fails until the
+list is updated. `fleet-isolation` and `agent-groups` never post to `/api/chat`, so the guard
+does not cover them.
+
+**Phase 13+ (production removal) is not started.** Five injected-runner pins remain on
+`/api/chat`, all waiting for a ruling. Removing `hasCustomRunner` now would break them.
+`hasCustomRunner` still has 57 occurrences in 8 files under `packages/server/src`. The rulings
+needed:
+
+| Pin | Section | Recommendation |
+|---|---|---|
+| smart-router "persists returned usage before completing a client-cancelled run" | §6p | real mid-stream abort, plus a unit pin of usage-on-abort accounting |
+| team-integration "does not push save_memory with a Team token bound to another server" | §6r | a governance fail-closed route pin, plus a unit pin of the token binding |
+| user-facing-error "provider HTTP error" and "persists the text it showed" | §6r | a non-retried status (400), or pin the real 502 sentence |
+| app e2e scenarios 10 and 10b | §6s | re-pin on the real approval hook |
+
+Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline, app e2e and the
+guard 2835/2835 (194 files), 464 s.
