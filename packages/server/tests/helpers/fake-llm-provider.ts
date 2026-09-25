@@ -30,8 +30,11 @@ export interface FakeLlmUsage {
 
 /** One scripted provider reply. */
 export type FakeLlmReply =
-  /** Assistant text. `chunks` sets the streamed deltas; default is one delta. */
-  | { type: 'text'; content: string; chunks?: readonly string[]; usage?: FakeLlmUsage }
+  /**
+   * Assistant text. `chunks` sets the streamed deltas; default is one delta.
+   * `finishReason` replaces the default `stop`.
+   */
+  | { type: 'text'; content: string; chunks?: readonly string[]; usage?: FakeLlmUsage; finishReason?: string }
   /** One assistant turn that calls these tools. */
   | {
     type: 'tool_calls';
@@ -45,7 +48,23 @@ export type FakeLlmReply =
   /** Streams `content`, then ends without a finish frame or `data: [DONE]`. */
   | { type: 'truncated_stream'; content: string; usage?: FakeLlmUsage }
   /** Never answers; rejects with an AbortError once the request is aborted. */
-  | { type: 'hang' };
+  | { type: 'hang' }
+  /**
+   * A stream scripted part by part, which can hold open mid-answer. It keeps
+   * going after the request aborts, as a provider that ignores the disconnect
+   * would; parts past a cancelled read are dropped. `truncated` ends it the
+   * way `truncated_stream` does. A non-streaming request gets the joined
+   * content as one JSON completion.
+   */
+  | { type: 'stream'; parts: readonly FakeLlmStreamPart[]; usage?: FakeLlmUsage; truncated?: boolean };
+
+export type FakeLlmStreamPart =
+  /** One content delta. */
+  | { content: string }
+  /** One private reasoning delta, sent as `reasoning_content`. */
+  | { reasoning: string }
+  /** Called when the stream reaches it; the stream resumes once its result settles. */
+  | { pause: () => unknown };
 
 /** What the fake saw of one `/chat/completions` request. */
 export interface FakeLlmRequest {
@@ -123,14 +142,14 @@ function wireToolCalls(reply: Extract<FakeLlmReply, { type: 'tool_calls' }>) {
 function encodeText(reply: Extract<FakeLlmReply, { type: 'text' }>, stream: boolean): Response {
   if (!stream) {
     return jsonResponse({
-      choices: [{ message: { role: 'assistant', content: reply.content }, finish_reason: 'stop' }],
+      choices: [{ message: { role: 'assistant', content: reply.content }, finish_reason: reply.finishReason ?? 'stop' }],
       usage: usageFrame(reply.usage),
     });
   }
   const chunks = reply.chunks ?? [reply.content];
   return sseResponse([
     ...chunks.map(content => ({ choices: [{ delta: { content }, finish_reason: null }] })),
-    { choices: [{ delta: {}, finish_reason: 'stop' }], usage: usageFrame(reply.usage) },
+    { choices: [{ delta: {}, finish_reason: reply.finishReason ?? 'stop' }], usage: usageFrame(reply.usage) },
   ]);
 }
 
@@ -154,6 +173,57 @@ function encodeToolCalls(reply: Extract<FakeLlmReply, { type: 'tool_calls' }>, s
     },
     { choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: usageFrame(reply.usage) },
   ]);
+}
+
+function encodeStream(reply: Extract<FakeLlmReply, { type: 'stream' }>, stream: boolean): Response {
+  if (!stream) {
+    const content = reply.parts.map(part => ('content' in part ? part.content : '')).join('');
+    return encodeText({ type: 'text', content, usage: reply.usage }, false);
+  }
+  const encoder = new TextEncoder();
+  const frame = (value: unknown) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`);
+  let next = 0;
+  let cancelled = false;
+  let ended = false;
+  let active: Promise<void> | null = null;
+  // Produces one frame per pull, so a pause runs only once the reader has
+  // taken every frame before it. After a cancel the remaining parts still
+  // run, pauses included, but nothing more is enqueued.
+  const produce = async (controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> => {
+    while (next < reply.parts.length) {
+      const part = reply.parts[next++];
+      if ('pause' in part) {
+        await part.pause();
+        continue;
+      }
+      if (cancelled) continue;
+      const delta = 'content' in part ? { content: part.content } : { reasoning_content: part.reasoning };
+      controller.enqueue(frame({ choices: [{ delta, finish_reason: null }] }));
+      return;
+    }
+    if (cancelled || ended) return;
+    ended = true;
+    if (reply.truncated) {
+      if (reply.usage) controller.enqueue(frame({ choices: [], usage: usageFrame(reply.usage) }));
+    } else {
+      controller.enqueue(frame({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: usageFrame(reply.usage) }));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+    }
+    controller.close();
+  };
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) { streamController = controller; },
+    pull(controller) {
+      active = produce(controller).finally(() => { active = null; });
+      return active;
+    },
+    cancel() {
+      cancelled = true;
+      if (!active && !ended) void produce(streamController);
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
 function hangUntilAborted(signal: AbortSignal | undefined): Promise<Response> {
@@ -181,6 +251,7 @@ function encodeReply(reply: FakeLlmReply, request: FakeLlmRequest): Promise<Resp
       ], false);
     case 'network_error': throw new TypeError(reply.message ?? 'fetch failed');
     case 'hang': return hangUntilAborted(request.signal);
+    case 'stream': return encodeStream(reply, request.stream);
   }
 }
 

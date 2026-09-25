@@ -1,3 +1,31 @@
+/**
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It records
+ * the `AgentLoopConfig` of every attempt, for the pins on fields that never
+ * reach the wire (`billingModel`, `modelSpendBudget`, `spendWorkspaceId`,
+ * `maxTokenBudget`, ...). Every turn runs the real loop against the fake
+ * provider.
+ */
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as import('@waggle/agent').AgentLoopConfig[],
+  /** Runs as each attempt enters the loop, before any model call. */
+  beforeLoop: undefined as (() => void) | undefined,
+  /** Thrown on attempt n instead of running the loop: only for failures no provider reply produces. */
+  failures: [] as unknown[],
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: import('@waggle/agent').AgentLoopConfig) => {
+      const index = loopSpy.configs.push(config) - 1;
+      loopSpy.beforeLoop?.();
+      const failure = loopSpy.failures[index];
+      if (failure !== undefined) throw failure;
+      return actual.runAgentLoop(config);
+    },
+  };
+});
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +41,12 @@ import {
 } from '../src/local/routes/chat.js';
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+  type FakeLlmReply,
+} from './helpers/fake-llm-provider.js';
 
 function sseEvents(body: string): Array<{ event: string; data: Record<string, unknown> }> {
   return body.split('\n\n').flatMap((block) => {
@@ -35,9 +69,30 @@ describe('chat smart-router integration', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let activeWorkspaceId: string;
-  let capturedModel: string | undefined;
   let capturedConfigs: AgentLoopConfig[];
   let completionRequests: Array<{ url: string; model: string }>;
+  /** The model of the last loop attempt. */
+  const capturedModel = (): string | undefined => capturedConfigs.at(-1)?.model;
+  /**
+   * The suite's model (TD-CHAT-16): every `/chat/completions` request is
+   * recorded in `completionRequests` and answered by `reply`, `ok` by default.
+   * The Ollama listing reports the suite's models; any other URL gets 503, as
+   * the suite's old fetch stub answered.
+   */
+  let provider: FakeLlmProvider;
+  const OK_REPLY: FakeLlmReply = { type: 'text', content: 'ok', usage: { inputTokens: 1, outputTokens: 1 } };
+  let reply: (request: { model: string; index: number }) => FakeLlmReply | Promise<FakeLlmReply>;
+  /** The model of every loop attempt, in order. */
+  const attemptModels = (): string[] => capturedConfigs.map(attempt => attempt.model);
+  /** A reply under which these models cannot be reached and every other answers `ok`. */
+  const unreachable = (...models: string[]) => (request: { model: string }): FakeLlmReply => (
+    models.includes(request.model) ? { type: 'network_error', message: 'fetch failed' } : OK_REPLY
+  );
+  /** Answers this test's model calls in order, then `ok`. */
+  const inOrder = (...replies: FakeLlmReply[]) => {
+    let next = 0;
+    return () => replies[next++] ?? OK_REPLY;
+  };
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-smart-router-'));
@@ -46,15 +101,29 @@ describe('chat smart-router integration', () => {
     config.setBudgetModel(budget);
     config.save();
 
-    server = await buildLocalServer({ dataDir: tmpDir });
+    // The approval hook runs on the real path, and these turns have no
+    // operator to answer its cards: the route's test-mode auto-approval, read
+    // once at registration, stands in (TD-CHAT-16).
+    const previousAutoApprove = process.env.WAGGLE_AUTO_APPROVE;
+    process.env.WAGGLE_AUTO_APPROVE = '1';
+    try {
+      server = await buildLocalServer({ dataDir: tmpDir });
+    } finally {
+      if (previousAutoApprove === undefined) delete process.env.WAGGLE_AUTO_APPROVE;
+      else process.env.WAGGLE_AUTO_APPROVE = previousAutoApprove;
+    }
+    server.llmRetryBackoffMs = () => 0;
     activeWorkspaceId = server.agentState.activeWorkspaceId!;
     expect(activeWorkspaceId).toBeTruthy();
   }, 30_000);
 
   beforeEach(() => {
-    capturedModel = undefined;
-    capturedConfigs = [];
+    loopSpy.configs.length = 0;
+    loopSpy.beforeLoop = undefined;
+    loopSpy.failures = [];
+    capturedConfigs = loopSpy.configs;
     completionRequests = [];
+    reply = () => OK_REPLY;
     resetRateLimiter(server);
     const config = new WaggleConfig(tmpDir);
     config.setDefaultModel(primary);
@@ -65,37 +134,32 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     server.agentState.costTracker.setBudget(null, 'soft');
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedModel = agentConfig.model;
-      capturedConfigs.push(agentConfig);
-      agentConfig.onToken?.('ok');
-      return {
-        content: 'ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      if (String(input).endsWith('/api/tags')) {
-        return new Response(JSON.stringify({
-          models: [
-            { name: 'primary-test-model' },
-            { name: 'budget-test-model' },
-            { name: 'fallback-test-model' },
-            { name: 'remote-budget-test-model', remote_host: 'https://ollama.com:443' },
-          ],
-        }), { status: 200 });
-      }
-      if (String(input).includes('/chat/completions')) {
-        const body = JSON.parse(String(init?.body)) as { model?: string };
-        completionRequests.push({ url: String(input), model: body.model ?? '' });
-      }
-      return new Response('', { status: 503 });
+    // Tests not yet ported inject their own runner; none may leak into the next.
+    server.agentRunner = undefined;
+    provider = installFakeLlmProvider({
+      respond: (request) => {
+        completionRequests.push({ url: request.url, model: request.model });
+        return reply(request);
+      },
+      otherRequest: async (input) => {
+        if (String(input).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({
+            models: [
+              { name: 'primary-test-model' },
+              { name: 'budget-test-model' },
+              { name: 'fallback-test-model' },
+              { name: 'remote-budget-test-model', remote_host: 'https://ollama.com:443' },
+            ],
+          }), { status: 200 });
+        }
+        return new Response('', { status: 503 });
+      },
     });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    provider.restore();
     server.vault.delete('anthropic');
     server.vault.delete('anthropic-2');
     server.vault.delete('anthropic-3');
@@ -121,7 +185,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('primary-test-model');
+    expect(capturedModel()).toBe('primary-test-model');
     expect(capturedConfigs[0].billingModel).toBe(primary);
     expect(capturedConfigs[0].modelSpendBudget).toBe(server.agentState.costTracker);
     expect(capturedConfigs[0].modelSpendBillingClass).toBe('free');
@@ -143,18 +207,18 @@ describe('chat smart-router integration', () => {
     // it. So this assertion is the behavior change on CI and a regression
     // guard on a developer's Windows box.
     const restoreWorkspace = server.agentState.activeWorkspaceId;
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      agentConfig.onToolResult?.(
-        'generate_docx',
-        { path: 'Unscoped-Brief.docx', title: 'Unscoped Brief' },
-        'Successfully generated Unscoped-Brief.docx (9.1 KB)',
-      );
-      return {
-        content: 'Created the brief.',
-        toolsUsed: ['generate_docx'],
+    // The model really calls generate_docx (TD-CHAT-16).
+    reply = inOrder(
+      {
+        type: 'tool_calls',
+        calls: [{
+          name: 'generate_docx',
+          args: { path: 'Unscoped-Brief.docx', title: 'Unscoped Brief', content: '# Unscoped Brief' },
+        }],
         usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+      },
+      { type: 'text', content: 'Created the brief.', usage: { inputTokens: 1, outputTokens: 1 } },
+    );
     let response;
     try {
       server.agentState.activeWorkspaceId = null;
@@ -177,49 +241,42 @@ describe('chat smart-router integration', () => {
   });
 
   it('indexes successful Office and PDF outputs in the workspace Library', async () => {
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      agentConfig.onToolResult?.(
-        'generate_docx',
-        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief' },
-        'Successfully generated PM-Launch-Brief.docx (11.9 KB)',
-      );
-      agentConfig.onToolResult?.(
-        'generate_pdf',
-        { filePath: 'PM-Launch-Brief.pdf', title: 'PM Launch Brief PDF' },
-        'Successfully generated PM-Launch-Brief.pdf (8.2 KB)',
-      );
-      agentConfig.onToolResult?.(
-        'generate_xlsx',
-        { filePath: 'PM-Launch-Tracker.xlsx', title: 'PM Launch Tracker' },
-        'Successfully generated PM-Launch-Tracker.xlsx (6.4 KB)',
-      );
-      agentConfig.onToolResult?.(
-        'generate_pptx',
-        { filePath: 'PM-Launch-Deck.pptx', title: 'PM Launch Deck' },
-        'Successfully generated PM-Launch-Deck.pptx (21.0 KB)',
-      );
-      agentConfig.onToolResult?.(
-        'generate_docx',
-        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief Refreshed' },
-        'Successfully regenerated PM-Launch-Brief.docx (12.1 KB)',
-      );
-      agentConfig.onToolResult?.(
-        'generate_pdf',
-        { filePath: 'failed.pdf', title: 'Failed PDF' },
-        'Error generating PDF: renderer unavailable',
-      );
-      return {
-        content: 'Created the requested launch artifacts.',
-        toolsUsed: ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx'],
+    // The model really calls the four generators, regenerates the brief under
+    // a new title, and makes one PDF call that fails (TD-CHAT-16).
+    reply = inOrder(
+      {
+        type: 'tool_calls',
+        calls: [
+          { name: 'generate_docx', args: { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief', content: '# Brief' } },
+          { name: 'generate_pdf', args: { filePath: 'PM-Launch-Brief.pdf', title: 'PM Launch Brief PDF', content: '# Brief' } },
+          {
+            name: 'generate_xlsx',
+            args: {
+              filePath: 'PM-Launch-Tracker.xlsx',
+              title: 'PM Launch Tracker',
+              sheets: [{ name: 'Tracker', columns: [{ header: 'Task', key: 'task' }], rows: [{ task: 'Ship' }] }],
+            },
+          },
+          {
+            name: 'generate_pptx',
+            args: { filePath: 'PM-Launch-Deck.pptx', title: 'PM Launch Deck', slides: [{ title: 'Launch', bullets: ['Ship'] }] },
+          },
+          {
+            name: 'generate_docx',
+            args: { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief Refreshed', content: '# Brief v2' },
+          },
+          { name: 'generate_pdf', args: { filePath: 'failed.pdf', title: 'Failed PDF' } },
+        ],
         usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+      },
+      { type: 'text', content: 'Created the requested launch artifacts.', usage: { inputTokens: 1, outputTokens: 1 } },
+    );
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: {
-        message: 'Create polished Word, PDF, Excel, and PowerPoint launch artifacts.',
+        message: 'Create polished Word, PDF, Excel spreadsheet, and PowerPoint launch artifacts.',
         session: 'generated-artifact-library-index',
       },
     });
@@ -272,28 +329,43 @@ describe('chat smart-router integration', () => {
   });
 
   it('does not retry or fall back after terminal hard-budget rejection', async () => {
-    const config = new WaggleConfig(tmpDir);
+    // Re-pinned on the real path (TD-CHAT-16 ruling 5): the loop's own hard cap
+    // refuses the attempt before any model request. The cap never refuses a
+    // free local model, so the primary here is a priced cloud model. Its own
+    // server: the route caches a provider's credential pool for the server's
+    // lifetime, and the shared server's credential pins set their own keys.
+    const budgetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-smart-router-hard-cap-'));
+    const config = new WaggleConfig(budgetDir);
+    config.setDefaultModel('claude-sonnet-4-6');
     config.setFallbackModel('ollama/fallback-test-model');
-    config.setDailyBudget(null);
+    config.setDailyBudget(0.000001);
+    config.setBudgetHardCap(true);
     config.save();
-    const attempts: string[] = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      throw Object.assign(new Error('Daily budget exceeded'), {
-        code: 'DAILY_MODEL_BUDGET_EXCEEDED',
+    const budgetServer = await buildLocalServer({ dataDir: budgetDir });
+    markFakeProviderHealthy(budgetServer);
+    budgetServer.agentState.costTracker.setBudget(0.000001, 'hard');
+
+    try {
+      const response = await injectWithAuth(budgetServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'hard-budget-terminal' },
       });
-    };
 
-    const response = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'What is 19 * 23?', session: 'hard-budget-terminal' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual(['primary-test-model']);
-    expect(response.body).toContain('event: error');
-    expect(response.body).toContain('Daily budget exceeded');
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfigs.map(attempt => attempt.model)).toEqual(['anthropic/claude-sonnet-4-6']);
+      expect(completionRequests).toEqual([]);
+      expect(response.body).toContain('event: error');
+      expect(response.body).toContain('Daily budget exceeded');
+    } finally {
+      await budgetServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        fs.rmSync(budgetDir, { recursive: true, force: true });
+      } catch {
+        // Windows may briefly retain a native SQLite handle after server.close().
+      }
+    }
   });
 
   it('keeps an under-threshold trivial turn on the configured primary model', async () => {
@@ -302,6 +374,11 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(7.99);
+    // The loop's own spend reservation reads the daily total as well; the
+    // router's single read is the count when the first attempt starts
+    // (TD-CHAT-16).
+    let routerReads: number | undefined;
+    loopSpy.beforeLoop = () => { routerReads ??= getDailyTotal.mock.calls.length; };
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -310,9 +387,9 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('primary-test-model');
+    expect(capturedModel()).toBe('primary-test-model');
     expect(response.body).not.toContain('event: model_switch');
-    expect(getDailyTotal).toHaveBeenCalledOnce();
+    expect(routerReads).toBe(1);
   });
 
   it.each([
@@ -327,7 +404,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('primary-test-model');
+    expect(capturedModel()).toBe('primary-test-model');
   });
 
   it.each([
@@ -350,7 +427,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('primary-test-model');
+    expect(capturedModel()).toBe('primary-test-model');
   });
 
   it('uses the budget model with threshold telemetry for an over-budget trivial turn', async () => {
@@ -359,6 +436,9 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(0.8);
+    // Counted up to the first attempt, as above (TD-CHAT-16).
+    let routerReads: number | undefined;
+    loopSpy.beforeLoop = () => { routerReads ??= getDailyTotal.mock.calls.length; };
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -367,8 +447,8 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('budget-test-model');
-    expect(getDailyTotal).toHaveBeenCalledOnce();
+    expect(capturedModel()).toBe('budget-test-model');
+    expect(routerReads).toBe(1);
     expect(response.body).toContain('event: model_switch');
     expect(response.body).toContain('Budget 80% reached ($0.80/$1.00)');
     const [persistedTrace] = server.traceStore.query({
@@ -425,15 +505,8 @@ describe('chat smart-router integration', () => {
       initialServer = undefined;
 
       restartedServer = await buildLocalServer({ dataDir: restartDir });
-      let restartedModel: string | undefined;
-      restartedServer.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-        restartedModel = agentConfig.model;
-        return {
-          content: 'ok',
-          toolsUsed: [],
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
-      };
+      // Its turns run the real loop against the suite's fake (TD-CHAT-16).
+      const restartedModel = capturedModel;
       vi.spyOn(restartedServer.traceStore, 'getTotalCostSince')
         .mockImplementationOnce(() => { throw new Error('transient daily cost read failure'); });
 
@@ -443,7 +516,7 @@ describe('chat smart-router integration', () => {
         payload: { message: 'What is 19 * 23?', session: 'failed-carryover-read' },
       });
       expect(failedReadResponse.statusCode).toBe(200);
-      expect(restartedModel).toBe('primary-test-model');
+      expect(restartedModel()).toBe('primary-test-model');
 
       // $8 persisted before restart + ~$2 incurred in this process reaches the
       // $10 total. The new trace is above the process-start id boundary, so a
@@ -467,7 +540,7 @@ describe('chat smart-router integration', () => {
         payload: { message: 'What is 19 * 23?', session: 'recovered-carryover-read' },
       });
       expect(recoveredReadResponse.statusCode).toBe(200);
-      expect(restartedModel).toBe('primary-test-model');
+      expect(restartedModel()).toBe('primary-test-model');
       expect(recoveredReadResponse.body).not.toContain('event: model_switch');
 
       config.setDailyBudget(12.5);
@@ -478,7 +551,7 @@ describe('chat smart-router integration', () => {
         payload: { message: 'What is 19 * 23?', session: 'persisted-spend-trivial-route' },
       });
       expect(response.statusCode).toBe(200);
-      expect(restartedModel).toBe('budget-test-model');
+      expect(restartedModel()).toBe('budget-test-model');
       expect(response.body).toContain('Budget 80% reached ($10.00/$12.50)');
     } finally {
       if (initialServer) await initialServer.close();
@@ -624,7 +697,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('primary-test-model');
+    expect(capturedModel()).toBe('primary-test-model');
   });
 
   it('returns to the primary before fallback when an optional budget run fails', async () => {
@@ -633,18 +706,11 @@ describe('chat smart-router integration', () => {
     config.setDailyBudget(1);
     config.save();
     vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
-    const attempts: string[] = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      if (attempts.length === 1) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-      }
-      return {
-        content: 'primary ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The budget model cannot be reached; the loop's own transport retries
+    // run out (TD-CHAT-16).
+    reply = (request) => (request.model === 'budget-test-model'
+      ? { type: 'network_error', message: 'fetch failed' }
+      : { type: 'text', content: 'primary ok', usage: { inputTokens: 1, outputTokens: 1 } });
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -653,7 +719,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual(['budget-test-model', 'primary-test-model']);
+    expect(capturedConfigs.map(attempt => attempt.model)).toEqual(['budget-test-model', 'primary-test-model']);
   });
 
   it('never replays an incomplete budget-model run on the primary or fallback', async () => {
@@ -662,23 +728,13 @@ describe('chat smart-router integration', () => {
     config.setDailyBudget(1);
     config.save();
     vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
-    const attempts: string[] = [];
-    let simulatedMutations = 0;
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
     const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addTokens = vi.spyOn(server.sessionManager, 'addTokens');
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      simulatedMutations++;
-      throw Object.assign(
-        new Error('LLM returned an incomplete completion; partial content was not accepted.'),
-        {
-          code: 'INCOMPLETE_COMPLETION',
-          status: 502,
-          usage: { inputTokens: 13_500, outputTokens: 500 },
-        },
-      );
-    };
+    const usageEntriesBefore = server.agentState.costTracker.getUsageEntries().length;
+    // The budget model's stream is cut before [DONE] with its usage reported
+    // (TD-CHAT-16).
+    reply = () => ({ type: 'truncated_stream', content: 'partial', usage: { inputTokens: 13_500, outputTokens: 500 } });
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -687,18 +743,24 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual(['budget-test-model']);
-    expect(simulatedMutations).toBe(1);
+    expect(capturedConfigs.map(attempt => attempt.model)).toEqual(['budget-test-model']);
+    expect(completionRequests).toHaveLength(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('fallback-test-model');
-    expect(addUsage).toHaveBeenCalledOnce();
-    expect(addUsage).toHaveBeenCalledWith(
-      'ollama/budget-test-model',
-      13_500,
-      500,
-      activeWorkspaceId,
-      { billingClass: 'free' },
-    );
+    // Re-pinned (TD-CHAT-16 ruling 3): the route charges only an injected
+    // runner, so it never calls addUsage here. The loop's own spend meter
+    // records the cut attempt's reported usage, once, with the same model,
+    // tokens, scope and billing class.
+    expect(addUsage).not.toHaveBeenCalled();
+    expect(server.agentState.costTracker.getUsageEntries().slice(usageEntriesBefore)).toEqual([
+      expect.objectContaining({
+        model: 'ollama/budget-test-model',
+        input: 13_500,
+        output: 500,
+        workspaceId: activeWorkspaceId,
+        billingClass: 'free',
+      }),
+    ]);
     expect(addTokens).toHaveBeenCalledOnce();
     expect(addTokens).toHaveBeenCalledWith(activeWorkspaceId, 14_000);
     expect(calculateUsageCost).toHaveBeenCalledWith({
@@ -762,53 +824,55 @@ describe('chat smart-router integration', () => {
   });
 
   it('uses the configured fallback only after both budget and primary runs fail', async () => {
-    const config = new WaggleConfig(tmpDir);
+    // Neither the budget model nor the primary can be reached; the loop's own
+    // transport retries run out on each (TD-CHAT-16). Its own server: eight
+    // transport failures on the shared Ollama origin open the model endpoint's
+    // circuit breaker, which would refuse every later pin's model call (§5).
+    const failureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-smart-router-both-fail-'));
+    const config = new WaggleConfig(failureDir);
+    config.setDefaultModel(primary);
+    config.setBudgetModel(budget);
     config.setFallbackModel('ollama/fallback-test-model');
     config.setDailyBudget(1);
+    config.setBudgetThreshold(0.8);
     config.save();
-    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
-    const attempts: string[] = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      if (attempts.length < 3) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
+    const failureServer = await buildLocalServer({ dataDir: failureDir });
+    failureServer.llmRetryBackoffMs = () => 0;
+    vi.spyOn(failureServer.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+    reply = (request) => (request.model === 'fallback-test-model'
+      ? { type: 'text', content: 'fallback ok', usage: { inputTokens: 1, outputTokens: 1 } }
+      : { type: 'network_error', message: 'fetch failed' });
+
+    try {
+      const response = await injectWithAuth(failureServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'budget-primary-fallback-order' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfigs.map(attempt => attempt.model)).toEqual([
+        'budget-test-model',
+        'primary-test-model',
+        'fallback-test-model',
+      ]);
+      expect(switchReasons(response.body)).toEqual([
+        'Budget 80% reached ($1.00/$1.00)',
+        'ollama/budget-test-model failed; primary selected',
+        'ollama/primary-test-model failed (timeout); configured fallback selected',
+      ]);
+    } finally {
+      await failureServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        fs.rmSync(failureDir, { recursive: true, force: true });
+      } catch {
+        // Windows may briefly retain a native SQLite handle after server.close().
       }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-
-    const response = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'What is 19 * 23?', session: 'budget-primary-fallback-order' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual([
-      'budget-test-model',
-      'primary-test-model',
-      'fallback-test-model',
-    ]);
-    expect(switchReasons(response.body)).toEqual([
-      'Budget 80% reached ($1.00/$1.00)',
-      'ollama/budget-test-model failed; primary selected',
-      'ollama/primary-test-model failed (timeout); configured fallback selected',
-    ]);
+    }
   });
 
   describe('model selection exits (TD-CHAT-3 slice 10 pins)', () => {
-    const recordingRunner = (attempts: string[], failFirst: number) =>
-      async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-        attempts.push(agentConfig.model);
-        if (attempts.length <= failFirst) {
-          throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-        }
-        return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-      };
-
     const overBudget = (setup: (config: WaggleConfig) => void) => {
       const config = new WaggleConfig(tmpDir);
       config.setDailyBudget(1);
@@ -819,8 +883,6 @@ describe('chat smart-router integration', () => {
 
     it('returns to the primary when the over-budget model is unavailable at preflight', async () => {
       overBudget((config) => config.setBudgetModel('ollama/missing-budget-test-model'));
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -829,7 +891,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['primary-test-model']);
+      expect(attemptModels()).toEqual(['primary-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'ollama/missing-budget-test-model unavailable; primary selected',
       ]);
@@ -841,8 +903,6 @@ describe('chat smart-router integration', () => {
         config.setBudgetModel('ollama/missing-budget-test-model');
         config.setFallbackModel('ollama/fallback-test-model');
       });
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -851,7 +911,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['fallback-test-model']);
+      expect(attemptModels()).toEqual(['fallback-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'ollama/missing-budget-test-model and ollama/missing-primary-test-model unavailable; configured fallback selected',
       ]);
@@ -862,8 +922,7 @@ describe('chat smart-router integration', () => {
         config.setDefaultModel('ollama/missing-primary-test-model');
         config.setFallbackModel('ollama/fallback-test-model');
       });
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 1);
+      reply = unreachable('budget-test-model');
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -872,7 +931,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['budget-test-model', 'fallback-test-model']);
+      expect(attemptModels()).toEqual(['budget-test-model', 'fallback-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'Budget 80% reached ($1.00/$1.00)',
         'ollama/budget-test-model failed and ollama/missing-primary-test-model unavailable; configured fallback selected',
@@ -883,8 +942,6 @@ describe('chat smart-router integration', () => {
       const config = new WaggleConfig(tmpDir);
       config.setDefaultModel('ollama/missing-primary-test-model');
       config.save();
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -893,7 +950,8 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual([]);
+      expect(attemptModels()).toEqual([]);
+      expect(completionRequests).toEqual([]);
       expect(response.body).toContain('event: error');
       expect(response.body).not.toContain('event: done');
       expect(switchReasons(response.body)).toEqual([]);
@@ -905,8 +963,8 @@ describe('chat smart-router integration', () => {
       config.setFallbackModel('ollama/fallback-test-model');
       config.save();
       const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 1);
+      const usageEntriesBefore = server.agentState.costTracker.getUsageEntries().length;
+      reply = unreachable('primary-test-model');
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -915,11 +973,17 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+      expect(attemptModels()).toEqual(['primary-test-model', 'fallback-test-model']);
       const done = sseEvents(response.body).find((event) => event.event === 'done');
       expect(done?.data.model).toBe('ollama/fallback-test-model');
-      expect(addUsage.mock.calls.map((call) => call[0])).toContain('ollama/fallback-test-model');
-      expect(addUsage.mock.calls.at(-1)?.[0]).toBe('ollama/fallback-test-model');
+      // Re-pinned (TD-CHAT-16 ruling 3): the route charges only an injected
+      // runner. The loop's own spend meter bills the model that answered, last.
+      expect(addUsage).not.toHaveBeenCalled();
+      const billedModels = server.agentState.costTracker.getUsageEntries()
+        .slice(usageEntriesBefore)
+        .map(entry => entry.model);
+      expect(billedModels).toContain('ollama/fallback-test-model');
+      expect(billedModels.at(-1)).toBe('ollama/fallback-test-model');
     });
   });
 
@@ -928,18 +992,10 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: string[] = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      if (attempts.length === 1) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The primary cannot be reached; the fallback answers (TD-CHAT-16).
+    reply = (request) => (request.model === 'primary-test-model'
+      ? { type: 'network_error', message: 'fetch failed' }
+      : { type: 'text', content: 'fallback ok', usage: { inputTokens: 1, outputTokens: 1 } });
     const session = 'actual-fallback-model-provenance';
 
     const response = await injectWithAuth(server, {
@@ -949,7 +1005,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+    expect(attemptModels()).toEqual(['primary-test-model', 'fallback-test-model']);
     const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
       .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
     expect(switchEvents).toEqual([{
@@ -1003,7 +1059,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
-      expect(capturedModel).toBe('primary-test-model');
+      expect(capturedModel()).toBe('primary-test-model');
       const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
         .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
       expect(switchEvents).toEqual([{
@@ -1076,7 +1132,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
-      expect(capturedModel).toBe('openrouter/openai/gpt-5.6-sol');
+      expect(capturedModel()).toBe('openrouter/openai/gpt-5.6-sol');
       const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
         .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
       expect(switchEvents).toEqual([{
@@ -1147,7 +1203,6 @@ describe('chat smart-router integration', () => {
   });
 
   it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
-    const previousRunner = server.agentRunner;
     const execute = vi.fn(async () => 'unused');
     const candidateNames = [
       'bash', 'read_file', 'write_file', 'edit_file', 'search_files',
@@ -1174,7 +1229,6 @@ describe('chat smart-router integration', () => {
       tools?: Array<{ function?: { name?: string } }>;
       messages?: Array<{ role?: string; content?: string }>;
     }> = [];
-    server.agentRunner = undefined;
     vi.restoreAllMocks();
     server.sessionManager.close(activeWorkspaceId);
     const previousWorkspacePersona = server.workspaceManager.get(activeWorkspaceId)?.personaId;
@@ -1451,7 +1505,6 @@ describe('chat smart-router integration', () => {
       server.sessionManager.close(activeWorkspaceId);
       server.workspaceManager.update(activeWorkspaceId, { personaId: previousWorkspacePersona });
       buildToolsForSession.mockRestore();
-      server.agentRunner = previousRunner;
     }
   }, 60_000);
 
@@ -1462,12 +1515,10 @@ describe('chat smart-router integration', () => {
     config.setFallbackModel('gemma-4-31b');
     config.save();
 
-    const previousRunner = server.agentRunner;
     const previousProvider = server.agentState.llmProvider;
     const previousCurrentModel = server.agentState.currentModel;
     const previousPromptAssembler = FEATURE_FLAGS.PROMPT_ASSEMBLER;
     const previousReranker = process.env.WAGGLE_RERANKER;
-    server.agentRunner = undefined;
     server.agentState.llmProvider = {
       provider: 'litellm',
       health: 'healthy',
@@ -1546,7 +1597,6 @@ describe('chat smart-router integration', () => {
       expect(fallbackPrompt).not.toContain('Briefly state assumption, then recommendation.');
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = previousRunner;
       server.agentState.llmProvider = previousProvider;
       server.agentState.currentModel = previousCurrentModel;
       Object.defineProperty(FEATURE_FLAGS, 'PROMPT_ASSEMBLER', {
@@ -1578,24 +1628,17 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; apiKey: string }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
-      if (attempts.length < 4) {
-        throw Object.assign(new Error('401 invalid credential'), { status: 401 });
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // Every provider key is rejected; the local fallback answers (TD-CHAT-16).
+    reply = (request) => (request.model === 'fallback-test-model'
+      ? { type: 'text', content: 'fallback ok', usage: { inputTokens: 1, outputTokens: 1 } }
+      : { type: 'http_error', status: 401, message: 'invalid credential' });
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Review this detailed plan.', session: 'credential-exhaustion-fallback' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, apiKey: attempt.litellmApiKey }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts.map(({ model }) => model)).toEqual([
@@ -1612,43 +1655,25 @@ describe('chat smart-router integration', () => {
   });
 
   it('retries one interrupted no-tool answer on the same model and credential', async () => {
-    const attempts: Array<{
-      model: string;
-      apiKey: string;
-      toolCount: number;
-      maxTokenBudget?: number;
-      modelOperationTimeoutMs?: number;
-    }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({
-        model: agentConfig.model,
-        apiKey: agentConfig.litellmApiKey,
-        toolCount: agentConfig.tools.length,
-        maxTokenBudget: agentConfig.maxTokenBudget,
-        modelOperationTimeoutMs: agentConfig.modelOperationTimeoutMs,
-      });
-      if (attempts.length === 1) {
-        throw Object.assign(
-          new Error('LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.'),
-          {
-            code: 'INCOMPLETE_COMPLETION',
-            status: 502,
-            usage: { inputTokens: 100, outputTokens: 20 },
-          },
-        );
-      }
-      return {
-        content: 'Recovered on the same model.',
-        toolsUsed: [],
-        usage: { inputTokens: 100, outputTokens: 25 },
-      };
-    };
+    // The first stream is cut before [DONE] with its usage reported; the
+    // replay answers (TD-CHAT-16).
+    reply = inOrder(
+      { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 100, outputTokens: 20 } },
+      { type: 'text', content: 'Recovered on the same model.', usage: { inputTokens: 100, outputTokens: 25 } },
+    );
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-safe-retry' },
     });
+    const attempts = capturedConfigs.map(attempt => ({
+      model: attempt.model,
+      apiKey: attempt.litellmApiKey,
+      toolCount: attempt.tools.length,
+      maxTokenBudget: attempt.maxTokenBudget,
+      modelOperationTimeoutMs: attempt.modelOperationTimeoutMs,
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts).toHaveLength(2);
@@ -1664,21 +1689,30 @@ describe('chat smart-router integration', () => {
     expect(response.body).not.toContain('event: model_switch');
   });
 
+  // A content filter and a cut stream that spent the token budget come from
+  // the fake provider. The loop never reports a refusal or an invalid body with
+  // these reasons, so those two are thrown by the spy (TD-CHAT-16 ruling 2).
+  const scriptedIncomplete = (message: string, usage: { inputTokens: number; outputTokens: number }) => ({
+    failure: Object.assign(new Error(message), { code: 'INCOMPLETE_COMPLETION', status: 502, usage }),
+  });
   it.each([
-    ['assistant refusal', 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
-    ['content filter', 'LLM returned an incomplete completion (unsupported finish_reason=content_filter); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
-    ['malformed response', 'LLM returned an incomplete completion (invalid response body); partial content was not accepted.', { inputTokens: 0, outputTokens: 0 }],
-    ['exhausted token budget', 'LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.', { inputTokens: 100_000, outputTokens: 20 }],
-  ])('does not retry an incomplete completion caused by %s', async (_label, message, usage) => {
-    let attempts = 0;
-    server.agentRunner = async (): Promise<AgentResponse> => {
-      attempts++;
-      throw Object.assign(new Error(message), {
-        code: 'INCOMPLETE_COMPLETION',
-        status: 502,
-        usage,
-      });
-    };
+    ['assistant refusal', scriptedIncomplete(
+      'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.',
+      { inputTokens: 100, outputTokens: 20 },
+    )],
+    ['content filter', {
+      reply: { type: 'text', content: 'filtered', finishReason: 'content_filter', usage: { inputTokens: 100, outputTokens: 20 } },
+    }],
+    ['malformed response', scriptedIncomplete(
+      'LLM returned an incomplete completion (invalid response body); partial content was not accepted.',
+      { inputTokens: 0, outputTokens: 0 },
+    )],
+    ['exhausted token budget', {
+      reply: { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 100_000, outputTokens: 20 } },
+    }],
+  ] as Array<[string, { reply?: FakeLlmReply; failure?: unknown }]>)('does not retry an incomplete completion caused by %s', async (_label, scripted) => {
+    if (scripted.reply) reply = () => scripted.reply!;
+    if (scripted.failure) loopSpy.failures[0] = scripted.failure;
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -1687,7 +1721,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toBe(1);
+    expect(capturedConfigs).toHaveLength(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('retrying once');
   });
@@ -1708,30 +1742,33 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; apiKey: string }> = [];
-    let simulatedMutations = 0;
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
-      simulatedMutations++;
-      agentConfig.onToolUse?.('write_file', { path: 'release.txt' });
-      throw Object.assign(
-        new Error('LLM returned an incomplete completion; partial content was not accepted.'),
-        { code: 'INCOMPLETE_COMPLETION', status: 502 },
-      );
-    };
+    // The model really writes release.txt, then its next stream is cut before
+    // [DONE]. The message asks for the write, because a review request
+    // transmits no write tool (TD-CHAT-16).
+    reply = inOrder(
+      {
+        type: 'tool_calls',
+        calls: [{ name: 'write_file', args: { path: 'release.txt', content: 'Release notes' } }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+      { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 1, outputTokens: 1 } },
+    );
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'Review this detailed plan.', session: 'incomplete-credential-no-replay' },
+      payload: { message: 'Write the release notes to release.txt.', session: 'incomplete-credential-no-replay' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, apiKey: attempt.litellmApiKey }));
+    const writeToolEvents = sseEvents(response.body)
+      .filter(event => event.event === 'tool' && event.data.name === 'write_file');
 
     expect(response.statusCode).toBe(200);
     expect(attempts).toEqual([{
       model: 'openrouter/anthropic/claude-sonnet-5',
       apiKey: firstKey,
     }]);
-    expect(simulatedMutations).toBe(1);
+    expect(writeToolEvents).toHaveLength(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('API key rotated');
   });
@@ -1740,24 +1777,14 @@ describe('chat smart-router integration', () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; litellmUrl: string }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, litellmUrl: agentConfig.litellmUrl });
-      if (attempts.length === 1) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    reply = unreachable('primary-test-model');
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Summarize this private document.', session: 'local-fallback-transport' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, litellmUrl: attempt.litellmUrl }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts.map((attempt) => attempt.model)).toEqual([
@@ -1781,6 +1808,6 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('fallback-test-model');
+    expect(capturedModel()).toBe('fallback-test-model');
   });
 });

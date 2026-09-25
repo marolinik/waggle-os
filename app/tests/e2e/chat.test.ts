@@ -2,9 +2,13 @@
  * E2E Tests: Chat Streaming, Tool Events, and Approval Gate
  *
  * Scenarios covered:
- *   4. Chat message sent and response received (with mock agentRunner)
- *   9. Tool execution — mock runner calls onToolUse, SSE includes tool event
+ *   4. Chat message sent and response received (real agent loop, fake model)
+ *   9. Tool execution — the model calls real tools, SSE includes tool events
  *  10. External mutation gate — eventBus-based approval flow
+ *
+ * Scenarios 4 and 9 run the real agent loop against the fake model provider
+ * (TD-CHAT-16). Scenario 10 is held on `server.agentRunner` for a ruling: its
+ * `gate:request` / `gate:response` flow lives only in the injected runner.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
@@ -14,6 +18,11 @@ import type { FastifyInstance } from 'fastify';
 import { startService } from '@waggle/server/local/service';
 import type { AgentRunner } from '@waggle/server/local/routes/chat';
 import { injectWithAuth } from './test-utils.js';
+import {
+  installFakeLlmProvider,
+  type FakeLlmProvider,
+  type FakeLlmResponder,
+} from '../../../packages/server/tests/helpers/fake-llm-provider.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-e2e-'));
@@ -52,11 +61,34 @@ function parseSSE(raw: string): Array<{ event: string; data: unknown }> {
   return events;
 }
 
+/**
+ * Starts the service with a healthy model provider answered by the fake.
+ * `autoApprove` builds it with the route's test-mode approval, read once at
+ * registration, for turns whose model calls a gated tool.
+ */
+async function startWithModel(dataDir: string, respond: FakeLlmResponder, autoApprove = false) {
+  const previousAutoApprove = process.env.WAGGLE_AUTO_APPROVE;
+  if (autoApprove) process.env.WAGGLE_AUTO_APPROVE = '1';
+  try {
+    const { server } = await startService({ dataDir, port: TEST_PORT, skipLiteLLM: true });
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    return { server, provider: installFakeLlmProvider({ respond }) };
+  } finally {
+    if (previousAutoApprove === undefined) delete process.env.WAGGLE_AUTO_APPROVE;
+    else process.env.WAGGLE_AUTO_APPROVE = previousAutoApprove;
+  }
+}
+
 describe('Chat E2E', () => {
   const servers: FastifyInstance[] = [];
   const tmpDirs: string[] = [];
+  let provider: FakeLlmProvider | undefined;
 
   afterEach(async () => {
+    provider?.restore();
+    provider = undefined;
     for (const s of servers) {
       try { await s.close(); } catch { /* ignore */ }
     }
@@ -71,24 +103,13 @@ describe('Chat E2E', () => {
   it('sends chat message and receives SSE token + done events', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
-    const port = TEST_PORT;
 
-    const { server } = await startService({ dataDir, port, skipLiteLLM: true });
+    const started = await startWithModel(dataDir, {
+      type: 'text', content: 'Hello world', chunks: ['Hello ', 'world'], usage: { inputTokens: 10, outputTokens: 5 },
+    });
+    const server = started.server;
+    provider = started.provider;
     servers.push(server);
-
-    // Inject mock agentRunner
-    const mockRunner: AgentRunner = async (config) => {
-      if (config.onToken) {
-        config.onToken('Hello ');
-        config.onToken('world');
-      }
-      return {
-        content: 'Hello world',
-        usage: { inputTokens: 10, outputTokens: 5 },
-        toolsUsed: [],
-      };
-    };
-    server.agentRunner = mockRunner;
 
     const res = await injectWithAuth(server, {
       method: 'POST',
@@ -112,45 +133,40 @@ describe('Chat E2E', () => {
     const doneData = doneEvents[0].data as { content: string; usage: unknown; toolsUsed: string[] };
     expect(doneData.content).toBe('Hello world');
     expect(doneData.toolsUsed).toEqual([]);
+    expect(provider.requests).toHaveLength(1);
   });
 
   // Scenario 9: Tool execution events in SSE stream
-  it('includes tool events in SSE when agentRunner calls onToolUse', async () => {
+  it('includes tool events in SSE when the model calls tools', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
-    const port = TEST_PORT;
 
-    const { server } = await startService({ dataDir, port, skipLiteLLM: true });
-    servers.push(server);
-
-    const mockRunner: AgentRunner = async (config) => {
-      if (config.onToken) {
-        config.onToken('Reading file...');
-      }
-      if (config.onToolUse) {
-        config.onToolUse('read_file', { path: '/src/index.ts' });
-      }
-      if (config.onToken) {
-        config.onToken(' Done.');
-      }
-      if (config.onToolUse) {
-        config.onToolUse('write_file', { path: '/src/output.ts', content: 'export {}' });
-      }
-      return {
-        content: 'Reading file... Done.',
+    // The model really calls read_file, then write_file, then answers. The
+    // message asks for both, because a read request transmits no write tool.
+    const started = await startWithModel(dataDir, [
+      { type: 'tool_calls', calls: [{ name: 'read_file', args: { path: '/src/index.ts' } }], usage: { inputTokens: 20, outputTokens: 10 } },
+      {
+        type: 'tool_calls',
+        calls: [{ name: 'write_file', args: { path: '/src/output.ts', content: 'export {}' } }],
         usage: { inputTokens: 20, outputTokens: 10 },
-        toolsUsed: ['read_file', 'write_file'],
-      };
-    };
-    server.agentRunner = mockRunner;
+      },
+      { type: 'text', content: 'Reading file... Done.', usage: { inputTokens: 20, outputTokens: 10 } },
+    ], true);
+    const server = started.server;
+    provider = started.provider;
+    servers.push(server);
 
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'Read the index file' },
+      payload: { message: 'Read the index file, then write /src/output.ts.' },
     });
 
-    const events = parseSSE(res.payload);
+    // The route's own auto_recall tool event is left out: the pin is about
+    // the model's tools (TD-CHAT-16, the ruling-4 pattern).
+    const events = parseSSE(res.payload).filter(e => (
+      e.event !== 'tool' || (e.data as { name?: string }).name !== 'auto_recall'
+    ));
 
     // Should have tool events
     const toolEvents = events.filter(e => e.event === 'tool');

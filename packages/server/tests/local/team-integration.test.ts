@@ -13,15 +13,38 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { MindDB, SessionStore, FrameStore, type TeamSync } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { emitAuditEvent, closeAuditDb } from '../../src/local/routes/events.js';
+import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { injectWithAuth } from '../test-utils.js';
+import { installFakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 // ── Mock global fetch ───────────────────────────────────────────────
 
 const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+
+/**
+ * A turn whose model calls the real `save_memory` once and then answers
+ * (TD-CHAT-16). The fake sits over the suite's fetch mock, so every non-model
+ * request still reaches `mockFetch`. Returns the undo.
+ */
+function modelSavesMemory(server: FastifyInstance, content: string): () => void {
+  const previousProvider = server.agentState.llmProvider;
+  server.agentState.llmProvider = {
+    provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+  };
+  const provider = installFakeLlmProvider({
+    respond: (request) => (request.messages.some(message => message.role === 'tool')
+      ? { type: 'text', content: 'saved', usage: { inputTokens: 1, outputTokens: 1 } }
+      : { type: 'tool_calls', calls: [{ name: 'save_memory', args: { content } }], usage: { inputTokens: 1, outputTokens: 1 } }),
+    otherRequest: 'previous',
+  });
+  return () => {
+    provider.restore();
+    server.agentState.llmProvider = previousProvider;
+  };
+}
 
 /**
  * Helper: write config.json with team server credentials into dataDir.
@@ -398,6 +421,9 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
     mockFetch.mockClear();
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
+    // Held on the injected runner for a ruling (TD-CHAT-16 §6r): on the real
+    // path the token bound to another server fails the turn's governance
+    // check before the model runs, so the push guard is never reached.
     const originalRunner = server.agentRunner;
     server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
       config.onToolResult?.('save_memory', {}, 'saved memory');
@@ -434,11 +460,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     writeTeamConfig(tmpDir, 'guarded-team-token', teamServerUrl);
     mockFetch.mockClear();
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onToolResult?.('save_memory', {}, 'saved memory');
-      return { content: 'saved', toolsUsed: ['save_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    const undoModel = modelSavesMemory(server, 'Guarded team decision');
 
     try {
       const res = await injectWithAuth(server, {
@@ -447,6 +469,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
         payload: { message: 'Remember this safely', workspace: workspace.id },
       });
       expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('"name":"save_memory"');
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const guardedPush = mockFetch.mock.calls.find(([url, options]) =>
@@ -457,7 +480,8 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
       expect(guardedPush?.[1]?.redirect).toBe('manual');
       expect(guardedPush?.[1]?.dispatcher).toBeDefined();
     } finally {
-      server.agentRunner = originalRunner;
+      undoModel();
+      server.sessionManager.close(workspace.id);
       mockFetch.mockResolvedValue({ ok: true });
     }
   });

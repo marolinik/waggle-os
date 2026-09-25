@@ -678,3 +678,239 @@ answer that holds open, or send reasoning deltas. The next slice extends the hel
 chunked stream plus a reasoning delta), with helper unit tests, and then ports these.
 
 Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794, 400 s.
+
+## 6o. chat-api slice 3d: the last five `chat-api.test.ts` tests
+
+**Helper.** The fake gains a `stream` reply, scripted part by part:
+- `{ content }` and `{ reasoning }` deltas, the second sent as `reasoning_content`;
+- `{ pause }`, a callback run when the reader reaches that point, which holds the stream open until
+  its result settles;
+- `truncated: true`, which ends it the way `truncated_stream` does.
+
+One frame goes out per pull, so a pause runs only after the reader has taken every frame before it.
+After a cancel the remaining parts still run, pauses included, but nothing more reaches the reader:
+that is a provider which ignores the disconnect. Four new helper tests drive it through
+`runAgentLoop`, 20/20.
+
+A body read that fails mid-stream was tried as a part and dropped. The parser reports it as
+`LLM stream ended unexpectedly before data: [DONE]`, which is neither the route's replay message
+nor retryable, so the turn ends in that error with no replay and no fallback. That is the current
+production behavior of a dropped connection mid-answer; it is noted here, not changed.
+
+**Ported, no injected runner remains in `chat-api.test.ts` (0 sites, was 9).** Every assertion is
+unchanged except the runner's own flags, which became their provider equivalents.
+- *Safe model activity.* The model's first delta is private reasoning, then the stream pauses.
+  The pin reads `model_active` while the pause holds. "The runner has not settled" became "the model
+  has not resumed", and the pin also asserts one model request. `PRIVATE_REASONING` has now
+  really reached the server before the check, where it used to be sent only after it.
+- *Safe reasoning activity.* Two reasoning deltas, the second shaped like the old
+  `[TOOL_CALL]{"secret":"EXFIL"}`, then the answer. The provisional private text now travels as
+  provider reasoning, not as a `<think>` token: on a non-Qwen model the loop does not strip literal
+  `<think>` content, so a real `<think>` delta would be part of the answer.
+- *Retry status before backoff.* The first model request fails in transport, and the loop's own
+  retry policy emits the notice, `Connection to the model failed — retrying in 2s (retry 1/3)...`,
+  the same text the runner forged. The retried request is held open. It runs on its own server,
+  as before.
+- *Late output after disconnect.* The stream sends reasoning, pauses, and after the client aborts
+  goes on with late reasoning and content. The aborted signal is read off the model request. The
+  post-abort probe reads the conversation off the wire, without the system prompt.
+- *Failed-attempt output out of the fallback stream.* The primary streams reasoning and provisional
+  content and is cut before `[DONE]`. The route's same-model replay then cannot reach the endpoint
+  (four transport failures), and the turn falls back. The model list is read off the wire with
+  consecutive retries collapsed, as `modelsSince` already does. The pin now builds its own server,
+  because those failures count against the endpoint's circuit breaker (§5).
+
+`AgentLoopConfig` and `AgentResponse` are no longer imported by the file.
+
+Verification: typecheck:server-tests and lint are clean; chat-api.test.ts 47/47 in three isolated runs.
+Wide run 2797/2798 (191 files), 445 s. The one failure is TD-TEST-20, the known forced-tool-choice
+fetch-count flake (4 calls where 3 are expected), which passed in all three isolated runs.
+
+## 6p. smart-router slice A: the suite default and the first half
+
+**Suite setup.** The suite's default runner and its fetch stub are gone. Each test installs the fake
+provider: every `/chat/completions` request is recorded in `completionRequests` (the variable the
+pins already read) and answered by a per-test `reply`, `ok` with usage 1/1 by default. The Ollama
+listing and the 503 for any other URL are unchanged. A ruling-2 pass-through spy records every
+attempt's `AgentLoopConfig`, because many pins read fields that never reach the wire
+(`billingModel`, `modelSpendBudget` identity, `modelSpendBillingClass`, `spendWorkspaceId`).
+`capturedModel` is now the last attempt's model.
+
+The approval hook runs on the real path, and a turn whose model calls a generator has no operator
+to answer the card: the two artifact pins hung until the test timeout. The suite builds its server
+with the route's existing test-mode auto-approval (`WAGGLE_AUTO_APPROVE`, read once at
+registration). The injected runner skipped the hook entirely, so no pin loses a check it had.
+
+**Ported with every assertion unchanged:** the default-runner pins, including L567 (ruling 3).
+- **L567, the paid compressor.** `completionRequests` is still `[]` on the real path. The
+  priced primary's own turn is refused by the loop's hard cap (the daily total is mocked at the
+  cap), so neither a compression call nor the turn's model call is made. The ruling's
+  production-path equivalent is therefore the unchanged assertion.
+- **Unscoped artifact index; Office and PDF index.** The model makes real `generate_docx`,
+  `generate_pdf`, `generate_xlsx` and `generate_pptx` calls; the second brief is regenerated
+  under the refreshed title; the failing PDF call omits `content`, so the real tool answers
+  `Error: content is required` instead of the forged `Error generating PDF`. The Office message
+  now says "Excel spreadsheet": with plain "Excel" the tool selector did not offer
+  `generate_xlsx`, and the call came back "not found".
+- **Restart carryover.** The restarted server's turns run the real loop; the model is read from
+  the spy.
+- **Failed budget run returns to the primary.** The budget model cannot be reached, and the loop's
+  own transport retries run out.
+- **Budget, then primary, then fallback.** Neither the budget model nor the primary can be reached;
+  the fallback answers. The attempts and the three switch reasons are unchanged. The primary's
+  `(timeout)` reason still holds: the loop's own "could not reach" error carries no status. The pin
+  runs on its own server. On the shared one, its eight transport failures on the Ollama origin
+  left the circuit breaker open: the next two Ollama pins in the file got `Server error 503`
+  retries and no `done`.
+
+**Re-pinned, please review.**
+- **Terminal hard-budget rejection (ruling 5 pattern).** The loop's own cap never refuses a free
+  model, so an Ollama primary cannot produce this refusal. The pin now uses a priced primary,
+  `claude-sonnet-4-6`, with a real hard cap, on its own server. It asserts one attempt on
+  `anthropic/claude-sonnet-4-6`, no model request, an `error` event and `Daily budget exceeded`.
+  The attempted model literal changed from `primary-test-model`. The pin needs its own server
+  because the route caches each provider's credential pool for the server's lifetime: a pool made
+  here with one key starved the credential-exhaustion pin later in the file.
+- **Router budget reads (2 pins).** `getDailyTotal` is read twice per turn on the real path: once
+  by the router and once by the loop's own spend reservation. The pins now count the reads made
+  before the first attempt enters the loop and assert exactly 1. A spy pre-loop hook records the
+  count, as in §6f.
+- **Incomplete budget run (ruling 3).** The budget model's stream is cut before `[DONE]` with
+  usage 13 500 / 500. The route never calls `addUsage` on the real path, and the pin asserts that.
+  The loop's spend meter records one usage entry with the same model, tokens, scope and billing
+  class. `addTokens`, `calculateUsageCost` and the trace assertions are unchanged.
+**Held for a ruling: "persists returned usage before completing a client-cancelled run" (L718).**
+The runner returns a usage of 20 000 / 1 000 and marks the turn's signal aborted as it returns. The
+real loop cannot produce that state. An abort during the stream rejects before the final usage
+frame, so the loop throws a client abort with no usage. The one abort path that carries usage
+(after the body is read, before the post-read work) cannot be hit deterministically. The pin's
+route-side `addUsage` assertion is injected-runner-only accounting as well. Options:
+- (a) re-pin to a real mid-stream client abort, asserting no `done` or `error`, an `abandoned`
+  trace, and the loop's committed estimate instead of 20 000 / 1 000;
+- (b) move the usage-on-abort accounting to a unit pin of the failure module;
+- (c) keep this pin on a ruling-2 spy that returns a response after aborting. That goes beyond
+  ruling 2.
+
+Recommendation: (a) plus (b).
+
+Verification: typecheck:server-tests and lint are clean; smart-router 66/66 (46 s). Wide run 2798/2798
+(191 files), 337 s.
+
+## 6q. smart-router slice B: the second half
+
+The fake's text reply takes an optional `finishReason` (a new helper test, 21/21). The spy gains
+`failures[n]`, thrown on attempt n, as in chat-attempt-chain.
+
+**Ported with every assertion unchanged:**
+- The four model-selection exits and the fallback provenance pin. An unreachable model is
+  scripted as a transport failure until the loop's retries run out; attempts are read from the
+  spy. "Primary unavailable, no fallback" also asserts that no model request is made.
+- The 29-tool and fallback-prompt pins already ran the real loop; they lose only their
+  `agentRunner = undefined` lines.
+- **Credential exhaustion.** Each provider key gets a real 401, and the local fallback answers.
+  The three keys and the fallback order are unchanged.
+- **Interrupted no-tool answer.** The first stream is cut before `[DONE]` with usage 100 / 20, and
+  the replay answers. The replay's token budget is still the first budget minus 120.
+- **Ollama fallback transport.** Both attempts' `litellmUrl` come from the spy.
+- **Incomplete completion rows.** "Content filter" is a real `finish_reason: content_filter`,
+  and "exhausted token budget" a cut stream reporting 100 000 / 20. The loop never reports an
+  "assistant refusal" or an "invalid response body" reason, so those two rows are thrown by the
+  spy under ruling 2. They are added to the §2 "cannot produce" list.
+- **Non-replayable tool.** The model really calls `write_file`, then its next stream is cut. The
+  message now asks for the write ("Write the release notes to release.txt."), because a review
+  request transmits no write tool. "One simulated mutation" is now one `write_file` tool event.
+
+**Re-pinned (ruling 3):** "reports the model that answered and bills it after a fallback". The
+route never calls `addUsage` on the real path, and the pin asserts that. The billed models are
+read from the loop's spend entries, which include the fallback model and end with it.
+
+**Left in the file:** the held client-cancelled pin (§6p), and the suite's
+`server.agentRunner = undefined` reset in `beforeEach`, which goes when that pin is ruled on.
+
+Verification: typecheck:server-tests and lint are clean; smart-router plus helpers 87/87 (47 s). Wide run
+2799/2799 (191 files), 345 s.
+
+## 6r. The small /api/chat files: team-integration, user-facing-error, chat-pipeline
+
+The grep for injection sites found one file the §2 inventory predates:
+`local/chat-turn-user-facing-error.test.ts` (TD-CHAT-15, PR #168). It is handled here.
+
+**chat-pipeline (tests/behaviors): no injected runner remains; 30/30.** The echo runner became the
+fake's default answer, streamed as the same three chunks. The exact `Hello from Waggle!` did not
+gain a suffix. The "runner never called" checks on the nine rejected requests became "no model
+request". The slow-first-token pin holds the model call. The tool-events pin makes a real
+`search_memory` call and filters out the route's own `auto_recall` events (the ruling-4 pattern).
+It also asserts that the tool is `search_memory`. The provisional "I will inspect…" token has no
+counterpart, because the fake's tool-call turn carries no content; the pin's "not in the answer"
+check still holds. In the abort pin the model streams a provisional answer, then keeps working
+until its request aborts; "work stops" is now the model request's abort. Every other assertion is
+unchanged.
+
+**user-facing-error: two of four ported.**
+- The pricing refusal is the loop's own: a model the trusted catalog cannot price
+  (`unpriced-test-model`), under a hard daily budget. The code and the verbatim message are
+  unchanged apart from the model name, which was the synthetic `x`. No model request is made.
+- The "assistant refusal" incomplete completion is thrown by a ruling-2 spy (§6q).
+- **Held, two pins: the provider HTTP error and its persisted failure turn.** A real 502 is
+  retried by the loop until its cap, and the user then sees "The model endpoint is not
+  responding. It may be down or restarting. Check Settings > Models, then try again.", not
+  "The model provider returned an error (HTTP 502). Try again or switch model." Only a status the
+  loop does not retry reaches the route as `LLM error (<status>): <body>`. Proposed re-pin: a
+  non-retried status such as 400, keeping the "status only, never the body" claim. The literal
+  would then read `HTTP 400`. Alternatively, pin the 502 path's real sentence.
+
+**team-integration: one of two ported.**
+- The guarded-transport pin makes a real `save_memory` call. The push still goes to the guarded
+  Team transport with the bound token, `redirect: 'manual'` and a dispatcher.
+- **Held: "does not push save_memory with a Team token bound to another server".** On the real
+  path the turn fails the team governance check before the model runs ("Team governance policies
+  could not be reached for this workspace."), so the push guard is never reached. The pin's
+  zero-push assertion still passes, but it would no longer test the guard. Proposed re-pin: keep
+  this route pin as a governance fail-closed pin (the error, no model request), and move the push
+  guard to a unit pin of the TeamSync token binding.
+
+Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline 2829/2829
+(192 files), 389 s.
+
+## 6s. app e2e, the seam guard, and what blocks the production removal
+
+**app/tests/e2e/chat.test.ts: two of four ported.**
+- Scenario 4 streams `Hello ` + `world` from the fake, with every assertion unchanged, and also
+  asserts one model request.
+- Scenario 9 has the model really call `read_file` and then `write_file`. The route's own
+  `auto_recall` tool event is filtered out (the ruling-4 pattern). The tool names, the read path
+  and `toolsUsed` are unchanged. The message now also asks for the write, because a read request
+  transmits no write tool. The service is built with the test-mode auto-approval, as in §6p.
+- **Held: scenarios 10 and 10b, the "external mutation gate".** Their `gate:request` /
+  `gate:response` exchange on the event bus exists only inside the injected runner. The real
+  approval hook never emits either event: it sends `approval_required` and waits on the pending
+  approval that `POST /api/approval/:id` answers. So there is no production path to port them
+  onto. Proposed re-pin: drive the real hook. A `bash` call in a turn without auto-approval
+  should show `approval_required` and finish once the approval is answered; a denial should show
+  the refusal. `chat-approval-hook-characterization` already pins much of this.
+
+**Guard (`chat-runner-seam-guard.test.ts`, ruling 1).** It scans every test file under
+`packages`, `tests`, `app/tests` and `apps` that mentions `/api/chat`, and counts its runner
+installs (`.agentRunner = …`, apart from `undefined` and saved-original restores, and
+`decorate('agentRunner', …)`). The counts must equal an allowlist:
+- `local-mode.test.ts`, 6 installs: fleet and agent-group runs (ruling 1);
+- the held pins: smart-router 1, team-integration 1, user-facing-error 1, app e2e 2.
+
+The list is a ratchet. When a held pin is ported, its count drops, and the guard fails until the
+list is updated. `fleet-isolation` and `agent-groups` never post to `/api/chat`, so the guard
+does not cover them.
+
+**Phase 13+ (production removal) is not started.** Five injected-runner pins remain on
+`/api/chat`, all waiting for a ruling. Removing `hasCustomRunner` now would break them.
+`hasCustomRunner` still has 57 occurrences in 8 files under `packages/server/src`. The rulings
+needed:
+
+| Pin | Section | Recommendation |
+|---|---|---|
+| smart-router "persists returned usage before completing a client-cancelled run" | §6p | real mid-stream abort, plus a unit pin of usage-on-abort accounting |
+| team-integration "does not push save_memory with a Team token bound to another server" | §6r | a governance fail-closed route pin, plus a unit pin of the token binding |
+| user-facing-error "provider HTTP error" and "persists the text it showed" | §6r | a non-retried status (400), or pin the real 502 sentence |
+| app e2e scenarios 10 and 10b | §6s | re-pin on the real approval hook |
+
+Verification: typecheck:server-tests and lint are clean. Wide run plus chat-pipeline, app e2e and the
+guard 2835/2835 (194 files), 464 s.
