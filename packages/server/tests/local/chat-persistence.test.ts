@@ -16,6 +16,7 @@ import {
   loadSessionMessages,
   replaceRetryTailWithUser,
   stripTrailingFailedPair,
+  createPersistedCapabilityReceipt,
 } from '../../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
@@ -476,5 +477,41 @@ describe('replaceRetryTailWithUser', () => {
     expect(result).toEqual({ ok: false, reason: 'history-replace-failed' });
     expect(renameAttempts).toBe(4);
     expect(fs.readFileSync(filePath, 'utf-8')).toBe(original);
+  });
+});
+
+// Moved here from the chat-api receipt pin (TD-CHAT-16 ruling 15): a real
+// agent loop cannot produce these forged, mismatched or oversized results, so
+// they are pinned against the receipt check directly.
+describe('createPersistedCapabilityReceipt', () => {
+  const marketplaceMarker = '<!--waggle:capability_request {"name":"react-best-practices","source":"marketplace","kind":"marketplace","packageId":7,"installType":"skill"}-->';
+  const result = `Recommended capability.\n${marketplaceMarker}`;
+
+  it('accepts a completed marketplace proposal and keeps its input and output', () => {
+    expect(createPersistedCapabilityReceipt({ need: ' review source code ' }, result)).toEqual({
+      id: expect.stringMatching(/^capability-/),
+      name: 'acquire_capability',
+      status: 'done',
+      input: { need: 'review source code' },
+      output: result,
+    });
+  });
+
+  it('accepts a starter-pack proposal without a package identity', () => {
+    const starter = 'Try this.\n<!--waggle:capability_request {"name":"code-review","source":"starter-pack","kind":"skill"}-->';
+    expect(createPersistedCapabilityReceipt({ need: 'review code' }, starter)).not.toBeNull();
+  });
+
+  it.each([
+    ['a mismatched route', { need: 'mismatched route' }, '<!--waggle:capability_request {"name":"wrong-route","source":"marketplace","kind":"skill"}-->'],
+    ['a missing canonical package identity', { need: 'missing canonical package identity' }, '<!--waggle:capability_request {"name":"same-name-decoy","source":"marketplace","kind":"marketplace"}-->'],
+    ['an over-long need', { need: 'x'.repeat(2_001) }, result],
+    ['an ordinary tool result', { need: 'not a capability receipt' }, 'ordinary result'],
+    ['a marker that is not at the end', { need: 'trailing text' }, `${marketplaceMarker}\nmore text`],
+    ['an error result', { need: 'errored' }, `Error: failed ${marketplaceMarker}`],
+    ['a missing need', {}, result],
+    ['a non-object input', 'review source code', result],
+  ])('rejects %s', (_case, input, output) => {
+    expect(createPersistedCapabilityReceipt(input, output)).toBeNull();
   });
 });

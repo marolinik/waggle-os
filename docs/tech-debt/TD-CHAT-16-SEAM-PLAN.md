@@ -616,3 +616,65 @@ of a worker out-of-memory crash, not a test failure.
 - 9/9 in the file; history-isolation 12/12.
 
 Verification: typecheck:server-tests and lint are clean. Wide run 2784/2784 (191 files), 630 s.
+
+### Fifth round (2026-09-25)
+
+13. **Blank-answer pins:** covers workspace-failures ×2 and the chat-api double-blank test. Pin
+    the loop's real rejection, `LLM returned an empty assistant response with no tool calls`.
+14. **"streams tool use events":** assert the ordered tool events `['auto_recall', 'web_search']`.
+15. **Forged acquire_capability receipt:**
+    - The positive receipt comes from a real, scripted `acquire_capability` call.
+    - The forgery cases move to a unit test of the receipt check.
+
+## 6m. Held tests ported (rulings 13–15)
+
+**workspace-failures: no injected runner remains; 30/30.**
+- The blank-answer pins run the real loop with a blank provider answer. They now assert the loop's
+  exact error message, `LLM returned an empty assistant response with no tool calls`, in the
+  error event and in the persisted turn. There is still no token and no done event.
+- "streams tool use events" makes a real scripted `web_search` call, with the search host answered
+  in-test. It asserts the ordered events `['auto_recall', 'web_search']`; the input, token and
+  `toolsUsed` assertions are unchanged.
+
+**history-isolation receipt pin: no injected runner remains; 12/12.**
+- The model makes two real `acquire_capability` calls. Each need names a marketplace skill, with
+  its words in a different order, and the real tool answers both with an installable marketplace
+  proposal.
+- Both proposals are issued. The persisted receipt is the second call's, live and cold, and the
+  forged final answer is persisted as text only.
+- The assertion that the streamed result differs from the raw tool result was dropped: no fixed
+  raw result exists any more. `proposalId` and `expiresAt` in the issued output still show that the
+  route rewrote it.
+- The forgery cases now pin `createPersistedCapabilityReceipt` directly, in
+  `local/chat-persistence.test.ts`: mismatched route, missing package identity, over-long need,
+  ordinary result, marker not at the end, error result, missing need, and non-object input. That
+  file also adds the positive marketplace and starter-pack cases.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794 (191 files), 365 s.
+
+## 6n. chat-api slice 3c: `chat-api.test.ts`, first part
+
+Six tests no longer inject a runner, and the unused `runOverlappingTurns` copy is gone.
+`agentRunner = ` sites in the file went from 19 to 9.
+- **Blank no-tool fallback.** Primary answers `' \n'`, fallback answers `fallback ok`. This used
+  to be an injected `runAgentLoop` with its own fetch and gates off; the route's own gates now run.
+  Assertions are unchanged, and the models are read off the wire.
+- **Double blank.** Re-pinned per ruling 13: the persisted turn is the loop's exact rejection.
+  The synthetic `unsafe provisional` token is gone.
+- **Tool then blank.** The injected `mutate_state` tool cannot exist on the real path. The model now
+  makes a real `search_memory` call (the message asks for a memory search) and then answers blank.
+  The pin still asserts one model tool event and one result, no replay and no fallback. It filters
+  out the route's own `auto_recall` events, the way ruling 4 filters to `chat.*` stages.
+  **Please review this filter:** it is the one assertion adaptation in this slice.
+- **Trusted full-history path.** Reads the first wire request.
+- **LiteLLM key routing ×2.** The describe installs its own fake, and the pins read the bearer
+  header each model request carried. The master key and the pool key are asserted unchanged.
+
+**Left: 9 sites in 5 tests.** These are "safe model activity", "safe reasoning activity",
+"retry status before backoff", "late output after disconnect" (2 sites) and "failed-attempt
+output out of the fallback stream". Each drives `onModelActivity`, `onReasoningActivity`,
+`onRetry` or a provisional `<think>` token mid-turn. The helper cannot yet stream a partial
+answer that holds open, or send reasoning deltas. The next slice extends the helper (a gated
+chunked stream plus a reasoning delta), with helper unit tests, and then ports these.
+
+Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794, 400 s.
