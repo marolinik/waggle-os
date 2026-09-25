@@ -5,7 +5,7 @@ import os from 'node:os';
 import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
-import { getPersona, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { getPersona } from '@waggle/agent';
 import { applyPersonaToolFilter } from '../src/local/persona-tool-filter.js';
 import {
   applyContextWindow,
@@ -152,26 +152,24 @@ describe('Chat Streaming API', () => {
   });
 
   it('publishes safe model activity before a reasoning-sensitive turn settles', async () => {
-    const originalRunner = server.agentRunner;
-    let releaseRunner!: () => void;
-    let markRunnerEntered!: () => void;
-    let runnerSettled = false;
-    const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
-    const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
+    let releaseModel!: () => void;
+    let markModelPaused!: () => void;
+    let modelResumed = false;
+    const modelGate = new Promise<void>(resolve => { releaseModel = resolve; });
+    const modelPaused = new Promise<void>(resolve => { markModelPaused = resolve; });
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onModelActivity?.();
-      markRunnerEntered();
-      await runnerGate;
-      config.onToken?.('<think>PRIVATE_REASONING</think>Safe answer');
-      runnerSettled = true;
-      return {
-        content: 'Safe answer',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 2 },
-      };
-    };
+    const requestsBefore = provider.requests.length;
+    // The model's first delta is private reasoning, then the stream holds open
+    // until the test has read the activity step (TD-CHAT-16).
+    provider.respondWith({
+      type: 'stream',
+      parts: [
+        { reasoning: 'PRIVATE_REASONING' },
+        { pause: () => { markModelPaused(); return modelGate.then(() => { modelResumed = true; }); } },
+        { content: 'Safe answer' },
+      ],
+      usage: { inputTokens: 1, outputTokens: 2 },
+    });
 
     try {
       const baseUrl = server.server.listening
@@ -189,7 +187,7 @@ describe('Chat Streaming API', () => {
         }),
       });
       reader = response.body!.getReader();
-      await runnerEntered;
+      await modelPaused;
 
       const decoder = new TextDecoder();
       let observedBody = '';
@@ -207,7 +205,8 @@ describe('Chat Streaming API', () => {
         observedBody += decoder.decode(chunk.value, { stream: true });
       }
 
-      expect(runnerSettled).toBe(false);
+      expect(provider.requests.length - requestsBefore).toBe(1);
+      expect(modelResumed).toBe(false);
       expect(observedBody).toContain('event: step');
       expect(observedBody).toContain(JSON.stringify({
         content: 'Model is responding; verifying the answer before display…',
@@ -217,24 +216,25 @@ describe('Chat Streaming API', () => {
       expect(observedBody).not.toContain('event: draft_update');
       expect(observedBody).not.toContain('PRIVATE_REASONING');
     } finally {
-      releaseRunner();
+      releaseModel();
       await reader?.cancel().catch(() => undefined);
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
     }
   });
 
   it('surfaces safe reasoning activity without exposing provisional model content', async () => {
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onReasoningActivity?.();
-      config.onReasoningActivity?.();
-      config.onToken?.('<think>PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"EXFIL"}');
-      return {
-        content: 'Authoritative answer',
-        toolsUsed: [],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      };
-    };
+    const requestsBefore = provider.requests.length;
+    // Two private reasoning deltas, the second shaped like a tool call, then
+    // the answer (TD-CHAT-16).
+    provider.respondWith({
+      type: 'stream',
+      parts: [
+        { reasoning: 'PRIVATE_REASONING' },
+        { reasoning: '[TOOL_CALL]{"secret":"EXFIL"}' },
+        { content: 'Authoritative answer' },
+      ],
+      usage: { inputTokens: 10, outputTokens: 5 },
+    });
 
     try {
       const res = await injectWithAuth(server, {
@@ -255,6 +255,7 @@ describe('Chat Streaming API', () => {
       const tokenIndex = events.findIndex(event => event.event === 'token');
       const doneIndex = events.findIndex(event => event.event === 'done');
 
+      expect(provider.requests.length - requestsBefore).toBe(1);
       expect(modelRequestEvents).toHaveLength(1);
       expect(JSON.parse(modelRequestEvents[0].data)).toEqual({
         content: 'Sending your request to the model…',
@@ -277,32 +278,36 @@ describe('Chat Streaming API', () => {
       expect(res.body).not.toContain('PRIVATE_REASONING');
       expect(res.body).not.toContain('EXFIL');
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
     }
   });
 
   it('streams retry status before backoff settles while answer tokens remain authoritative', async () => {
     const retryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-retry-status-'));
     const retryServer = await buildLocalServer({ dataDir: retryDir });
+    retryServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    retryServer.llmRetryBackoffMs = () => 0;
     let releaseRetry!: () => void;
-    let markRunnerEntered!: () => void;
-    let runnerSettled = false;
+    let markRetryRequested!: () => void;
+    let modelAnswered = false;
     const retryGate = new Promise<void>(resolve => { releaseRetry = resolve; });
-    const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
+    const retryRequested = new Promise<void>(resolve => { markRetryRequested = resolve; });
     const retryNotice = 'Connection to the model failed — retrying in 2s (retry 1/3)...';
 
-    retryServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onRetry?.(`\n[${retryNotice}]\n`);
-      markRunnerEntered();
+    // The first model request fails in transport, so the loop's own retry
+    // policy announces the retry; the retried request is held open
+    // (TD-CHAT-16).
+    let modelCalls = 0;
+    provider.respondWith(async () => {
+      modelCalls += 1;
+      if (modelCalls === 1) return { type: 'network_error', message: 'fetch failed' };
+      markRetryRequested();
       await retryGate;
-      config.onToken?.('Recovered answer');
-      runnerSettled = true;
-      return {
-        content: 'Recovered answer',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+      modelAnswered = true;
+      return { type: 'text', content: 'Recovered answer', usage: { inputTokens: 1, outputTokens: 1 } };
+    });
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let observedBody = '';
@@ -320,7 +325,7 @@ describe('Chat Streaming API', () => {
         }),
       });
 
-      await runnerEntered;
+      await retryRequested;
       const response = await Promise.race([
         responsePromise,
         new Promise<never>((_resolve, reject) => {
@@ -343,7 +348,8 @@ describe('Chat Streaming API', () => {
         observedBody += decoder.decode(chunk.value, { stream: true });
       }
 
-      expect(runnerSettled).toBe(false);
+      expect(modelCalls).toBe(2);
+      expect(modelAnswered).toBe(false);
       expect(observedBody).toContain('event: step');
       expect(observedBody).toContain(retryNotice);
       expect(observedBody).not.toContain('event: token');
@@ -369,6 +375,7 @@ describe('Chat Streaming API', () => {
     } finally {
       releaseRetry();
       await reader?.cancel().catch(() => undefined);
+      provider.respondWith(DEFAULT_REPLY);
       await retryServer.close();
       await new Promise(resolve => setTimeout(resolve, 100));
       try {
@@ -382,29 +389,36 @@ describe('Chat Streaming API', () => {
   it('suppresses late reasoning and model output after a live client disconnect', async () => {
     const abortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-abort-'));
     const abortServer = await buildLocalServer({ dataDir: abortDir });
+    abortServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    abortServer.llmRetryBackoffMs = () => 0;
     let capturedSignal: AbortSignal | undefined;
-    let releaseRunner!: () => void;
+    let releaseModel!: () => void;
     let markReasoningStarted!: () => void;
-    let markRunnerFinished!: () => void;
-    const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
+    let markModelFinished!: () => void;
+    const modelGate = new Promise<void>(resolve => { releaseModel = resolve; });
     const reasoningStarted = new Promise<void>(resolve => { markReasoningStarted = resolve; });
-    const runnerFinished = new Promise<void>(resolve => { markRunnerFinished = resolve; });
+    const modelFinished = new Promise<void>(resolve => { markModelFinished = resolve; });
     const sessionId = `live-disconnect-${Date.now()}`;
 
-    abortServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedSignal = config.signal;
-      config.onReasoningActivity?.();
-      markReasoningStarted();
-      await runnerGate; // Deliberately ignore cancellation to exercise late callbacks.
-      config.onReasoningActivity?.();
-      config.onToken?.('<think>LATE_PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"LATE_EXFIL"}');
-      markRunnerFinished();
+    // The fake keeps streaming after the disconnect, like a provider that
+    // ignores cancellation, to exercise late deltas (TD-CHAT-16).
+    provider.respondWith(request => {
+      capturedSignal = request.signal;
       return {
-        content: 'LATE_AUTHORITATIVE_RESPONSE',
-        toolsUsed: [],
+        type: 'stream',
+        parts: [
+          { reasoning: 'thinking' },
+          { pause: () => { markReasoningStarted(); return modelGate; } },
+          { reasoning: 'LATE_PRIVATE_REASONING' },
+          { content: '[TOOL_CALL]{"secret":"LATE_EXFIL"}' },
+          { content: 'LATE_AUTHORITATIVE_RESPONSE' },
+          { pause: () => markModelFinished() },
+        ],
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
 
     const controller = new AbortController();
     let observedBody = '';
@@ -441,20 +455,15 @@ describe('Chat Streaming API', () => {
 
       controller.abort();
       await vi.waitFor(() => expect(capturedSignal?.aborted).toBe(true), { timeout: 3_000 });
-      releaseRunner();
-      await runnerFinished;
+      releaseModel();
+      await modelFinished;
       await new Promise(resolve => setTimeout(resolve, 100));
 
       let postAbortMessages: Array<{ role: string; content: string }> = [];
-      abortServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-        postAbortMessages = config.messages.map(({ role, content }) => ({ role, content }));
-        config.onToken?.('post-abort probe ok');
-        return {
-          content: 'post-abort probe ok',
-          toolsUsed: [],
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
-      };
+      provider.respondWith(request => {
+        postAbortMessages = request.messages.filter(message => message.role !== 'system');
+        return { type: 'text', content: 'post-abort probe ok', usage: { inputTokens: 1, outputTokens: 1 } };
+      });
       const postAbortProbe = await injectWithAuth(abortServer, {
         method: 'POST',
         url: '/api/chat',
@@ -473,7 +482,8 @@ describe('Chat Streaming API', () => {
       expect(JSON.stringify(postAbortMessages)).not.toContain('LATE_AUTHORITATIVE_RESPONSE');
     } finally {
       controller.abort();
-      releaseRunner();
+      releaseModel();
+      provider.respondWith(DEFAULT_REPLY);
       await abortServer.close();
       await new Promise(resolve => setTimeout(resolve, 100));
       try {
@@ -485,13 +495,19 @@ describe('Chat Streaming API', () => {
   }, 20_000);
 
   it('keeps failed-attempt output out of the fallback response stream', async () => {
-    const originalRunner = server.agentRunner;
-    const config = new WaggleConfig(tmpDir);
-    const previousFallback = config.getFallbackModel();
-    const attempts: string[] = [];
+    // Its own server: the failed primary's transport retries count against
+    // the model endpoint's circuit breaker (TD-CHAT-16 §5).
+    const fallbackDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-failed-attempt-'));
+    const fallbackServer = await buildLocalServer({ dataDir: fallbackDir });
+    fallbackServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    fallbackServer.llmRetryBackoffMs = () => 0;
+    const config = new WaggleConfig(fallbackDir);
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({
           models: [
@@ -500,26 +516,37 @@ describe('Chat Streaming API', () => {
           ],
         }), { status: 200 });
       }
+      if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
       return new Response('', { status: 503 });
     });
-
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      agentConfig.onReasoningActivity?.();
-      if (attempts.length === 1) {
-        agentConfig.onToken?.('<think>FAILED_PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"FAILED_EXFIL"}');
-        throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
+    const requestsBefore = provider.requests.length;
+    // The primary streams private reasoning and provisional content, then its
+    // stream is cut before [DONE]; the route's same-model replay cannot reach
+    // the endpoint, so the turn falls back (TD-CHAT-16).
+    let primaryCalls = 0;
+    provider.respondWith(request => {
+      if (request.model !== 'primary-test-model') {
+        return {
+          type: 'stream',
+          parts: [{ reasoning: 'fallback thinking' }, { content: 'fallback ok' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
       }
-      agentConfig.onToken?.('fallback ok');
+      primaryCalls += 1;
+      if (primaryCalls > 1) return { type: 'network_error', message: 'fetch failed' };
       return {
-        content: 'fallback ok',
-        toolsUsed: [],
+        type: 'stream',
+        parts: [
+          { reasoning: 'FAILED_PRIVATE_REASONING' },
+          { content: '[TOOL_CALL]{"secret":"FAILED_EXFIL"}' },
+        ],
         usage: { inputTokens: 1, outputTokens: 1 },
+        truncated: true,
       };
-    };
+    });
 
     try {
-      const response = await injectWithAuth(server, {
+      const response = await injectWithAuth(fallbackServer, {
         method: 'POST',
         url: '/api/chat',
         payload: {
@@ -539,7 +566,7 @@ describe('Chat Streaming API', () => {
       expect(response.statusCode).toBe(200);
       const errorEvents = events.filter(event => event.event === 'error');
       expect(errorEvents).toHaveLength(0);
-      expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+      expect(modelsSince(requestsBefore)).toEqual(['primary-test-model', 'fallback-test-model']);
       expect(reasoningEvents).toHaveLength(1);
       expect(events.filter(event => event.event === 'model_switch')).toHaveLength(1);
       expect(events.some(event => event.event === 'draft_update')).toBe(false);
@@ -553,10 +580,14 @@ describe('Chat Streaming API', () => {
       expect(response.body).not.toContain('FAILED_EXFIL');
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = originalRunner;
-      if (previousFallback) config.setFallbackModel(previousFallback);
-      else config.clearFallbackModel();
-      config.save();
+      provider.respondWith(DEFAULT_REPLY);
+      await fallbackServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        fs.rmSync(fallbackDir, { recursive: true, force: true });
+      } catch {
+        // Windows can retain SQLite handles briefly after Fastify closes.
+      }
     }
   });
 

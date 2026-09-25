@@ -678,3 +678,50 @@ answer that holds open, or send reasoning deltas. The next slice extends the hel
 chunked stream plus a reasoning delta), with helper unit tests, and then ports these.
 
 Verification: typecheck:server-tests and lint are clean. Wide run 2794/2794, 400 s.
+
+## 6o. chat-api slice 3d: the last five `chat-api.test.ts` tests
+
+**Helper.** The fake gains a `stream` reply, scripted part by part:
+- `{ content }` and `{ reasoning }` deltas, the second sent as `reasoning_content`;
+- `{ pause }`, a callback run when the reader reaches that point, which holds the stream open until
+  its result settles;
+- `truncated: true`, which ends it the way `truncated_stream` does.
+
+One frame goes out per pull, so a pause runs only after the reader has taken every frame before it.
+After a cancel the remaining parts still run, pauses included, but nothing more reaches the reader:
+that is a provider which ignores the disconnect. Four new helper tests drive it through
+`runAgentLoop`, 20/20.
+
+A body read that fails mid-stream was tried as a part and dropped. The parser reports it as
+`LLM stream ended unexpectedly before data: [DONE]`, which is neither the route's replay message
+nor retryable, so the turn ends in that error with no replay and no fallback. That is the current
+production behavior of a dropped connection mid-answer; it is noted here, not changed.
+
+**Ported, no injected runner remains in `chat-api.test.ts` (0 sites, was 9).** Every assertion is
+unchanged except the runner's own flags, which became their provider equivalents.
+- *Safe model activity.* The model's first delta is private reasoning, then the stream pauses.
+  The pin reads `model_active` while the pause holds. "The runner has not settled" became "the model
+  has not resumed", and the pin also asserts one model request. `PRIVATE_REASONING` has now
+  really reached the server before the check, where it used to be sent only after it.
+- *Safe reasoning activity.* Two reasoning deltas, the second shaped like the old
+  `[TOOL_CALL]{"secret":"EXFIL"}`, then the answer. The provisional private text now travels as
+  provider reasoning, not as a `<think>` token: on a non-Qwen model the loop does not strip literal
+  `<think>` content, so a real `<think>` delta would be part of the answer.
+- *Retry status before backoff.* The first model request fails in transport, and the loop's own
+  retry policy emits the notice, `Connection to the model failed — retrying in 2s (retry 1/3)...`,
+  the same text the runner forged. The retried request is held open. It runs on its own server,
+  as before.
+- *Late output after disconnect.* The stream sends reasoning, pauses, and after the client aborts
+  goes on with late reasoning and content. The aborted signal is read off the model request. The
+  post-abort probe reads the conversation off the wire, without the system prompt.
+- *Failed-attempt output out of the fallback stream.* The primary streams reasoning and provisional
+  content and is cut before `[DONE]`. The route's same-model replay then cannot reach the endpoint
+  (four transport failures), and the turn falls back. The model list is read off the wire with
+  consecutive retries collapsed, as `modelsSince` already does. The pin now builds its own server,
+  because those failures count against the endpoint's circuit breaker (§5).
+
+`AgentLoopConfig` and `AgentResponse` are no longer imported by the file.
+
+Verification: typecheck:server-tests and lint are clean; chat-api.test.ts 47/47 in three isolated runs.
+Wide run 2797/2798 (191 files), 445 s. The one failure is TD-TEST-20, the known forced-tool-choice
+fetch-count flake (4 calls where 3 are expected), which passed in all three isolated runs.

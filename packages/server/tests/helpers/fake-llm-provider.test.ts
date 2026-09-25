@@ -4,7 +4,7 @@
  * is checked through `runAgentLoop` itself rather than by decoding the bytes
  * here.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig, type ToolDefinition } from '@waggle/agent';
 import {
   installFakeLlmProvider,
@@ -209,6 +209,78 @@ describe('installFakeLlmProvider', () => {
       provider = undefined;
       outer.restore();
     }
+  });
+
+  it('streams reasoning deltas as private reasoning, never as content', async () => {
+    provider = installFakeLlmProvider({
+      respond: {
+        type: 'stream',
+        parts: [{ reasoning: 'PRIVATE_REASONING' }, { content: 'Public ' }, { content: 'answer' }],
+        usage: { inputTokens: 4, outputTokens: 3 },
+      },
+    });
+    let reasoningSignals = 0;
+    const tokens: string[] = [];
+    const result = await runAgentLoop(loopConfig({
+      stream: true,
+      onReasoningActivity: () => { reasoningSignals += 1; },
+      onToken: token => tokens.push(token),
+    }));
+
+    expect(reasoningSignals).toBe(1);
+    expect(tokens).toEqual(['Public ', 'answer']);
+    expect(result.content).toBe('Public answer');
+    expect(result.usage).toEqual({ inputTokens: 4, outputTokens: 3 });
+  });
+
+  it('holds a chunked stream open at a pause after its first delta', async () => {
+    let release!: () => void;
+    const released = new Promise<void>(resolve => { release = resolve; });
+    let paused = false;
+    provider = installFakeLlmProvider({
+      respond: {
+        type: 'stream',
+        parts: [
+          { content: 'first ' },
+          { pause: () => { paused = true; return released; } },
+          { content: 'second' },
+        ],
+      },
+    });
+    const activity: string[] = [];
+    const run = runAgentLoop(loopConfig({
+      stream: true,
+      onModelActivity: () => activity.push('model'),
+      onToken: token => activity.push(`token:${token}`),
+    }));
+    await vi.waitFor(() => expect(paused).toBe(true));
+    await vi.waitFor(() => expect(activity).toEqual(['model', 'token:first ']));
+    release();
+
+    expect((await run).content).toBe('first second');
+    expect(activity).toEqual(['model', 'token:first ', 'token:second']);
+  });
+
+  it('ends a truncated scripted stream without [DONE], which the loop reports as incomplete', async () => {
+    provider = installFakeLlmProvider({
+      respond: {
+        type: 'stream',
+        parts: [{ reasoning: 'hidden' }, { content: 'partial' }],
+        usage: { inputTokens: 3, outputTokens: 1 },
+        truncated: true,
+      },
+    });
+    await expect(runAgentLoop(loopConfig({ stream: true }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 3, outputTokens: 1 },
+    });
+  });
+
+  it('answers a non-streaming request for a scripted stream with its joined content', async () => {
+    provider = installFakeLlmProvider({
+      respond: { type: 'stream', parts: [{ reasoning: 'hidden' }, { content: 'a' }, { content: 'b' }] },
+    });
+    expect((await runAgentLoop(loopConfig({ stream: false }))).content).toBe('ab');
   });
 
   it('restores the fetch that was installed before it', () => {
