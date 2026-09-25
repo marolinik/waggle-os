@@ -16,9 +16,8 @@ import { MindDB, SessionStore, FrameStore, type TeamSync } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { emitAuditEvent, closeAuditDb } from '../../src/local/routes/events.js';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
-import { injectWithAuth } from '../test-utils.js';
-import { installFakeLlmProvider } from '../helpers/fake-llm-provider.js';
+import { injectWithAuth, parseSSE } from '../test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
 // ── Mock global fetch ───────────────────────────────────────────────
 
@@ -27,9 +26,9 @@ const mockFetch = vi.fn().mockResolvedValue({ ok: true });
 /**
  * A turn whose model calls the real `save_memory` once and then answers
  * (TD-CHAT-16). The fake sits over the suite's fetch mock, so every non-model
- * request still reaches `mockFetch`. Returns the undo.
+ * request still reaches `mockFetch`. Returns the provider and the undo.
  */
-function modelSavesMemory(server: FastifyInstance, content: string): () => void {
+function modelSavesMemory(server: FastifyInstance, content: string): { provider: FakeLlmProvider; undo: () => void } {
   const previousProvider = server.agentState.llmProvider;
   server.agentState.llmProvider = {
     provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
@@ -40,9 +39,12 @@ function modelSavesMemory(server: FastifyInstance, content: string): () => void 
       : { type: 'tool_calls', calls: [{ name: 'save_memory', args: { content } }], usage: { inputTokens: 1, outputTokens: 1 } }),
     otherRequest: 'previous',
   });
-  return () => {
-    provider.restore();
-    server.agentState.llmProvider = previousProvider;
+  return {
+    provider,
+    undo: () => {
+      provider.restore();
+      server.agentState.llmProvider = previousProvider;
+    },
   };
 }
 
@@ -411,7 +413,10 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(registrationCalls).toHaveLength(0);
   });
 
-  it('does not push save_memory with a Team token bound to another server', async () => {
+  // TD-CHAT-16 ruling 17: on the real path a Team token bound to another
+  // server fails the turn's governance check before the model runs. The push
+  // guard itself is pinned in `chat-tool-result-effects.test.ts`.
+  it('refuses a chat turn whose Team token is bound to another server before the model runs', async () => {
     const workspace = server.workspaceManager.create({
       name: 'Server A Workspace',
       group: 'work',
@@ -421,14 +426,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
     mockFetch.mockClear();
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
-    // Held on the injected runner for a ruling (TD-CHAT-16 §6r): on the real
-    // path the token bound to another server fails the turn's governance
-    // check before the model runs, so the push guard is never reached.
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onToolResult?.('save_memory', {}, 'saved memory');
-      return { content: 'saved', toolsUsed: ['save_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    const { provider, undo: undoModel } = modelSavesMemory(server, 'Cross-server decision');
 
     try {
       const res = await injectWithAuth(server, {
@@ -437,14 +435,20 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
         payload: { message: 'Remember this', workspace: workspace.id },
       });
       expect(res.statusCode).toBe(200);
+      const events = parseSSE(res.body);
+      expect(events.filter(event => event.event === 'error').map(event => JSON.parse(event.data))).toEqual([{
+        message: 'Team governance policies could not be reached for this workspace. Check your connection and try again.',
+      }]);
+      expect(events.some(event => event.event === 'done')).toBe(false);
+      expect(provider.requests).toHaveLength(0);
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(mockFetch.mock.calls.filter(([url, options]) =>
-        String(url).startsWith('https://team-a.example.com')
-        && options?.headers?.Authorization === 'Bearer server-b-token',
+      expect(mockFetch.mock.calls.filter(([, options]) =>
+        options?.headers?.Authorization === 'Bearer server-b-token',
       )).toHaveLength(0);
     } finally {
-      server.agentRunner = originalRunner;
+      undoModel();
+      server.sessionManager.close(workspace.id);
       mockFetch.mockResolvedValue({ ok: true });
     }
   });
@@ -460,7 +464,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     writeTeamConfig(tmpDir, 'guarded-team-token', teamServerUrl);
     mockFetch.mockClear();
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
-    const undoModel = modelSavesMemory(server, 'Guarded team decision');
+    const { undo: undoModel } = modelSavesMemory(server, 'Guarded team decision');
 
     try {
       const res = await injectWithAuth(server, {

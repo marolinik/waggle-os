@@ -1,8 +1,7 @@
 /**
  * Guard for TD-CHAT-16 ruling 1: `server.agentRunner` stays only for the
  * fleet and agent-group routes. No test file that posts to `/api/chat` may
- * install a runner, except the pins held for a founder ruling below. The
- * allowlist is a ratchet: a count may only go down, and a file whose count
+ * install a runner. The allowlist below is a ratchet: a count may only go down, and a file whose count
  * reaches zero must leave the list.
  */
 import fs from 'node:fs';
@@ -27,10 +26,6 @@ const INSTALL_PATTERNS = [
 
 const ALLOWED_INSTALLS: Record<string, { count: number; reason: string }> = {
   'packages/server/tests/local-mode.test.ts': { count: 6, reason: 'fleet and agent-group runs (ruling 1)' },
-  'packages/server/tests/smart-router-chat.test.ts': { count: 1, reason: 'held: client-cancelled usage (plan 6p)' },
-  'packages/server/tests/local/team-integration.test.ts': { count: 1, reason: 'held: cross-server Team token (plan 6r)' },
-  'packages/server/tests/local/chat-turn-user-facing-error.test.ts': { count: 1, reason: 'held: provider HTTP error (plan 6r)' },
-  'app/tests/e2e/chat.test.ts': { count: 2, reason: 'held: eventBus gate scenarios (plan 6s)' },
 };
 
 function testFiles(dir: string): string[] {

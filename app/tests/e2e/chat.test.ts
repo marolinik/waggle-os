@@ -4,11 +4,10 @@
  * Scenarios covered:
  *   4. Chat message sent and response received (real agent loop, fake model)
  *   9. Tool execution — the model calls real tools, SSE includes tool events
- *  10. External mutation gate — eventBus-based approval flow
+ *  10. External mutation gate — the pre-tool approval hook
  *
- * Scenarios 4 and 9 run the real agent loop against the fake model provider
- * (TD-CHAT-16). Scenario 10 is held on `server.agentRunner` for a ruling: its
- * `gate:request` / `gate:response` flow lives only in the injected runner.
+ * Every scenario runs the real agent loop against the fake model provider
+ * (TD-CHAT-16).
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
@@ -16,7 +15,6 @@ import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { startService } from '@waggle/server/local/service';
-import type { AgentRunner } from '@waggle/server/local/routes/chat';
 import { injectWithAuth } from './test-utils.js';
 import {
   installFakeLlmProvider,
@@ -186,145 +184,94 @@ describe('Chat E2E', () => {
     expect(doneData.toolsUsed).toEqual(['read_file', 'write_file']);
   });
 
-  // Scenario 10: External mutation gate — eventBus approval flow
-  // The approval gate is driven by the eventBus: the agent emits a
-  // 'gate:request' event and waits for 'gate:response'. This test
-  // verifies the eventBus-based flow without needing an HTTP endpoint.
-  it('external mutation gate: eventBus blocks and resumes on approval', async () => {
+  /**
+   * Scenarios 10 and 10b drive the real pre-tool approval hook (TD-CHAT-16
+   * ruling 19). The model calls `write_file`; the hook sends `approval_required`
+   * and holds the call until `POST /api/approval/:id` answers it, as the
+   * desktop app's approval card does. The model then answers from the tool
+   * result it received.
+   */
+  async function runGatedTurn(approved: boolean) {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
-    const port = TEST_PORT;
-
-    const { server } = await startService({ dataDir, port, skipLiteLLM: true });
+    const started = await startWithModel(dataDir, (request) => {
+      const toolResult = request.messages.find(message => message.role === 'tool');
+      if (!toolResult) {
+        return {
+          type: 'tool_calls',
+          calls: [{ name: 'write_file', args: { path: '/src/gate.ts', content: 'export {}' } }],
+          usage: { inputTokens: 15, outputTokens: 3 },
+        };
+      }
+      return {
+        type: 'text',
+        content: /denied/i.test(toolResult.content) ? 'Blocked.' : 'Executed.',
+        usage: { inputTokens: 15, outputTokens: 3 },
+      };
+    });
+    const server = started.server;
+    provider = started.provider;
     servers.push(server);
 
-    // Simulate the approval gate pattern used by the desktop app:
-    // agentRunner emits 'gate:request' on the eventBus, waits for 'gate:response'
     const gateLog: string[] = [];
-
-    const mockRunner: AgentRunner = async (config) => {
-      // Simulate a tool that triggers an approval gate
-      if (config.onToolUse) {
-        config.onToolUse('bash', { command: 'rm -rf /important' });
+    let stop = false;
+    const answer = (async () => {
+      while (!stop) {
+        const [requestId] = server.agentState.pendingApprovals.keys();
+        if (requestId) {
+          gateLog.push('request-received');
+          const res = await injectWithAuth(server, {
+            method: 'POST',
+            url: `/api/approval/${requestId}`,
+            payload: { approved },
+          });
+          gateLog.push(res.statusCode === 200 ? (approved ? 'approved' : 'denied') : `status ${res.statusCode}`);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
-
-      // Emit gate request and wait for response
-      const approved = await new Promise<boolean>((resolve) => {
-        server.eventBus.once('gate:response', (response: { approved: boolean }) => {
-          gateLog.push(response.approved ? 'approved' : 'denied');
-          resolve(response.approved);
-        });
-        server.eventBus.emit('gate:request', {
-          tool: 'bash',
-          input: { command: 'rm -rf /important' },
-          requestId: 'gate-001',
-        });
+    })();
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Create the file /src/gate.ts with an empty export.' },
       });
+      return { events: parseSSE(res.payload), gateLog };
+    } finally {
+      stop = true;
+      await answer;
+    }
+  }
 
-      if (config.onToken) {
-        config.onToken(approved ? 'Executed.' : 'Blocked.');
-      }
+  // Scenario 10: External mutation gate — approval resumes the tool
+  it('external mutation gate: the approval hook blocks and resumes on approval', async () => {
+    const { events, gateLog } = await runGatedTurn(true);
 
-      return {
-        content: approved ? 'Executed.' : 'Blocked.',
-        usage: { inputTokens: 15, outputTokens: 3 },
-        toolsUsed: approved ? ['bash'] : [],
-      };
-    };
-    server.agentRunner = mockRunner;
+    const approval = events.find(e => e.event === 'approval_required');
+    expect((approval?.data as { toolName?: string } | undefined)?.toolName).toBe('write_file');
 
-    // Listen for gate requests and auto-approve
-    server.eventBus.on('gate:request', (req: { requestId: string }) => {
-      gateLog.push('request-received');
-      // Simulate user clicking "Approve" in the UI
-      server.eventBus.emit('gate:response', { requestId: req.requestId, approved: true });
-    });
-
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Delete the folder' },
-    });
-
-    const events = parseSSE(res.payload);
     const doneEvents = events.filter(e => e.event === 'done');
     expect(doneEvents.length).toBe(1);
-
     const doneData = doneEvents[0].data as { content: string; toolsUsed: string[] };
     expect(doneData.content).toBe('Executed.');
-    expect(doneData.toolsUsed).toEqual(['bash']);
+    expect(doneData.toolsUsed).toEqual(['write_file']);
 
-    // Verify gate flow happened in correct order
-    expect(gateLog.length).toBe(2);
-    expect(gateLog[0]).toBe('request-received');
-    expect(gateLog[1]).toBe('approved');
+    expect(gateLog).toEqual(['request-received', 'approved']);
   });
 
   // Scenario 10b: External mutation gate — denial path
-  it('external mutation gate: eventBus blocks and returns denial', async () => {
-    const dataDir = makeTmpDir();
-    tmpDirs.push(dataDir);
-    const port = TEST_PORT;
+  it('external mutation gate: the approval hook blocks and returns denial', async () => {
+    const { events, gateLog } = await runGatedTurn(false);
 
-    const { server } = await startService({ dataDir, port, skipLiteLLM: true });
-    servers.push(server);
+    expect(events.some(e => e.event === 'approval_required')).toBe(true);
 
-    const gateLog: string[] = [];
-
-    const mockRunner: AgentRunner = async (config) => {
-      if (config.onToolUse) {
-        config.onToolUse('bash', { command: 'rm -rf /important' });
-      }
-
-      // Emit gate request and wait for response
-      const approved = await new Promise<boolean>((resolve) => {
-        server.eventBus.once('gate:response', (response: { approved: boolean }) => {
-          gateLog.push(response.approved ? 'approved' : 'denied');
-          resolve(response.approved);
-        });
-        server.eventBus.emit('gate:request', {
-          tool: 'bash',
-          input: { command: 'rm -rf /important' },
-          requestId: 'gate-002',
-        });
-      });
-
-      if (config.onToken) {
-        config.onToken(approved ? 'Executed.' : 'Blocked.');
-      }
-
-      return {
-        content: approved ? 'Executed.' : 'Blocked.',
-        usage: { inputTokens: 15, outputTokens: 3 },
-        toolsUsed: approved ? ['bash'] : [],
-      };
-    };
-    server.agentRunner = mockRunner;
-
-    // Listen for gate requests and auto-DENY
-    server.eventBus.on('gate:request', (req: { requestId: string }) => {
-      gateLog.push('request-received');
-      // Simulate user clicking "Deny" in the UI
-      server.eventBus.emit('gate:response', { requestId: req.requestId, approved: false });
-    });
-
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'Delete the folder' },
-    });
-
-    const events = parseSSE(res.payload);
     const doneEvents = events.filter(e => e.event === 'done');
     expect(doneEvents.length).toBe(1);
-
     const doneData = doneEvents[0].data as { content: string; toolsUsed: string[] };
     expect(doneData.content).toBe('Blocked.');
     expect(doneData.toolsUsed).toEqual([]);
 
-    // Verify gate flow happened in correct order with denial
-    expect(gateLog.length).toBe(2);
-    expect(gateLog[0]).toBe('request-received');
-    expect(gateLog[1]).toBe('denied');
+    expect(gateLog).toEqual(['request-received', 'denied']);
   });
 });
