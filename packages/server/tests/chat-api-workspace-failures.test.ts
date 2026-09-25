@@ -1,4 +1,25 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+/**
+ * Pass-through spy on the real agent loop (TD-CHAT-16 ruling 2). It throws a
+ * scripted error only for the two pins whose failure no provider reply can
+ * produce: an unclassified message, which the route maps to its generic
+ * sentence. Every other turn runs the real loop against the fake provider.
+ */
+const loopSpy = vi.hoisted(() => ({
+  failWith: null as Error | null,
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      if (loopSpy.failWith) throw loopSpy.failWith;
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -28,72 +49,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
-import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
-
-function openAiSseResponse(content: string): Response {
-  return new Response(
-    `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] })}\n\n`
-      + `data: ${JSON.stringify({
-        choices: [{ delta: {}, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 10, completion_tokens: 2 },
-      })}\n\ndata: [DONE]\n\n`,
-    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-  );
-}
-
-function openAiJsonResponse(content: string): Response {
-  return new Response(JSON.stringify({
-    choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
-    usage: { prompt_tokens: 10, completion_tokens: 2 },
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function openAiToolJsonResponse(name: string, args: Record<string, unknown> = {}): Response {
-  return new Response(JSON.stringify({
-    choices: [{
-      message: {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: `call-${name}`,
-          type: 'function',
-          function: { name, arguments: JSON.stringify(args) },
-        }],
-      },
-      finish_reason: 'tool_calls',
-    }],
-    usage: { prompt_tokens: 10, completion_tokens: 2 },
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function openAiToolSseResponse(name: string): Response {
-  return new Response(
-    `data: ${JSON.stringify({
-      choices: [{
-        delta: {
-          tool_calls: [{
-            index: 0,
-            id: `call-${name}`,
-            type: 'function',
-            function: { name, arguments: '{}' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    })}\n\n`
-      + `data: ${JSON.stringify({
-        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
-        usage: { prompt_tokens: 10, completion_tokens: 2 },
-      })}\n\ndata: [DONE]\n\n`,
-    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-  );
-}
+import { installFakeLlmProvider, type FakeLlmProvider, type FakeLlmReply } from './helpers/fake-llm-provider.js';
 
 // Split out of chat-api.test.ts by area so the suites run on parallel
 // workers (TD-CHAT-16 ruling 12). Each part repeats the shared setup of
@@ -103,69 +59,20 @@ describe('Chat Streaming API', () => {
   let tmpDir: string;
   /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
   let provider: FakeLlmProvider;
+  const DEFAULT_REPLY: FakeLlmReply = {
+    type: 'text',
+    content: 'Hello world',
+    chunks: ['Hello ', 'world'],
+    usage: { inputTokens: 10, outputTokens: 5 },
+  };
+  /** A provider failure the route classifies by its HTTP status; 4xx never trips the circuit breaker. */
+  const PROVIDER_400: FakeLlmReply = { type: 'http_error', status: 400, message: 'invalid tool call arguments' };
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
   beforeEach(() => {
     resetRateLimiter(server);
   });
-
-  async function runOverlappingTurns(
-    first: { message: string; workspace: string; session: string },
-    second: { message: string; workspace: string; session: string },
-  ) {
-    const originalRunner = server.agentRunner;
-    const captured = new Map<string, Array<{ role: string; content: string }>>();
-    let entered = 0;
-    let releaseFirst!: () => void;
-    let releaseSecond!: () => void;
-    let resolveBothEntered!: () => void;
-    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
-    const bothEntered = new Promise<void>((resolve) => { resolveBothEntered = resolve; });
-
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const turnMessage = config.messages.at(-1)?.content ?? '';
-      captured.set(turnMessage, config.messages.map(({ role, content }) => ({ role, content })));
-      entered += 1;
-      if (entered === 2) resolveBothEntered();
-      await (turnMessage === first.message ? firstGate : secondGate);
-      return {
-        content: `reply:${turnMessage}`,
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
-
-    const firstRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: first,
-    });
-    const secondRequest = injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: second,
-    });
-
-    try {
-      const completedBeforeOverlap = Promise.race([firstRequest, secondRequest]).then(() => {
-        if (entered < 2) throw new Error('A chat request completed before both turns overlapped');
-      });
-      await Promise.race([bothEntered, completedBeforeOverlap]);
-
-      // Finish the second turn first to prove completion order cannot swap state.
-      releaseSecond();
-      const secondResponse = await secondRequest;
-      releaseFirst();
-      const firstResponse = await firstRequest;
-      return { captured, firstResponse, secondResponse };
-    } finally {
-      releaseFirst();
-      releaseSecond();
-      server.agentRunner = originalRunner;
-    }
-  }
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-test-'));
@@ -181,12 +88,7 @@ describe('Chat Streaming API', () => {
     };
     server.llmRetryBackoffMs = () => 0;
     provider = installFakeLlmProvider({
-      respond: {
-        type: 'text',
-        content: 'Hello world',
-        chunks: ['Hello ', 'world'],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      },
+      respond: DEFAULT_REPLY,
       // Several tests call this server over real HTTP with `fetch`; only model
       // calls (and the direct Anthropic API) belong to the fake.
       otherRequest: 'previous',
@@ -273,12 +175,7 @@ describe('Chat Streaming API', () => {
       group: 'test',
       directory: linkedDirectory,
     });
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (): Promise<AgentResponse> => ({
-      content: 'linked ok',
-      toolsUsed: [],
-      usage: { inputTokens: 1, outputTokens: 1 },
-    });
+    const requestsBefore = provider.requests.length;
 
     try {
       const res = await injectWithAuth(server, {
@@ -293,8 +190,10 @@ describe('Chat Streaming API', () => {
 
       expect(res.statusCode).toBe(200);
       expect(parseSSE(res.body).some(event => event.event === 'done')).toBe(true);
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
     } finally {
-      server.agentRunner = originalRunner;
+      // The real turn opens a workspace session; the tier caps live ones.
+      server.sessionManager.close(workspace.id);
       fs.rmSync(linkedDirectory, { recursive: true, force: true });
     }
   });
@@ -401,11 +300,8 @@ describe('Chat Streaming API', () => {
   });
 
   it('handles agent errors gracefully', async () => {
-    // Temporarily replace agent runner with one that throws
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async () => {
-      throw new Error('LiteLLM is not available');
-    };
+    // An unclassified message: no provider reply produces one (ruling 2).
+    loopSpy.failWith = new Error('LiteLLM is not available');
     try {
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -419,35 +315,42 @@ describe('Chat Streaming API', () => {
       const errorData = JSON.parse(errorEvents[0].data);
       expect(errorData.message).toBe('Something went wrong. Try sending your message again.');
     } finally {
-      server.agentRunner = originalRunner;
+      loopSpy.failWith = null;
     }
   });
 
   it.each([
     [
       'direct connection refusal',
-      'connect ECONNREFUSED 10.33.0.153:4000',
+      { type: 'network_error', message: 'connect ECONNREFUSED 10.33.0.153:4000' },
     ],
     [
       'proxied transport failure',
-      'Server error retry cap exceeded after 3 retries (latest 502): {"error":{"message":"openai-compatible API request failed: fetch failed"}}',
+      { type: 'http_error', status: 502, message: 'openai-compatible API request failed: fetch failed' },
     ],
-  ])('maps %s to one actionable endpoint outage without raw transport or API-key advice', async (
+  ] as const)('maps %s to one actionable endpoint outage without raw transport or API-key advice', async (
     _case,
-    thrownMessage,
+    failure,
   ) => {
-    const originalRunner = server.agentRunner;
-    const workspaceId = server.workspaceManager.create({
+    // The provider fails every retry, and each failure counts against the
+    // server-lifetime circuit breaker, so each case gets its own server
+    // (TD-CHAT-16 §5): the shared one must not open its breaker for later pins.
+    const outageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-outage-'));
+    const outageServer = await buildLocalServer({ dataDir: outageDir });
+    outageServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    outageServer.llmRetryBackoffMs = () => 0;
+    const workspaceId = outageServer.workspaceManager.create({
       name: `Endpoint outage ${_case} ${Date.now()}`,
       group: 'test',
     }).id;
     const sessionId = `endpoint-outage-${Date.now()}`;
-    server.agentRunner = async () => {
-      throw new Error(thrownMessage);
-    };
+    const requestsBefore = provider.requests.length;
+    provider.respondWith(failure);
 
     try {
-      const res = await injectWithAuth(server, {
+      const res = await injectWithAuth(outageServer, {
         method: 'POST',
         url: '/api/chat',
         payload: {
@@ -464,8 +367,9 @@ describe('Chat Streaming API', () => {
         'The model endpoint is not responding. It may be down or restarting. Check Settings > Models, then try again.',
       );
       expect(errorMessage).not.toMatch(/api key|ECONNREFUSED|fetch failed|retry cap|502/i);
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
 
-      const inMemory = server.agentState.sessionHistories.get(
+      const inMemory = outageServer.agentState.sessionHistories.get(
         chatSessionStateKey(workspaceId, sessionId),
       ) ?? [];
       expect(inMemory).toHaveLength(2);
@@ -473,13 +377,18 @@ describe('Chat Streaming API', () => {
         role: 'assistant',
         content: `${GENERATION_FAILED_PREFIX}${errorMessage}`,
       });
-      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
+      expect(loadSessionMessages(outageDir, workspaceId, sessionId)).toEqual(inMemory);
     } finally {
-      server.agentRunner = originalRunner;
-      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+      provider.respondWith(DEFAULT_REPLY);
+      await outageServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(outageDir, { recursive: true, force: true });
     }
   });
 
+  // Held on the injected runner (TD-CHAT-16 §6k): the real loop rejects a
+  // blank no-tool answer itself, with its own message, before this route
+  // branch can see it. Awaiting a founder ruling.
   it.each(['', ' \n\t'])('rejects a blank successful agent response %j', async (blankContent) => {
     const originalRunner = server.agentRunner;
     const blankTag = blankContent.length === 0 ? 'empty' : 'whitespace';
@@ -537,15 +446,12 @@ describe('Chat Streaming API', () => {
   });
 
   it('persists an assistant error turn when generation fails', async () => {
-    const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Error response ${Date.now()}`,
       group: 'test',
     }).id;
     const sessionId = `error-session-${Date.now()}`;
-    server.agentRunner = async () => {
-      throw new Error('LLM error (400): invalid tool call arguments');
-    };
+    provider.respondWith(PROVIDER_400);
 
     try {
       const res = await injectWithAuth(server, {
@@ -575,12 +481,12 @@ describe('Chat Streaming API', () => {
       const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
       expect(onDisk).toEqual(inMemory);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
     }
   });
 
-  it('atomically replaces the exact assistant retry pair and invokes the runner once', async () => {
-    const originalRunner = server.agentRunner;
+  it('atomically replaces the exact assistant retry pair and calls the model once', async () => {
     const workspaceId = server.workspaceManager.create({
       name: `Structured retry success ${Date.now()}`,
       group: 'test',
@@ -592,12 +498,12 @@ describe('Chat Streaming API', () => {
     persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
     const seeded = loadSessionMessages(tmpDir, workspaceId, sessionId);
     server.agentState.sessionHistories.set(chatSessionStateKey(workspaceId, sessionId), [...seeded]);
-    const runner = vi.fn(async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const content = `replacement:${config.messages.at(-1)?.content ?? ''}`;
-      config.onToken?.(content);
-      return { content, toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    });
-    server.agentRunner = runner;
+    const requestsBefore = provider.requests.length;
+    provider.respondWith(request => ({
+      type: 'text',
+      content: `replacement:${request.messages.filter(m => m.role !== 'system').at(-1)?.content ?? ''}`,
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
 
     try {
       const response = await injectWithAuth(server, {
@@ -617,7 +523,7 @@ describe('Chat Streaming API', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(runner).toHaveBeenCalledTimes(1);
+      expect(provider.requests.length - requestsBefore).toBe(1);
       const expected = [
         expect.objectContaining({ role: 'user', content: message }),
         expect.objectContaining({ role: 'assistant', content: `replacement:${message}` }),
@@ -627,7 +533,8 @@ describe('Chat Streaming API', () => {
         chatSessionStateKey(workspaceId, sessionId),
       )).toEqual(expected);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
       server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
     }
   });
@@ -636,7 +543,6 @@ describe('Chat Streaming API', () => {
     ['count', 4, `${GENERATION_FAILED_PREFIX}temporary failure`],
     ['content', 2, `${GENERATION_FAILED_PREFIX}different failure`],
   ])('fails closed when structured retry %s is stale', async (_case, expectedMessageCount, expectedAssistantContent) => {
-    const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Structured retry stale ${_case} ${Date.now()}`,
       group: 'test',
@@ -655,10 +561,7 @@ describe('Chat Streaming API', () => {
       chatSessionStateKey(workspaceId, sessionId),
       memoryBefore.map(entry => ({ ...entry })),
     );
-    const runner = vi.fn(async (): Promise<AgentResponse> => ({
-      content: 'must not run', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
-    }));
-    server.agentRunner = runner;
+    const requestsBefore = provider.requests.length;
 
     try {
       const response = await injectWithAuth(server, {
@@ -681,19 +584,18 @@ describe('Chat Streaming API', () => {
       const errors = parseSSE(response.body).filter(event => event.event === 'error');
       expect(errors).toHaveLength(1);
       expect(JSON.parse(errors[0]!.data)).toMatchObject({ code: 'RETRY_TARGET_STALE' });
-      expect(runner).not.toHaveBeenCalled();
+      expect(provider.requests.length).toBe(requestsBefore);
       expect(fs.readFileSync(sessionFile)).toEqual(diskBefore);
       expect(server.agentState.sessionHistories.get(
         chatSessionStateKey(workspaceId, sessionId),
       )).toEqual(memoryBefore);
     } finally {
-      server.agentRunner = originalRunner;
+      server.sessionManager.close(workspaceId);
       server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
     }
   });
 
   it('does not replace a prior failed pair for a legacy retry with a different message', async () => {
-    const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Legacy retry preservation ${Date.now()}`,
       group: 'test',
@@ -705,8 +607,8 @@ describe('Chat Streaming API', () => {
     persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: originalMessage });
     persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
     server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
-    server.agentRunner = async (): Promise<AgentResponse> => ({
-      content: 'different retry answer', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    provider.respondWith({
+      type: 'text', content: 'different retry answer', usage: { inputTokens: 1, outputTokens: 1 },
     });
 
     try {
@@ -723,13 +625,13 @@ describe('Chat Streaming API', () => {
           { role: 'assistant', content: 'different retry answer' },
         ]);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
       server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
     }
   });
 
   it('runs a structured retry without reading or rewriting durable history when history is denied', async () => {
-    const originalRunner = server.agentRunner;
     const workspaceId = server.workspaceManager.create({
       name: `Denied structured retry ${Date.now()}`,
       group: 'test',
@@ -744,11 +646,12 @@ describe('Chat Streaming API', () => {
     );
     const diskBefore = fs.readFileSync(sessionFile);
     server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
-    const runner = vi.fn(async (config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: `private:${config.messages.at(-1)?.content ?? ''}`,
-      toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    const requestsBefore = provider.requests.length;
+    provider.respondWith(request => ({
+      type: 'text',
+      content: `private:${request.messages.filter(m => m.role !== 'system').at(-1)?.content ?? ''}`,
+      usage: { inputTokens: 1, outputTokens: 1 },
     }));
-    server.agentRunner = runner;
     const message = '/research BERYL do not use saved history. Answer from scratch. Do not write files or execute code.';
 
     try {
@@ -767,14 +670,17 @@ describe('Chat Streaming API', () => {
       expect(response.statusCode).toBe(200);
       expect(parseSSE(response.body).some(event => event.event === 'done')).toBe(true);
       expect(parseSSE(response.body).some(event => event.event === 'error')).toBe(false);
-      expect(runner).toHaveBeenCalledTimes(1);
-      expect(JSON.stringify(runner.mock.calls[0]![0].messages)).not.toContain(priorMessage);
+      expect(provider.requests.length - requestsBefore).toBe(1);
+      expect(JSON.stringify(
+        provider.requests.at(-1)!.messages.filter(m => m.role !== 'system'),
+      )).not.toContain(priorMessage);
       expect(fs.readFileSync(sessionFile)).toEqual(diskBefore);
       expect(server.agentState.sessionHistories.has(
         chatSessionStateKey(workspaceId, sessionId),
       )).toBe(false);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
+      server.sessionManager.close(workspaceId);
       server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
     }
   });
@@ -783,12 +689,9 @@ describe('Chat Streaming API', () => {
   // When the model call throws, the happy-path write-back never runs — so the
   // route persists the raw user turn directly, else "remembers everything" breaks.
   it('persists a failed raw turn in the authorized active workspace, never personal memory (#3)', async () => {
-    const originalRunner = server.agentRunner;
     const activeWorkspaceId = server.agentState.activeWorkspaceId;
     expect(activeWorkspaceId).toBeTruthy();
-    server.agentRunner = async () => {
-      throw new Error('LiteLLM is not available');
-    };
+    provider.respondWith(PROVIDER_400);
 
     const seed = `Launch-blocker seed ${Date.now()}: my horse is named Comet and I live in Belgrade.`;
     try {
@@ -806,7 +709,7 @@ describe('Chat Streaming API', () => {
       expect(persisted!.content).toContain('my horse is named Comet');
       expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
     }
   });
 
@@ -818,9 +721,11 @@ describe('Chat Streaming API', () => {
     const retirement = await personalServer.agentState.closeWorkspaceMind(initiallyActiveWorkspace!);
     retirement.release();
     expect(personalServer.agentState.activeWorkspaceId).toBeNull();
-    personalServer.agentRunner = async () => {
-      throw new Error('LiteLLM is not available');
+    personalServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
     };
+    provider.respondWith(PROVIDER_400);
+    const requestsBefore = provider.requests.length;
     const seed = `Personal failed-turn marker ${Date.now()}`;
 
     try {
@@ -832,14 +737,15 @@ describe('Chat Streaming API', () => {
 
       expect(parseSSE(response.body).filter(event => event.event === 'error')).toHaveLength(1);
       expect(personalServer.agentState.orchestrator.getFrames().findDuplicate(seed)).not.toBeNull();
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
     } finally {
+      provider.respondWith(DEFAULT_REPLY);
       await personalServer.close();
       fs.rmSync(personalDir, { recursive: true, force: true });
     }
   });
 
   it('binds failed-turn memory to the authorized workspace instead of mutable active state', async () => {
-    const originalRunner = server.agentRunner;
     const originalWorkspaceId = server.agentState.activeWorkspaceId;
     const nonce = Date.now();
     const workspaceA = server.workspaceManager.create({
@@ -851,9 +757,7 @@ describe('Chat Streaming API', () => {
       group: 'test',
     });
     const seed = `Workspace B private failed-turn marker ${nonce}`;
-    server.agentRunner = async () => {
-      throw new Error('LiteLLM is not available');
-    };
+    provider.respondWith(PROVIDER_400);
 
     try {
       expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
@@ -885,7 +789,7 @@ describe('Chat Streaming API', () => {
       expect(server.agentState.orchestrator.getSessions()
         .getActive().map(item => item.gop_id)).toEqual(personalSessionsBefore);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       const restored = originalWorkspaceId
         ? server.agentState.activateWorkspaceMind(originalWorkspaceId)
         : false;
@@ -900,7 +804,6 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps an implicit failed turn bound when the global active workspace changes mid-request', async () => {
-    const originalRunner = server.agentRunner;
     const originalWorkspaceId = server.agentState.activeWorkspaceId;
     const nonce = Date.now();
     const workspaceA = server.workspaceManager.create({
@@ -917,11 +820,12 @@ describe('Chat Streaming API', () => {
     const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
     const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
     let responsePromise: ReturnType<typeof injectWithAuth> | undefined;
-    server.agentRunner = async () => {
+    // The provider holds the real loop's model call open, then fails it.
+    provider.respondWith(async () => {
       markRunnerEntered();
       await runnerGate;
-      throw new Error('LiteLLM is not available');
-    };
+      return PROVIDER_400;
+    });
 
     try {
       expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
@@ -958,7 +862,7 @@ describe('Chat Streaming API', () => {
     } finally {
       releaseRunner();
       await responsePromise?.catch(() => undefined);
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       const restored = originalWorkspaceId
         ? server.agentState.activateWorkspaceMind(originalWorkspaceId)
         : false;
@@ -973,14 +877,12 @@ describe('Chat Streaming API', () => {
   });
 
   it('keeps a failed broad no-change request in chat history without writing it to memory', async () => {
-    const originalRunner = server.agentRunner;
     const sessionId = `no-mutation-failure-${Date.now()}`;
     const seed = `Analyze this release plan (${Date.now()}). Do not create or edit anything.`;
     const authorizedWorkspace = server.agentState.activeWorkspaceId;
     expect(authorizedWorkspace).toBeTruthy();
-    server.agentRunner = async () => {
-      throw new Error('LiteLLM is not available');
-    };
+    // An unclassified message: no provider reply produces one (ruling 2).
+    loopSpy.failWith = new Error('LiteLLM is not available');
 
     try {
       const res = await injectWithAuth(server, {
@@ -1000,7 +902,7 @@ describe('Chat Streaming API', () => {
       expect(transcript[1].role).toBe('assistant');
       expect(transcript[1].content).toBe('Generation failed: Something went wrong. Try sending your message again.');
     } finally {
-      server.agentRunner = originalRunner;
+      loopSpy.failWith = null;
     }
   });
 
@@ -1008,23 +910,19 @@ describe('Chat Streaming API', () => {
   // endpoint (graceful degradation / sovereignty), NOT LiteLLM which doesn't have
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
   it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    // Model calls still reach the suite's fake, which records the real loop's
+    // wire request (TD-CHAT-16).
+    const fakeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
           status: 200,
         });
       }
+      if (String(input).endsWith('/chat/completions')) return fakeFetch(input, init);
       return new Response('', { status: 503 });
     });
-    let capturedUrl: string | undefined;
-    let capturedModel: string | undefined;
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedUrl = config.litellmUrl;
-      capturedModel = config.model;
-      if (config.onToken) config.onToken('ok');
-      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+    const requestsBefore = provider.requests.length;
 
     try {
       await injectWithAuth(server, {
@@ -1033,10 +931,11 @@ describe('Chat Streaming API', () => {
         payload: { message: 'hi', model: 'ollama/llama3.2:latest' },
       });
 
-      expect(capturedUrl).toMatch(/:11434\/v1$/);    // routed to Ollama, not LiteLLM
-      expect(capturedModel).toBe('llama3.2:latest');  // 'ollama/' prefix stripped
+      expect(provider.requests.length).toBeGreaterThan(requestsBefore);
+      const sent = provider.requests.at(-1)!;
+      expect(sent.url).toMatch(/:11434\/v1\/chat\/completions$/); // routed to Ollama, not LiteLLM
+      expect(sent.model).toBe('llama3.2:latest');  // 'ollama/' prefix stripped
     } finally {
-      server.agentRunner = originalRunner;
       fetchSpy.mockRestore();
     }
   });
@@ -1051,10 +950,7 @@ describe('Chat Streaming API', () => {
       return;
     }
     const beforeCounts = server.traceStore.outcomeCounts();
-    const originalRunner = server.agentRunner;
-    server.agentRunner = async () => {
-      throw new Error('H-07 regression: forced failure');
-    };
+    provider.respondWith(PROVIDER_400);
     try {
       await injectWithAuth(server, {
         method: 'POST',
@@ -1068,7 +964,7 @@ describe('Chat Streaming API', () => {
       expect(afterCounts.success).toBe(beforeCounts.success);
       expect(afterCounts.pending).toBe(beforeCounts.pending);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
     }
   });
 
@@ -1087,6 +983,9 @@ describe('Chat Streaming API', () => {
     expect(afterCounts.pending).toBe(beforeCounts.pending);
   });
 
+  // Held on the injected runner (TD-CHAT-16 §6k): on the real path the route's
+  // auto-recall adds its own `auto_recall` tool event before the model's, so
+  // the exact count of one changes. Awaiting a founder ruling.
   it('streams tool use events', async () => {
     const originalRunner = server.agentRunner;
     server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
@@ -1129,36 +1028,30 @@ describe('Chat Streaming API', () => {
     async (workspaceField) => {
       const workspaceId = `unknown-${workspaceField.toLowerCase()}-${Date.now()}`;
       const sessionId = `unknown-session-${Date.now()}`;
-      const originalRunner = server.agentRunner;
-      const runner = vi.fn(originalRunner);
-      server.agentRunner = runner;
+      const requestsBefore = provider.requests.length;
 
-      try {
-        const res = await injectWithAuth(server, {
-          method: 'POST',
-          url: '/api/chat',
-          payload: {
-            message: 'This must not create orphan history.',
-            [workspaceField]: workspaceId,
-            session: sessionId,
-          },
-        });
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'This must not create orphan history.',
+          [workspaceField]: workspaceId,
+          session: sessionId,
+        },
+      });
 
-        expect(res.statusCode).toBe(404);
-        expect(res.json()).toEqual({
-          error: 'Workspace not found',
-          code: 'WORKSPACE_NOT_FOUND',
-        });
-        expect(runner).not.toHaveBeenCalled();
-        expect(server.workspaceManager.get(workspaceId)).toBeNull();
-        expect(server.agentState.sessionHistories.has(
-          chatSessionStateKey(workspaceId, sessionId),
-        )).toBe(false);
-        expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual([]);
-        expect(fs.existsSync(path.join(tmpDir, 'workspaces', workspaceId))).toBe(false);
-      } finally {
-        server.agentRunner = originalRunner;
-      }
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toEqual({
+        error: 'Workspace not found',
+        code: 'WORKSPACE_NOT_FOUND',
+      });
+      expect(provider.requests.length).toBe(requestsBefore);
+      expect(server.workspaceManager.get(workspaceId)).toBeNull();
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, sessionId),
+      )).toBe(false);
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual([]);
+      expect(fs.existsSync(path.join(tmpDir, 'workspaces', workspaceId))).toBe(false);
     },
   );
 
