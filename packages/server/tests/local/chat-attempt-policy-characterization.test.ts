@@ -76,6 +76,8 @@ describe('POST /api/chat attempt policy (characterization)', () => {
     config.setFallbackModel(FALLBACK);
     config.save();
     server = await buildLocalServer({ dataDir: tmpDir });
+    // Scripted provider failures must not sleep through real backoff (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
   }, 30_000);
 
   beforeEach(() => {

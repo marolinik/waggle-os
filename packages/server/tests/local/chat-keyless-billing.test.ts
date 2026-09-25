@@ -3,15 +3,64 @@
  * Each test builds its own server over its own data directory, because the
  * provider configuration is the subject (moved out of chat-api.test.ts,
  * TD-TEST-7).
+ *
+ * The real agent loop runs against the fake provider (TD-CHAT-16), which also
+ * answers the configured keyless base URL. The billing model and class the
+ * route hands each attempt never reach the wire, so the pass-through loop spy
+ * records them (ruling 2).
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { WaggleConfig } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
-import { describe, expect, it } from 'vitest';
+import type { AgentLoopConfig } from '@waggle/agent';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const loopSpy = vi.hoisted(() => ({ configs: [] as AgentLoopConfig[] }));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      loopSpy.configs.push(config);
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
+import type { FastifyInstance } from 'fastify';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  type FakeLlmProvider,
+  type FakeLlmResponder,
+} from '../helpers/fake-llm-provider.js';
+
+let provider: FakeLlmProvider | undefined;
+
+/**
+ * Arms a fresh server the way production passes the model-health gate, with no
+ * vault key (a key would change the billing subject), and scripts the model.
+ */
+function armProvider(server: FastifyInstance, respond: FakeLlmResponder): AgentLoopConfig[] {
+  server.agentState.llmProvider = {
+    provider: 'anthropic-proxy',
+    health: 'healthy',
+    detail: 'fake LLM provider',
+    checkedAt: new Date().toISOString(),
+  };
+  server.llmRetryBackoffMs = () => 0;
+  provider = installFakeLlmProvider({ respond });
+  loopSpy.configs.length = 0;
+  return loopSpy.configs;
+}
+
+afterEach(() => {
+  provider?.restore();
+  provider = undefined;
+});
 
 describe('keyless model billing', () => {
   it('marks only an exact configured keyless OpenAI-compatible model as free', async () => {
@@ -36,16 +85,9 @@ describe('keyless model billing', () => {
       group: 'Test',
       model: 'ollama/remote-paid',
     });
-    const capturedConfigs: AgentLoopConfig[] = [];
-    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
-      capturedConfigs.push(runnerConfig);
-      runnerConfig.onToken?.('billing-class-ok');
-      return {
-        content: 'billing-class-ok',
-        toolsUsed: [],
-        usage: { inputTokens: 11, outputTokens: 3 },
-      };
-    };
+    const capturedConfigs = armProvider(localServer, {
+      type: 'text', content: 'billing-class-ok', usage: { inputTokens: 11, outputTokens: 3 },
+    });
 
     try {
       const configured = await injectWithAuth(localServer, {
@@ -153,19 +195,10 @@ describe('keyless model billing', () => {
     });
     config.save();
     const localServer = await buildLocalServer({ dataDir });
-    const capturedConfigs: AgentLoopConfig[] = [];
-    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
-      capturedConfigs.push(runnerConfig);
-      if (capturedConfigs.length === 1) {
-        throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
-      }
-      runnerConfig.onToken?.('fallback-billing-ok');
-      return {
-        content: 'fallback-billing-ok',
-        toolsUsed: [],
-        usage: { inputTokens: 11, outputTokens: 3 },
-      };
-    };
+    // The primary endpoint refuses every connection; the fallback answers.
+    const capturedConfigs = armProvider(localServer, (request) => (request.model.endsWith('primary-local')
+      ? { type: 'network_error', message: 'fetch failed' }
+      : { type: 'text', content: 'fallback-billing-ok', usage: { inputTokens: 11, outputTokens: 3 } }));
 
     try {
       const response = await injectWithAuth(localServer, {
@@ -219,26 +252,13 @@ describe('keyless model billing', () => {
     });
     config.save();
     const localServer = await buildLocalServer({ dataDir });
-    const capturedConfigs: AgentLoopConfig[] = [];
-    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
-      capturedConfigs.push(runnerConfig);
-      if (capturedConfigs.length === 1) {
-        if (firstAttempt === 'throw-without-usage') {
-          throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
-        }
-        return {
-          content: '',
-          toolsUsed: [],
-          usage: { inputTokens: 11, outputTokens: 3 },
-        };
-      }
-      runnerConfig.onToken?.('mixed-fallback-ok');
-      return {
-        content: 'mixed-fallback-ok',
-        toolsUsed: [],
-        usage: { inputTokens: 7, outputTokens: 2 },
-      };
-    };
+    // The paid primary either answers empty with billable usage or refuses
+    // every connection (no usage); the free fallback answers.
+    const capturedConfigs = armProvider(localServer, (request) => (request.model.endsWith('unlisted-paid-primary')
+      ? firstAttempt === 'throw-without-usage'
+        ? { type: 'network_error', message: 'fetch failed' }
+        : { type: 'text', content: '', usage: { inputTokens: 11, outputTokens: 3 } }
+      : { type: 'text', content: 'mixed-fallback-ok', usage: { inputTokens: 7, outputTokens: 2 } }));
 
     try {
       const response = await injectWithAuth(localServer, {

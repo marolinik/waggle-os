@@ -17,25 +17,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse, TurnEventRecord } from '@waggle/agent';
+import type { TurnEventRecord } from '@waggle/agent';
 import { startTurnCapture, stopTurnCapture } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 describe('POST /api/chat turn-trace emission (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let workspaceId: string;
   let captured: TurnEventRecord[];
+  let provider: FakeLlmProvider;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-turntrace-'));
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = async (_config: AgentLoopConfig): Promise<AgentResponse> => ({
-      content: 'traced answer',
-      toolsUsed: [],
-      usage: { inputTokens: 1, outputTokens: 1 },
+    // The real agent loop runs; only the model call is scripted (TD-CHAT-16).
+    markFakeProviderHealthy(server);
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'traced answer', usage: { inputTokens: 1, outputTokens: 1 } },
     });
     new WaggleConfig(tmpDir).save();
     workspaceId = server.workspaceManager.create({
@@ -52,6 +58,7 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
@@ -65,6 +72,10 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
   }
 
   const starts = (): TurnEventRecord[] => captured.filter(e => e.stage === 'chat.turn.start');
+  /** The stages one turn id carried, route-level (`chat.*`) or all of them. */
+  const stagesOf = (turnId: string, routeOnly = true): string[] => captured
+    .filter(e => e.turnId === turnId && (!routeOnly || e.stage.startsWith('chat.')))
+    .map(e => e.stage);
 
   it('mints no turn id when the workspace gate rejects', async () => {
     // The Target gate runs BEFORE the id is minted, so a rejection there leaves
@@ -96,6 +107,7 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
     // Exactly one stage for this id: nothing downstream ever runs.
     const turnId = starts()[0].turnId;
     expect(captured.filter(e => e.turnId === turnId).map(e => e.stage)).toEqual(['chat.turn.start']);
+    expect(provider.requests).toHaveLength(0);
   });
 
   it('emits the same single stage on a turn that succeeds', async () => {
@@ -103,12 +115,12 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
     // the route emits `chat.turn.start` and nothing else, ever. There is no
     // `chat.turn.end`, so a completed turn and a turn killed at a later gate
     // leave IDENTICAL route-level traces. Whatever successors a turn id gets
-    // come from the agent loop downstream, and an injected runner contributes
-    // none - which is why this pin asserts one event and not several.
+    // come from the agent loop downstream - which is why the route-level
+    // assertion filters to `chat.*` stages (TD-CHAT-16 ruling 4).
     //
     // That is the real shape of TD-CHAT-43: the orphan id at the rejected gate
-    // is not distinguishable by counting stages, only by the absence of the
-    // downstream stages a real agent path would add.
+    // is not distinguishable by its route stages, only by the absence of the
+    // downstream stages the real agent path adds, pinned below.
     const res = await runTurn({
       message: 'Say something short.',
       workspace: workspaceId,
@@ -117,6 +129,12 @@ describe('POST /api/chat turn-trace emission (characterization)', () => {
     expect(res.statusCode).toBe(200);
     expect(starts()).toHaveLength(1);
     const turnId = starts()[0].turnId;
-    expect(captured.filter(e => e.turnId === turnId).map(e => e.stage)).toEqual(['chat.turn.start']);
+    expect(stagesOf(turnId)).toEqual(['chat.turn.start']);
+    // The loop's own stages follow on a turn that reached the model.
+    const all = stagesOf(turnId, false);
+    expect(all).toContain('agent-loop.enter');
+    expect(all).toContain('agent-loop.exit');
+    expect(all.indexOf('agent-loop.enter')).toBeLessThan(all.indexOf('agent-loop.exit'));
+    expect(provider.requests.length).toBeGreaterThan(0);
   });
 });

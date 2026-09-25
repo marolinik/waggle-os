@@ -49,6 +49,8 @@ describe('POST /api/chat failure before commit (characterization)', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-turn-failure-'));
     server = await buildLocalServer({ dataDir: tmpDir });
+    // Scripted provider failures must not sleep through real backoff (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
     markFakeProviderHealthy(server);
     provider = installFakeLlmProvider({ respond: { type: 'text', content: 'unused' } });
   });
@@ -132,6 +134,8 @@ describe('POST /api/chat daily-budget refusal before commit (characterization)',
     config.setBudgetHardCap(true);
     config.save();
     server = await buildLocalServer({ dataDir: tmpDir });
+    // Scripted provider failures must not sleep through real backoff (TD-CHAT-16).
+    server.llmRetryBackoffMs = () => 0;
     markFakeProviderHealthy(server);
     provider = installFakeLlmProvider({ respond: { type: 'text', content: 'over budget' } });
   });

@@ -28,6 +28,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
+import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
@@ -97,6 +98,8 @@ function openAiToolSseResponse(name: string): Response {
 describe('Chat Streaming API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
+  let provider: FakeLlmProvider;
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
@@ -164,24 +167,31 @@ describe('Chat Streaming API', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-test-'));
 
-    // Mock agent runner that simulates streaming tokens
-    const mockAgentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      if (config.onToken) {
-        config.onToken('Hello ');
-        config.onToken('world');
-      }
-      return {
-        content: 'Hello world',
-        toolsUsed: [],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      };
-    };
-
     server = await buildLocalServer({ dataDir: tmpDir });
-    server.agentRunner = mockAgentRunner;
+    // No default runner: every turn runs the real agent loop against the fake
+    // provider below unless a test injects its own (TD-CHAT-16).
+    // Healthy built-in proxy WITHOUT a vault key: a key would enable the GEPA
+    // optimizer, whose direct Anthropic calls hang behind the per-test fetch
+    // stubs that answer 503 to unknown hosts (TD-CHAT-16 §6h).
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
+    };
+    server.llmRetryBackoffMs = () => 0;
+    provider = installFakeLlmProvider({
+      respond: {
+        type: 'text',
+        content: 'Hello world',
+        chunks: ['Hello ', 'world'],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      // Several tests call this server over real HTTP with `fetch`; only model
+      // calls (and the direct Anthropic API) belong to the fake.
+      otherRequest: 'previous',
+    });
   });
 
   afterAll(async () => {
+    provider.restore();
     await server.close();
     // Small delay to release file locks on Windows
     await new Promise(r => setTimeout(r, 100));
@@ -1674,20 +1684,26 @@ describe('Chat Streaming API', () => {
       'totalServerLatencyMs',
       'transmittedToolSchemaChars',
     ].sort());
+    // Re-pinned on the production path (TD-CHAT-16 ruling 3): the metrics now
+    // describe the prompt package the real loop sent, not the injected runner's
+    // 'custom' stub. A conversational 'Hello' is packaged compact and transmits
+    // no tools from the full catalog.
+    const sent = provider.requests.at(-1)!;
+    expect(sent.toolNames).toEqual([]);
+    expect(doneData.contextMetrics.toolCatalogCount).toBeGreaterThan(0);
     expect(doneData.contextMetrics).toMatchObject({
-      toolCatalogCount: 0,
       toolEligibleCount: 0,
       toolSelectedCount: 0,
       toolOmittedCount: 0,
       transmittedToolSchemaChars: 0,
       estimatedToolSchemaTokens: 0,
-      finalSystemPromptChars: 'You are a helpful AI assistant.'.length,
-      estimatedSystemPromptTokens: Math.ceil('You are a helpful AI assistant.'.length / 4),
-      packageMode: 'custom',
-      selectorLatencyMs: 0,
+      finalSystemPromptChars: sent.systemPrompt.length,
+      estimatedSystemPromptTokens: Math.ceil(sent.systemPrompt.length / 4),
+      packageMode: 'compact',
       providerInputTokens: 10,
       providerOutputTokens: 5,
     });
+    expect(Number.isFinite(doneData.contextMetrics.selectorLatencyMs)).toBe(true);
     expect(Number.isFinite(doneData.contextMetrics.timeToFirstTokenMs)).toBe(true);
     expect(Number.isFinite(doneData.contextMetrics.agentLatencyMs)).toBe(true);
     expect(Number.isFinite(doneData.contextMetrics.totalServerLatencyMs)).toBe(true);

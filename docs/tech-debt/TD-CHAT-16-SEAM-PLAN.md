@@ -1,7 +1,8 @@
 # TD-CHAT-16 — narrowing the `agentRunner` test seam to the LLM call
 
 Status: plan written and Phase 1 done 2026-09-24 on `chore/td-chat-16-seam` (base `main` = `b455db18`,
-PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2`.
+PR #166). Founder rulings recorded in §7; phases 2–4 on `chore/td-chat-16-seam-p2` (PR #167); retry clock,
+turn-trace and phases 5–6 on `chore/td-chat-16-seam-p3`.
 The founder ruled "take it now" on 2026-09-24. The ratified direction: the test seam replaces only
 the model call (fetch-spy style, the real `runAgentLoop` against a stubbed OpenAI-compatible
 provider), no strategy class. The end state has **zero** `hasCustomRunner` reads.
@@ -258,7 +259,7 @@ cut stream is what discards them now: a provider cannot stream and then answer 4
   server per test, and the whole file took 13.6 s before.
 - A later phase could inject a retry clock. That is production code, so it is not done here.
 
-**Pre-existing flake, not caused by this branch.** chat-api "translates a validated OpenAI forced
+**Pre-existing flake, not caused by this branch (ledgered as TD-TEST-20).** chat-api "translates a validated OpenAI forced
 tool choice for the native Anthropic route" (L1639) expects `fetch` to be called exactly 3 times
 and sometimes sees 4. It failed in 1 of 2 isolated runs of the untouched file on this branch, and in
 the phase 3 wide run.
@@ -277,3 +278,210 @@ All three recommendations were accepted.
    chat-api L1647 (`contextMetrics`), smart-router L567 (paid compressor blocked) and turn-failure
    L73 (failure accounting). Each port pins what the real path does, and the port commit records
    what changed.
+
+### Second round (2026-09-24, after PR #167)
+
+4. **chat-turn-trace L101: port it.** The existing assertion is kept, filtered to the `chat.*`
+   stages (still exactly `['chat.turn.start']`). A new assertion checks that `agent-loop.enter` and
+   `agent-loop.exit` follow on the success turn.
+5. **Budget-refusal re-pin against the real cap's own message: accepted.**
+6. **Injectable retry clock: yes, as its own phase, before any further ports.** It is a minimal
+   production seam, a backoff delay function passed through the loop config or retry policy, with
+   no abstraction beyond a function parameter. It is pinned first, then used by the fake-provider
+   tests so they stop waiting in real time.
+7. **chat-api L1639 flake:** find out whether it is pre-existing. If it is, record it without
+   fixing it blindly.
+
+## 6c. Retry clock (ruling 6)
+
+No sleep or delay seam existed in the loop or in `retry-policy.ts`; `waitForRetry` called
+`setTimeout` directly.
+
+**Seam.** `AgentLoopConfig.retryBackoffMs?: (waitMs) => number` maps the policy's backoff to the wait
+actually taken. When it is unset, the loop waits exactly what the policy decided. The chat route
+passes `server.llmRetryBackoffMs`, an optional decoration that is never set in production. Abort
+and deadline checks are unchanged.
+
+**Pins.** The agent pin was written first and failed before the field existed. It checks three things:
+- the policy's schedule of 2 s, 4 s and 8 s reaches the seam, and the seam's answer is the wait taken;
+- with the seam unset, a 2 s backoff still waits 2 s (fake timers);
+- an abort still ends a shortened wait.
+
+A route pin in chat-retry-chain checks that the decoration reaches every attempt's loop config.
+
+**Effect.** Four files set `server.llmRetryBackoffMs = () => 0`:
+
+| File | Before | After |
+|---|---|---|
+| attempt-policy | 16.9 s | 1.0 s |
+| turn-failure | 12.9 s | 2.5 s |
+| attempt-chain | 31.4 s | 18.1 s |
+| usage-ledger | 2.6 s | 1.1 s |
+
+attempt-chain's remainder is first-test cold start; the whole file took 13.6 s before any port.
+Later ports that script failures should set the decoration as well.
+
+**Flake (ruling 7).** TD-TEST-20 is pre-existing by construction. `chore/td-chat-16-seam-p2` has no
+diff from `main` in production source, in `chat-api.test.ts`, in its test utilities or in the
+vitest config, and the failure appeared there. The likely cause is a background fetch from the fresh
+server landing inside the test's global `fetch` spy. It is recorded, not fixed.
+
+## 6d. Turn-trace and phase 5 result
+
+**Turn-trace (ruling 4), ported.**
+- The success pin filters the turn's stages to `chat.*` and still asserts exactly
+  `['chat.turn.start']`.
+- It now also asserts that `agent-loop.enter` precedes `agent-loop.exit`.
+- The rejected turn asserts that no model call was made.
+
+**Phase 5: two of five ported.**
+- **chat-keyless-billing: ported, all assertions unchanged.** A pass-through spy records the billing
+  model and class for each attempt. Costs match to the digit on the real path, including 0.000078
+  for the priced 11/3 turn, which the loop's own spend accounting now charges. The fake answers the
+  keyless base URL `127.0.0.1:1`.
+- **chat-agent-run: ported.**
+  - The give-up pin scripts nine failing `read_file` calls, with paths outside the workspace, and
+    the real loop guard aborts. **The asserted literal is now the guard's own copy**, "I wasn't able
+    to complete this — the read_file tool failed repeatedly. Try rephrasing …", instead of the
+    synthetic "I stopped after repeated tool failures." The same class of change as the accepted
+    budget message; please review.
+  - The tool-signal pin scripts a real `list_skills {filter:'launch'}` call; its assertion is
+    unchanged.
+  - Both turns now send a message that asks for the tool, because a conversational message
+    transmits no tools.
+
+**Stopped: an observable result changes, so these three files stay on `agentRunner`.**
+
+| File | What changes on the real path | Proposed re-pin |
+|---|---|---|
+| chat-turn-execution-trace L163 ("cost read back … raised to spend already recorded") | The runner recorded 0.125 on the trace itself. The real loop charges its own spend onto the same trace, so `done.cost` is 0.125 plus the loop's cost. The other ten pins in the file port mechanically, but the file is held whole. | The spy records 0.125 before calling the real loop. Assert that `done.cost` equals the row's `cost_usd` and exceeds 0.125. |
+| chat-teamsync-push | (a) The pushed content is the real tool result, "Memory saved to workspace mind (…)", not "Saved 1 memory.". (b) The real `save_memory` accepts an empty save, so the failed-save pin cannot be driven by arguments. | (a) Pin the real result text. (b) Fault-inject the mind write, for example a `vi.spyOn` on the frame store that throws. |
+| chat-sse-backpressure | The socket stays open. With a real loop streaming about 3× `SSE_MAX_BUFFERED_BYTES` in 256 KB deltas, the backlog never passes the cap. Cause not confirmed; the likely suspect is that the loop caps or reshapes a multi-MB answer before the route's final write. | Needs investigation before a ruling. |
+
+## 6e. Phase 6 (chat-api slice 1): attempted, stopped
+
+**What I tried.** I replaced the suite's default runner in `beforeAll` with a suite-wide fake
+provider. It streams `Hello ` and `world` with usage 10/5, and the suite was set to
+`markFakeProviderHealthy` and a zero retry backoff.
+
+**Result: 93 of 98 tests pass.**
+- Four tests that still inject their own runner now time out: "publishes safe model activity",
+  "streams retry status before backoff settles", "suppresses late reasoning … after a live client
+  disconnect" and "keeps the authorized implicit workspace request-scoped".
+- One of them never restores its runner, so the next test, "sends done event" (L1647), received
+  that test's `Safe answer`.
+- The healthy provider state or the vault key changes something these hold-open tests depend on.
+  The cause is not isolated yet.
+
+**Decision.** This is not a mechanical port, so chat-api is reverted. The slice needs:
+1. Diagnose the four timeouts with the new suite state applied one change at a time: the vault
+   key, `llmProvider`, the fake fetch, then the backoff seam.
+2. Then do the L1647 re-pin (ruling 3). On the production path, `finalSystemPromptChars` equals the
+   system prompt the fake received, `packageMode` is the real mode rather than `custom`, and the
+   tool counts match the request's `toolNames`.
+
+The slice should probably install the fake per test group rather than suite-wide.
+
+### Third round (2026-09-25)
+
+8. **agent-run give-up pin with the loop guard's real text: accepted.**
+9. **Re-pin execution-trace and teamsync-push as proposed.**
+   - execution-trace: `done.cost` is 0.125 plus the loop's own spend.
+   - teamsync-push: the pushed content is the real tool result, and the failed-save case uses fault
+     injection.
+   - **sse-backpressure: the socket that never closes may be a real bug.** Root-cause it first:
+     reproduce it, find where the close should happen, and compare the injected path with the real
+     path. If it is a production bug, stop and report the evidence. Do not fix it silently.
+10. **chat-api: follow the §6e diagnosis order.** Fix the runner leak and the four timeouts first,
+    then port the file in 2–3 slices, including the L1647 re-pin. No suite-wide switch in one go.
+
+## 6f. Re-pins (ruling 9)
+
+**execution-trace: ported. The L163 assertion is unchanged, `done.cost === 0.125`, and my §6d
+claim was wrong.**
+- The spy's pre-loop hook records 0.125 on the trace the route hands the loop. The real loop then
+  runs against the fake provider.
+- The loop does not write its own spend to the trace row. Trace-owned spend is recorded by the
+  built-in proxy when it serves the call, and the fake answers `/chat/completions` in the proxy's
+  place.
+- So the read-back is still exactly 0.125, which is also what the row holds. The "0.125 plus the
+  loop's spend" premise in §6d was an unverified guess, and no assertion changed.
+- The other ten pins ported mechanically:
+  - scripted provider replies where possible;
+  - the ruling-2 spy for unclassified messages and SQLITE_BUSY.
+
+**teamsync-push: ported.**
+- The success pin asserts that the pushed content equals the real `save_memory` result the turn
+  reported, which starts with `Memory saved to workspace mind (`.
+- The failure pin fault-injects the mind write (`CognifyPipeline.prototype.cognify` rejects), so the
+  real tool result is an error, and asserts zero entity pushes.
+- The failing save uses distinct content. The first pin's frame would otherwise dedup it into a
+  successful "already exists" result.
+
+## 6g. sse-backpressure investigation (ruling 9): not a production bug
+
+**Reproduction.** A probe ran the real loop against a fake provider streaming 96 × 256 KB, about
+3× the 8 MB `SSE_MAX_BUFFERED_BYTES`.
+- The server made one model request.
+- The response body was 475 bytes and ended with
+  `error: LLM stream exceeded the total SSE size limit; partial content was not accepted.`
+- The HTTP response therefore ends normally. The client in the pin never reads it, so the
+  keep-alive socket stays open, which is exactly the "still open" the pin saw.
+
+**Where the close should happen.** `writeSseEvent` (`routes/chat-sse.ts:24-34`) destroys the stream
+once `writableLength` passes 8 MB. On the injected path the runner pushed 24 MB of tokens straight
+into the route, so the cap fired. On the real path the agent's own SSE parser fails closed first,
+at `MAX_TOTAL_SSE_CHARS = 2_097_152` (`packages/agent/src/sse-parser.ts:46,383`). That is 2 MiB,
+below the route's 8 MB cap.
+
+**Conclusion.** Both limits behave as designed, so there is no bug. One provider answer can never
+fill the route's backlog to its cap. The TD-REL-1 cap still guards the cumulative backlog of a long
+turn: tool events, many steps, and the answer.
+
+**Pin decision needed.** The pin as written describes a state that one real answer cannot produce.
+Options:
+- (a) Keep it at the `writeSseEvent` unit level, which already exists.
+- (b) Drive the cumulative backlog through many tool rounds with a paused reader. This is possible
+  but slow and fragile.
+- (c) Keep this one pin on a ruling-2-style spy that drives `onToken` directly. That goes beyond
+  ruling 2, which only allows recording and throwing.
+
+The file stays on `agentRunner` until a ruling. Recommendation: (a) plus one real-path pin showing
+that an oversized provider answer ends in the parser's fail-closed error and that the socket is
+released once the response ends.
+
+## 6h. chat-api: the four timeouts diagnosed (ruling 10, step 1)
+
+I re-applied the §6e suite state one change at a time, with the injected default runner kept in
+place. Two independent causes, and no runner leak of its own.
+1. **The vault key hangs L3125 through GEPA.** `markFakeProviderHealthy` sets the vault `anthropic`
+   key, which enables GEPA. L3125 already runs the real loop behind its own `fetch` stub, which
+   answers 503 to every host but `/api/tags`. GEPA's direct Anthropic calls then retry for longer
+   than the test timeout.
+   - Fix: the suite marks the built-in proxy healthy *without* a vault key. Model availability
+     needs only the provider health.
+2. **The fake answers the tests' own loopback HTTP with a 404.** Three hold-open tests ("safe model
+   activity", "retry status before backoff", "late output after disconnect") call the suite's
+   server over real HTTP with the global `fetch`. The fake answered those requests 404, so the
+   route was never reached.
+   - Fix: the suite installs the fake with `otherRequest: 'previous'`. Model calls and the Anthropic
+     API go to the fake; everything else uses the real `fetch`, as before.
+3. **The "runner leak" into L1647 (`Safe answer`) was a side effect** of the "safe model activity"
+   timeout, not a separate defect.
+
+With both fixes and the default runner still injected, chat-api passes 98/98. The next slice
+removes the default runner.
+
+**Slice 1: the default runner is removed.** Every chat-api turn without its own injected runner now
+runs the real loop against the suite's fake.
+- 97 of 98 passed unchanged, including the exact two-token stream, L2614 (`gpt-4o` provenance and
+  exact persisted content) and the trace counters.
+- L1647 was re-pinned per ruling 3. The metrics now describe the real package:
+  - `packageMode: 'compact'`;
+  - a positive tool catalog, with 0 tools eligible, selected or transmitted, matching the request's
+    empty `tools`;
+  - `finalSystemPromptChars` equal to the system prompt the fake received, with the token estimate
+    derived from it;
+  - provider tokens still 10/5.
+
+The injected-runner C tests in chat-api are the next slices.

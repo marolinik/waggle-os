@@ -123,6 +123,8 @@ export async function runAgentTurn(turn: AgentRunTurn): Promise<AgentRunOutcome>
     // Breaker-wrapped, from the composition root (R-2). Read defensively so
     // suites that mount no decorator keep the platform fetch.
     fetch: server.llmFetch ?? globalThis.fetch,
+    // Test-only backoff seam; unset in production (TD-CHAT-16).
+    ...(server.llmRetryBackoffMs ? { retryBackoffMs: server.llmRetryBackoffMs } : {}),
     litellmUrl: getLitellmUrl(),
     litellmApiKey: server.agentState.litellmApiKey,
     model: modelSelection.model,

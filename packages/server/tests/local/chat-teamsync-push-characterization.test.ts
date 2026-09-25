@@ -5,23 +5,29 @@
  * The push is fire-and-forget with a `.catch`, so it is NOT complete when the
  * turn is: the pins poll for the egress instead of asserting after `done`.
  *
- * The seam is the `server.agentRunner` `onToolResult` callback - there is no
- * `hasCustomRunner` gate between the tool-result handler and this block - plus
- * a `globalThis.fetch` spy on the egress itself. The destination has to survive
+ * The real agent loop runs against the fake provider (TD-CHAT-16), which
+ * scripts a real `save_memory` call; the tool-result handler then drives this
+ * block. A `globalThis.fetch` capture sits behind the fake for the egress
+ * itself. The destination has to survive
  * the team-server egress guard before `fetch` is consulted at all, so the URL
  * is https and is bound to the same base the workspace records.
  *
  * These pin CURRENT behavior, not a specification.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import { CognifyPipeline } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
-import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
+import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  markFakeProviderHealthy,
+  type FakeLlmProvider,
+} from '../helpers/fake-llm-provider.js';
 
 /**
  * A loopback destination, not a public hostname.
@@ -50,6 +56,7 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
   let originalFetch: typeof globalThis.fetch;
   let pushes: CapturedPush[];
   let previousAllowLocal: string | undefined;
+  let provider: FakeLlmProvider | undefined;
 
   beforeAll(async () => {
     previousAllowLocal = process.env.WAGGLE_ALLOW_LOCAL_FETCH;
@@ -76,12 +83,15 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
       teamServerUrl: TEAM_SERVER_URL,
     });
     server.agentState.activeWorkspaceId = workspaceId;
+    markFakeProviderHealthy(server);
     originalFetch = globalThis.fetch;
   });
 
   afterEach(() => {
+    provider?.restore();
+    provider = undefined;
     globalThis.fetch = originalFetch;
-    delete server.agentRunner;
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -132,12 +142,21 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
     }
   }
 
-  function runnerSaving(result: string) {
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      config.onToolResult?.('save_memory', { content: 'a decision worth keeping' }, result);
-      return { content: 'saved', toolsUsed: ['save_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
-    };
+  /**
+   * The model calls the real `save_memory` once, then answers. Installed after
+   * `captureEgress`, so every non-model request reaches the capture.
+   */
+  function modelSaving(content = 'a decision worth keeping') {
+    provider = installFakeLlmProvider({
+      respond: (request) => (request.messages.some(m => m.role === 'tool')
+        ? { type: 'text', content: 'saved', usage: { inputTokens: 1, outputTokens: 1 } }
+        : { type: 'tool_calls', calls: [{ name: 'save_memory', args: { content } }] }),
+      otherRequest: 'previous',
+    });
   }
+
+  /** The `save_memory` result the turn reported to the client. */
+  let lastSaveResult: string | undefined;
 
   async function runTurn(session: string) {
     resetRateLimiter(server);
@@ -151,12 +170,17 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
         model: 'claude-sonnet-4-6',
       },
     });
+    const saveResult = parseSSE(res.body)
+      .filter(e => e.event === 'tool_result')
+      .map(e => JSON.parse(e.data) as { name: string; result: string })
+      .find(e => e.name === 'save_memory');
+    lastSaveResult = saveResult?.result;
     return res.statusCode;
   }
 
   it('pushes a saved memory to the bound team server', async () => {
     captureEgress();
-    runnerSaving('Saved 1 memory.');
+    modelSaving();
     const session = `teamsync-push-${Date.now()}`;
     expect(await runTurn(session)).toBe(200);
     await waitForPush();
@@ -173,19 +197,26 @@ describe('POST /api/chat TeamSync push (characterization)', () => {
     // carries no fallback (TD-CHAT-40 removed a dead `?? 'unknown'`).
     expect(push.body.name).toBe(session);
     // The remote copy is the tool result, capped: a local write is not
-    // reproduced verbatim without bound.
-    expect((push.body.properties as { content?: unknown }).content).toBe('Saved 1 memory.');
+    // reproduced verbatim without bound. Re-pinned on the real tool's result
+    // (TD-CHAT-16 ruling 9); the injected runner fed 'Saved 1 memory.'.
+    expect(lastSaveResult).toMatch(/^Memory saved to workspace mind \(/);
+    expect((push.body.properties as { content?: unknown }).content).toBe(lastSaveResult);
   });
 
   it('pushes nothing when the save failed', async () => {
     captureEgress();
-    runnerSaving('Error: could not write the frame');
+    // Fault-injected write (TD-CHAT-16 ruling 9): the real tool's mind write
+    // throws, so its result is an error and the save counts as failed.
+    vi.spyOn(CognifyPipeline.prototype, 'cognify').mockRejectedValue(new Error('could not write the frame'));
+    // Distinct content: the earlier pin's frame would otherwise dedup this save.
+    modelSaving('a second decision that fails to persist');
     expect(await runTurn(`teamsync-error-${Date.now()}`)).toBe(200);
     await waitForPush();
 
     // A failed local write must not become a remote one. The unrelated team
     // egress on the same host still happens, which is why this counts entity
     // pushes and not every request.
+    expect(lastSaveResult).toMatch(/could not write the frame/);
     expect(entityPushes()).toHaveLength(0);
   });
 });

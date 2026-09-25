@@ -223,3 +223,70 @@ describe('visible retry wait', () => {
     }
   });
 });
+
+/**
+ * TD-CHAT-16 retry clock. `retryBackoffMs` maps the retry policy's backoff to
+ * the wait the loop actually takes. It exists so route tests that script
+ * provider failures do not sleep through real backoff; production leaves it
+ * unset and waits exactly what the policy decided.
+ */
+describe('retry backoff seam', () => {
+  function failThenAnswer(failures: number) {
+    let calls = 0;
+    const fetchFn = vi.fn(async () => {
+      calls++;
+      if (calls <= failures) throw new TypeError('fetch failed');
+      return okResponse('recovered');
+    });
+    return { fetchFn, calls: () => calls };
+  }
+
+  it('hands every policy wait to the seam and waits what it returns', async () => {
+    const { fetchFn, calls } = failThenAnswer(3);
+    const policyWaits: number[] = [];
+    const started = Date.now();
+    const result = await runAgentLoop(baseConfig({
+      fetch: fetchFn as unknown as typeof fetch,
+      retryBackoffMs: (waitMs) => {
+        policyWaits.push(waitMs);
+        return 0;
+      },
+    }));
+
+    expect(result.content).toBe('recovered');
+    expect(calls()).toBe(4);
+    // The policy's own schedule reaches the seam unchanged: 2s, 4s, 8s.
+    expect(policyWaits).toEqual([2_000, 4_000, 8_000]);
+    // ...and the loop took the seam's answer, not the 14s the policy asked for.
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('waits the policy backoff when the seam is not set', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fetchFn, calls } = failThenAnswer(1);
+      const run = runAgentLoop(baseConfig({ fetch: fetchFn as unknown as typeof fetch }));
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(calls()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await run).content).toBe('recovered');
+      expect(calls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still honours an abort during a seam-shortened wait', async () => {
+    const controller = new AbortController();
+    const fetchFn = vi.fn(async () => {
+      controller.abort();
+      throw new TypeError('fetch failed');
+    });
+    await expect(runAgentLoop(baseConfig({
+      fetch: fetchFn as unknown as typeof fetch,
+      signal: controller.signal,
+      retryBackoffMs: () => 0,
+    }))).rejects.toThrow();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});

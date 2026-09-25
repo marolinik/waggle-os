@@ -426,6 +426,12 @@ declare module 'fastify' {
      * the entire point of it.
      */
     llmFetch: typeof globalThis.fetch;
+    /**
+     * Test seam (TD-CHAT-16): maps the agent loop's retry backoff to the wait
+     * actually taken. Never set in production; route tests that script provider
+     * failures set it to `() => 0`.
+     */
+    llmRetryBackoffMs?: (waitMs: number) => number;
     evolutionStore: import('@waggle/core').EvolutionRunStore;
     /**
      * Active behavioral spec — baseline `BEHAVIORAL_SPEC` with any

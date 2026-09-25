@@ -92,6 +92,12 @@ export interface AgentLoopConfig {
   toolContextBudget?: ToolContextBudget;
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
+  /**
+   * Maps the retry policy's backoff (ms) to the wait actually taken. Omit in
+   * production. Tests that script provider failures pass `() => 0` so they do
+   * not sleep through real backoff; abort and deadline checks still apply.
+   */
+  retryBackoffMs?: (waitMs: number) => number;
   hooks?: HookRegistry;
   capabilityRouter?: CapabilityRouter;
   /** Optional plugin tool provider — merges active plugin tools into the agent's toolset */
@@ -840,7 +846,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       ? initialModelActivityDeadlineAt - Date.now()
       : undefined;
     if (initialRemainingMs !== undefined && initialRemainingMs <= 0) throw initialModelActivityTimeoutError();
-    const boundedWaitMs = Math.min(waitMs, remainingMs ?? waitMs, initialRemainingMs ?? waitMs);
+    const backoffMs = config.retryBackoffMs ? config.retryBackoffMs(waitMs) : waitMs;
+    const boundedWaitMs = Math.min(backoffMs, remainingMs ?? backoffMs, initialRemainingMs ?? backoffMs);
 
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {

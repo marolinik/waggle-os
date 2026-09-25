@@ -10,13 +10,12 @@
  * nothing about the payload each finalize writes, the finalize-once guard, the
  * cost read back from the row, or the finally block at all.
  *
- * The seam is `server.agentRunner` plus spies on the real, decorated
- * `server.traceRecorder`, so every call below is one the route genuinely made
- * against the shared recorder and store.
- *
- * Not reachable through this seam (TD-CHAT-16): the trace id handed to the
- * child-agent spend budget and the frame->trace backlink on auto-saved memory
- * both run only when no custom runner is installed.
+ * The real agent loop runs against the fake provider (TD-CHAT-16), with spies
+ * on the real, decorated `server.traceRecorder`, so every call below is one the
+ * route genuinely made against the shared recorder and store. A pass-through
+ * spy on `runAgentLoop` (ruling 2) records each attempt's config, runs a
+ * pre-loop hook where a pin needs one, and throws only the failures no provider
+ * reply produces (unclassified messages, SQLITE_BUSY).
  *
  * These pin CURRENT behavior, not a specification.
  */
@@ -25,10 +24,37 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { AgentLoopConfig, AgentResponse, TraceFinalizeOptions, TraceHandle } from '@waggle/agent';
+import type { AgentLoopConfig, TraceFinalizeOptions, TraceHandle } from '@waggle/agent';
 import { WaggleConfig } from '@waggle/core';
+
+/** Per attempt (1-based): throw this, or run this hook before the real loop. */
+const loopSpy = vi.hoisted(() => ({
+  configs: [] as AgentLoopConfig[],
+  failures: new Map<number, unknown>(),
+  beforeLoop: undefined as ((config: AgentLoopConfig) => void) | undefined,
+}));
+
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    runAgentLoop: async (config: AgentLoopConfig) => {
+      loopSpy.configs.push(config);
+      const failure = loopSpy.failures.get(loopSpy.configs.length);
+      if (failure !== undefined) throw failure;
+      loopSpy.beforeLoop?.(config);
+      return actual.runAgentLoop(config);
+    },
+  };
+});
+
 import { buildLocalServer } from '../../src/local/index.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
+import {
+  installFakeLlmProvider,
+  type FakeLlmProvider,
+  type FakeLlmResponder,
+} from '../helpers/fake-llm-provider.js';
 
 const MODEL = 'claude-sonnet-4-6';
 /** What the route resolves MODEL to; every trace call carries this id. */
@@ -36,22 +62,13 @@ const ROUTED_MODEL = 'anthropic/claude-sonnet-4-6';
 /** Mirrors the route's private redaction marker for non-retained turns. */
 const NON_RETAINED = '[Not retained: memory disabled for this turn]';
 
-/** The error shape the safe-replay predicate accepts, so a second attempt runs. */
-function streamInterruption(usage: { inputTokens: number; outputTokens: number }): Error {
-  const error = new Error(
-    'Model stream ended early (stream ended before data: [DONE]); partial content was not accepted.',
-  ) as Error & { code: string; usage: { inputTokens: number; outputTokens: number } };
-  error.code = 'INCOMPLETE_COMPLETION';
-  error.usage = usage;
-  return error;
-}
-
 type DoneEvent = { content: string; model: string; cost?: number };
 
 describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
   let server: FastifyInstance;
   let tmpDir: string;
-  let configs: AgentLoopConfig[];
+  const configs = loopSpy.configs;
+  let provider: FakeLlmProvider | undefined;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-trace-'));
@@ -64,11 +81,15 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
       checkedAt: new Date().toISOString(),
     };
     new WaggleConfig(tmpDir).save();
+    server.llmRetryBackoffMs = () => 0;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete server.agentRunner;
+    provider?.restore();
+    provider = undefined;
+    loopSpy.failures.clear();
+    loopSpy.beforeLoop = undefined;
   });
 
   afterAll(async () => {
@@ -84,14 +105,16 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     };
   }
 
-  /** Runs `attempt` for every model attempt, recording each attempt's config. */
-  function installRunner(attempt: (config: AgentLoopConfig, index: number) => AgentResponse | Promise<AgentResponse>) {
-    configs = [];
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      configs.push(config);
-      return attempt(config, configs.length);
-    };
+  /** Scripts the model; `failures` throws on the given attempts (1-based) instead. */
+  function installModel(respond: FakeLlmResponder, failures: Record<number, unknown> = {}) {
+    configs.length = 0;
+    for (const [attempt, failure] of Object.entries(failures)) loopSpy.failures.set(Number(attempt), failure);
+    provider = installFakeLlmProvider({ respond });
   }
+
+  const answer = (content: string, inputTokens = 1, outputTokens = 1) => ({
+    type: 'text' as const, content, usage: { inputTokens, outputTokens },
+  });
 
   async function runTurn(session: string, extra: Record<string, unknown> = {}) {
     resetRateLimiter(server);
@@ -115,11 +138,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
 
   it('starts one trace per turn and finalizes it as success with the answer, model and tokens', async () => {
     const recorder = spyOnRecorder();
-    installRunner(() => ({
-      content: 'traced answer',
-      toolsUsed: [],
-      usage: { inputTokens: 5, outputTokens: 7 },
-    }));
+    installModel(answer('traced answer', 5, 7));
 
     const { done } = await runTurn('trace-success');
 
@@ -149,7 +168,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
 
   it('hands the agent loop the trace id and the live recording', async () => {
     const recorder = spyOnRecorder();
-    installRunner(() => ({ content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+    installModel(answer('ok'));
 
     await runTurn('trace-handoff');
 
@@ -160,21 +179,25 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     expect(configs[0].traceRecording?.handle).toBe(handle);
   });
 
+  // The pre-loop hook records 0.125 on the trace the route handed the loop. The
+  // loop's own spend (5/7 tokens) is far below it and is not written to the row
+  // on this path, so the read-back is still exactly 0.125 (TD-CHAT-16 §6f).
   it('reports the turn cost read back from the finalized row, raised to spend already recorded on the trace', async () => {
-    spyOnRecorder();
-    installRunner((config) => {
-      server.traceStore.recordCost(config.modelSpendTraceId!, 0.125);
-      return { content: 'costed answer', toolsUsed: [], usage: { inputTokens: 5, outputTokens: 7 } };
-    });
+    const recorder = spyOnRecorder();
+    loopSpy.beforeLoop = (config) => server.traceStore.recordCost(config.modelSpendTraceId!, 0.125);
+    installModel(answer('costed answer', 5, 7));
 
     const { done } = await runTurn('trace-cost-readback');
 
+    const handle = recorder.start.mock.results[0].value as TraceHandle;
+    const row = server.traceStore.get(handle.id);
     expect(done?.cost).toBe(0.125);
+    expect(row?.cost_usd).toBe(0.125);
   });
 
   it('finalizes a failed turn once as abandoned, with the error as correction feedback', async () => {
     const recorder = spyOnRecorder();
-    installRunner(() => { throw new Error('forced trace failure'); });
+    installModel(answer('unreachable'), { 1: new Error('forced trace failure') });
 
     await runTurn('trace-failure');
 
@@ -193,10 +216,11 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
 
   it('records the tokens and cost of failed attempts on an abandoned trace', async () => {
     const recorder = spyOnRecorder();
-    installRunner((_config, index) => {
-      if (index === 1) throw streamInterruption({ inputTokens: 2, outputTokens: 3 });
-      throw new Error('second attempt failed');
-    });
+    // Attempt 1's stream is cut after reporting 2/3; the replay fails outright.
+    installModel(
+      { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 2, outputTokens: 3 } },
+      { 2: new Error('second attempt failed') },
+    );
 
     await runTurn('trace-failed-attempt-usage');
 
@@ -212,7 +236,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
   it('retries a failed success finalize from the finally block with the success payload', async () => {
     const recorder = spyOnRecorder();
     recorder.finalize.mockImplementationOnce(() => { throw new Error('trace store unavailable'); });
-    installRunner(() => ({ content: 'delivered anyway', toolsUsed: [], usage: { inputTokens: 5, outputTokens: 7 } }));
+    installModel(answer('delivered anyway', 5, 7));
 
     const { done } = await runTurn('trace-success-finalize-throws');
 
@@ -230,7 +254,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
   it('retries a failed error-path finalize once from the finally block, with the error details', async () => {
     const recorder = spyOnRecorder();
     recorder.finalize.mockImplementationOnce(() => { throw new Error('trace store unavailable'); });
-    installRunner(() => { throw new Error('forced trace failure'); });
+    installModel(answer('unreachable'), { 1: new Error('forced trace failure') });
 
     await runTurn('trace-failure-finalize-throws');
 
@@ -243,7 +267,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
 
   it('a read-only persona turn records redacted text and gives the loop no recording', async () => {
     const recorder = spyOnRecorder();
-    installRunner(() => ({ content: 'planner answer', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+    installModel(answer('planner answer'));
 
     await runTurn('trace-read-only', { persona: 'planner' });
 
@@ -257,7 +281,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
   it('runs a turn untraced when its trace cannot start', async () => {
     const recorder = spyOnRecorder();
     recorder.start.mockImplementationOnce(() => { throw new Error('SQLITE_BUSY: database is locked'); });
-    installRunner(() => ({ content: 'answered untraced', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+    installModel(answer('answered untraced'));
 
     const { events, done } = await runTurn('trace-start-throws');
 
@@ -273,8 +297,8 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
   it('answers a fatal local-database error with a fixed message and code', async () => {
     // Stands in for any critical-path SQLite write that fails, such as issuing
     // a capability proposal, which stays fail-closed by design.
-    installRunner(() => {
-      throw Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    installModel(answer('unreachable'), {
+      1: Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' }),
     });
 
     const { events } = await runTurn('sqlite-busy-error');
@@ -291,7 +315,7 @@ describe('POST /api/chat execution-trace lifecycle (characterization)', () => {
     const decorated = server.traceRecorder;
     (server as { traceRecorder?: unknown }).traceRecorder = undefined;
     try {
-      installRunner(() => ({ content: 'untraced answer', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+      installModel(answer('untraced answer'));
 
       const { done } = await runTurn('trace-none');
 
