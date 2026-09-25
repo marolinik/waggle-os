@@ -795,3 +795,37 @@ Recommendation: (a) plus (b).
 
 Verification: typecheck:server-tests and lint are clean; smart-router 66/66 (46 s). Wide run 2798/2798
 (191 files), 337 s.
+
+## 6q. smart-router slice B: the second half
+
+The fake's text reply takes an optional `finishReason` (a new helper test, 21/21). The spy gains
+`failures[n]`, thrown on attempt n, as in chat-attempt-chain.
+
+**Ported with every assertion unchanged:**
+- The four model-selection exits and the fallback provenance pin. An unreachable model is
+  scripted as a transport failure until the loop's retries run out; attempts are read from the
+  spy. "Primary unavailable, no fallback" also asserts that no model request is made.
+- The 29-tool and fallback-prompt pins already ran the real loop; they lose only their
+  `agentRunner = undefined` lines.
+- **Credential exhaustion.** Each provider key gets a real 401, and the local fallback answers.
+  The three keys and the fallback order are unchanged.
+- **Interrupted no-tool answer.** The first stream is cut before `[DONE]` with usage 100 / 20, and
+  the replay answers. The replay's token budget is still the first budget minus 120.
+- **Ollama fallback transport.** Both attempts' `litellmUrl` come from the spy.
+- **Incomplete completion rows.** "Content filter" is a real `finish_reason: content_filter`,
+  and "exhausted token budget" a cut stream reporting 100 000 / 20. The loop never reports an
+  "assistant refusal" or an "invalid response body" reason, so those two rows are thrown by the
+  spy under ruling 2. They are added to the §2 "cannot produce" list.
+- **Non-replayable tool.** The model really calls `write_file`, then its next stream is cut. The
+  message now asks for the write ("Write the release notes to release.txt."), because a review
+  request transmits no write tool. "One simulated mutation" is now one `write_file` tool event.
+
+**Re-pinned (ruling 3):** "reports the model that answered and bills it after a fallback". The
+route never calls `addUsage` on the real path, and the pin asserts that. The billed models are
+read from the loop's spend entries, which include the fallback model and end with it.
+
+**Left in the file:** the held client-cancelled pin (§6p), and the suite's
+`server.agentRunner = undefined` reset in `beforeEach`, which goes when that pin is ruled on.
+
+Verification: typecheck:server-tests and lint are clean; smart-router plus helpers 87/87 (47 s). Wide run
+2799/2799 (191 files), 345 s.

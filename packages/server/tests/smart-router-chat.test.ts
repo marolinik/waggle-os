@@ -9,6 +9,8 @@ const loopSpy = vi.hoisted(() => ({
   configs: [] as import('@waggle/agent').AgentLoopConfig[],
   /** Runs as each attempt enters the loop, before any model call. */
   beforeLoop: undefined as (() => void) | undefined,
+  /** Thrown on attempt n instead of running the loop: only for failures no provider reply produces. */
+  failures: [] as unknown[],
 }));
 
 vi.mock('@waggle/agent', async (importOriginal) => {
@@ -16,8 +18,10 @@ vi.mock('@waggle/agent', async (importOriginal) => {
   return {
     ...actual,
     runAgentLoop: async (config: import('@waggle/agent').AgentLoopConfig) => {
-      loopSpy.configs.push(config);
+      const index = loopSpy.configs.push(config) - 1;
       loopSpy.beforeLoop?.();
+      const failure = loopSpy.failures[index];
+      if (failure !== undefined) throw failure;
       return actual.runAgentLoop(config);
     },
   };
@@ -78,6 +82,12 @@ describe('chat smart-router integration', () => {
   let provider: FakeLlmProvider;
   const OK_REPLY: FakeLlmReply = { type: 'text', content: 'ok', usage: { inputTokens: 1, outputTokens: 1 } };
   let reply: (request: { model: string; index: number }) => FakeLlmReply | Promise<FakeLlmReply>;
+  /** The model of every loop attempt, in order. */
+  const attemptModels = (): string[] => capturedConfigs.map(attempt => attempt.model);
+  /** A reply under which these models cannot be reached and every other answers `ok`. */
+  const unreachable = (...models: string[]) => (request: { model: string }): FakeLlmReply => (
+    models.includes(request.model) ? { type: 'network_error', message: 'fetch failed' } : OK_REPLY
+  );
   /** Answers this test's model calls in order, then `ok`. */
   const inOrder = (...replies: FakeLlmReply[]) => {
     let next = 0;
@@ -110,6 +120,7 @@ describe('chat smart-router integration', () => {
   beforeEach(() => {
     loopSpy.configs.length = 0;
     loopSpy.beforeLoop = undefined;
+    loopSpy.failures = [];
     capturedConfigs = loopSpy.configs;
     completionRequests = [];
     reply = () => OK_REPLY;
@@ -862,15 +873,6 @@ describe('chat smart-router integration', () => {
   });
 
   describe('model selection exits (TD-CHAT-3 slice 10 pins)', () => {
-    const recordingRunner = (attempts: string[], failFirst: number) =>
-      async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-        attempts.push(agentConfig.model);
-        if (attempts.length <= failFirst) {
-          throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-        }
-        return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-      };
-
     const overBudget = (setup: (config: WaggleConfig) => void) => {
       const config = new WaggleConfig(tmpDir);
       config.setDailyBudget(1);
@@ -881,8 +883,6 @@ describe('chat smart-router integration', () => {
 
     it('returns to the primary when the over-budget model is unavailable at preflight', async () => {
       overBudget((config) => config.setBudgetModel('ollama/missing-budget-test-model'));
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -891,7 +891,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['primary-test-model']);
+      expect(attemptModels()).toEqual(['primary-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'ollama/missing-budget-test-model unavailable; primary selected',
       ]);
@@ -903,8 +903,6 @@ describe('chat smart-router integration', () => {
         config.setBudgetModel('ollama/missing-budget-test-model');
         config.setFallbackModel('ollama/fallback-test-model');
       });
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -913,7 +911,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['fallback-test-model']);
+      expect(attemptModels()).toEqual(['fallback-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'ollama/missing-budget-test-model and ollama/missing-primary-test-model unavailable; configured fallback selected',
       ]);
@@ -924,8 +922,7 @@ describe('chat smart-router integration', () => {
         config.setDefaultModel('ollama/missing-primary-test-model');
         config.setFallbackModel('ollama/fallback-test-model');
       });
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 1);
+      reply = unreachable('budget-test-model');
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -934,7 +931,7 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['budget-test-model', 'fallback-test-model']);
+      expect(attemptModels()).toEqual(['budget-test-model', 'fallback-test-model']);
       expect(switchReasons(response.body)).toEqual([
         'Budget 80% reached ($1.00/$1.00)',
         'ollama/budget-test-model failed and ollama/missing-primary-test-model unavailable; configured fallback selected',
@@ -945,8 +942,6 @@ describe('chat smart-router integration', () => {
       const config = new WaggleConfig(tmpDir);
       config.setDefaultModel('ollama/missing-primary-test-model');
       config.save();
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 0);
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -955,7 +950,8 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual([]);
+      expect(attemptModels()).toEqual([]);
+      expect(completionRequests).toEqual([]);
       expect(response.body).toContain('event: error');
       expect(response.body).not.toContain('event: done');
       expect(switchReasons(response.body)).toEqual([]);
@@ -967,8 +963,8 @@ describe('chat smart-router integration', () => {
       config.setFallbackModel('ollama/fallback-test-model');
       config.save();
       const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
-      const attempts: string[] = [];
-      server.agentRunner = recordingRunner(attempts, 1);
+      const usageEntriesBefore = server.agentState.costTracker.getUsageEntries().length;
+      reply = unreachable('primary-test-model');
 
       const response = await injectWithAuth(server, {
         method: 'POST',
@@ -977,11 +973,17 @@ describe('chat smart-router integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+      expect(attemptModels()).toEqual(['primary-test-model', 'fallback-test-model']);
       const done = sseEvents(response.body).find((event) => event.event === 'done');
       expect(done?.data.model).toBe('ollama/fallback-test-model');
-      expect(addUsage.mock.calls.map((call) => call[0])).toContain('ollama/fallback-test-model');
-      expect(addUsage.mock.calls.at(-1)?.[0]).toBe('ollama/fallback-test-model');
+      // Re-pinned (TD-CHAT-16 ruling 3): the route charges only an injected
+      // runner. The loop's own spend meter bills the model that answered, last.
+      expect(addUsage).not.toHaveBeenCalled();
+      const billedModels = server.agentState.costTracker.getUsageEntries()
+        .slice(usageEntriesBefore)
+        .map(entry => entry.model);
+      expect(billedModels).toContain('ollama/fallback-test-model');
+      expect(billedModels.at(-1)).toBe('ollama/fallback-test-model');
     });
   });
 
@@ -990,18 +992,10 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: string[] = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push(agentConfig.model);
-      if (attempts.length === 1) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The primary cannot be reached; the fallback answers (TD-CHAT-16).
+    reply = (request) => (request.model === 'primary-test-model'
+      ? { type: 'network_error', message: 'fetch failed' }
+      : { type: 'text', content: 'fallback ok', usage: { inputTokens: 1, outputTokens: 1 } });
     const session = 'actual-fallback-model-provenance';
 
     const response = await injectWithAuth(server, {
@@ -1011,7 +1005,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+    expect(attemptModels()).toEqual(['primary-test-model', 'fallback-test-model']);
     const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
       .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
     expect(switchEvents).toEqual([{
@@ -1209,7 +1203,6 @@ describe('chat smart-router integration', () => {
   });
 
   it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
-    const previousRunner = server.agentRunner;
     const execute = vi.fn(async () => 'unused');
     const candidateNames = [
       'bash', 'read_file', 'write_file', 'edit_file', 'search_files',
@@ -1236,7 +1229,6 @@ describe('chat smart-router integration', () => {
       tools?: Array<{ function?: { name?: string } }>;
       messages?: Array<{ role?: string; content?: string }>;
     }> = [];
-    server.agentRunner = undefined;
     vi.restoreAllMocks();
     server.sessionManager.close(activeWorkspaceId);
     const previousWorkspacePersona = server.workspaceManager.get(activeWorkspaceId)?.personaId;
@@ -1513,7 +1505,6 @@ describe('chat smart-router integration', () => {
       server.sessionManager.close(activeWorkspaceId);
       server.workspaceManager.update(activeWorkspaceId, { personaId: previousWorkspacePersona });
       buildToolsForSession.mockRestore();
-      server.agentRunner = previousRunner;
     }
   }, 60_000);
 
@@ -1524,12 +1515,10 @@ describe('chat smart-router integration', () => {
     config.setFallbackModel('gemma-4-31b');
     config.save();
 
-    const previousRunner = server.agentRunner;
     const previousProvider = server.agentState.llmProvider;
     const previousCurrentModel = server.agentState.currentModel;
     const previousPromptAssembler = FEATURE_FLAGS.PROMPT_ASSEMBLER;
     const previousReranker = process.env.WAGGLE_RERANKER;
-    server.agentRunner = undefined;
     server.agentState.llmProvider = {
       provider: 'litellm',
       health: 'healthy',
@@ -1608,7 +1597,6 @@ describe('chat smart-router integration', () => {
       expect(fallbackPrompt).not.toContain('Briefly state assumption, then recommendation.');
     } finally {
       fetchSpy.mockRestore();
-      server.agentRunner = previousRunner;
       server.agentState.llmProvider = previousProvider;
       server.agentState.currentModel = previousCurrentModel;
       Object.defineProperty(FEATURE_FLAGS, 'PROMPT_ASSEMBLER', {
@@ -1640,24 +1628,17 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; apiKey: string }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
-      if (attempts.length < 4) {
-        throw Object.assign(new Error('401 invalid credential'), { status: 401 });
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // Every provider key is rejected; the local fallback answers (TD-CHAT-16).
+    reply = (request) => (request.model === 'fallback-test-model'
+      ? { type: 'text', content: 'fallback ok', usage: { inputTokens: 1, outputTokens: 1 } }
+      : { type: 'http_error', status: 401, message: 'invalid credential' });
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Review this detailed plan.', session: 'credential-exhaustion-fallback' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, apiKey: attempt.litellmApiKey }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts.map(({ model }) => model)).toEqual([
@@ -1674,43 +1655,25 @@ describe('chat smart-router integration', () => {
   });
 
   it('retries one interrupted no-tool answer on the same model and credential', async () => {
-    const attempts: Array<{
-      model: string;
-      apiKey: string;
-      toolCount: number;
-      maxTokenBudget?: number;
-      modelOperationTimeoutMs?: number;
-    }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({
-        model: agentConfig.model,
-        apiKey: agentConfig.litellmApiKey,
-        toolCount: agentConfig.tools.length,
-        maxTokenBudget: agentConfig.maxTokenBudget,
-        modelOperationTimeoutMs: agentConfig.modelOperationTimeoutMs,
-      });
-      if (attempts.length === 1) {
-        throw Object.assign(
-          new Error('LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.'),
-          {
-            code: 'INCOMPLETE_COMPLETION',
-            status: 502,
-            usage: { inputTokens: 100, outputTokens: 20 },
-          },
-        );
-      }
-      return {
-        content: 'Recovered on the same model.',
-        toolsUsed: [],
-        usage: { inputTokens: 100, outputTokens: 25 },
-      };
-    };
+    // The first stream is cut before [DONE] with its usage reported; the
+    // replay answers (TD-CHAT-16).
+    reply = inOrder(
+      { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 100, outputTokens: 20 } },
+      { type: 'text', content: 'Recovered on the same model.', usage: { inputTokens: 100, outputTokens: 25 } },
+    );
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Summarize this plan without using tools.', session: 'incomplete-safe-retry' },
     });
+    const attempts = capturedConfigs.map(attempt => ({
+      model: attempt.model,
+      apiKey: attempt.litellmApiKey,
+      toolCount: attempt.tools.length,
+      maxTokenBudget: attempt.maxTokenBudget,
+      modelOperationTimeoutMs: attempt.modelOperationTimeoutMs,
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts).toHaveLength(2);
@@ -1726,21 +1689,30 @@ describe('chat smart-router integration', () => {
     expect(response.body).not.toContain('event: model_switch');
   });
 
+  // A content filter and a cut stream that spent the token budget come from
+  // the fake provider. The loop never reports a refusal or an invalid body with
+  // these reasons, so those two are thrown by the spy (TD-CHAT-16 ruling 2).
+  const scriptedIncomplete = (message: string, usage: { inputTokens: number; outputTokens: number }) => ({
+    failure: Object.assign(new Error(message), { code: 'INCOMPLETE_COMPLETION', status: 502, usage }),
+  });
   it.each([
-    ['assistant refusal', 'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
-    ['content filter', 'LLM returned an incomplete completion (unsupported finish_reason=content_filter); partial content was not accepted.', { inputTokens: 100, outputTokens: 20 }],
-    ['malformed response', 'LLM returned an incomplete completion (invalid response body); partial content was not accepted.', { inputTokens: 0, outputTokens: 0 }],
-    ['exhausted token budget', 'LLM returned an incomplete completion (stream ended before data: [DONE]); partial content was not accepted.', { inputTokens: 100_000, outputTokens: 20 }],
-  ])('does not retry an incomplete completion caused by %s', async (_label, message, usage) => {
-    let attempts = 0;
-    server.agentRunner = async (): Promise<AgentResponse> => {
-      attempts++;
-      throw Object.assign(new Error(message), {
-        code: 'INCOMPLETE_COMPLETION',
-        status: 502,
-        usage,
-      });
-    };
+    ['assistant refusal', scriptedIncomplete(
+      'LLM returned an incomplete completion (assistant refusal); partial content was not accepted.',
+      { inputTokens: 100, outputTokens: 20 },
+    )],
+    ['content filter', {
+      reply: { type: 'text', content: 'filtered', finishReason: 'content_filter', usage: { inputTokens: 100, outputTokens: 20 } },
+    }],
+    ['malformed response', scriptedIncomplete(
+      'LLM returned an incomplete completion (invalid response body); partial content was not accepted.',
+      { inputTokens: 0, outputTokens: 0 },
+    )],
+    ['exhausted token budget', {
+      reply: { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 100_000, outputTokens: 20 } },
+    }],
+  ] as Array<[string, { reply?: FakeLlmReply; failure?: unknown }]>)('does not retry an incomplete completion caused by %s', async (_label, scripted) => {
+    if (scripted.reply) reply = () => scripted.reply!;
+    if (scripted.failure) loopSpy.failures[0] = scripted.failure;
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -1749,7 +1721,7 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(attempts).toBe(1);
+    expect(capturedConfigs).toHaveLength(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('retrying once');
   });
@@ -1770,30 +1742,33 @@ describe('chat smart-router integration', () => {
     config.clearBudgetModel();
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; apiKey: string }> = [];
-    let simulatedMutations = 0;
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
-      simulatedMutations++;
-      agentConfig.onToolUse?.('write_file', { path: 'release.txt' });
-      throw Object.assign(
-        new Error('LLM returned an incomplete completion; partial content was not accepted.'),
-        { code: 'INCOMPLETE_COMPLETION', status: 502 },
-      );
-    };
+    // The model really writes release.txt, then its next stream is cut before
+    // [DONE]. The message asks for the write, because a review request
+    // transmits no write tool (TD-CHAT-16).
+    reply = inOrder(
+      {
+        type: 'tool_calls',
+        calls: [{ name: 'write_file', args: { path: 'release.txt', content: 'Release notes' } }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+      { type: 'truncated_stream', content: 'partial', usage: { inputTokens: 1, outputTokens: 1 } },
+    );
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'Review this detailed plan.', session: 'incomplete-credential-no-replay' },
+      payload: { message: 'Write the release notes to release.txt.', session: 'incomplete-credential-no-replay' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, apiKey: attempt.litellmApiKey }));
+    const writeToolEvents = sseEvents(response.body)
+      .filter(event => event.event === 'tool' && event.data.name === 'write_file');
 
     expect(response.statusCode).toBe(200);
     expect(attempts).toEqual([{
       model: 'openrouter/anthropic/claude-sonnet-5',
       apiKey: firstKey,
     }]);
-    expect(simulatedMutations).toBe(1);
+    expect(writeToolEvents).toHaveLength(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('API key rotated');
   });
@@ -1802,24 +1777,14 @@ describe('chat smart-router integration', () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
     config.save();
-    const attempts: Array<{ model: string; litellmUrl: string }> = [];
-    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
-      attempts.push({ model: agentConfig.model, litellmUrl: agentConfig.litellmUrl });
-      if (attempts.length === 1) {
-        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
-      }
-      return {
-        content: 'fallback ok',
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    reply = unreachable('primary-test-model');
 
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
       payload: { message: 'Summarize this private document.', session: 'local-fallback-transport' },
     });
+    const attempts = capturedConfigs.map(attempt => ({ model: attempt.model, litellmUrl: attempt.litellmUrl }));
 
     expect(response.statusCode).toBe(200);
     expect(attempts.map((attempt) => attempt.model)).toEqual([

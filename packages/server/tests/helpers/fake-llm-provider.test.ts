@@ -276,6 +276,16 @@ describe('installFakeLlmProvider', () => {
     });
   });
 
+  it('reports a scripted finish reason, which the loop rejects when unsupported', async () => {
+    provider = installFakeLlmProvider({
+      respond: { type: 'text', content: 'filtered', finishReason: 'content_filter', usage: { inputTokens: 5, outputTokens: 1 } },
+    });
+    await expect(runAgentLoop(loopConfig({ stream: true }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringContaining('unsupported finish_reason=content_filter'),
+    });
+  });
+
   it('answers a non-streaming request for a scripted stream with its joined content', async () => {
     provider = installFakeLlmProvider({
       respond: { type: 'stream', parts: [{ reasoning: 'hidden' }, { content: 'a' }, { content: 'b' }] },

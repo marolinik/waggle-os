@@ -30,8 +30,11 @@ export interface FakeLlmUsage {
 
 /** One scripted provider reply. */
 export type FakeLlmReply =
-  /** Assistant text. `chunks` sets the streamed deltas; default is one delta. */
-  | { type: 'text'; content: string; chunks?: readonly string[]; usage?: FakeLlmUsage }
+  /**
+   * Assistant text. `chunks` sets the streamed deltas; default is one delta.
+   * `finishReason` replaces the default `stop`.
+   */
+  | { type: 'text'; content: string; chunks?: readonly string[]; usage?: FakeLlmUsage; finishReason?: string }
   /** One assistant turn that calls these tools. */
   | {
     type: 'tool_calls';
@@ -139,14 +142,14 @@ function wireToolCalls(reply: Extract<FakeLlmReply, { type: 'tool_calls' }>) {
 function encodeText(reply: Extract<FakeLlmReply, { type: 'text' }>, stream: boolean): Response {
   if (!stream) {
     return jsonResponse({
-      choices: [{ message: { role: 'assistant', content: reply.content }, finish_reason: 'stop' }],
+      choices: [{ message: { role: 'assistant', content: reply.content }, finish_reason: reply.finishReason ?? 'stop' }],
       usage: usageFrame(reply.usage),
     });
   }
   const chunks = reply.chunks ?? [reply.content];
   return sseResponse([
     ...chunks.map(content => ({ choices: [{ delta: { content }, finish_reason: null }] })),
-    { choices: [{ delta: {}, finish_reason: 'stop' }], usage: usageFrame(reply.usage) },
+    { choices: [{ delta: {}, finish_reason: reply.finishReason ?? 'stop' }], usage: usageFrame(reply.usage) },
   ]);
 }
 
