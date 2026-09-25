@@ -28,7 +28,7 @@ import {
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { getAuthToken, injectWithAuth, resetRateLimiter, parseSSE } from './test-utils.js';
-import { installFakeLlmProvider, type FakeLlmProvider } from './helpers/fake-llm-provider.js';
+import { installFakeLlmProvider, type FakeLlmProvider, type FakeLlmReply } from './helpers/fake-llm-provider.js';
 
 function openAiSseResponse(content: string): Response {
   return new Response(
@@ -103,6 +103,12 @@ describe('Chat Streaming API', () => {
   let tmpDir: string;
   /** Suite-wide model (TD-CHAT-16): answers every turn that runs the real loop. */
   let provider: FakeLlmProvider;
+  const DEFAULT_REPLY: FakeLlmReply = {
+    type: 'text',
+    content: 'Hello world',
+    chunks: ['Hello ', 'world'],
+    usage: { inputTokens: 10, outputTokens: 5 },
+  };
 
   // The /api/chat limiter keeps state across tests. Reset it before every one,
   // rather than in the 31 tests that happened to need it (TD-TEST-4).
@@ -181,12 +187,7 @@ describe('Chat Streaming API', () => {
     };
     server.llmRetryBackoffMs = () => 0;
     provider = installFakeLlmProvider({
-      respond: {
-        type: 'text',
-        content: 'Hello world',
-        chunks: ['Hello ', 'world'],
-        usage: { inputTokens: 10, outputTokens: 5 },
-      },
+      respond: DEFAULT_REPLY,
       // Several tests call this server over real HTTP with `fetch`; only model
       // calls (and the direct Anthropic API) belong to the fake.
       otherRequest: 'previous',
@@ -384,23 +385,21 @@ describe('Chat Streaming API', () => {
     const sessionId = `implicit-history-${nonce}`;
     const firstMessage = `first implicit history turn ${nonce}`;
     const secondMessage = `second implicit history turn ${nonce}`;
-    const originalRunner = server.agentRunner;
     const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
 
     expect(literalDefaultWorkspace.teamRole).toBe('viewer');
     expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedMessages.push(
-        config.messages.map(({ role, content }) => ({ role, content })),
-      );
-      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
-      config.onToken?.(content);
+    // The real loop runs; the fake records what reached the model and echoes
+    // the turn's own message (TD-CHAT-16).
+    provider.respondWith((request) => {
+      const conversation = request.messages.filter(m => m.role !== 'system');
+      capturedMessages.push(conversation);
       return {
-        content,
-        toolsUsed: [],
+        type: 'text',
+        content: `reply:${conversation.at(-1)?.content ?? ''}`,
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
 
     try {
       const firstResponse = await injectWithAuth(server, {
@@ -444,7 +443,7 @@ describe('Chat Streaming API', () => {
       ]);
       expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([]);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       server.agentState.sessionHistories.delete(
         chatSessionStateKey(memberWorkspace.id, sessionId),
       );
@@ -468,7 +467,6 @@ describe('Chat Streaming API', () => {
     const sessionId = `implicit-retry-${nonce}`;
     const retryMessage = `retry member turn ${nonce}`;
     const defaultMessage = `viewer default turn ${nonce}`;
-    const originalRunner = server.agentRunner;
 
     expect(literalDefaultWorkspace.teamRole).toBe('viewer');
     expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
@@ -499,15 +497,12 @@ describe('Chat Streaming API', () => {
     server.agentState.sessionHistories.delete(
       chatSessionStateKey(memberWorkspace.id, sessionId),
     );
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
-      config.onToken?.(content);
-      return {
-        content,
-        toolsUsed: [],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    };
+    // The real loop runs; the fake echoes the turn's own message (TD-CHAT-16).
+    provider.respondWith((request) => ({
+      type: 'text',
+      content: `reply:${request.messages.filter(m => m.role !== 'system').at(-1)?.content ?? ''}`,
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
 
     try {
       const response = await injectWithAuth(server, {
@@ -533,7 +528,7 @@ describe('Chat Streaming API', () => {
         }),
       ]);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       server.agentState.sessionHistories.delete(
         chatSessionStateKey(memberWorkspace.id, sessionId),
       );
@@ -555,21 +550,19 @@ describe('Chat Streaming API', () => {
     const sessionId = `default-state-collision-${nonce}`;
     const legacyMessage = `legacy implicit secret ${nonce}`;
     const managedMessage = `managed default message ${nonce}`;
-    const originalRunner = server.agentRunner;
     const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
 
-    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
-      capturedMessages.push(
-        config.messages.map(({ role, content }) => ({ role, content })),
-      );
-      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
-      config.onToken?.(content);
+    // The real loop runs; the fake records what reached the model and echoes
+    // the turn's own message (TD-CHAT-16).
+    provider.respondWith((request) => {
+      const conversation = request.messages.filter(m => m.role !== 'system');
+      capturedMessages.push(conversation);
       return {
-        content,
-        toolsUsed: [],
+        type: 'text',
+        content: `reply:${conversation.at(-1)?.content ?? ''}`,
         usage: { inputTokens: 1, outputTokens: 1 },
       };
-    };
+    });
 
     try {
       const retirement = await server.agentState.closeWorkspaceMind(previousActiveWorkspace!);
@@ -641,7 +634,7 @@ describe('Chat Streaming API', () => {
       });
       expect(clearedManagedHistory.json().messages).toEqual([]);
     } finally {
-      server.agentRunner = originalRunner;
+      provider.respondWith(DEFAULT_REPLY);
       server.agentState.sessionHistories.delete(
         chatSessionStateKey('default', sessionId),
       );
@@ -722,17 +715,16 @@ describe('Chat Streaming API', () => {
 
       const managedSessionId = `${sessionId}-managed`;
       const managedMessage = `managed default cold history ${Date.now()}`;
-      migrationServer.agentRunner = async (
-        config: AgentLoopConfig,
-      ): Promise<AgentResponse> => {
-        const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
-        config.onToken?.(content);
-        return {
-          content,
-          toolsUsed: [],
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
+      // The real loop runs on this server too; the suite's fake echoes the
+      // turn's own message (TD-CHAT-16).
+      migrationServer.agentState.llmProvider = {
+        provider: 'anthropic-proxy', health: 'healthy', detail: 'fake LLM provider', checkedAt: new Date().toISOString(),
       };
+      provider.respondWith((request) => ({
+        type: 'text',
+        content: `reply:${request.messages.filter(m => m.role !== 'system').at(-1)?.content ?? ''}`,
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }));
       const managedPost = await injectWithAuth(migrationServer, {
         method: 'POST',
         url: '/api/chat',
@@ -792,6 +784,7 @@ describe('Chat Streaming API', () => {
         expect.objectContaining({ role: 'user', content: legacyMessage }),
       ]);
     } finally {
+      provider.respondWith(DEFAULT_REPLY);
       await migrationServer.close();
       await new Promise(resolve => setTimeout(resolve, 100));
       fs.rmSync(migrationDir, { recursive: true, force: true });
