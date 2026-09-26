@@ -101,9 +101,9 @@
     "jsdom": "^20.0.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "tsx": "4.23.13",
+    "tsx": "4.23.15",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.70.0",
+    "typescript-eslint": "^8.70.1",
     "@vitest/coverage-v8": "^3.2.7"
   },
   "dependencies": {
@@ -120,11 +120,11 @@
   "//optionalDependencies": "Platform-specific native binaries — optional so npm SKIPS them on os/cpu mismatch (Linux/macOS CI) instead of failing install with EBADPLATFORM. See docs/audits/2026-06-01-full-repo-verification-sweep.md.",
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.2.9",
-    "@rollup/rollup-darwin-arm64": "4.63.3",
-    "@rollup/rollup-darwin-x64": "4.63.3",
-    "@rollup/rollup-linux-x64-gnu": "4.63.3",
-    "@rollup/rollup-linux-x64-musl": "4.63.3",
-    "@rollup/rollup-win32-x64-msvc": "4.63.3",
+    "@rollup/rollup-darwin-arm64": "4.63.4",
+    "@rollup/rollup-darwin-x64": "4.63.4",
+    "@rollup/rollup-linux-x64-gnu": "4.63.4",
+    "@rollup/rollup-linux-x64-musl": "4.63.4",
+    "@rollup/rollup-win32-x64-msvc": "4.63.4",
     "@swc/core-win32-x64-msvc": "^1.15.21",
     "lightningcss-win32-x64-msvc": "^1.33.0",
     "sqlite-vec-windows-x64": "^0.1.9"
