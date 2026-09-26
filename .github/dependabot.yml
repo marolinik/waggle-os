@@ -20,6 +20,12 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # @types/node follows the runtime, not the latest Node: the desktop
+      # sidecar ships Node 22 and engines require >=22.19. Newer majors type
+      # APIs that Node 22 does not have. Lift this when the runtime moves.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-and-patch:
         update-types:
