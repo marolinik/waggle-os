@@ -44,7 +44,7 @@
     "@waggle/core": "*",
     "@waggle/shared": "*",
     "@waggle/wiki-compiler": "*",
-    "zod": "^3.23.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

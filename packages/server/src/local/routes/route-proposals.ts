@@ -50,7 +50,7 @@ const proposeSchema = z.object({
   privacy: z.enum(['normal', 'private']).optional(),
   preferredExecutorId: z.string().min(1).max(128).optional(),
 }).strict();
-const paramsSchema = z.object({ id: z.string().uuid() }).strict();
+const paramsSchema = z.object({ id: z.string().guid() }).strict();
 const confirmSchema = z.object({
   executorId: z.string().min(1).max(128).optional(),
   removeFrameIds: z.array(z.string().min(1).max(128)).max(100).optional(),
