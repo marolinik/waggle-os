@@ -25,10 +25,10 @@
     "better-sqlite3": "^12.6.2",
     "cron-parser": "^4.9.0",
     "sqlite-vec": "^0.1.7-alpha.2",
-    "undici": "^6.27.0"
+    "undici": "^6.28.1"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1134.0",
+    "@aws-sdk/client-s3": "^3.1138.0",
     "@types/better-sqlite3": "^7.6.13"
   },
   "license": "Apache-2.0",
