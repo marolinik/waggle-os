@@ -36,6 +36,7 @@ import { WaggleConfig } from '@waggle/core';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { buildLocalServer } from '../../src/local/index.js';
 import { loadSessionMessages } from '../../src/local/routes/chat-persistence.js';
+import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 import { injectWithAuth, resetRateLimiter, parseSSE } from '../test-utils.js';
 import { installFakeLlmProvider, type FakeLlmProvider } from '../helpers/fake-llm-provider.js';
 
@@ -97,6 +98,13 @@ describe('POST /api/chat user-facing failure text', () => {
   it('shows a daily-budget pricing refusal its own message and code', async () => {
     // A priced model the trusted catalog cannot price, under a hard daily
     // budget: the loop's own cost tracker refuses it before any model call.
+    // With no credential and no local model, model resolution keeps the
+    // unpriced model; a provider key (a developer's .env, which
+    // vitest.setup.ts loads) would swap it for a priced cloud fallback.
+    for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+      vi.stubEnv(envName, '');
+    }
+    vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11457');
     const config = new WaggleConfig(tmpDir);
     const previousModel = config.getDefaultModel();
     config.setDefaultModel(UNPRICED_MODEL);
@@ -110,6 +118,7 @@ describe('POST /api/chat user-facing failure text', () => {
       }]);
       expect(provider.requests).toHaveLength(0);
     } finally {
+      vi.unstubAllEnvs();
       server.agentState.costTracker.setBudget(null, 'soft');
       config.setDefaultModel(previousModel);
       config.save();
