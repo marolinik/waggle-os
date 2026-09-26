@@ -1531,6 +1531,10 @@ describe('Chat Streaming API', () => {
         parameters: { type: 'object', properties: {} },
       },
     } as const;
+    // Only the provider calls count: a live server may fetch in the background
+    // (a startup probe or monitor), and the global spy sees those too (TD-TEST-20).
+    const messagesCalls = () => vi.mocked(globalThis.fetch).mock.calls
+      .filter(([url]) => String(url) === 'https://api.anthropic.com/v1/messages');
     try {
       const response = await injectWithAuth(proxyServer, {
         method: 'POST',
@@ -1546,7 +1550,7 @@ describe('Chat Streaming API', () => {
       });
       expect(response.statusCode).toBe(200);
       const outboundBody = JSON.parse(String(
-        vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body ?? '{}',
+        messagesCalls()[0]?.[1]?.body ?? '{}',
       ));
       expect(outboundBody.tool_choice).toEqual({
         type: 'tool',
@@ -1569,7 +1573,7 @@ describe('Chat Streaming API', () => {
         });
         expect(mapped.statusCode).toBe(200);
         const mappedBody = JSON.parse(String(
-          vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[1]?.body ?? '{}',
+          messagesCalls().at(-1)?.[1]?.body ?? '{}',
         ));
         expect(mappedBody.tool_choice).toEqual({
           type: expectedType,
@@ -1589,7 +1593,7 @@ describe('Chat Streaming API', () => {
         },
       });
       expect(invalid.statusCode).toBe(400);
-      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+      expect(messagesCalls()).toHaveLength(3);
     } finally {
       globalThis.fetch = originalFetch;
       await proxyServer.close();

@@ -207,7 +207,7 @@ Route to closing every recorded finding: `docs/tech-debt/CLOSE-OUT-PLAN-2026-09-
   - [x] TD-CHAT-3 slices 9-12, attempt/fallback control flow -> `chat-attempt-policy`, `TurnModelSelection`, `TurnAttemptState`, `createAttemptChain` (agent, 2026-09-23/24)
   - [x] TD-CHAT-3 slices 13-16, the handler's phases -> completion, preparation, failure, agent run, request resolution, model routing, session runtime, history load, command routing; handler 3594 -> 362; row CLOSED by founder (agent, PRs #163/#164, 2026-09-24)
   - [x] TD-CHAT-48: warn on a swallowed trace finalize (agent, P3; closed `70855e2e`, 2026-09-23)
-- [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; record the ignore in `dependabot.yml` (agent, P1, post-launch)
+- [ ] TD-DEP-2: undici 8 through undici's own `fetch` in both egress guards, security review, §7.5 forward-port; ~~record the ignore in `dependabot.yml`~~ (done 2026-09-26) (agent, P1, post-launch)
 - [x] Phase 3 pass 1: clean-code scoring, 58-block error-handling audit, 7 structure-only fixes on `chore/tech-debt-phase3-chat-clean-code` (agent, 7 commits `b5f18e6b` through `d242ec05`, 2026-09-15)
 - [x] Review + merge `chore/tech-debt-phase3-chat-clean-code` into `main`; the nine Phase 3 Adopted Conventions ratified as amended by founder delegation (agent, session 0915 S3, 51-agent review; merged via PR #85)
 - [x] TD-CHAT-23 governance half: pinned then failed closed (agent, `e42d4e27` + `ed4a6a8a` + `f3d21adf`, 2026-09-16). Soft-failure half stays open — see F3
