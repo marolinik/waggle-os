@@ -36,7 +36,7 @@ features only in the public mirror.
    the next curated export.
 3. Run `scripts/oss-drift-check.sh` before every OSS release and after any arc
    that touched a Hive Mind checkout. The thin shell entrypoint delegates to
-   the cross-platform Node 20 checker, which validates
+   the cross-platform Node checker, which validates
    `scripts/oss-drift-baseline.json` without updating or accepting it. Separate
    sections identify reviewed adaptations, intentional private exclusions,
    known reviewed blockers, unreviewed differences, forbidden whole-file
@@ -77,7 +77,7 @@ npx vitest run packages/hive-mind-core/tests
 After the canonical change lands, prepare a separate curated forward-port in a
 clean public-mirror branch and review the complete export diff.
 
-Node.js 20 or newer is required. Public contributors should use the public
+Node.js 22.19 or newer is required (undici 8, which the egress guard uses, needs it). Public contributors should use the public
 mirror README and issues for current platform support. Maintainers working in
 the private monorepo can additionally consult
 `packages/hive-mind-cli/docs/WINDOWS-QUIRKS.md`.

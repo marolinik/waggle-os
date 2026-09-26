@@ -26,7 +26,7 @@
 
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP, type LookupFunction } from 'node:net';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export type AddressClass =
   | 'public'
@@ -453,8 +453,11 @@ function redirectRequestInit(
 /**
  * SSRF-safe fetch. Validates the target before the request and re-validates
  * every redirect hop (`redirect: 'manual'`) so a public URL cannot redirect
- * into a private/link-local address. Native fetch is mandatory; proxy transports
- * need an equivalent pinned connector rather than a global dispatcher override.
+ * into a private/link-local address. The request goes through undici's own
+ * fetch, never Node's global fetch: the pinned `Agent` must come from the same
+ * undici as the client, because Node's bundled undici (6 on Node 22) rejects a
+ * newer-major dispatcher at runtime (TD-DEP-2). Proxy transports need an
+ * equivalent pinned connector rather than a global dispatcher override.
  * Caller-supplied `redirect` in `init` is
  * ignored — this helper owns redirect handling.
  */
@@ -479,7 +482,7 @@ export async function safeFetch(
 
     let response: Response;
     try {
-      response = await (globalThis.fetch as unknown as FetchWithDispatcher)(currentUrl, {
+      response = await (undiciFetch as unknown as FetchWithDispatcher)(currentUrl, {
         ...currentInit,
         redirect: 'manual',
         dispatcher,

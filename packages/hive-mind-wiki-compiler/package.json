@@ -53,7 +53,7 @@
     "hive-mind"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   },
   "types": "dist/index.d.ts"
 }

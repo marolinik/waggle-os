@@ -36,7 +36,7 @@
     "@waggle/hive-mind-wiki-compiler": "*"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   },
   "publishConfig": {
     "access": "public"
