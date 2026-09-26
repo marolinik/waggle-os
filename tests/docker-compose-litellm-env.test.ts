@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 
 const REPO_ROOT = resolve(__dirname, '..');
 
@@ -34,7 +34,7 @@ type ComposeConfig = {
 };
 
 function loadYaml<T>(relPath: string): T {
-  return yaml.load(readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')) as T;
+  return load(readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')) as T;
 }
 
 /** Pull the unique set of env-var names referenced by litellm-config's model list. */
