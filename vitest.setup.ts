@@ -1,6 +1,10 @@
 /**
  * Vitest global setup — loads .env file into process.env for server tests
  * that need DATABASE_URL, REDIS_URL, CLERK_SECRET_KEY, etc.
+ * Model-provider credentials (`*_API_KEY`) are never loaded: a developer's
+ * real keys would let model resolution pick a live cloud fallback and send
+ * real provider requests, so local runs would diverge from CI, which has no
+ * .env. A test that needs a key stubs it; an explicit shell export still wins.
  * No external dependencies (no dotenv required).
  */
 import { readFileSync } from 'node:fs';
@@ -74,6 +78,7 @@ try {
     const eq = trimmed.indexOf('=');
     if (eq < 0) continue;
     const key = trimmed.slice(0, eq).trim();
+    if (key.endsWith('_API_KEY')) continue;
     const val = trimmed.slice(eq + 1).trim();
     // Don't override existing env vars (CLI > .env)
     if (!process.env[key]) {
