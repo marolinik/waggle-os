@@ -946,7 +946,9 @@ describe('Tauri Production Configuration', () => {
       browserslist: '4.28.9',
       'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
-      'js-yaml': '4.3.1',
+      // Scoped to v4 requests: @eslint/eslintrc still asks for ^4 and gets the
+      // patched 4.3.1, while the root's own devDependency moved to js-yaml 5.
+      'js-yaml@4': '4.3.1',
       'better-sqlite3': '12.6.2',
       '@huggingface/transformers': { sharp: '0.35.4' },
       // Moved with apps/www in the 79-package group bump. `apps/www` declares an
@@ -1012,7 +1014,7 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
-    expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
+    expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1', '5.4.2']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.4']));
     // The staged-resource release checker keeps its OWN literal copy of this
     // version, and nothing tied the two together: this group bump moved the
