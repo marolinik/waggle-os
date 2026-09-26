@@ -20,6 +20,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # undici stays on major 6 (TD-DEP-2): both SSRF egress guards pass an
+      # undici `Agent` as `dispatcher` to Node's global fetch, and Node 22
+      # bundles undici 6, whose handler API rejects a newer-major dispatcher at
+      # runtime. Lift this only with the TD-DEP-2 fix (guards use undici's own
+      # fetch), its security review and the §7.5 hive-mind forward-port.
+      - dependency-name: "undici"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-and-patch:
         update-types:
