@@ -94,7 +94,7 @@ Tested on:
 
 - Windows 10 21H2+ (build 19044+)
 - Windows 11 22H2+ (build 22621+)
-- Node.js 20.x via official MSI installer
+- Node.js 22.x (22.19 or newer) via official MSI installer
 
 Untested / may need additional config:
 

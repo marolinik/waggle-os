@@ -5,7 +5,7 @@ Foundation utilities for the [hive-mind-clients](https://github.com/marolinik/hi
 This package is shared by every per-IDE shim (`@hive-mind/claude-code-hooks`, `@hive-mind/cursor-hooks`, etc.). It exposes typed interfaces, deterministic helpers, and a single CLI bridge to the hive-mind core — so each shim only has to translate IDE-native hook events into a common shape, then hand off to shim-core.
 
 **Status**: pre-1.0, Wave 1 in development.
-**Target**: Node >= 20, ESM-only.
+**Target**: Node >= 22.19, ESM-only.
 **Peer dependency**: hive-mind-cli >= 0.1.0 (installed via `npm install -g @hive-mind/cli` or a local link).
 
 ## What's in here

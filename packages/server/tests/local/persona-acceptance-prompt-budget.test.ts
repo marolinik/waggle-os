@@ -8,6 +8,13 @@ import { MarketplaceInstaller } from '@waggle/marketplace';
 import { markUserFacingError } from '@waggle/shared';
 import type { PluginTool } from '@waggle/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Guarded egress calls undici's own fetch (TD-DEP-2). Route it through the
+// global fetch so this file's transport stub still sees every Team request.
+vi.mock('undici', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('undici')>()),
+  fetch: (...args: Parameters<typeof globalThis.fetch>) => globalThis.fetch(...args),
+}));
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 import {
   CANONICAL_VERIFIER_REPORT,

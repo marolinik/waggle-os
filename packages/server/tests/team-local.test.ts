@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
+
+// Guarded egress calls undici's own fetch (TD-DEP-2). Route it through the
+// global fetch so this file's transport stub still sees every Team request.
+vi.mock('undici', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('undici')>()),
+  fetch: (...args: Parameters<typeof globalThis.fetch>) => globalThis.fetch(...args),
+}));
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
