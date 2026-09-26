@@ -2,17 +2,12 @@
 // `rootDir` and `composite` are dropped deliberately: this config emits nothing,
 // and tests legitimately import fixtures from outside `src/`.
 //
-// Every server test file is typechecked but one. The first run (2026-09-19)
-// surfaced 173 errors across 56 files, held in a baseline exclude list that only
-// shrank; 55 were fixed on 2026-09-23 (TD-TEST-11). Do not add a file back to
-// `exclude`: fix its types instead.
-//
-// The one exception is not a test defect. start-trial.test.ts boots the Vite
-// dev server with apps/web/vite.config.ts, and this config resolves `vite`
-// from the root install while that file's plugins come from apps/web's own
-// `vite` copy, whose Plugin types differ. apps/web typechecks its config
-// against its own copy (typecheck:web). Remove the entry once the two vite
-// installs are one.
+// Every server test file is typechecked. The first run (2026-09-19) surfaced
+// 173 errors across 56 files, held in a baseline exclude list that only
+// shrank; 55 were fixed on 2026-09-23 (TD-TEST-11), and the last one,
+// start-trial.test.ts, came back when the workspace moved to one `vite`
+// install (TD-TEST-19). Do not add a file back to `exclude`: fix its types
+// instead.
 //
 // `paths` mirrors `vitest.aliases.ts`: several workspace packages declare a
 // `dist/` entry in package.json `exports`, which is correct for publishing but
@@ -121,5 +116,5 @@
     "src/**/*.ts",
     "tests/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist", "tests/start-trial.test.ts"]
+  "exclude": ["node_modules", "dist"]
 }
