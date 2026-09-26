@@ -60,13 +60,19 @@ function mapStatus(
 ): NonNullable<ClerkPublicMetadata['subscriptionStatus']> {
   // Collapse Stripe's 8 statuses into the 5 we expose to the app:
   //   active | past_due | canceled | trialing | incomplete
+  // Each kept status returns its own literal: Stripe's Status type includes
+  // an open `OtherString`, so a fall-through `return status` does not narrow.
   switch (status) {
     case 'active':
+      return 'active';
     case 'past_due':
+      return 'past_due';
     case 'canceled':
+      return 'canceled';
     case 'trialing':
+      return 'trialing';
     case 'incomplete':
-      return status;
+      return 'incomplete';
     case 'unpaid':
     case 'incomplete_expired':
       return 'past_due';
