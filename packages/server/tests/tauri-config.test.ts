@@ -954,8 +954,9 @@ describe('Tauri Production Configuration', () => {
       // exact declaration — holding this at 16.3.0 made the lockfile satisfy
       // neither and `npm ci` fail. 16.3.5 is a newer patch in the same minor, so
       // it advances the intent this override was added for (ec24a8a3, "upgrade
-      // secure Next runtime") rather than weakening it.
-      next: '16.3.5',
+      // secure Next runtime") rather than weakening it. Moved again to 16.3.6
+      // with the 18-update minor/patch group (dependabot #176).
+      next: '16.3.6',
     };
 
     expect(manifest.engines?.node).toBe('>=22.19.0');
@@ -978,7 +979,7 @@ describe('Tauri Production Configuration', () => {
       )) as { dependencies?: Record<string, string> };
       return workspaceManifest.dependencies?.['@fastify/static'];
     });
-    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.3']));
+    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.4']));
 
     const betterSqliteRanges = [
       'core',
@@ -1005,7 +1006,7 @@ describe('Tauri Production Configuration', () => {
       return new Set(matching.map(([, metadata]) => metadata.version!));
     };
 
-    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.3']));
+    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.4']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.7']));
     expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
