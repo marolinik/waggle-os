@@ -42,11 +42,6 @@ export default defineConfig({
     exclude: [
       'apps/**', 'node_modules/**', '**/__faza1-closed/**',
       ...INFRA_TEST_SUITES,
-      // Requires the gitignored ~13MB pre-built packages/marketplace/marketplace.db
-      // fixture (createTempDb copies it); absent on a clean checkout / CI. Proper
-      // fix (regenerate from sources-seed.ts in test setup) tracked in
-      // docs/audits/2026-06-01-full-repo-verification-sweep.md.
-      'packages/marketplace/tests/sync-verification.test.ts',
       // Wall-clock budgets run in a dedicated lane so filesystem/process
       // contention cannot make the deterministic correctness gate flaky.
       'packages/server/tests/performance/**',
