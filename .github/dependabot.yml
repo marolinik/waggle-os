@@ -26,6 +26,16 @@ updates:
       # APIs that Node 22 does not have. Lift this when the runtime moves.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # TypeScript 7 (native compiler) is blocked by typescript-eslint, whose
+      # peer range is typescript <6.1; the lint gate would break (TD-DEP-3).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # transformers 4 does not read the model cache transformers 3 wrote, so
+      # existing installs and the installer's managed embedding model would
+      # re-download or fail offline. Needs a cache migration, an embedding
+      # parity check and installer re-certification first (TD-DEP-4).
+      - dependency-name: "@huggingface/transformers"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-and-patch:
         update-types:
