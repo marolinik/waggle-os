@@ -3,15 +3,15 @@ import type { AxAIService } from '@ax-llm/ax';
 
 // --- Signature Definitions ---
 
-export const SUMMARIZER_SIGNATURE = new AxSignature(
+export const SUMMARIZER_SIGNATURE = AxSignature.create(
   'textToSummarize:string "The text content to summarize" -> summaryText:string "A concise summary of the input text"'
 );
 
-export const CLASSIFIER_SIGNATURE = new AxSignature(
+export const CLASSIFIER_SIGNATURE = AxSignature.create(
   'textToClassify:string "Text to classify into a category" -> intentCategory:class "question, command, observation, request, greeting"'
 );
 
-export const PROMPT_EXPANDER_SIGNATURE = new AxSignature(
+export const PROMPT_EXPANDER_SIGNATURE = AxSignature.create(
   'briefPrompt:string "A brief or vague user prompt" -> expandedPrompt:string "A detailed, well-structured prompt with clear instructions"'
 );
 
