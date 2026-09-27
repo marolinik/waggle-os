@@ -517,10 +517,13 @@ describe('VaultStore', () => {
         actual.execFile(
           process.execPath,
           [
-            // tsx, not vite-node: vitest 4 no longer installs vite-node. The
-            // probe imports only relative source; @waggle/hive-mind-core
-            // resolves to its built dist (build:packages runs first in CI).
+            // tsx, not vite-node: vitest 4 no longer installs vite-node.
+            // tsconfig.tests.json maps @waggle/* to src (it mirrors the vitest
+            // aliases), so the probe needs no build step; verify-windows runs
+            // it without build:packages.
             path.resolve('node_modules/tsx/dist/cli.mjs'),
+            '--tsconfig',
+            path.resolve('packages/server/tsconfig.tests.json'),
             probePath,
           ],
           {
