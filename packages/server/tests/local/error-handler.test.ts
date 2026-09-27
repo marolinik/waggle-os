@@ -7,13 +7,13 @@
  * (message echoed only outside production); 4xx → pass through with message.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, type Mock } from 'vitest';
 import Fastify from 'fastify';
 import { installErrorHandler } from '../../src/local/error-handler.js';
 import type { Logger } from '../../src/local/logger.js';
 
-function makeLogger(): Logger & { error: ReturnType<typeof vi.fn> } {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+function makeLogger(): Logger & { error: Mock<Logger['error']> } {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn<Logger['error']>() };
 }
 
 async function buildApp(log: Logger) {

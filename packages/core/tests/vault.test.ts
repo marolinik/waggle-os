@@ -517,11 +517,10 @@ describe('VaultStore', () => {
         actual.execFile(
           process.execPath,
           [
-            path.resolve('node_modules/vite-node/vite-node.mjs'),
-            '--root',
-            process.cwd(),
-            '--config',
-            path.resolve('vitest.config.ts'),
+            // tsx, not vite-node: vitest 4 no longer installs vite-node. The
+            // probe imports only relative source; @waggle/hive-mind-core
+            // resolves to its built dist (build:packages runs first in CI).
+            path.resolve('node_modules/tsx/dist/cli.mjs'),
             probePath,
           ],
           {

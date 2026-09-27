@@ -2357,8 +2357,10 @@ describe('CI/CD Configuration', () => {
         '.github/workflows/hive-mind-cli-cross-platform.yml',
       ]),
     );
+    // The ACL probe runs under tsx, which the root pins exactly; vitest 4
+    // no longer installs vite-node.
     expect(vaultTests).toMatch(
-      /removes a pre-existing explicit Everyone allow ACE[\s\S]*?node_modules\/vite-node\/vite-node\.mjs[\s\S]*?'--config'[\s\S]*?probePath[\s\S]*?\r?\n\s*210_000,\r?\n\s*\);/,
+      /removes a pre-existing explicit Everyone allow ACE[\s\S]*?node_modules\/tsx\/dist\/cli\.mjs[\s\S]*?probePath[\s\S]*?\r?\n\s*210_000,\r?\n\s*\);/,
     );
     expect(vaultTests).not.toContain("'--script'");
   });
