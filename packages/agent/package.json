@@ -35,7 +35,7 @@
     "@waggle/core": "*",
     "@waggle/marketplace": "*",
     "@waggle/shared": "*",
-    "docx": "^9.6.1",
+    "docx": "^9.7.2",
     "exceljs": "^4.4.0",
     "glob": "^13.0.6",
     "jszip": "^3.10.1",
