@@ -32,6 +32,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ax-llm/ax": "^24.0.20",
     "@waggle/core": "*",
     "@waggle/marketplace": "*",
     "@waggle/shared": "*",

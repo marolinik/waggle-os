@@ -17,6 +17,7 @@
     "start:local": "tsx src/local/start.ts"
   },
   "dependencies": {
+    "@ax-llm/ax": "^24.0.20",
     "@clerk/fastify": "^3.1.79",
     "@fastify/cors": "^10.0.0",
     "@fastify/static": "^10.1.4",

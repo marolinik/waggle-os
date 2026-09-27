@@ -52,7 +52,7 @@ export async function getOptimizerService(server: FastifyInstance): Promise<Opti
     const { AxAI, AxAIAnthropicModel } = await import('@ax-llm/ax');
     const { PromptOptimizer } = await import('@waggle/optimizer');
 
-    const ai = new AxAI({
+    const ai = AxAI.create({
       name: 'anthropic',
       apiKey,
       config: { model: AxAIAnthropicModel.Claude45Haiku }, // Use cheapest model for optimization
