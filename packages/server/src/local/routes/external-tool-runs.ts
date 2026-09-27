@@ -99,7 +99,7 @@ const participantSchema = z.object({
   sessionIds: sessionIdsSchema.optional(),
 });
 const attributionSchema = z.object({
-  routeDecisionId: z.string().uuid(),
+  routeDecisionId: z.string().guid(),
   briefHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 const runSchema = z.object({

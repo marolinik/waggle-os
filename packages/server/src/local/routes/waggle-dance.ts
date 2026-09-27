@@ -66,7 +66,7 @@ const signalRequestSchema = z.object({
     'knowledge_match', 'task_claim', 'discovery', 'routed_share',
     'skill_share', 'model_recipe',
   ]),
-  content: z.record(z.unknown()),
+  content: z.record(z.string(), z.unknown()),
   senderId: z.string().min(1).max(200).optional(),
   teamId: z.string().min(1).max(200).optional(),
   referenceId: z.string().min(1).max(200).nullable().optional(),

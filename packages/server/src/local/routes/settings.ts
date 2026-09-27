@@ -22,7 +22,7 @@ import { refreshManagedLiteLLM, type LiteLLMRefreshResult } from '../litellm-run
 const VALID_AUTONOMY = ['normal', 'trusted', 'yolo'] as const satisfies readonly AutonomyLevel[];
 const autonomyLevelSchema = z.enum(VALID_AUTONOMY);
 const permissionGateListSchema = z.array(z.string().min(1).max(256)).max(100);
-const workspaceOverridesSchema = z.record(permissionGateListSchema).refine(
+const workspaceOverridesSchema = z.record(z.string(), permissionGateListSchema).refine(
   (value) => Object.keys(value).length <= 100,
   'Too many workspace overrides',
 );
