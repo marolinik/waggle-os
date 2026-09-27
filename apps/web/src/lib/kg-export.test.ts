@@ -1,7 +1,7 @@
 /**
  * M-30 — kg-export vitest. Pure / DOM-only helpers under jsdom.
  */
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import {
   KG_THEME_VARS,
   buildKgExportFilename,
@@ -202,7 +202,7 @@ describe('downloadKgPng', () => {
   let originalCreate: typeof URL.createObjectURL;
   let originalRevoke: typeof URL.revokeObjectURL;
   let originalImage: typeof Image;
-  let canvasToBlob: ReturnType<typeof vi.fn>;
+  let canvasToBlob: Mock<HTMLCanvasElement['toBlob']>;
 
   beforeEach(() => {
     createdUrls = [];
@@ -240,7 +240,7 @@ describe('downloadKgPng', () => {
     (globalThis as any).Image = MockImage;
 
     // Mock canvas.toBlob to immediately return a stub PNG blob.
-    canvasToBlob = vi.fn(function (this: HTMLCanvasElement, cb: BlobCallback) {
+    canvasToBlob = vi.fn<HTMLCanvasElement['toBlob']>(function (this: HTMLCanvasElement, cb: BlobCallback) {
       cb(new Blob(['png-bytes'], { type: 'image/png' }));
     });
     HTMLCanvasElement.prototype.toBlob = canvasToBlob;

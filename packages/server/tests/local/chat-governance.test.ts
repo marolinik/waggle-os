@@ -26,9 +26,11 @@ const { mockGetTeamServer } = vi.hoisted(() => {
 
 vi.mock('@waggle/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@waggle/core')>(),
-  WaggleConfig: vi.fn(() => ({
-    getTeamServer: mockGetTeamServer,
-  })),
+  // A `function`, not an arrow: the route calls `new WaggleConfig(...)`, and
+  // vitest 4 mocks refuse `new` on an arrow implementation.
+  WaggleConfig: vi.fn(function () {
+    return { getTeamServer: mockGetTeamServer };
+  }),
 }));
 
 import { getGovernancePermissions } from '../../src/local/routes/chat-governance.js';

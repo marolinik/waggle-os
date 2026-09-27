@@ -23,7 +23,9 @@ vi.mock('@clerk/nextjs/server', () => ({
 }));
 
 vi.mock('stripe', () => ({
-  default: vi.fn().mockImplementation(() => ({
+  // A `function`, not an arrow: the route calls `new Stripe(...)`, and
+  // vitest 4 mocks refuse `new` on an arrow implementation.
+  default: vi.fn().mockImplementation(function () { return {
     checkout: {
       sessions: {
         create: stripeMocks.checkoutSessionsCreate,
@@ -35,7 +37,7 @@ vi.mock('stripe', () => ({
     prices: {
       list: stripeMocks.pricesList,
     },
-  })),
+  }; }),
 }));
 
 import { GET } from '../app/api/stripe/checkout/route';

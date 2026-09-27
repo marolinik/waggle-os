@@ -1,9 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { ToolOutputPane } from './ToolOutputPane';
 import { adapter } from '@/lib/adapter';
 
 describe('ToolOutputPane', () => {
+  // vitest 4 reuses an existing spy on vi.spyOn, calls included, so each
+  // test restores the adapter it spied on.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders streamed lines and the exit chip', () => {
     let onLine!: (l: string) => void;
     let onExit!: (c: number | null) => void;

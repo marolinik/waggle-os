@@ -517,11 +517,13 @@ describe('VaultStore', () => {
         actual.execFile(
           process.execPath,
           [
-            path.resolve('node_modules/vite-node/vite-node.mjs'),
-            '--root',
-            process.cwd(),
-            '--config',
-            path.resolve('vitest.config.ts'),
+            // tsx, not vite-node: vitest 4 no longer installs vite-node.
+            // tsconfig.tests.json maps @waggle/* to src (it mirrors the vitest
+            // aliases), so the probe needs no build step; verify-windows runs
+            // it without build:packages.
+            path.resolve('node_modules/tsx/dist/cli.mjs'),
+            '--tsconfig',
+            path.resolve('packages/server/tsconfig.tests.json'),
             probePath,
           ],
           {

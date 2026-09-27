@@ -108,6 +108,8 @@ describe('desktop startup surface', () => {
       expect(reactMocks.applyStoredThemeEarly).toHaveBeenCalledOnce();
       expect(reactMocks.createRoot).toHaveBeenCalledWith(root);
       expect(root?.dataset.waggleUiReady).toBe('ready');
-    });
+      // The real app-entry graph is transformed on first import; under full
+      // suite load that can exceed waitFor's 1s default.
+    }, { timeout: 10_000 });
   });
 });
