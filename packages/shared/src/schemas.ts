@@ -23,7 +23,7 @@ export const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   priority: z.enum(['critical', 'high', 'normal', 'low']).default('normal'),
-  parentTaskId: z.string().uuid().optional(),
+  parentTaskId: z.string().guid().optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -31,7 +31,7 @@ export const updateTaskSchema = z.object({
   description: z.string().max(5000).optional(),
   status: z.enum(['open', 'claimed', 'in_progress', 'done', 'cancelled']).optional(),
   priority: z.enum(['critical', 'high', 'normal', 'low']).optional(),
-  assignedTo: z.string().uuid().nullable().optional(),
+  assignedTo: z.string().guid().nullable().optional(),
 });
 
 export const sendMessageSchema = z.object({
@@ -40,9 +40,9 @@ export const sendMessageSchema = z.object({
     'knowledge_check', 'task_delegation', 'skill_request', 'model_recommendation',
     'knowledge_match', 'task_claim', 'discovery', 'routed_share', 'skill_share', 'model_recipe',
   ]),
-  content: z.record(z.unknown()),
-  referenceId: z.string().uuid().optional(),
-  routing: z.array(z.object({ userId: z.string().uuid(), reason: z.string() })).optional(),
+  content: z.record(z.string(), z.unknown()),
+  referenceId: z.string().guid().optional(),
+  routing: z.array(z.object({ userId: z.string().guid(), reason: z.string() })).optional(),
 });
 
 // UX-Refactor Phase 3 (PRD §15.5): shared enum fragments for the Agent entity.
@@ -66,8 +66,8 @@ export const createAgentSchema = z.object({
   systemPrompt: z.string().max(10000).optional(),
   model: z.string().min(1).default('claude-haiku-4-5'),
   tools: z.array(z.string()).default([]),
-  config: z.record(z.unknown()).default({}),
-  teamId: z.string().uuid().optional(),
+  config: z.record(z.string(), z.unknown()).default({}),
+  teamId: z.string().guid().optional(),
   // §15.5 optional Agent-entity fields (Phase 3) — all optional for back-compat.
   type: agentTypeEnum.optional(),
   goal: z.string().max(4000).optional(),
@@ -79,7 +79,7 @@ export const createAgentSchema = z.object({
   skillIds: z.array(z.string().min(1)).optional(),
   connectorIds: z.array(z.string().min(1)).optional(),
   mcpIds: z.array(z.string().min(1)).optional(),
-  permissions: z.record(z.unknown()).optional(),
+  permissions: z.record(z.string(), z.unknown()).optional(),
   status: agentStatusEnum.optional(),
 });
 
@@ -95,7 +95,7 @@ export const createAgentGroupSchema = z.object({
   description: z.string().max(500).optional(),
   strategy: z.enum(['parallel', 'sequential', 'coordinator']),
   members: z.array(z.object({
-    agentId: z.string().uuid(),
+    agentId: z.string().guid(),
     roleInGroup: z.enum(['lead', 'worker']).default('worker'),
     executionOrder: z.number().int().min(0).default(0),
   })),
@@ -104,24 +104,24 @@ export const createAgentGroupSchema = z.object({
 export const createEntitySchema = z.object({
   entityType: z.string().min(1).max(100),
   name: z.string().min(1).max(200),
-  properties: z.record(z.unknown()).default({}),
+  properties: z.record(z.string(), z.unknown()).default({}),
   validFrom: z.string().datetime().optional(),
   validTo: z.string().datetime().optional(),
 });
 
 export const createRelationSchema = z.object({
-  sourceId: z.string().uuid(),
-  targetId: z.string().uuid(),
+  sourceId: z.string().guid(),
+  targetId: z.string().guid(),
   relationType: z.string().min(1).max(100),
   confidence: z.number().min(0).max(1).default(1.0),
-  properties: z.record(z.unknown()).default({}),
+  properties: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const createResourceSchema = z.object({
   resourceType: z.enum(['model_recipe', 'skill', 'tool_config', 'prompt_template']),
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 export const scheduledJobTypeSchema = z.enum(['chat', 'task', 'waggle', 'group']);
@@ -130,11 +130,11 @@ export const createCronSchema = z.object({
   name: z.string().min(1).max(200),
   cronExpr: z.string().min(1),
   jobType: scheduledJobTypeSchema,
-  jobConfig: z.record(z.unknown()).default({}),
+  jobConfig: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const queueJobSchema = z.object({
   jobType: z.enum(['chat', 'task', 'cron', 'waggle', 'group']),
-  input: z.record(z.unknown()),
-  teamId: z.string().uuid().optional(),
+  input: z.record(z.string(), z.unknown()),
+  teamId: z.string().guid().optional(),
 });

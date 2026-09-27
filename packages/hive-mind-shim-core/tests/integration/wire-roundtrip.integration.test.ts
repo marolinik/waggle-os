@@ -160,6 +160,6 @@ describe.skipIf(!cliReachable)('integration: cli-bridge ↔ hive-mind-cli round-
     await expect(bridge.callMcpTool('save_memory', {
       content: 'should fail',
       source: 'claude-code', // INVALID — must be one of the four provenance enum values
-    })).rejects.toThrow(/Invalid enum value/);
+    })).rejects.toThrow(/Invalid option/);
   }, TEST_TIMEOUT_MS);
 });
