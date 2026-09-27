@@ -218,14 +218,14 @@ export async function createAnthropicEvolutionLLM(
   if (!apiKey) return null;
   try {
     const mod = await import('@ax-llm/ax');
-    const AxAI = (mod as unknown as { AxAI: new (config: unknown) => unknown }).AxAI;
+    const AxAI = (mod as unknown as { AxAI?: { create(config: unknown): unknown } }).AxAI;
     const AxAIAnthropicModel = (mod as unknown as {
       AxAIAnthropicModel: Record<string, string>;
     }).AxAIAnthropicModel;
     if (!AxAI) return null;
 
     const model = options.model ?? AxAIAnthropicModel?.Claude45Haiku ?? 'claude-haiku-4-5-20251001';
-    const ai = new AxAI({
+    const ai = AxAI.create({
       name: 'anthropic',
       apiKey,
       config: { model },
