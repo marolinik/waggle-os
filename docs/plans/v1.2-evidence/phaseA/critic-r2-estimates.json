@@ -1,0 +1,79 @@
+[
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.3 tabela, redovi G3 (linije 439–441) i §4.1.1 red B3-PR2 (linija 403); prenos u WAGGLE-AUDIT-DISPOSITION-v1.2.md linije 14 i 187",
+  "problem": "NALAZ AUDITA — ZA PROVERU: sabirak „B3 izvršenje 5–15 rd wall-clock“ nema izvođenje (N × broj grana × t_task ÷ konkurentnost bench mašine) ni statusnu oznaku, a to je najveći pojedinačni ulaz u G3 kalendar (raspon 3×, ~2 nedelje razlike). Sestrinski dokument WAGGLE-BENCHMARK-PROTOCOL-DRAFT.md ga protivreči: §9.1 (linija 313) „brojevi su OPEN, Q-02“, §10.7 (linija 406) N „se meri u B2, ne pretpostavlja“, §7 (linija 295) trajanje B3 = „NEPOZNATO do Q-01/Q-02“. Plan ipak proglašava „aritmetika eksplicitna“ (linija 431) i disposition prenosi „14–21 / 15–24 nedelja“ kao izvedene brojke.",
+  "fix": "Označiti 5–15 kao PREDLOG/NEPOZNATO i dati formulu sa ulazima koje B2-PR0/B2 mere (t_task po grani, N iz BP-STAT-N, ≥3 grane po BP-CMP-01 minimumu, konkurentnost bench mašine); alternativno prikazati G3 kao „X nedelja + B3 wall-clock (NEPOZNATO)“ i isto preneti u disposition OD-8 i liniju 14.",
+  "severity": "HIGH"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.3 tabela, kolona „Ekspertski raspon kalendara“ (linije 437–441) i „Kontrola aritmetike“ (linija 443)",
+  "problem": "Datumi su preračunati i tačni (27.09.2026 = nedelja; +70 = 06.12.2026, +98 = 03.01.2027, +140 = 14.02.2027; 12–17 nedelja = 20.12.2026–24.01.2027). Problem je pravilo rd→nedelje: nije navedeno i primenjeno je nedosledno u smeru koji sužava raspon — G2 donja 33.5 rd → 7 (zaokruženo gore), G2 gornja 51 rd → 10 (10.2 zaokruženo dole); G3 (a) donja 17 rd → 4 (3.4 gore), G3 (b) donja 22 rd → 5 (4.4 gore). Dosledno zaokruživanje gornje granice naviše daje G2 +7–11 → kumulativno 10–15 (do 10.01.2027), a sve G3 gornje granice pomera +1 nedelja (14.02→21.02, 21.02→28.02, 07.03→14.03, 14.03→21.03).",
+  "fix": "Navesti pravilo (npr. donja granica floor, gornja ceil) i preračunati kolonu, „Kontrola aritmetike“ i petak (n−2) datume; uskladiti disposition OD-8 i liniju 14.",
+  "severity": "MED"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.3 red „G3 varijanta (b): B3 serijski“ (linija 441)",
+  "problem": "Varijanta (b) sabira samo B3 wall-clock 5–15 rd na 17–30, ali po sopstvenoj pretpostavci (bench mašina tek posle W7/W8) posle izvršenja ne ostaje posao za paralelizaciju, pa B3-PR2 (4.5–7.5 eng + 0.5 review, §4.1.1 linija 403) postaje serijski; u effort-bound 17–30 ušao je samo kao (4.5–7.5)÷(2.5–3.0) ≈ 1.5–3 rd. Pesimistička varijanta je time potcenjena ≈3.5–5 rd (≈1 nedelja): realno ≈ 25.5–50 rd → +6–10 nedelja, kumulativno ~16–24 umesto 15–23.",
+  "fix": "Prikazati (b) kao [ne-B3 G3 posao 37–52 ÷ 2.5–3.0] + B3 wall-clock + B3-PR2 (serijski, +review) + F3, sa B3-PR1 pre izvršenja; preračunati datume i disposition.",
+  "severity": "MED"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§5 tabela red F3 (linija 457) i tekst „planira se ne ispod S1 '3–4 dana'“ (linije 433, 460); §4.3 G3 redovi „F3 3–5“ (linije 439–441)",
+  "problem": "Tvrdnja „ne ispod S1“ cita samo per-freeze pretpostavku 3–4 dana (`S1_AUDIT.md:217`), a S1 je na sopstvenoj kritičnoj putanji za finalni freeze uzeo **5–8 rd** (`S1_AUDIT.md:221`: „final freeze 5-8“). F3 je najteži ciklus u planu (puni I+R+P+A+C na RC + notices/SBOM asserti + prvi C na packaged build-u posle F2), a procenjen je 3–5 rd — ispod S1 floor-a koji plan tvrdi da ne probija i ne veći od F2 (3–5).",
+  "fix": "F3 ≥ F2 i ≥ S1 5–8 rd (ili eksplicitno obrazložiti zašto je kraći, uz oznaku NEPOZNATO do F1 merenja); propagirati +2–3 rd u G3 gornje granice.",
+  "severity": "MED"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.1 red W7 (linija 352); linija 406 „W7 −16–13 / −5–5 = tri ekosistema manje −18–16/−6“; §4.3 G3 red „W7 serijski deo (PR2→PR3→PR4→PR6) 8–12 eng“ (linija 439); §4.1.1 (linije 361–404) bez W7",
+  "problem": "W7 je najveći G3 talas (10–14 AI) i ulazi u kalendar preko po-PR lanca (8–12 eng), ali §4.1.1 nema W7 raspodelu — lanac 8–12 nije izvodljiv iz dokumenta, a implicirani ostatak za PR1+PR5+PR7 = 2–2 eng iako je W7-PR7 ceo drugi sync izvor (kalendar). Odbitak −16–18 od S1 40–45 nije izveden po konektoru; S1 W7 (`S1_AUDIT.md:176`) = 4 konektora u 3 ekosistema (Google, Microsoft, Slack), plan zadržava 2 konektora/1 ekosistem → „tri ekosistema manje“ je pogrešno brojanje (2 ekosistema / 3 konektora manje). DIR-25 traži procenu iz jedinica rada, ne iz broja modula.",
+  "fix": "Dodati W7 red u §4.1.1 (PR1..PR7, klasično/AI), izvesti odbitak po konektoru (mail, calendar, ekosistem-nezavisni WorkItem/klasifikator/labeled set), ispraviti formulaciju u liniji 406 i uskladiti lanac u §4.3.",
+  "severity": "MED"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.1 red WB (linija 354) i linija 406 „WB −4 / −1 = inventar završen u phase-A“; §4.1 red W0 (linija 344) i §4.1.1 W0 grupa PR0+PR12+PR13+PR15+PR16 (linija 366)",
+  "problem": "S1 WB 18–24/8–11 (`S1_AUDIT.md:178`) obuhvatao je uklanjanje TRIAL/TEAMS/ENTERPRISE gate-ova (uklj. Approvals/cost unblockere, `S1_AUDIT.md:198`), Stripe freeze/migraciju, www pricing, `config.json` migraciju i KVARK connect. Plan (a) premešta Approvals/cost/audit de-gate u W0 (+ u W0-PR12) bez odbitka u WB → dupli obračun; (b) označava WB kao „bez Stripe migracije dok DQ-03…“ a numerički ne odbija Stripe/www; (c) „KVARK connect flow ostaje (+)“ nije kvantifikovano — sve suprotno pravilu iz linije 406 „brojčani udeo svakog dodatka/oduzimanja“, koje je primenjeno na sve ostale talase.",
+  "fix": "WB delte po stavci (de-gate premešten u W0 −, Stripe/www uslovno −, inventar −, KVARK connect ±) i preračun 14–20/7–10; ako Stripe/www ostaju u broju, ispraviti labelu „bez Stripe migracije“.",
+  "severity": "MED"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§3 kritična putanja (linija 332) „…moraju stići uz nju: … W3e-PR1..4“; §1 G2 exit (e) (linija 41); §5 F2 red (linija 456); W3e affected receipts (linija 196)",
+  "problem": "G2 exit (e) traži AT-04/05/29 (W3e-PR1..PR5), a F2 uključuje P receipt dok W3e-PR1 menja persona resolution („persona receipt obavezan“). §3 navodi samo W3e-PR1..4 kao obavezne uz putanju; ako W3e-PR5..PR8 uđu posle F2, P receipt se ponavlja (re-spin), a to nije uračunato ni u §4.3 ni u §5. Protokol §7 potvrđuje da W+evolved nije u minimumu B3, pa W3e nije zavisnost B2 — ali jeste zavisnost F2 zbog P receipt-a.",
+  "fix": "Eksplicitno: „svi W3e PR-ovi koji menjaju persona resolution merge-ovani pre F2“; pokazati da W3e lanac (9–12 eng + 8×0.5 review ≈ 13–16 rd; PR-ovi koji koriste `gate_passed` zavise od W1-PR7) staje u W1→W3 lanac od 26.5–35.5 rd.",
+  "severity": "LOW"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.2 red „Human review“, kolona G2 (linija 427): „~55–70 PR-ova ≈ 18–23 rd“",
+  "problem": "Iz §2 slicing-a G2 ima ≈54–56 PR-ova (W1 12 + W2 10 + W3 8 + W3e 8 + W4 PR1–PR4 + W5 PR1–PR2 + W6 PR1/2/3/6/7 + B1 1 + B2 3 + integracija 1–2); gornja granica 70 nema osnovu u dokumentu. Ne menja floor (23 < 33.5), ali odstupa od „iz jedinica rada“ i bez obrazložene rezerve.",
+  "fix": "Uskladiti sa brojem PR-ova iz §2 (≈54–56 → ≈18–19 rd) ili navesti rezervu (npr. „+20% za split-ove PR-ova“) kao eksplicitnu pretpostavku.",
+  "severity": "LOW"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.1 red W3, kolona „Razlog“ (linija 347): „cherry-pick aditivnih fajlova, 117 A-fajlova“",
+  "problem": "Na `2af0904d` (radno stablo == HEAD) `git diff --name-status --diff-filter=A main...origin/feature/harness-sota-bench` daje **113** dodatih fajlova (+ 8 M), isto i preko `git log --diff-filter=A` od merge-base-a; „2022 komita iza“ je tačno. Uticaj na procenu W3-PR8 (1–2 / 0.5) nema, ali brojka ne odgovara reviziji koju plan citira.",
+  "fix": "Zameniti sa „113 A + 8 M (merge-base vs `18e5b36a`)“ ili navesti komandu koja daje 117.",
+  "severity": "LOW"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§4.3 pretpostavke „5 radnih dana/nedelja … Bez eksplicitnih pauza“ (linija 433) i napomena o datumima (linija 443)",
+  "problem": "Kalendar teče kroz 24.12.2026–04.01.2027 bez ijednog reda za praznični period; G2 gornja granica pada na 03.01.2027 (poslednji radni dan 01.01.2027 = Nova godina). Brief §15.2 dozvoljava prikaz „pre dodatnih eksplicitnih pauza“, ali plan tu pauzu ni ne imenuje ni ne kvantifikuje, iako G2/F2 (receipt ciklus, B2 compute) padaju baš u taj prozor.",
+  "fix": "Dodati eksplicitan red „praznična pauza 24.12–04.01 (≈+1–2 nedelje) nije uračunata; ako se uračuna, G2 → 13.12.2026–17.01.2027 i sve G3 granice +1–2 nedelje“ ili je direktno uračunati.",
+  "severity": "LOW"
+ },
+ {
+  "file": "C:/Users/MARKOM~1/AppData/Local/Temp/claude/D--Projects-waggle-os/449d95c2-664a-4546-93ca-03448d462006/scratchpad/out/plans/WAGGLE-DELIVERY-PLAN-v1.2.md",
+  "where": "§3 graf G1 (linija 312) „WB-PR2/3 (KVARK RED + connect)“; §4.2 G1 „WB inventar/KVARK RED 2–3“ (linija 422) i „Human review“ G1 „+ WB-PR1/2/3“ (linija 427); §1 G1 exit (linija 40) vs G3 (f) (linija 42)",
+  "problem": "WB-PR3 (connect/disconnect/revoke ruta + SettingsApp) je u G1 po grafu i po broju PR-ova za review, ali G1 exit kriterijumi ne traže KVARK konekciju (traži je G3 (f), AT-26), a §4.2 G1 jedinice broje samo inventar + KVARK RED (PR1–PR2) dok ostatak WB (5–7) ide u G3. Nije jednoznačno gde je WB-PR3 trošak i u kojoj kontrolnoj tački se dokazuje.",
+  "fix": "Jednoznačno dodeliti WB-PR3 (G1 ili G3) u §1, §3 i oba reda §4.2; ako ostaje u G1, dodati u G1 exit listu i u G1 jedinice rada.",
+  "severity": "LOW"
+ }
+]

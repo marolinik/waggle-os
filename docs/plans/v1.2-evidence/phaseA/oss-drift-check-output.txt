@@ -1,0 +1,73 @@
+CANONICAL 2af0904df01ca3d374cc78ba95b60dc579dd6a7a dirty D:\Projects\waggle-os
+OSS 77c6dd7f8c36e333f2de859e4f4d7818b03e667a clean D:\Projects\hive-mind
+PARITY: 5
+REVIEWED ADAPTATIONS: 36
+  harvest/chatgpt-adapter.ts [branding,import,logger]
+  harvest/chunk-utils.ts [import,layout]
+  harvest/claude-adapter.ts [branding,import,logger]
+  harvest/extract-memory-lanes.ts [import]
+  harvest/gemini-adapter.ts [branding,import,logger]
+  harvest/index.ts [import,layout]
+  harvest/markdown-adapter.ts [branding,import,logger]
+  harvest/pdf-adapter.ts [branding,import,logger]
+  harvest/perplexity-adapter.ts [branding,import,logger]
+  harvest/plaintext-adapter.ts [branding,import,logger]
+  harvest/prompts.ts [branding]
+  harvest/raw-types.ts [import,layout]
+  harvest/run-store.ts [import,logger]
+  harvest/source-store.ts [import,logger]
+  harvest/types.ts [import,layout]
+  harvest/universal-adapter.ts [branding,import,logger]
+  injection-scanner.ts [layout]
+  logger.ts [branding,logger]
+  memory-ingress-guard.ts [import]
+  mind/api-embedder.ts [branding,import,logger]
+  mind/awareness.ts [import,logger]
+  mind/chunker.ts [import]
+  mind/concept-tracker.ts [import,logger]
+  mind/content-hash.ts [import]
+  mind/embeddings.ts [import,logger]
+  mind/entity-normalizer.ts [import]
+  mind/fts-sanitize.ts [import]
+  mind/litellm-embedder.ts [branding,import,logger]
+  mind/ollama-embedder.ts [branding,import,logger]
+  mind/ontology.ts [import]
+  mind/parse-date-window.ts [import]
+  mind/recall-context.ts [import,logger]
+  mind/reconcile.ts [import,logger]
+  mind/resolve-relative-date.ts [import]
+  mind/scoring.ts [import]
+  mind/sessions.ts [import,logger]
+INTENTIONAL OSS EXCLUSIONS: 3
+  mind/evolution-runs.ts
+  mind/execution-traces.ts
+  mind/improvement-signals.ts
+KNOWN REVIEWED BLOCKERS: 22
+  harvest/dedup.ts (different; reconcile)
+  harvest/extract-kg-entities.ts (only-canonical; reconcile)
+  harvest/pipeline.ts (different; reconcile)
+  harvest/url-adapter.ts (different; reconcile)
+  hook-runtime.ts (only-canonical; product-curation)
+  index.ts (different; reconcile)
+  mind/db.ts (different; reconcile)
+  mind/embedding-provider.ts (different; reconcile)
+  mind/frames.ts (different; reconcile)
+  mind/identity.ts (different; reconcile)
+  mind/inprocess-embedder.ts (different; reconcile)
+  mind/knowledge.ts (different; reconcile)
+  mind/llm-extractor.ts (only-oss; reconcile)
+  mind/raw-archive.ts (different; reconcile)
+  mind/raw-detail-lane.ts (different; reconcile)
+  mind/schema.ts (different; reconcile)
+  mind/search.ts (different; reconcile)
+  mind/supersede.ts (only-canonical; product-curation)
+  mind/suppression.ts (different; reconcile)
+  multi-mind-cache.ts (different; reconcile)
+  multi-mind.ts (only-canonical; product-curation)
+  workspace-manager.ts (different; reconcile)
+UNREVIEWED DIFFERENCES: 3
+  BASELINE-DRIFT harvest/url-egress-guard.ts reviewed adaptation bytes changed (different)
+  BASELINE-DRIFT mind/transformers-model-load.ts reviewed adaptation bytes changed (different)
+  harvest/raw-turns.ts (different)
+FORBIDDEN EXPORTS: 0
+[oss-drift-check] release blocked: reconcile in the canonical monorepo, then use a curated forward-port; never publish a raw split.
