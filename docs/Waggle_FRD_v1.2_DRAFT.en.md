@@ -1,0 +1,801 @@
+# Waggle — Functional Requirements Document (FRD) v1.2 DRAFT
+
+> **English translation** of [Waggle_FRD_v1.2_DRAFT.md](Waggle_FRD_v1.2_DRAFT.md) (Serbian original, same folder). The Serbian original is authoritative; report any discrepancy. Dates are written DD.MM.YYYY; "wd" means working days.
+
+**Document revision: 1.2 DRAFT · 27.09.2026 · reviewed code revision 2af0904df01ca3d374cc78ba95b60dc579dd6a7a**
+
+**DOCX export (brief §20.1 requires `.md` + DOCX):** delivered 28.09.2026 — `Waggle_FRD_v1.2_DRAFT.docx` (and `Waggle_PRD_v1.2_DRAFT.docx`) in `docs/`, generated from this `.md` with the command `pandoc -f gfm-tex_math_dollars-tex_math_gfm Waggle_FRD_v1.2_DRAFT.md -o Waggle_FRD_v1.2_DRAFT.docx` (`pandoc 3.9` on the host; the source is written as GFM; `$` math is disabled so that amounts such as "$49/seat" remain text). The `.md` remains the source of truth; the SHA-256 hashes of both `.md` files and both `.docx` files are recorded in `plans/WAGGLE-DELIVERY-PLAN-v1.2.md` §6.1 and in OD-9 of `plans/WAGGLE-AUDIT-DISPOSITION-v1.2.md` §5 (the hash of an `.md` file cannot be stored in the file itself). Any later change to this `.md` makes the DOCX stale: before handover, the hash is checked and the export is repeated with the same command. — CONFIRMED on the host (28.09.2026; a property of the package, not of the code revision).
+
+> Implementation contracts for the agreed Waggle mental model (brief §4). This is a draft: none of the contracts below is implemented, approved for implementation or verified by a test, except where a row is marked **CONFIRMED AT REVISION** (existing behavior read at `2af0904d`) or **ALREADY CLOSED** (an S1 claim already resolved at that revision). The working basis for delivery is **G1 → G2 → G3** (brief §5.1); the "ship current main first" option from S1 §5 is not the basis of this document.
+>
+> **Status convention (mandatory on every claim; aligned with PRD v1.2 "How to read"):** DECISION (**only** explicit user decisions D-01..D-18 from brief §3; not reopened; the prohibitions from DIR-01 are the authority boundary of this pass, not a product direction) · HISTORICAL FOUNDER DECISION (memory, date) — aligned with D-xx / the direction of the brief (a founder record from project memory before 27.09.2026 — "L2 assist stays TOOLLESS" 2026-06-29 → brief §11.5/C15; isolation of personal/workspace minds 2026-06-12 → D-12; brief §2.1 and §21: not a D authority, valid only through a cited D or brief basis) · PROPOSAL — BRIEF DIRECTION (DIR-nn / §17 Cn / §18 An / §19 Rn / brief §k: a planning direction or a resolution by the brief's author adopted as the working basis of the draft; brief §1 and §2.1 row P do not classify it among user decisions, so it is **never** labeled DECISION — the earlier label "DECISION (DIR/C/A/R/brief §)" was abolished by this pass) · CONFIRMED AT REVISION (read at `2af0904d`, working tree == HEAD) · AUDIT FINDING — TO VERIFY (a claim from S1/phase A that requires execution/repro) · PARTIAL/UNWIRED (exists, but is not wired or covers only part) · PROPOSAL (a proposed contract, not approved) · DEFERRED · UNKNOWN · ALREADY CLOSED.
+>
+> **ID convention:** `FRD-<sekcija>.<redni>` (e.g. `FRD-02.4`). References to phase A findings: `F-HARN-*`, `F-DUR-*`, `F-HM-*`, `F-EVO-*`, `F-CAP-*`, `F-UXM-*`, `F-TK-*`, `F-REL-*`, `EXT-*` (external.md §0 ordinal number). All `path:line` references are at revision `2af0904d`; phase A confirmed `git status --porcelain` = only two untracked `.docx` files in `docs/`, so the working tree == HEAD for every cited file. Paths corrected per the refute pass (e.g. `system-tools.ts`, `tool-executor.ts` are in `packages/agent/src/`, not in `packages/server/src/local/`; `budgetStopResponse` is `packages/agent/src/agent-loop.ts:895`).
+>
+> **Date arithmetic:** 12–17 calendar weeks from 27.09.2026 = **20.12.2026–24.01.2027** (brief §15.2). This FRD does not give an estimate; the estimate is in the Delivery plan.
+
+---
+
+## Contents
+
+1. Layers and boundaries
+2. Data contracts (+ compatibility map with existing types)
+3. Run creation order (8 steps)
+4. State machine, lease and fencing
+5. Harness engine: gates, server-observed evidence, budget stop, CONDITIONAL policy
+6. Capability resolver and permission envelope
+7. Hive Mind context loop
+8. Evolution pipeline
+9. Attention / WorkItem and Routines
+10. Model readiness and hardware ladder
+11. Surfaces: desktop, IM companion, worker boundary
+12. Security, privacy, egress
+13. Observability and benchmark manifest
+14. Migrations (pointer)
+15. Acceptance tests AT-01..AT-30
+16. Traceability PRD → FRD
+Sources
+
+---
+
+## 1. Layers and boundaries
+
+The layers are the same as in FRD v1.1 §1, but each row now carries the state at the revision and what changes in v1.2. "A layer exists" is not evidence of an E2E function.
+
+| ID | Layer | State at `2af0904d` | What v1.2 contracts | Status |
+|---|---|---|---|---|
+| FRD-01.1 | **User layer:** Home (What Needs Me / My Work / Routines / Ask Waggle), Workspace (sessions/tabs, files, memory, artifacts, long-running work), Memory Center, Settings/Advanced | `HomeCockpit.tsx:902-1046` has AskBar, RecallStrip, StartHere, OvernightHero, "Pick up where you left off"; there is **no** Routines block and no unified WorkItem list (F-UXM-13). The sidebar is two-layer, but "New Agent" is visible on every tier and the ⌘K "Power tools" are not tier-gated (F-UXM-08/15). | Keep the existing components (D-07, DIR-16); add a Routines block on top of the existing `CronStore`/`/api/automations`; Work Progress as an extension of the SSE `step` channel (§11). No new UI rewrite. | DECISION (D-07, D-08, D-09) + CONFIRMED AT REVISION (state) + PROPOSAL (additions) |
+| FRD-01.2 | **Execution layer:** work classification, recipe/version selection, harness engine, durable run engine, proof-of-done | `detectTaskShape` (`task-shape.ts:145`) works, but does not select the harness; the harness is selected by the model through `run_harness`/`compose_workflow` text (F-HARN-09); there is no server-driven phase executor (F-DUR-13); `activeHarnessRuns` is an in-memory Map (`workflow-tools.ts:447`). | The server becomes the authority for: run identity, recipe selection, phases, gates, checkpoint, proof (DIR-04/05/07). The model submits only `content`. | CONFIRMED AT REVISION (state) + PROPOSAL (contract) |
+| FRD-01.3 | **Capability layer:** native tools, skills (active/inactive/starter/marketplace), connectors, MCP | At least 4 independent engines without a facade (F-CAP-11); none of them filters by permissions before ranking (F-CAP-01). The install path is already bounded: starter-pack and marketplace proposal behind `install_capability` ALWAYS_CONFIRM + SecurityGate (F-CAP-06). | One resolver **contract** (facade), not a physical merge of the engines (DIR-11); permissions first, lane order as a tie-breaker (§6). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-01.4 | **Memory layer:** Hive Mind (`recallMemory` 7 lanes + RAWDETAIL), hooks, memory MCP, Weaver, extraction | The `orchestrator.ts:582-978` engine exists and has pin tests (F-HM-09); zero occurrences of `ContextPackage`/`ContextBuilder`/`WAGGLE_CONTEXT_INJECTED` (F-HM-08); 4 places write the workspace run summary into the personal mind (F-HM-05). | Wrap the existing retrieval in a typed `ContextPackage` contract without a new engine (DIR-09, D-12); close the isolation gaps; a snapshot does not override deletion. | DECISION (D-12) + CONFIRMED AT REVISION + PROPOSAL |
+| FRD-01.5 | **State layer (execution state):** runs, checkpoints, retries, grants, leases, budgets | `agent-runs.json` whole-file JSON store (F-DUR-02); `pending_actions` SQLite table (F-DUR-05); cron leases without fencing (F-DUR-10); Loop cross-tick state in the Awareness layer of the personal `.mind`, and it **enters recall** through `toContext()` (F-DUR-09, refute HOLDS+). | A canonical run store separate from semantic memory (brief §8.2). The store choice (SQLite `runs.db` vs the existing one) goes through Build-vs-Borrow (§14, A8, EXT-7: there is no drop-in engine; Reflow is the closest, bus factor 1). | CONFIRMED AT REVISION + PROPOSAL (store = ADR (2)) |
+| FRD-01.6 | **KVARK boundary:** the organizational world comes in through connection, without personal memory spilling over | `createKvarkTools` has 0 production callers; `KvarkClient` is never instantiated; `kvark:connection` is only read; Settings fields without handlers; gate on `tier === 'ENTERPRISE'` instead of on the connection (F-TK-11). `handleKvarkError` has no cloud fallback (F-TK-12, good for D-03). | Connect/validate/revoke contract; gate on a live connection; no-sharing default (§11, §12). Not a Waggle Team SKU (D-02). | DECISION (D-02, D-03) + CONFIRMED AT REVISION + PROPOSAL |
+| FRD-01.7 | **Cross-cutting layers:** permissions/provenance on every action; observability; learning/evolution as a proposer of verified changes | The approval stack exists and is tested (F-CAP §2 row 6); `HarnessTraceBridge` writes `verified` for every completed phase (F-HARN-06); the evolution deploy persona override is shadowed (F-EVO-01). | Three verification levels (§5.4), trace qualification (§13), active-version pointer (§8). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-01.8 | **Modes:** interaction kind `conversation`/`work` × execution mode `normal`/`strict`/`benchmark` (DIR-03) | No explicit mode exists; `detectTaskShape.complexity === 'simple'` is used only for a single check in `chat.ts:746` (F-HARN-09). | The mode is the `DurableRun.mode` field (§2) and **never expands permissions**; the latency budget per task shape is measured, not assumed (brief §6.1). Concrete thresholds: UNKNOWN until baseline measurement. | PROPOSAL — BRIEF DIRECTION (DIR-03) + PROPOSAL |
+
+**FRD-01.9 — What this FRD does not contract:** Fusion/council/5-hats — DECISION (D-16); a new mobile application, all mail/chat ecosystems, arbitrary graph/topology evolution, a large coding program and a complete restructuring of the Team server — PROPOSAL — BRIEF DIRECTION (§5.2; a planning direction, not a user decision — D-16 covers only Fusion). The native coding path is preserved and **qualified** (C17 "PRESERVE, QUALIFY", R06) — CONFIRMED AT REVISION: the native `code-review-fix` harness exists (`packages/agent/src/builtin-harnesses.ts:138` `id: 'code-review-fix'`, phases understand → review → fix → verify), and its verify gate passes on **any** `bash`/`run_command` call without reading the exit code (`builtin-harnesses.ts:181` `hasToolCalls(output, ['bash','Bash','run_command'], 1)`; F-HARN-03, AT-02, W0-PR3; the same state is reported by PRD-04-03, FRD-05.2 and disposition C17/R06). The E2E **quality** of the native and external (Claude Code/Codex/Hermes via route-proposals) coding paths = UNKNOWN (not executed in phase A; a public coding comparison only after the KW study, R06).
+
+---
+
+## 2. Data contracts
+
+All fields below are a **contract PROPOSAL** (brief §6.3), except where a row is marked as an existing type. Names are adapted to existing symbols where they exist; the compatibility map is in §2.12. No payload may contain secrets (brief §6.3, RunEvent).
+
+### FRD-02.1 — `DurableRun` — PROPOSAL
+
+| Field | Type / semantics | Compatibility note |
+|---|---|---|
+| `runId` | stable UUID, created before any side effect (§3 step 3) | `CollaborationRun.id` from `AgentRunRegistry` is an existing candidate for the same identity; the harness `run_id` from `workflow-tools.ts:374` is currently created **after** classification, in-memory (F-HARN-07, F-DUR-13) |
+| `workspaceId`, `sessionId` | mandatory; personal scope = an explicit value, not a `null` default | `external-tool-runs.ts:964-977` and 3 other places currently write into personal without an explicit scope (F-HM-05) |
+| `requestFingerprint` | hash (user, workspace, normalized intent, source channel, occurrence id if it is a routine) | prevents duplicate run creation on a client retry; it is **not** the deduplication key for external actions (that is `actionId`, §2.4) |
+| `interaction` | `'conversation' \| 'work'` | DIR-03 |
+| `mode` | `'normal' \| 'strict' \| 'benchmark'` | never expands permissions (brief §6.1) |
+| `status` | canonical (§4.1) | map to `CollaborationRunStatus` in §2.12 |
+| `recipeId`, `recipeVersion` | reference to `HarnessRecipeVersion` (§2.11) | the existing `harnessId` (`builtin-harnesses.ts`) is a template, not a version |
+| `modelRef`, `runtimeRef` | `{ provider, modelId, quant?, runtimeVersion? }` recorded at creation; pinned for the life of the run | AT-04 "an existing run stays on the pinned version" |
+| `budget` | `{ limit: { tokens?, usd?, wallClockMs? }, spent: { tokens, usd, wallClockMs } }` | `spent` is stored in every Checkpoint (A10, F-DUR-07: currently per-run metrics enter the registry only at the end, `fleet-run-executor.ts:746-766`) |
+| `permissionEnvelope` | snapshot of the intersection of constraints (§6.2) at creation + version | recomputed after a grant (§3 step 6) |
+| `contextRef` | `{ packageId, version, hash }` → `ContextPackage` (§2.7) | the only durable context reference today is `briefHash` in `attribution` (F-HM-18) |
+| `cursor` | `{ phaseId, attemptNo, lastCheckpointId }` | `HarnessRunState.currentPhase` (`workflow-harness.ts:110-128`) is the existing shape |
+| `interruptReason` | `string \| null` — mandatory when the status enters `FAILED_RETRYABLE`/legacy `interrupted` | currently only `result.error = 'Waggle restarted before this run finished'` (F-DUR-01) |
+| `createdAt`, `updatedAt`, `completedAt` | ISO 8601 UTC | — |
+| `schemaVersion` | integer | `agent-runs.json` has `version: 1` and silently drops the store on a mismatch (F-DUR-02 → migration §14) |
+
+### FRD-02.2 — `PhaseAttempt` — PROPOSAL
+
+`{ runId, phaseId, attemptNo, inputRefs[], startedAt, endedAt, observedToolCalls[] (server ledger), artifactRefs[], gateResults[], verdict?, endReason: 'gates_passed' | 'gates_failed' | 'aborted' | 'budget_stop' | 'cancelled' | 'crashed' | 'skipped_by_policy' }`.
+- `observedToolCalls` are populated **exclusively** from the server ledger (`chat-agent-run.ts:214-225 onToolResult`, `TurnToolActivity`), not from `phase_output.tool_calls` (F-HARN-08, DIR-07). Transitionally: mark the existing `PhaseOutput.toolCalls` as `selfReported: true`; in `strict` mode the gate rejects self-reported evidence.
+- `skipped_by_policy` must carry a reason and **must not** produce `COMPLETED` without a marker in the ProofReceipt (F-HARN-01: currently `getRunSummary` writes `**Status:** Completed` alongside `| Verify | SKIP |`).
+- Map to the existing `PhaseStatus` (`workflow-harness.ts:23`): `pending|active|validating|passed|failed|skipped` → `PhaseAttempt` is an instance of an attempt; `skipped` becomes `endReason: 'skipped_by_policy'` + `verdict: null`.
+
+### FRD-02.3 — `Checkpoint` — PROPOSAL
+
+`{ checkpointId, runId, phaseId, attemptNo, boundary: 'phase_confirmed', phaseResultRef, artifactRefs[] (sa sha256), evidenceRefs[], contextRef (packageId+version+hash), budgetSpent, nextCursor, schemaVersion, createdAt }`.
+- The recovery boundary is the **phase** (DIR-05, A6). The existing `CheckpointStepState` (`long-task/checkpoint.ts:63-97`, `schema_version`, `cost_usd`, `run_id`, `step_index`) has step granularity; it may be kept **below** the phase boundary as an internal detail (F-DUR-04: `CheckpointStore`/`RecoveryRunner` have 0 production callers except the optional `retrieval-agent-loop.ts:153`; an asset for ADAPT).
+- The artifact hash confirms content, not business correctness (brief §6.3).
+- Atomicity applies to a confirmed transaction in the run store; for external boundaries (email, filesystem, `.mind`) plan idempotent linking/outbox (brief §6.3). Status: PROPOSAL.
+
+### FRD-02.4 — `ToolAction` and `ToolAttempt` — PROPOSAL (DIR-06, correction of S1 A7)
+
+| Object | Fields | Rule |
+|---|---|---|
+| `ToolAction` | `actionId` (server-persisted, stable across retries), `runId`, `phaseId`, `toolName`, `argsFingerprint`, `sideEffectClass: 'none' \| 'local_write' \| 'external_send' \| 'install' \| 'payment'`, `grantRef`, `status`, `providerIdempotencyKey?`, `occurrenceId?` (routines), `createdAt` | `actionId ≠ attemptId ≠ providerIdempotencyKey`. A new `actionId` **must not** be a shortcut around an unresolved previous attempt of the same action. Identical arguments are not a sufficient reason for dedup: two approved routine occurrences legitimately send two similar reports (brief §6.5). |
+| `ToolAttempt` | `attemptId`, `actionId`, `attemptNo`, `startedAt`, `endedAt`, `observed: { ok, exitCode?, durationMs, resultDigest }`, `receipt?` | one execution attempt; `observed` from the server ledger |
+| `ToolAction.status` | `planned → approved → dispatching → succeeded \| failed \| unknown_outcome` | `dispatching` is written **before** `tool.execute`; `unknown_outcome` when the process crashes after provider success but before the local ack → first provider state/receipt or a user check; **no blind retry** for a non-idempotent service (AT-08) |
+
+- The existing `PendingActionStatus` (`cron-store.ts:88`: `held|approved|denied|executed|failed|expired`) and the atomic claim `held→approved` (`held-action-executor.ts:154-160` → `cron-store.ts:551-556`) are the **BORROW** starting point (F-DUR-05 HOLDS): closer to DIR-06 than the S1 proposal `runId+phaseId+attempt+callIndex`. Missing: `dispatching`, `unknown_outcome`, a separate `attemptId`, `providerIdempotencyKey` (grep 0). A crash between `tool.execute` (`:233`) and `updatePendingActionResult` (`:235`) leaves the row `approved` forever — CONFIRMED AT REVISION.
+- Map: `held→planned`, `approved→approved`, `denied→(terminal, nema ToolAttempt)`, `executed→succeeded`, `failed→failed`, `expired→(terminal)`. Widening the union: check for a `switch` without a `default` (refute F-DUR-05: there are none in non-test code; `ApprovalsApp.tsx:182,301` filters by `source`, not by status).
+
+### FRD-02.5 — `RunEvent` — PROPOSAL (A9, A11)
+
+`{ runId, seq (monotono po run-u), phaseId?, attemptNo?, type, label (user-facing), status: 'running' | 'done' | 'failed' | 'blocked' | 'cancelled', evidenceRefs[], at }`. No secrets in the payload.
+- Reconnect: `GET .../stream?sinceSeq=` or a compatible equivalent; replay does not duplicate text/cards/actions (AT-10). The existing `GET /api/agent-runs/events?since=` with `resetRequired` (`routes/agent-runs.ts:20-22,73-84`, `agent-run-registry.ts:243-257`) is a compatible equivalent **for run status**, not for chat text; chat SSE has no `sinceSeq`/`Last-Event-ID` (grep 0 in `packages/server/src`) — CONFIRMED AT REVISION (F-DUR-06).
+- Per-run bus: `harnessEvents` is a process-global `EventEmitter` without `runId` in its payloads (`workflow-harness.ts:132,169-207`) — CONFIRMED AT REVISION (F-HARN-07, F-DUR-08). Minimal G1 change: additive `runId` (+`workspaceId`,`sessionId`) in all three payload types; the bridge test uses `toContain`, so an additive field does not break it (refute F-DUR-08).
+- The web `StepContentBlock` (`apps/web/src/lib/types.ts:575-586`: `status: 'running' | 'done'`, `provenance?`) is extended additively: `runId`, `phaseId`, `status` + `failed|blocked`, `evidenceRefs` (F-UXM-11).
+
+### FRD-02.6 — `ProofReceipt` — PROPOSAL (brief §7.2, three levels)
+
+```
+ProofReceipt {
+  receiptId, runId, subject: { kind: 'artifact'|'phase'|'run', ref },
+  level: 'structural' | 'defined_elements' | 'content_review',
+  verifierVersions: { validators: Record<name, version>, grader?: { model, version, promptHash } },
+  observedEvidence: EvidenceRef[],           // iz server ledger-a / validatora
+  mandatoryGates: GateOutcome[], optionalGates: GateOutcome[],
+  verdict: 'PASS' | 'CONDITIONAL' | 'FAIL' | 'NOT_RUN',
+  warnings[], unresolved[],
+  qualification: 'qualified' | 'legacy_unqualified',
+  createdAt
+}
+```
+- **Not a general seal of truthfulness.** Level 1 confirms that the DOCX exists/parses/has sections and that a tool finished with an observed status — not that the conclusions are correct. Level 2 confirms amounts/dates/citations/references against the designated sources. Level 3 is a rubric for completeness/faithfulness — not a mathematical guarantee (brief §7.2).
+- `COMPLETED` in `strict` mode requires a receipt with all `mandatoryGates` PASS or a recipe-defined CONDITIONAL policy (§5.5).
+- Map to `TraceOutcome` (`execution-traces.ts:20`: `success|corrected|abandoned|verified|pending`): `verified` is currently written only by `HarnessTraceBridge`, for **every** completed phase (`harness-trace-bridge.ts:91`) — CONFIRMED AT REVISION (F-HARN-06, F-EVO-12). v1.2: a completed phase = `gate_passed` (structural), `verified` reserved for a receipt of level ≥2. **Warning from the refute pass:** `outcome` has an SQL `CHECK` in two places (`execution-traces.ts:150-151`, `mind/schema.ts:242-243`) → adding `gate_passed` is a table-rebuild migration (§14), not a type edit; the alternative without a schema change = `tags[]` + eval filter — PROPOSAL, a decision for the ADR authors.
+
+### FRD-02.7 — `ContextPackage` — PROPOSAL (brief §8.1, DIR-09)
+
+`{ packageId, version, runId, workspaceId, sessionId, query, taskShape, sources: [{ frameId|fileRef, revision|hash, scope: 'personal'|'workspace:<id>'|'file', provenance: FrameSource, trust: 'user_stated'|'tool_verified'|'agent_inferred'|'import'|'system', taint: 'none'|'external'|'harvested' }], tokenBudget, priorityOrder[], executorPayload: { mode: 'references'|'inline', text? }, omitted: [{ ref, reason }], hash }`.
+- A wrapper over the existing `recallMemory` (`orchestrator.ts:582-978`, 7 lanes + RAWDETAIL, 4 callers) — the engine does not change (D-12, F-HM-09).
+- Precedent for `hash` and redaction: `ExecutorBrief` (`executor-brief.ts:29-36`: `briefHash`, `blocked`, cap 8000 characters/6 items, `redactSecrets`, injection scan) — CONFIRMED AT REVISION (F-HM-11). Used only on the route-proposal path; `/api/tools/run` and the interactive launch do not attach a brief (PARTIAL/UNWIRED).
+- `trust` comes from `FrameSource` (`frames.ts:28`); it is currently not rendered in the recall block (`orchestrator.ts:843,854` = `[date, importance] content`) — CONFIRMED AT REVISION (F-HM-06); adding it changes the bytes of the recall block → requires a LoCoMo same-judge control (W2 risk), not a quick fix.
+- `tokenBudget`: currently assembler-level `FRAME_LIMITS` small 3/mid 6/frontier 10 (`prompt-assembler.ts:165-169`) and `DEFAULT_MAX_CHARS = 32_000`; the multi-lane block is a single section, so per-tier limits are not applied to the lanes (F-HM-07, PARTIAL/UNWIRED).
+- **Snapshot ≠ deletion override:** on resume every `sources[]` reference is resolved again; deleted/revoked/rescoped → `omitted` + `RunEvent(status:'blocked')` + a request for a new resolution (AT-15). Currently no checkpoint↔context link exists, and therefore no invalidation either (F-HM-18).
+
+### FRD-02.8 — `CapabilityRequest` — PROPOSAL (brief §9.3, C14 new ADR)
+
+`{ requestId, runId, workspaceId, sessionId, proposedCapability: { kind: 'skill'|'connector'|'mcp'|'marketplace', id, authType?: 'api_key'|'bearer'|'oauth'|'none' }, scope[], reason (šta nedostaje, zašto, posledica), state: 'proposed'|'awaiting_user'|'setup_in_progress'|'granted'|'declined'|'expired', expiresAt, oauthState?: { nonce, callbackOrigin, pkce?: true }, createdAt }`.
+- Durable; survives restart. The existing `CapabilityProposalStore` (`capability-proposals.ts:19-35`: in-memory `Map`, TTL 10 min, max 256, `workspaceId+sessionId`, `state: pending|confirming|used|expired`) is the starting point, but it has no notion of a run and does not survive restart — CONFIRMED AT REVISION (F-CAP-02). The card renders only `starter-pack`/`marketplace`; connector/mcp → `return null` (`CapabilityRequestCard.tsx:94-99`).
+- OAuth: `pendingStates` is an in-memory `Map<state,{provider,createdAt}>` without run binding; there is no PKCE (grep 0) (`oauth.ts:64-65,138-139,200-209`) — CONFIRMED AT REVISION. v1.2: state/nonce bound to `requestId`, callback origin checked server-side, PKCE where applicable, a closed window/expired grant/callback for a different request ≠ successful authorization (AT-11). The `SetupCompleted` event is bound to `requestId`; **the model does not see the token**.
+- MCP binary/remote marketplace installations: proposal inline, installation in Settings with SecurityGate (R11) — already in effect at the revision (F-CAP-06: `installer.ts:392` refuses without `forceInsecure`; `forceInsecure` comes from the client body, with an audit) — CONFIRMED AT REVISION; `THREAT_MODEL.md` exists at the repo root (CONFIRMED AT REVISION; it does not cover the inline install boundary, MCP binary install, the egress profile or PostHog → an addendum is missing, ADR-10-P6); "no secrets in prompts/traces" test: UNKNOWN/not found.
+
+### FRD-02.9 — `WorkItem` — PROPOSAL (brief §11.4, DIR-18)
+
+`{ workItemId, type: 'Action'|'Commitment'|'Decision'|'Signal', status: 'new'|'seen'|'snoozed'|'dismissed'|'converted'|'linked', provenance: { channel, sourceId, threadId?, fetchedAt, taint: 'harvested' }, sourceTime, workspaceId?, confidence, priorityReason, userCorrection?: { originalType, correctedType, at }, mergedFrom[] (reverzibilno), dueAt?, createdAt }`.
+- Grep `convert.?to.?work|WorkItem|toWorkItem` in `packages/server/src` and `apps/web/src` = 0 → the feature does not exist (F-CAP-05c; W7 net-new) — CONFIRMED AT REVISION.
+- A WorkItem is **not** an instruction to the agent; convert-to-work creates a `DurableRun` with `taint` in the `permissionEnvelope` — no external effect without approval (AT-19).
+- Dedup/merging only with sufficient evidence; an incorrect merge is reversible (`mergedFrom`). Precision/false-positive thresholds are locked before final scoring (AT-24) — UNKNOWN until a labeled set exists.
+
+### FRD-02.10 — `RoutineOccurrence` — PROPOSAL (brief §11.5, DIR-19)
+
+`{ occurrenceId, scheduleId, scheduledFor (ISO UTC), timezone, firedAt, policyApplied: 'on_time'|'catch_up_one'|'skipped_misfire', runId?, budgetRef, resultChannel }`.
+- The executor currently receives only `schedule` (`cron.ts:19`), without an occurrence id — CONFIRMED AT REVISION (F-DUR-10). Candidate for `occurrenceId` = `cron_execution_history.id` or `lease.id`.
+- See §9 for misfire/DST/fencing and for the AUDIT FINDING about the `next_run_at` format.
+
+### FRD-02.11 — `HarnessRecipeVersion` — PROPOSAL (DIR-14, A18)
+
+`{ recipeId, version, parentVersion?, target: 'persona-system-prompt'|'behavioral-spec-section'|'skill-body'|'recipe-variant', mutations[], invariants: { scope, egressDenylist, approvals, budgetCap, mandatoryGates, contaminationBoundary, successDefinition } (nepromenljivi), evalMetrics: { train, validation }, holdoutMetrics: { n, metric, ci, holdoutViews }, promotionPolicyRef, promotionState: 'proposed'|'accepted'|'rejected'|'deployed'|'rolled_back'|'failed'|'written_not_active', activeFrom?, activeUntil?, rollbackTarget?, executorManifest: { executorModel, judgeModel, runtime }, createdAt }`.
+- The existing `EvolutionRunStatus` (`evolution-runs.ts:23-28`: `proposed|accepted|rejected|deployed|failed`) with an SQL `CHECK` (`:95-96`) — has no `rolled_back` (F-EVO-02) → table-rebuild migration (§14). `deployed` is set as soon as the `deploy` callback does not throw (`evolution-runs.ts:192-201`), without an activation check (F-EVO-10) → new state `written_not_active`.
+- The `recipe-variant` target does not exist in the code (`EvolutionTarget`, `iterative-optimizer.ts:88-93`) — the bounded registry from DIR-14 is net-new (§8.5).
+
+### FRD-02.12 — Compatibility map: existing types ↔ canonical contracts
+
+| Existing symbol (`2af0904d`) | Canonical v1.2 contract | Map / rule | Status |
+|---|---|---|---|
+| `COLLABORATION_RUN_STATUSES` (`packages/shared/src/types.ts:398-402`): `queued, starting, running, waiting_for_approval, paused, cancelling, completed, failed, cancelled, interrupted` | `DurableRun.status` (§4.1) | `queued→QUEUED`; `starting\|running→RUNNING`; `waiting_for_approval→BLOCKED_APPROVAL`; `cancelling→` transitional (keep; not a canonical state); `completed→COMPLETED`; `cancelled→CANCELLED`; `failed→FAILED_FINAL` until a retryable/final classification exists; `interrupted→` legacy: preserves `interruptReason`, resume only through an explicit API that validates the checkpoint (becomes neither COMPLETED nor unconditionally RUNNING); `paused→ODLOŽENO` (no suspension primitive: `capabilities.pause/resume = true` 0 setters; fleet `pause` is `AbortController.abort`, not suspension — refute F-DUR-03). **Do not delete values from the enum**: the zod enum `routes/agent-runs.ts:15`, `RoomApp.tsx:51-66`, `routes/agents.ts:149-160` depend on them. | CONFIRMED AT REVISION + PROPOSAL |
+| `AGENT_RUN_STATES` (`types.ts:381-384`) | — | lifecycle of a saved Agent blueprint; **not mapped** to run status (comment `:376-380`) | CONFIRMED AT REVISION |
+| `HarnessRunState` (`workflow-harness.ts:110-128`) + `PhaseStatus` (`:23`) | `DurableRun.cursor` + `PhaseAttempt` | a serializable shape already exists; add `runId`; `skipped` → `endReason:'skipped_by_policy'` with a reason | CONFIRMED AT REVISION + PROPOSAL |
+| `PhaseOutput.toolCalls` (`workflow-harness.ts:76`: `{tool,args,result}`) | `PhaseAttempt.observedToolCalls` | transitionally `selfReported:true`; rejected in strict; long-term the server ledger | PROPOSAL |
+| `CheckpointStepState` (`long-task/checkpoint.ts:63-97`) | `Checkpoint` (phase boundary) | step granularity stays internal, below the phase; `cost_usd` → `budgetSpent` | PARTIAL/UNWIRED (0 prod. callers) + PROPOSAL |
+| `PendingActionRow`/`PendingActionStatus` (`cron-store.ts:88-100`) | `ToolAction`/`ToolAttempt` | see §2.4 | CONFIRMED AT REVISION + PROPOSAL |
+| `TraceOutcome` (`execution-traces.ts:20`) | `ProofReceipt.level` + `qualification` | `verified` (harness) → `gate_passed`/legacy_unqualified; `success` stays; migration because of the `CHECK` | CONFIRMED AT REVISION + PROPOSAL |
+| `CapabilityProposal` (`capability-proposals.ts:19-26`) | `CapabilityRequest` | + `runId`, `kind:'connector'`, `authType`, persistence | CONFIRMED AT REVISION + PROPOSAL |
+| `CapabilityCandidate` (`capability-acquisition.ts:27-36`: `availability`, `source`, `matchScore`, `trust?`) | stays | the resolver facade returns `CapabilityCandidate[]`; `trust` currently does not affect ranking (the test `capability-acquisition-trust.test.ts:126` locks this in) | CONFIRMED AT REVISION |
+| `ExecutorBrief` (`executor-brief.ts:29-36`) | `ContextPackage.executorPayload` + `hash` | `briefHash` = precedent for `contextRef.hash` | CONFIRMED AT REVISION + PROPOSAL |
+| `FrameSource` (`frames.ts:28`) | `ContextPackage.sources[].trust` | 1:1 | CONFIRMED AT REVISION |
+| `EvolutionRunStatus` (`evolution-runs.ts:23-28`) | `HarnessRecipeVersion.promotionState` | + `rolled_back`, `written_not_active` (migration) | CONFIRMED AT REVISION + PROPOSAL |
+| `StepContentBlock` (`apps/web/src/lib/types.ts:575-586`) | `RunEvent` (client projection) | additive `runId/phaseId/status failed\|blocked/evidenceRefs` | CONFIRMED AT REVISION + PROPOSAL |
+| `Automation.status` (`types.ts:777`: `active\|paused\|running\|failed`) | Routine block state (§9) | the backend emits only `active\|paused` (`automations.ts:128-148`); the `running`/`failed` branches are dead; add a derived `blocked` | CONFIRMED AT REVISION (refute F-DUR-11) + PROPOSAL |
+| `TaskShape` (`task-shape.ts:34-44`: `complexity: simple\|moderate\|complex`) | `DurableRun.interaction` input | heuristic classifier; **does not select** a recipe today | CONFIRMED AT REVISION |
+
+---
+
+## 3. Run creation order (brief §6.2, DIR-04)
+
+**FRD-03.0 — Rule:** the run exists before any side effect, blocking or durable context. For light chat (`interaction:'conversation'`) the existing session path without a `DurableRun` remains. Status: PROPOSAL — BRIEF DIRECTION (DIR-04) + PROPOSAL (steps).
+
+| Step | v1.2 contract | State at `2af0904d` | Status |
+|---|---|---|---|
+| FRD-03.1 | Resolve the user/Workspace; save the intent with a stable `requestFingerprint`. | Workspace/session exist (`chat-turn-preparation.ts`); there is no request fingerprint for a work run. | PROPOSAL |
+| FRD-03.2 | Classify `interaction` and `taskShape`; select the initial `recipeId/version`. Misclassification is visible and correctable; no silent start of expensive work (DIR-03). | `detectTaskShape` exists and has 9 callers, but harness selection is model-invoked text (`compose_workflow` only prints the mode, `workflow-tools.ts:84-119`) (F-HARN-09). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-03.3 | Create a `DurableRun` with scope, `mode`, `budget.limit` and an initial `permissionEnvelope`. | `AgentRunRegistry.record()` creates the room/worker record **before** execution for fleet (`fleet-run-executor.ts:480-496`) — the closest existing candidate for ADAPT (F-DUR-12); the harness `run_id` is created only on the first `run_harness` call (F-HARN-07). | PARTIAL/UNWIRED + PROPOSAL |
+| FRD-03.4 | Assemble and durably bind the `ContextPackage` (`contextRef` with a hash). The package may be prepared in memory before step 3, but no durable reference may depend on a package that is not bound to the run. | `recallMemory` is called in `chat-turn-preparation.ts:237`; there is no durable reference except `briefHash` on the route-proposal path (F-HM-11/18). | PROPOSAL |
+| FRD-03.5 | Resolve capabilities through the envelope (§6); if any are missing → the run goes into a durable `BLOCKED_CAPABILITY` with a `CapabilityRequest`. | `BLOCKED_CAPABILITY\|BLOCKED_APPROVAL` grep = 0; currently the turn ends, the user goes to the Hub, and there is no signal back (F-CAP-02). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-03.6 | After a grant, recompute the envelope and fresh availability, then continue the **same** run. A callback for a different request / an expired grant does not start work. | does not exist (F-CAP-02, F-CAP-08: the unit of durability is the held tool call, not the run). | PROPOSAL |
+| FRD-03.7 | Execute the phase; gates read the server-observed log; checkpoint at the confirmed boundary; `budget.spent` in the checkpoint. | gates read the model-supplied `phase_output` (F-HARN-08); no checkpoint in production (F-DUR-04/13). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-03.8 | Completion produces the result + `ProofReceipt`; only then `COMPLETED`. Memory consolidation is a separately recorded, idempotent operation (key `(runId, outputHash)`). | `chat-turn-completion.ts:371-375` always `outcome:'success'`; content-hash dedup exists (`frames.ts:109-111,289-294`), but there is no `(runId, outputHash)` key — different text from the same run is duplicated (F-HM-16). | CONFIRMED AT REVISION + PROPOSAL |
+
+**FRD-03.9 — Restart:** do not silently reconstruct the "same" context from new sources; use `contextRef` + re-validation (§2.7). Status: PROPOSAL — BRIEF DIRECTION (brief §6.2) + PROPOSAL.
+
+---
+
+## 4. State machine, lease and fencing
+
+### FRD-04.1 — Canonical states — PROPOSAL (brief §6.4)
+
+`QUEUED → RUNNING → { BLOCKED_CAPABILITY | BLOCKED_APPROVAL } → RUNNING → COMPLETED`; from `RUNNING`: `FAILED_RETRYABLE` (→ `QUEUED` through an explicit resume or policy) or `FAILED_FINAL`; from any non-terminal state: `CANCELLED`. Terminal: `COMPLETED`, `FAILED_FINAL`, `CANCELLED`. `PAUSED` — **DEFERRED** (C12; waiting for approval ≠ a user pause; no semantics in the code, refute F-DUR-03).
+
+- The existing `ALLOWED_TRANSITIONS` (`agent-run-registry.ts:31-42`) is the source of truth for legacy states; `interrupted: new Set()` means that legacy `interrupted` is terminal — CONFIRMED AT REVISION (F-DUR-01). The test `agent-run-registry.test.ts:195-218` pins `interrupted` as **intended**; the test `:84-94` rejects terminal→running. Therefore resume goes through an **explicit API** (validates the checkpoint), not through a change to the transition table (refute F-DUR-01). The Harvest M-08 resume pattern (`routes/harvest.ts:128`, `adapter.ts:4018`) is a BORROW candidate.
+- Migration of legacy `interrupted`: preserve the reason; check whether a safe continuation is possible; **never** automatically `COMPLETED` nor unconditionally `RUNNING` (brief §6.4). Status: PROPOSAL — BRIEF DIRECTION (DIR-05) + PROPOSAL.
+
+### FRD-04.2 — The phase is the unit of recovery — PROPOSAL — BRIEF DIRECTION (DIR-05, A6)
+
+An unfinished phase starts over from the beginning, from the last valid `Checkpoint` with already confirmed outputs; side actions that were already executed (`ToolAction.status ∈ {succeeded, unknown_outcome}`) are **not repeated blindly**. There is no resume in the middle of an agent loop. A restart does not reset `budget.spent` (A10). Status: PROPOSAL — BRIEF DIRECTION + PROPOSAL (implementation).
+
+### FRD-04.3 — Lease and fencing — PROPOSAL (AT-09)
+
+- A run has only one authorized active executor per phase. `RunLease { runId, ownerId (pid+instance nonce), fencingToken (monotono), expiresAt, heartbeatAt }`. Every run-state mutation and every `ToolAction` transition `approved→dispatching` carries the `fencingToken`; the store rejects an older token.
+- Currently: cron `acquireRunLease` is a plain `INSERT` without `UNIQUE` (`cron-store.ts:442-447`, schema `:155-161`) → not fencing; two processes over the same `dataDir` can execute the same job; single-flight is only `this.ticking` per process (F-DUR-10) — CONFIRMED AT REVISION. Minimum: a conditional `INSERT … WHERE NOT EXISTS` or `UNIQUE(schedule_id)` + expiry.
+- `RecoveryRunner` (`long-task/recovery.ts:250-344`: fresh/resume_clean/resume_from_error, retry/backoff) exists with 0 production callers — an asset for ADAPT (F-DUR-04).
+
+### FRD-04.4 — Detach, cancel, connection loss — PROPOSAL — BRIEF DIRECTION (brief §6.4) + CONFIRMED AT REVISION (state)
+
+- Detach = the UI detaches, approved background work continues. Cancel = no new actions, a controlled stop, a terminal record with a reason, artifacts/checkpoints retained. Loss of the SSE connection is **not** a user cancel.
+- State: `chat.ts:1604-1612` `raw.once('close') → abortController.abort()` (R3-008, intentional; origin `docs/audits/2026-05-29-prod-readiness/REPORT.md:103`); Stop and unmount abort (`useChat.ts:463-487`); child subagents inherit the interruption (`chat-collaboration.ts:110-128 linkParentCancellation`). The existing "Stop generating" copy (`ChatApp.tsx:2428-2432`) does not say that child runs are lost, nor that closing the tab interrupts the work (refute F-DUR-06 WEAKENED).
+- v1.2: the foreground conversation path may keep R3-008 **with an explicit UX message**; the durable work path (`interaction:'work'`) has a separate contract: socket close → `RunEvent(detached)`, the run continues under the lease; fleet spawn (`POST /api/fleet/spawn`, 202) is the closest existing internal flow that continues without a socket, but it does not survive restart; external-tool runs (`/api/tools/launch`, `/api/tools/run`) continue without a socket and survive restart through pid-reconcile (`agent-run-registry.ts:381-395,510-520`; `tools-routes-launch.test.ts:1148-1170`) — BORROW precedent (F-DUR-12, refute). ADR (3) from brief §20.2. Status: PROPOSAL.
+
+### FRD-04.5 — Budget and restart — PROPOSAL (A10)
+
+`Checkpoint.budgetSpent` is mandatory; daily spend already survives restart (`local-mode.test.ts:1067-1075`), per-run spend does not (F-DUR-07). Until the W1 store: progressively patch `metrics` into the registry at the turn boundary (`fleet-run-executor.ts`), so that an `interrupted` run at least carries its consumption. Status: PARTIAL/UNWIRED + PROPOSAL.
+
+---
+
+## 5. Harness engine
+
+### FRD-05.1 — Verify never silently skipped — PROPOSAL (DIR-03/07; F-HARN-01)
+
+- Current state: `workflow-harness.ts:313` `if (nextPhase.id.includes('verify') && shouldSkipVerify())`; `:474-482` `return env !== 'true' && env !== '1'` → unset or `'0'` = skip; `catch { return true }` fail-open; no configuration in the repo sets `WAGGLE_AUTO_VERIFY` (grep `app/`, `sidecar/`, `scripts/`, `.env.example`, `package.json`, docker/render = 0) → **production default = skip**; commit `93ff7813` deliberately kept it; `FEATURE_FLAGS.VERIFIER_AUTO_RUN` (`feature-flags.ts:26`) is dead (0 consumers). Repro `docs/plans/v1.2-evidence/phaseA/repro-harness.mjs` 25/25. — CONFIRMED AT REVISION.
+- Contract: in `work` mode (`normal` and `strict`) the verify phase is never silently skipped; opt-out is an explicit recipe/run option recorded as `endReason:'skipped_by_policy'` + `ProofReceipt.verdict:'NOT_RUN'`; `getRunSummary` shows "Completed (verify skipped)"; `harness:phase:skipped` is emitted. `catch → false`. Unify with `VERIFIER_AUTO_RUN` or remove the flag.
+- Test that **turns red** with the fix (expected): `workflow-tools-harness.test.ts:135-179` (relies on auto-skip). Order: F-HARN-01 before F-HARN-02/03, because in the production default the VERDICT gate is unreachable (refute cross-cutting 2).
+
+### FRD-05.2 — Gate types — PROPOSAL (FRD v1.1 §5 refined)
+
+| Gate | What it reads | What it does not prove | Current state |
+|---|---|---|---|
+| tool-call evidence | `PhaseAttempt.observedToolCalls` (server ledger: name, `ok`, `exitCode`, `durationMs`) | that the tool did the right thing | today model-supplied (F-HARN-08); `hasToolCalls` substring match (`builtin-harnesses.ts:13-24`) also catches `my_bash_like_tool` |
+| test/build result | exact tool names + command pattern (`/(npm\|pnpm\|yarn)\s+(test\|run\s+test)\|vitest\|jest\|tsc\|pytest\|cargo test/`) + `exitCode === 0` | test coverage | `echo hi` passes as a test (`builtin-harnesses.ts:181`); the exit code is observed in `system-tools-helpers.ts:732-734` and then discarded in `system-tools.ts:682-693` when there is output (`Error:` prefix only on empty output); `tool-executor.ts:285-287,298` does not see the failure — CONFIRMED AT REVISION (F-HARN-03) |
+| artifact existence/validation | file exists, parses, has the required sections, sha256 | content accuracy | `hasMinSections`, `hasMinLength` exist (`builtin-harnesses.ts:43-89`) |
+| structured-output check | schema validation of the output | semantics | partially exists (`hasPattern`) |
+| citation/reference resolution | references resolve to `ContextPackage.sources` or a file/URL; the citation matches the source | all interpretations of the source | does not exist (R07: universal entailment later; do not defer targeted checks) |
+| numeric/date fidelity | numbers/dates in the artifact match the tagged sources | business recommendation | does not exist (AT-21) |
+| contradiction check | explicit contradictions within the artifact / with confirmed decisions | — | `contradiction-detector.ts` exists (callers: UNKNOWN in this pass) |
+| verdict gate | the **value** of `VERDICT` (capture group), not its presence | — | `builtin-harnesses.ts:128` regex passes `FAIL` and `CONDITIONAL` as PASS — CONFIRMED AT REVISION (F-HARN-02) |
+| custom domain validator | recipe-specific | — | — |
+
+Source count by itself is not quality; there is no arbitrary source quota (brief §7.2). Status: PROPOSAL — BRIEF DIRECTION (DIR-07) + PROPOSAL (implementation).
+
+### FRD-05.3 — Server-observed evidence — PROPOSAL — BRIEF DIRECTION (DIR-07, A5)
+
+- The model may propose a claim/plan/phase output; it cannot produce an authoritative record that a tool was called, a file was created, a test passed or a permission was granted.
+- Implementation (PROPOSAL): `WorkflowToolsConfig` gets an `observedToolCalls(sinceMarker)` provider that the server populates from `onToolResult` (`chat-agent-run.ts:214-225`); `run_harness` ignores `phase_output.tool_calls`; `system-tools.ts:684-691` always includes `Exit code: N` (or a structured `{ok:false, exitCode}`); `tool-executor.ts` sets `succeeded=false` on a non-zero exit; `verification-gate.ts:33` removes `'run_harness'` from `VERIFICATION_TOOL_EXACT` (F-HARN-04: origin `9fce1d2f`, no documented decision; not D-01..D-18); the gate receives `{name, succeeded}` pairs instead of bare names (`agent-loop.ts:1826` pushes the name even when `executionSucceeded === false`).
+- Tests that turn red: `workflow-tools-harness.test.ts:82-106,135-179` (the Gather gate passes on self-reported `search_memory`/`recall_memory`) — update them or inject `observedToolCalls` into `makeConfig()` (refute F-HARN-08).
+- `HarnessTraceBridge`: `ok: true / durationMs: 0` hardcoded (`harness-trace-bridge.ts:139-148`), `context` is not passed at boot (`local/index.ts:612-616`), hence `workspaceId:null` in the trace; a second hardcoded `ok:true` in `trace-recorder.ts:281,288` (chat turn) — CONFIRMED AT REVISION (F-HARN-06). v1.2: `ok: tc.ok ?? null`, no fabricated `durationMs`, a resolver from a run→context map once events carry a `runId`.
+
+### FRD-05.4 — Three verification levels instead of a single `verified` — PROPOSAL — BRIEF DIRECTION (brief §7.2) + PROPOSAL
+
+See `ProofReceipt.level` (§2.6). Dashboard/eval must not count `gate_passed` as content-confirmed (brief §7.3). Existing `verified` harness rows → `qualification:'legacy_unqualified'` without deleting history (§14). `EvalDatasetBuilder.positiveOutcomes` is configurable (`eval-dataset.ts:66,208`, default `['success','verified']`) → enables exclusion without a schema change (F-HARN §2 row 12).
+
+### FRD-05.5 — CONDITIONAL policy — PROPOSAL (brief §7.2)
+
+- `GateResult.verdict?: 'PASS'|'CONDITIONAL'|'FAIL'`; only `PASS` passes unconditionally; `FAIL` → retry (`maxRetries`) → `FAILED_RETRYABLE`/`BLOCKED_APPROVAL` per recipe.
+- `CONDITIONAL` → recipe field `conditionalPolicy: 'require_supplement' | 'require_user_review' | 'complete_with_limitation'`; default `require_supplement` (`passed:false` + `reason`). `complete_with_limitation` produces `COMPLETED` **only** with `ProofReceipt.verdict:'CONDITIONAL'` and a visible `unresolved[]`. In `strict` mode a mandatory gate that is not PASS blocks `COMPLETED`; the partial artifact remains available without a full-confirmation label.
+- Current state: `CONDITIONAL` = 2 occurrences in all of `packages/`, both in `builtin-harnesses.ts:125,128`; the `code-review-fix` verify phase has no VERDICT gate at all (`:177-184`) — CONFIRMED AT REVISION (F-HARN-02).
+
+### FRD-05.6 — Budget stop does not create success — PROPOSAL — BRIEF DIRECTION (DIR-08) + PROPOSAL
+
+- Current state: `agent-loop.ts:1507-1550` is the branch where `maxTokenBudget` is exhausted; `:1523-1534` `maybeFireCompletionGate({ enableVerification:false, enableSkillDistillation:false })`; in `loop-gates.ts:903` the first condition `enableVerification &&` also disables the disclosure path (`:907-920`, `VERIFICATION_NO_TOOL_DISCLOSURE`), which does not require a new turn; `budgetStopResponse` (`agent-loop.ts:895-920`) has no partial/unverified label when a `usableAnswer` exists; the integrity gate (`rejectIncompleteReason`, `:1535-1540`) remains but catches structural incompleteness, not unverified claims — CONFIRMED AT REVISION (F-HARN-05). The whole loop with a real budget was not executed (verification boundary).
+- Contract: budget stop → `PhaseAttempt.endReason:'budget_stop'`, `ProofReceipt.verdict:'NOT_RUN'` for the mandatory verify, `RunEvent(status:'blocked', label:'Budget exhausted before verification')`, `budget.spent` preserved; the user may approve additional budget (new `attemptNo`, same `actionId`s) or accept a labeled draft; the system does not retroactively remove a mandatory gate. Minimum: D3 in `disclose-only` mode (`verificationMode:'disclose-only'` or a direct `assertsUnverifiedCompletion` + suffix) before `budgetStopResponse`; `budgetStop:true` in `AgentResponse` (additive; `toMatchObject` asserts tolerate it).
+
+### FRD-05.7 — Harness router (server-side) — PROPOSAL (W3)
+
+- The server separates `conversation`/`work`, chooses `recipeId/version` and `mode`; the classification is visible (RunEvent) and correctable (the user may downgrade to conversation or change the recipe before the first side effect).
+- Existing input: `detectTaskShape` (heuristic, `task-shape.ts:145`), `composeWorkflow.selectExecutionMode` (`workflow-composer.ts:99-104`, `'harnessed'` when `FEATURE_FLAGS.ADVANCED_WORKFLOWS` is default ON and the `matchHarness` regex matches), `CapabilityRouter` (confidence sort, not a permission filter, `capability-router.ts:170`) — all PARTIAL/UNWIRED for the router role (F-HARN-09).
+- Initial recipe set (DIR-02, W3): **two** variants — `research-brief` and `document-production`; analysis is folded into them, with no separate "analysis engine". The existing built-in harnesses (`research-verify`, `code-review-fix`, `document-draft` in `builtin-harnesses.ts:94-238`) are starting material, not final recipes.
+- The advisory fields `allowedTools/requiresApproval/timeoutMs` (`workflow-harness.ts:47-68`) become **enforced** in the server executor (today they are not, documented in `93ff7813`).
+
+### FRD-05.8 — Work Progress labels — PROPOSAL — BRIEF DIRECTION (brief §11.1) + PROPOSAL
+
+Label = phase intent (Understanding / Gathering context / Researching / Checking / Writing / Verifying), actual status, blocker, cost/budget when relevant, result, "View work". No percentage and no remaining time. No private reasoning. Failure/partial/blocked/cancelled have the same "View work" (A22). Current state: `rg "View work"` = 0; labels are scattered (F-UXM-07) — CONFIRMED AT REVISION.
+
+---
+
+## 6. Capability resolver and permission envelope
+
+### FRD-06.1 — One resolver contract — PROPOSAL — BRIEF DIRECTION (DIR-11) + PROPOSAL
+
+`resolveCapabilities(need, envelope, taskShape): CapabilityCandidate[]` — a thin facade over the existing engines: `searchCapabilities` (`capability-acquisition.ts:187`), `CapabilityRouter.resolve` (`capability-router.ts:58`, today an unknown-tool fallback from `tool-executor.ts:143-151`), `scoreConnectors` (`routes/agent-search.ts:56`), marketplace FTS (`agent-search.ts:132`, `skill-tools.ts:446-448`) + `find_connector`/SkillRecommender (F-CAP-11). No physical merge until the need is proven.
+
+### FRD-06.2 — Permissions first; lane order = tie-breaker — PROPOSAL — BRIEF DIRECTION (§17 C13 "REFINE", brief §9.1) + PROPOSAL
+
+1. `filterCandidates(envelope)`: permissions, egress, readonly, availability, trust, KVARK policy when connected.
+2. Ranking: task fit, reliability, setup and runtime cost.
+3. Lane preference `native → active skill → inactive skill → curated installable → connector → MCP → marketplace` only among **usable** candidates with close scores.
+- Current state: three different behaviors, none of them "permissions first" (`searchCapabilities` sorts by `matchScore`, then by `availabilityOrder` when the difference is ≤0.05, `:299-311`; `CapabilityRouter` fixed per-lane confidence = a strict order disguised as a score; `agent-search` merges by score) — CONFIRMED AT REVISION (F-CAP-01). A read-only persona can get a write candidate through `acquire_capability` because the resolver does not know about the persona filter (F-CAP-04).
+
+### FRD-06.3 — `PermissionEnvelope` = intersection — PROPOSAL — BRIEF DIRECTION (brief §9.2, §18 A12 "AMEND THE TIER PART") + PROPOSAL
+
+`envelope = ∩ { systemSecurityAndEgress, kvarkPolicy? (samo kad je konekcija živa), userGrants (ApprovalGrantStore) i denials, workspaceRules, personaAllowlist/isReadOnly, toolCapabilities }`. The resolver **never widens** permissions. **Tier is not an individual boundary** (A12 "AMEND THE TIER PART"; D-01).
+- Existing layers (order in the chat path): persona `applyPersonaToolFilter`/`filterMcpToolsForPersona` (`persona-tool-filter.ts:98-153`, called at `chat-turn-preparation.ts:454,530,553`); governance `blockedTools` only when `wsConfig.teamId` (`chat-turn-preparation.ts:694-738`, `chat-governance.ts:87-89` → Solo has no governance layer); executor floor (`tool-executor.ts:129,160-226`); `ApprovalGrantStore` (`approval-grants.ts:172-304`, non-grantable `bash/run_code/cli_execute/install_capability` `:20-25`); autonomy level (`confirmation.ts:337-358`). None of them is a single typed object; the resolver does not read them — PARTIAL/UNWIRED (F-CAP-04). `requireTier` gates routes, not tools; `requiredTier` in `ACTION_REGISTRY` is dead (0 descriptors), `hasCapability` has 0 callers (F-TK-17).
+- Minimal change: `PermissionEnvelope` computed once in `chat-turn-preparation.ts` and passed to the resolver and the executor (same source of truth); no new policy engine (R13).
+
+### FRD-06.4 — Inline setup = work continuity — DECISION (D-10) + PROPOSAL — BRIEF DIRECTION (brief §9.3) + PROPOSAL
+
+The card explains what is missing/why/scope/consequence; the secret goes into a protected field (`POST /api/connectors/:id/connect`, `connectors.ts:118-142`) or OAuth runs in the system browser; the run stays `BLOCKED_CAPABILITY`; after a valid callback `SetupCompleted{requestId}` → envelope re-evaluation → continuation of the same run. "Inline" does not mean that OAuth/secrets go through LLM text. Current state and minimal change: §2.8; superseding ADR for `held-action-executor.ts:6-10` ("never mid-run suspend/resume") and for PR4 D3 (`routes/agent-search.ts:79`, not `apps/web/src/lib/agent-search.ts:81` as S1 states — correction F-CAP §0). Status: PROPOSAL (ADR (4)).
+
+### FRD-06.5 — MCP install via Settings — PROPOSAL — BRIEF DIRECTION (§19 R11) + CONFIRMED AT REVISION
+
+Inline is only a proposal; installation happens in Settings with SecurityGate and the user; no silent binary install. Already in effect (F-CAP-06). v1.2 adds: a supplement to the existing `THREAT_MODEL.md` (exists — CONFIRMED AT REVISION; does not cover the inline install boundary, MCP binary install, egress profile or PostHog; ADR-10-P6) + a test that `buildSystemPrompt`/trace do not contain vault values (A14) — PROPOSAL.
+
+### FRD-06.6 — Approvals are core for the individual — DECISION (D-01) + PROPOSAL — BRIEF DIRECTION (§18 A15) + CONFIRMED AT REVISION (state)
+
+- The gate is **navigation hiding only**: `dock-tiers.ts:82` `minBillingTier:'TEAMS'`, `AppShell.tsx:727-728`, `command-catalog.ts:89`; the `/approvals` route and `routes/approval.ts` are not tier-gated (F-TK-02, F-CAP-07). Solo user: the inline card works, the inbox is invisible except via a direct URL/notification.
+- v1.2: remove the three UI gates; `BLOCKED_APPROVAL` as a run state (today the unit of durability is the held tool call, `chat-approval-hook.ts:95-105` 24h TTL; after approval `executeHeldAction` executes only that tool without continuing the run — F-CAP-08); decline with an optional duration as a negative grant in `ApprovalGrantStore` (today deny is one-shot, F-CAP-09); held-action expiry exists and is tested (`held-action-executor.test.ts:187`) (ALREADY CLOSED partially — expiry only); revoke exists in code (`approval-grants.ts:286`, `routes/approval.ts:120`), a test was **NOT found** at `2af0904d` (only UI mocks `ApprovalsApp.test.tsx:17`, `p7-b1-approvals-error.test.tsx:16`) — RED test missing (§15 AT-12). Neither the model, a hook nor an IM message can reverse a decline/revoke (AT-12).
+
+### FRD-06.7 — Shared actions — PROPOSAL — BRIEF DIRECTION (DIR-12) + PARTIAL/UNWIRED
+
+The same business action through UI/agent/routine shares: input schema, scope, side-effect class, validation, approval, result, audit, idempotency. Current state: `ACTION_REGISTRY` (`command-registry.ts:108-181`, 4 actions, NL command bar only); agent tool + held action already share `ToolDefinition` (`held-action-executor.ts:213-233`); UI clicks go directly to REST without the registry (F-CAP-13). v1.2: extend `ActionDescriptor` as the source of truth for the side-effect endpoints the UI already uses; the agent does not confirm its own approval; browser automation of external applications remains a separate capability. BuilderIO/agent-native = pattern reference only — PROPOSAL — BRIEF DIRECTION (§19 R20; external.md §2.1 "PROPOSAL: pattern reference only"), consistent with DECISION D-17 (order Borrow→Adapt→Build; D-17 does not prescribe this verdict). License facts and capabilities (EXT-5: root `license: ISC`, GitHub `license: null`, MIT packages without LICENSE text; durable/replay guarantees unproven) — AUDIT FINDING — TO VERIFY (live 27.09.2026, source: external.md §2.1, §8).
+
+### FRD-06.8 — Skills and learning — PROPOSAL — BRIEF DIRECTION (brief §9.5)
+
+Preserve create/distill/audit/hygiene/retire/recommend where they are active (callers: UNKNOWN in phase A for each one individually). A self-evolving skill cannot, by changing an instruction, add a network scope, a new binary or bypass approval. Importing a package ≠ use on Qwen (check dependencies, tool naming, model-specific instructions). Status: PROPOSAL — BRIEF DIRECTION + UNKNOWN (state of individual paths).
+
+---
+
+## 7. Hive Mind context loop
+
+### FRD-07.1 — Preserve retrieval first — DECISION (D-12) + PROPOSAL — BRIEF DIRECTION (DIR-09) + CONFIRMED AT REVISION
+
+`recallMemory` (`orchestrator.ts:582-978`): importance K5, semantic personal, semantic workspace, date-window, profiles, facts 60, events 40, RAWDETAIL K=6 (`:858-894`), catch-up branch, empty-mind fast path, read-side injection scan (`:923-933`), temporal anchor. Callers: `chat-turn-preparation.ts:237`, `chat.ts:390`, `command.ts:266`, `commands.ts:74`. Pin tests: `orchestrator-recall-hardening`, `w41-temporal-recall`, `r2-recall-closure`, `w46-rawdetail-recall`, `orchestrator-memory-boundary-pins` (not executed in phase A). The engine is **not changed**; `ContextPackage` is a wrapper (§2.7).
+
+### FRD-07.2 — Three storage responsibilities — PROPOSAL — BRIEF DIRECTION (brief §8.2)
+
+| Layer | Role | Current state |
+|---|---|---|
+| RAWDETAIL / source material | verbatim evidence for retrieval and exact citation; **not** a learned fact | lane active by default (reranker default ON, `orchestrator.ts:564`; comment `:106-109` outdated); the corpus is populated **only** by harvest paths (`routes/harvest.ts:661`, `memory-mcp/src/tools/harvest.ts:316`, `hive-mind-mcp-server/src/tools/harvest.ts:318`) → live chat is not covered; the reranker model (~22 MB ONNX) is not bundled in the installer → on a fresh offline desktop the lane is probably inactive until the first online recall — CONFIRMED AT REVISION + AUDIT FINDING — TO VERIFY (F-HM-01, refute) |
+| Derived memory | facts/decisions/preferences/relations/summaries/confirmed outcomes/corrections with provenance | exists (frames, KG, lanes) |
+| Execution state | runs, checkpoints, retries, grants, leases, budgets — **not** a memory frame | Loop `loop:<id>` state is in the Awareness layer and **enters recall** (`awareness.ts:142-168 toContext()` without a filter → `context-loader.ts:111-120` → `orchestrator.ts:315-316`) as a "- Loop: <name>" row under "Pending Items" — CONFIRMED AT REVISION (refute F-DUR-09 HOLDS+) → move to the run store (§1.5) |
+
+Hook `temporary` frames: every UserPromptSubmit is stored as `importance:'temporary'` (`handlers-core.ts:148`, `user-prompt-submit.ts:50`); a 30-day TTL **exists and has a server cron** `memory_compact` (`packages/server/src/local/index.ts:2033-2058`, seed `setup-crons.ts:35` `30 3 * * *`) — refute F-HM-02 WEAKENED: the mechanism exists; whether the cron actually runs on the desktop = PARTIAL/UNWIRED (E2E unverified).
+
+### FRD-07.3 — Retrieval exclusion `temporary` — PROPOSAL (F-HM-03, F-CAP-05d)
+
+Waggle recall excludes `temporary`/`deprecated` (`orchestrator.ts:728-737`, `context-loader.ts:77-88`, `executor-brief.ts:66`) — CONFIRMED. Hook recall does **not** exclude them: `hook-runtime.ts:237` `WHERE importance != 'deprecated'`; MCP `recall_memory` treats importance as a score (`search.ts:37-43`) — CONFIRMED AT REVISION. v1.2: `NOT IN ('deprecated','temporary')` + a post-filter identical to `isAuthoritativeForRecall` for MCP; does not break `hook-runtime.test.ts:126-137` (limit 2).
+
+### FRD-07.4 — Isolation of minds — DECISION (D-12) + HISTORICAL FOUNDER DECISION (memory, 2026-06-12) — aligned with D-12 (AT-13) + CONFIRMED AT REVISION (leak)
+
+- The leak is not in one place but in **four**: `external-tool-runs.ts:964-977`, `chat-collaboration.ts:802-814`, `fleet-run-executor.ts:924-936` (default `memoryScopes = ['personal','workspace']`, `:729`), `agent-groups.ts:719-729` — each writes a `Summary` (up to 1000 characters) into the personal mind with `importance:'normal'`, `source:'agent_inferred'`; `recallMemory` searches personal on every query; MCP default scope `personal` (F-HM-05).
+- Contract: the run summary stays in the workspace mind; personal gets at most a content-free pointer (`Run/Workspace/Status`, `importance:'temporary'`). A derived fact inherits the restrictions of its source; the classifier/evolution cannot declare it public (brief §8.3).
+- **Warning from the refute (F-HM-05 WEAKENED):** the fleet policy gate (`fleet-run-executor.ts:101-106`) treats a saved agent **without** `personal` in `memoryScopes` as UNSUPPORTED (fail-closed), pinned by `fleet-isolation.test.ts:203`; the positive test `:496-525` pins personal as mandatory → the change requires redefining the policy gate, not just the default. Tests that break: at least `agent-groups.test.ts:362`, `external-tool-runs.test.ts:259`, `fleet-isolation.test.ts:203,519-522`, `external-tool-runs.test.ts:245-260,319-335`. A sentinel isolation test does not exist (AT-13). Status: AUDIT FINDING — TO VERIFY (runtime repro Workspace A → chat in Workspace B).
+
+### FRD-07.5 — `WAGGLE_CONTEXT_INJECTED` is coordination, not authorization — PROPOSAL — BRIEF DIRECTION (brief §8.3) + PROPOSAL
+
+- The marker is paired with `runId` + `contextRef.hash` + the expected execution path; the hook does not accept untrusted content that claims "already verified context" and **does not skip** the scope/taint check.
+- Current state: 0 occurrences; double injection is possible (route-proposal prepends the brief `route-proposals.ts:205-207` **and** the SessionStart hook injects its own recall `session-start.ts:80`); `WAGGLE_ENV_ALLOWLIST` (`external-process-env.ts:29-35`) does not contain the marker; hooks do not read `WAGGLE_RUN_ID` (F-HM-08, F-HM-12). UNKNOWN: whether Claude Code `--safe-mode` suppresses SessionStart hooks (refute F-HM-08). Minimum: env marker in the allowlist together with `WAGGLE_RUN_ID`; SessionStart shortens/skips recall when the marker + run id are present; `frame-encoder.ts` adds a `run:<id>` token.
+
+### FRD-07.6 — External executors — DECISION (D-11) + PROPOSAL — BRIEF DIRECTION (DIR-10) + PARTIAL/UNWIRED
+
+- Same Workspace, explicit executor; the native agent remains the main individual path. Result = status, output, artifacts, known limitations; `toolsUsed` from the tool stream labeled `tool-reported`, not server-verified (F-HM-14: `external-tool-runner.ts:519,531` → `external-tool-runs.ts:922-932` without a provenance label).
+- Context handoff: only the route-proposal path has `buildExecutorBrief` (F-HM-11); `/api/tools/run` and interactive launch do not. v1.2: `ContextPackage.executorPayload` for every path (opt-in until W2). Key leakage: the fail-closed env allowlist and the `/(KEY|TOKEN|SECRET)$/` redaction in event text exist (`external-process-env.ts:8-35`, `external-tool-runner.ts:588-595`); **gap**: the SessionStart hook inject does not redact secrets from recalled content (`session-start.ts:46-60`, `handlers-core.ts:77-90`); `redactSecrets` lives in `@waggle/agent` (`eval-dataset.ts:133`), hook packages cannot import it without a new dependency → apply it in `hook-runtime.ts` (refute F-HM-13). A read-side scan in the hook path does not exist (F-HM-04).
+- Qualification per harness (Claude Code/Codex/Hermes): detection, authorization, context handoff, working dir, tool permissions, timeout/cancel, result return, capture with `workspace/run` identity — workspace capture CONFIRMED (`cli-bridge.ts:240,404-408` → `hook-runtime.ts:121-187 resolveMind`), run id NOT WIRED (F-HM-12). The E2E flow was not run in phase A → UNKNOWN. In KVARK mode an executor that requires an unapproved cloud endpoint is not available (D-03).
+
+### FRD-07.7 — Idempotent consolidation — PROPOSAL (brief §8.2, AT-14)
+
+Key `(runId, outputHash)` in the run record metadata; check the `createPFrame` dedup (`cognify.ts:64-70`, not verified). Content-hash dedup (`frames.ts:109-111,289-294`), lane dedup (`extract-memory-lanes.ts:284`), distill replace-on-update (`weaver/src/consolidation.ts:226-236`) exist — CONFIRMED AT REVISION (F-HM-16).
+
+### FRD-07.8 — LoCoMo regression gate before merge — PROPOSAL (A26)
+
+There is no CI gate (grep `locomo` in `.github/workflows/` = 0); a manual same-judge run + `benchmarks/results/locomo-sota-2026-06/recount.mjs` exist (F-HM-15). v1.2: a process gate for every change to the rendered bytes of the recall block (not necessarily CI for G1). Canonical number: **86.49%** (MEMORY.md SOTA index; 87.66 withdrawn). Status: PARTIAL/UNWIRED.
+
+### FRD-07.9 — Two MCP servers — DEFERRED (R23) + CONFIRMED AT REVISION
+
+`waggle-memory-mcp` (has `erase`) vs `@waggle/hive-mind-mcp-server` (no `erase`); 15 differing files; the hook path allows only `save_memory/recall_memory` (`hook-call.ts:29-30`), so the hook chain cannot call erase; risk for a user who uses the hive-mind CLI/MCP directly (F-HM-17). No merge in this scope; the `erase` divergence is recorded for AT-15.
+
+---
+
+## 8. Evolution pipeline
+
+### FRD-08.1 — Map "who calls → what it produces → where it is stored → active version → next run" — PROPOSAL — BRIEF DIRECTION (DIR-13) + CONFIRMED AT REVISION (F-EVO §0)
+
+| Module | Callers | Does the next run use it? |
+|---|---|---|
+| `AgentLearning` (`agent-learning.ts:43`) | 0 (barrel only, `index.ts:231`) | **No** — dead code; `recordPersonaTask` has no producer → the PRD claim about persona effectiveness has no producer |
+| `processInteractionForImprovement` (`improvement-wiring.ts:97`) | 0 | **No** |
+| `analyzeAndRecordCorrection` (`chat-turn-completion.ts:253-261` → `improvement-detector.ts:81-98`) | every turn when `allowDerivedPersistence` | **Yes** — textual corrections **already** produce `improvement_signals('correction')` and enter `# User Corrections` (`chat.ts:1485-1496`) (refute F-EVO-09: the S1/phase A sub-claim "thumbs-down only" is REFUTED) |
+| `markCorrected` (`execution-traces.ts:473`, `trace-recorder.ts:234-236`) | 0 | **No** — the previous turn's trace never becomes `corrected`; `chat-turn-completion.ts:371-375` always `success`, the comment is incorrect |
+| `markSurfaced` | UNKNOWN (grep: only `improvement-detector.ts:206-208`) | if there is no caller, signals stay `surfaced=0` and accumulate in the prompt |
+| `EvolveSchema` Stage 1 (`compose-evolution.ts:174-184`) | `runOnce` ← `POST /api/evolution/run`, `EvolutionService` | **No** — `frozenSchema` does not go into Stage 2 (`:191-196`), deploy ignores it (`routes/evolution.ts:51-82`), the UI does not render it (F-EVO-05); consumes 5×3×32 + anchor 100 LLM calls (`evolve-schema.ts:830-835`) |
+| GEPA winner → persona override (`{dataDir}/personas/<id>.json`) | same | **No** — `listPersonas()` = `[...PERSONAS, ...custom]` (`personas.ts:67-70`), `resolvePersona = find()` (`chat.ts:439-440`) returns the built-in one; same pattern in `fleet-run-executor.ts:127,590`, `agent-groups.ts:87`, `fleet.ts:354`; repro `docs/plans/v1.2-evidence/phaseA/repro-shadow.mjs` (F-EVO-01) |
+| GEPA winner → behavioral-spec override | same | **Yes** (`index.ts:626-635`, `chat.ts:1441-1444`) — ALREADY CLOSED / works (F-EVO-11); `systemPromptCache` is not tied to the event, but `historyLength` in the key makes the next turn a cache miss |
+
+**Wire-vs-remove decision for `AgentLearning`/`improvement-wiring`:** open (R18: the functional goal remains; dead code is not a feature, deletion is not "solved learning"). Correct minimalChange (refute): do **not** duplicate `analyzeAndRecordCorrection`; add `markCorrected` on the previous turn's trace when `detectCorrection` hits, `recordPersonaTask` from `finalizeOnce`, and a decision on `formatLearningPrompt` as a second channel. Status: PROPOSAL.
+
+### FRD-08.2 — Active-version pointer and rollback — PROPOSAL (AT-04)
+
+- `resolvePersona` must return the active version (a custom one with the same `id` replaces the built-in one: `Map` by `id`, custom last) — does not break `personas.test.ts:43-47` or `personas-routes.test.ts:121-140` (refute F-EVO-01).
+- The baseline endpoint (`routes/evolution.ts:259` → `getPersona` built-in only; `evolution-service.ts:277`) uses the same resolver.
+- `POST /api/evolution/runs/:uuid/rollback` calls the existing `rollbackPersonaOverride`/`rollbackBehavioralSpecOverride` (`evolution-deploy.ts:119-135,220-235`, **0 callers** outside tests) + status `rolled_back` (migration `CHECK`). The backup is a single-level `.bak` (`:79-82`) → a multi-step rollback requires a registry, not a file.
+- `persona:reloaded` has no consumer (the only `on` is `behavioral-spec:reloaded`, `index.ts:630`); the WS relay (`index.ts:3189`) does not forward evolution events; the docs `05d-subsystem-evolution.md:94` claim a cache invalidation that does not exist (F-EVO-10).
+- An existing run stays on the pinned version (`DurableRun.modelRef` + `recipeVersion`); precedent: `fleet-run-executor.ts:589-591` persona snapshot.
+- **Order:** F-EVO-01 → F-EVO-10 (activation check before `markDeployed`; if it is introduced before the shadowing fix, `evolution-routes.test.ts:169-188` fails).
+
+### FRD-08.3 — The candidate is executed before scoring — ALREADY CLOSED (production paths) + UNKNOWN (route-level test)
+
+`makeRunningJudge` (`evolution-llm-wiring.ts:415-452`) + guard `iterative-optimizer.ts:173-184` (throws for a bare judge without `allowBareJudge`) + brand through `filterJudgeFeedback` (`compose-evolution.ts:142-149`); tests `iterative-optimizer.test.ts:424-445`, `evolution-llm-wiring.test.ts:266-330` (F-EVO-03). Comment `iterative-optimizer.ts:393-397` is outdated. Missing: a route test that `complete()` = 2 calls per example (execute + judge); a stub with `callCount()` exists in `evolution-run-route.test.ts:37-58`. AT-05.
+
+### FRD-08.4 — Executor ≠ judge preferred, not mandatory; local judge default — PROPOSAL — BRIEF DIRECTION (§18 A19 "AMEND THE ABSOLUTE CONDITION", brief §10.4) + CONFIRMED AT REVISION (state)
+
+- Current state: a single `llm` for baseJudge, runningJudge, schemaExecute, mutate (`routes/evolution.ts:365,376-379`); `createAnthropicEvolutionLLM` hardcodes `anthropic` + Haiku (`evolution-llm-wiring.ts:214-260`); `buildRunPrompt` = candidate + "USER INPUT" in a single user turn without `composePersonaPrompt`/tools/the user's model (`:454-461`); no model and no per-example output in `artifacts` (`evolution-orchestrator.ts:230-235`); 422 without an Anthropic key (`routes/evolution.ts:355-363`); no KVARK/offline guard; the `EvolutionTab.tsx:1296` static disclaimer "costs a few cents" is not an estimate/cap/consent and does not say that traces are sent to Anthropic (F-EVO-04, F-EVO-08).
+- Contract: `EvolutionLLM` adapter over the provider router / selected local model (the `complete(prompt)` contract is kept → tests do not break); execution through `composePersonaPrompt(core, {systemPrompt: candidate})`; `executorManifest` + per-example outputs (redacted) in `artifacts`; one local model may be both generator and rubric evaluator in separate roles, with an **explicitly labeled bias risk**; a second model family = preferred independent control. Cloud/BYOK judge: explicit `consent` flag, minimization, redaction (`EvalDatasetBuilder.build()` secret scan), pre-run estimate, hard cap (`maxJudgeCalls`), abort (the plumbing already exists: `IterativeGEPAOptions.signal`, `runOnce(signal)`; SSE close intentionally does not stop the run, `routes/evolution.ts:458-462`). In KVARK mode a cloud judge is not allowed (D-03). Status: PROPOSAL.
+
+### FRD-08.5 — Bounded recipe registry — PROPOSAL — BRIEF DIRECTION (DIR-14) + PROPOSAL (net-new; scope depends on founder approval of scope ODB-02, Delivery plan §6.1, W3e-PR9a..e)
+
+- A small registry of approved variants for research/document work (e.g. base procedure vs + contradiction check vs an allowed retrieval/review variant). Candidates change instructions, the arrangement of approved optional phases and budgets **within limits**.
+- Invariants are immutable: scope, egress prohibitions, approvals, budget cap, mandatory gates, contamination boundary, meaning of success (`HarnessRecipeVersion.invariants`). A recipe that gets a better score by skipping a security check **is not a candidate** for promotion.
+- Current state: `EvolutionTarget` has no recipe target (`iterative-optimizer.ts:88-93`) — net-new; not contained in S1 W3e (which excludes recipe evolution). The planner assesses it separately; if it is deferred, show which user outcome and public claim are dropped (brief §10.3). Status: PROPOSAL (scope proposed by the Delivery plan; open → ODB-02, Delivery plan §6.1).
+
+### FRD-08.6 — Promotion policy — PROPOSAL — BRIEF DIRECTION (DIR-15) + CONFIRMED AT REVISION (errors)
+
+- Baseline and candidate re-scored on the **same examples and budget**; metric-appropriate CI; minimum practical difference; regression per task shape; latency/compute cap; procedure for grader error; a `null` scorer does not drop out of the denominator; separate model/tool/infra/budget/evaluator failures.
+- Current state: baseline scored only on `microSample` (`iterative-optimizer.ts:205-211`); anchor scores only `survivors` (`:302-311`); `delta = winner.overall − baseline.overall` from different phases when the baseline was dominated earlier (`:315-325`; the `evolution-orchestrator.ts:184-190` comment is conditionally incorrect); `combinedDelta = GEPA overall − schema accuracy` (two metrics, `compose-evolution.ts:198-200`); `scoreOne` `null` → filtered out (`:398-416`) while a running-judge error → score 0 **enters** the average (`evolution-llm-wiring.ts:439-447`, `judge.ts:141-151`). Repro `docs/plans/v1.2-evidence/phaseA/repro-gepa-delta.mjs`: `n=50` vs `n=400`, delta 0.2660 vs 0.2500 on the same sample (F-EVO-06).
+- **Warning:** removing/renaming `combinedDelta` breaks `compose-evolution.test.ts:342-371` (refute).
+- Dataset governance (A17, F-EVO-07): the orchestrator bypasses `build()` (`evolution-orchestrator.ts:311-326` → `sourceFromTraces(['success','verified'], true, …)`); no secret scan (repro: `sk-ant-…` reached the judge), no split/holdout, no dedup; `corrected` → `expected_output = correctionFeedback` (correction as gold); `traceFilter = {}` → traces of all personas and workspaces enter the candidate of a single persona (scope leak, AT-13). v1.2: `build({ traceFilter: { personaId, workspaceId }, includeCorrections:false, seed })`; GEPA on train+val; final paired score on the holdout; `holdoutViews` recorded; "≥30" is not universal sufficiency. Correction = signal, not gold. Status: PROPOSAL.
+
+### FRD-08.7 — UX truthfulness — PROPOSAL — BRIEF DIRECTION (DIR-13 "remove false UX claims") + CONFIRMED AT REVISION
+
+`EvolutionTab.tsx:759,771,883,237-249`: "Accept & Deploy", "hot-reloads the spec" (shown for both target kinds; correct only for behavioral-spec), "deployed lift", "score-verified". v1.2: status reflects activation (`written_not_active`), copy depends on the target kind, "score-verified" only with a paired holdout (F-EVO-10).
+
+---
+
+## 9. Attention / WorkItem and Routines
+
+### FRD-09.1 — Attention normalization — PROPOSAL — BRIEF DIRECTION (DIR-18) + PROPOSAL
+
+WorkItem (§2.9) from the Gmail/GCal/Outlook/Slack connectors that already exist (`packages/agent/src/connectors/*`; E2E has not been checked — UNKNOWN). **One** initial scenario and the actual authorization path are named in the Delivery plan/decision queue (brief §20.3), not here. Requirements: background incremental sync ≠ health probe ≠ manual fetch; cursor/delta persistence (`historyId`/`syncToken`/delta), lost cursor, dedup, revoked credentials, retention, a labeled eval set for precision/false-positives (AT-24). Channel profiles per EXT-11 (channel rules/ToS: AUDIT FINDING — TO VERIFY (live 27.09.2026, source: external.md §5, §8); repo state of the adapters — `whatsapp-adapter.ts:2,5`, no Viber adapter — CONFIRMED AT REVISION): WhatsApp = export/import (+roadmap; live personal NO; `whatsapp-adapter.ts:2-5` itself states that Baileys violates the ToS), Viber = bot/forward or drop, Discord = bot/forward, Telegram = Bot API (user API roadmap with an ADR), Slack = user token with ToS storage restrictions (legal TO VERIFY), Gmail = restricted scopes → OAuth verification + CASA (exemption for local-only desktop TO VERIFY), MS Graph = delegated without admin consent (most favorable; MSA accounts TO VERIFY). No blanket "no API" claims.
+
+### FRD-09.2 — Injection from harvested content — PROPOSAL — BRIEF DIRECTION (§18 A13 "ACCEPT WITH LIMITATION") + CONFIRMED AT REVISION
+
+Scan at ingestion **ALREADY CLOSED** (`harvest/pipeline.ts:108-142` Pass 0 `evaluateExternalMemoryIngress`; `connector-harvest.ts:189-191`; `extract-memory-lanes.ts:298`). Taint as a typed field **does not exist** (grep `taint` only comments) → `ContextPackage.sources[].taint` (§2.7). The scanner is regex-only (`injection-scanner.ts:22-56`) = defense-in-depth; protection of policy/vault/send depends on the approval floor (`tool-executor.ts:184-226`) and `ALWAYS_CONFIRM` (`confirmation.ts:16-29`) — correct; the AT-19 test "path without a keyword" does not exist (F-CAP-05).
+
+### FRD-09.3 — Routines = trigger, not new intelligence — PROPOSAL — BRIEF DIRECTION (DIR-19) + CONFIRMED AT REVISION (state)
+
+- Routine = schedule/event trigger for an allowed work recipe with an `occurrenceId`, budget, Workspace, policy and result channel; no separate "routine harness family" (R05). Reuse: `CronStore` + `LocalScheduler` (`cron-store.ts`, `cron.ts`, 8 `job_type`s `index.ts:1913-2706`) + `AutomationCenterApp` (next run, pause/run-now, history, L2 approvals — F-DUR-11).
+- Approval for a daily draft ≠ approval to send. Pause/disable of a routine ≠ mid-phase pause of the executor.
+
+### FRD-09.4 — Misfire, DST, timezone, occurrence, fencing — PROPOSAL (AT-23) + AUDIT FINDING — TO VERIFY
+
+- Contract: a `timezone` field per routine; misfire policy explicit per routine: `skip` | `catch_up_one` | bounded rule; DST transition defined; a restart/duplicate event does not produce a duplicate occurrence action; the occurrence budget is not reset; `occurrenceId` in the executor signature; lease fencing (§4.3).
+- State (F-DUR-10, CONFIRMED): `getDue()` = `enabled=1 AND next_run_at <= datetime('now')` (`cron-store.ts:367-371`); `markRun` only after success (`cron.ts:276`) → a failure re-fires on every tick until the 5-strike auto-disable (`cron.ts:55,307-311`); `computeNextRun` without `tz` (`cron-store.ts:203-206`, cron-parser 4.9.0 → the process's local time zone); `sweepInterruptedRuns` does not touch `next_run_at` → the same occurrence is executed again after a crash (for `ai_task` with `proposeHeld` = two held rows for the same intent, F-DUR-14 branch active); no `timezone` field; DST behavior untested (UNKNOWN).
+- **New finding from the refute (F-DUR-10):** `computeNextRun` writes ISO with `'T'` (`next().toISOString()`), while `getDue` compares against `datetime('now')` (`YYYY-MM-DD HH:MM:SS`, space); BINARY collation `'T'(0x54) > ' '(0x20)` → a `next_run_at` on the same UTC date is **always greater** than now → a sub-daily routine runs at most once per UTC day, a daily `0 9 * * *` is delayed until 00:00 UTC of the following day. an SQL probe over `:memory:` better-sqlite3 was executed; one against `CronStore` was not → **AUDIT FINDING — TO VERIFY**; proposed repro: `store.create({cronExpr:'* * * * *'})` then after >60 s `store.getDue()` (expected 1, hypothesis 0). No test exercises the real path `create()→getDue()` (`cron-ai-task.test.ts:230,280` writes the sqlite format directly; hardening tests mock `getDue`). This is a G1 candidate (truthfulness of routines), ahead of any Routines UX work.
+
+### FRD-09.5 — TOOLLESS carve-out — HISTORICAL FOUNDER DECISION (memory, 2026-06-29: "L2 assist stays TOOLLESS") — aligned with brief §11.5/C15 + PROPOSAL — BRIEF DIRECTION (§17 C15 "CARVE-OUT") + CONFIRMED AT REVISION
+
+The Loops L2 maker stays toolless (`loop-executor.ts:254-262` `chat()` without tools; one proposed action → held queue `index.ts:2632-2645`). An approved **routine** may start a tool-using work run through the same permission/durable layer under a **different contract** (superseding ADR (7), brief §20.2), without silent acquisition. Loop cross-tick state moves to the run store (§7.2). Status: HISTORICAL FOUNDER DECISION (memory, 2026-06-29: L2 toolless; aligned with brief §11.5/C15) + PROPOSAL — BRIEF DIRECTION (C15: approved routine under a different contract) + PROPOSAL (ADR-07).
+
+---
+
+## 10. Model readiness and hardware ladder
+
+### FRD-10.1 — Readiness is live evidence — PROPOSAL — BRIEF DIRECTION (DIR-17, §18 A20) + CONFIRMED AT REVISION (false positives)
+
+- `useHasWorkingModel.ts:171-174` `transient` → `ready` when the sidecar is offline or the probe is `verified:false` without a rejection; `:129-136` a third false positive (default-model probe `configured && !verified && !rejected` → `ready:true`); `:244-245` `localReady = localModelCount > 0` (count-based from `/api/tags`). The behavior is intentional and regression-locked (`5e2de2b8`; tests `useHasWorkingModel.test.ts:271-281,301-307,486-495` turn RED with the fix). `ModelGate.tsx:257-261` has the same logic inline (F-UXM-02).
+- Probe: `probeConfiguredModel` (`settings.ts:103-164`) `max_tokens: isQwen ? 32 : 1`, `verified = content.length > 0` (does not check `WAGGLE_OK`); timeout/cold start/network/HTTP ≠401/403 → identical `{configured:true, verified:false}`; no tool/structured-output round-trip (F-UXM-03). Router readiness `probeReadyOllamaModel` (`anthropic-proxy.ts:848-917`) is format-only (`/api/show` capabilities).
+- Contract: `ModelReadiness { modelRef, generation: { ok, sampleHash, latencyMs }, toolRoundTrip?: { ok, protocol } (obavezan za work profil), reason: 'ok'|'timeout'|'unreachable'|'cold_start'|'http_error'|'empty_content'|'auth_rejected'|'model_not_found'|'tool_format_incompatible', probedAt }`; `ready` **only** after an actual generation; different messages per `reason`; a format-only check is not "verified". Status: PROPOSAL.
+
+### FRD-10.2 — Hardware ladder fields — PROPOSAL — BRIEF DIRECTION (brief §11.3, §18 A21) + PROPOSAL
+
+`HardwareLadderRow { modelRef: { id, hfRevision, license }, weightFormat, quant, diskDownloadGb, diskCacheGb, ramGb, vramGb | unifiedMemoryGb, contextTokens, kvCacheGb, cpuOffload: bool, concurrency, measuredLatency: { taskShape, p50Ms, p95Ms, hardwareProfile }, runtime: { name, versionPin, archTag }, supportedProfile: 'managed_windows' | 'existing_ollama' | 'openai_compatible_endpoint' | 'byok' | 'offline_bundle' }`.
+- "A model that fits on disk is not a model that runs usably"; do **not** assume "24 GB GPU" from a single estimate (brief §11.3). Official VRAM/RAM per quant **does not exist** on HF/Ollama (EXT-3) → measure.
+- State: `hardware-detect.ts:7-19` NVIDIA + Apple + CPU only; AMD/Intel/WMI intentionally not built (`:330`) → an AMD/Intel Windows laptop falls back to `cpu_only` (F-UXM-05); pull `stream:false` + 45 min timeout, with no progress/resume reporting (`local-inference.ts:313-332`), while the managed runtime download **is** resumable with sha256 (`managed-ollama-runtime.ts:1109-1204`) (F-UXM-04); a post-pull digest + live generation probe exists (`local-inference.ts:338-377`) — a solid part.
+
+### FRD-10.3 — Reference model: Qwen 3.8 27B-class — DECISION (D-15) + PROPOSAL — BRIEF DIRECTION (§17 C19 "RE-BASELINE") + AUDIT FINDING — TO VERIFY (identity: live 27.09.2026, HF/Ollama, source `docs/plans/v1.2-evidence/phaseA/external.md` §1, §8 — not a property of the revision) + AUDIT FINDING — TO VERIFY (runtime)
+
+- Identity (EXT-1): `Qwen/Qwen3.8-27B`, HF sha `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, 2026-08-14, Apache-2.0, **dense** 27B VL, `model_type: qwen3_5`, 262k ctx, thinking default-on + `reasoning_effort`, the chat template has `<tool_call>`/`<function=` markers (E2E with the Waggle tool loop TO VERIFY; official parser for 3.8 UNKNOWN). Official quant `Qwen/Qwen3.8-27B-FP8`; GGUF `unsloth/Qwen3.8-27B-GGUF` UD-Q4_K_M 16.5 GB / Q8_0 29 GB / BF16 54.7 GB.
+- Ollama: `qwen3.8:27b` 18 GB (Q4_K_M class), landed in **v0.32.12 (14.08.2026; year inferred — release notes "14 Aug", external §7)**; Waggle pins `OLLAMA_TARGET_VERSION = '0.32.3'` / rollback `'0.32.0'` (`managed-ollama-runtime.ts:28-29`) → **the pinned runtime is older than the first Qwen 3.8 release** (EXT-2) → repin (≥0.32.12; reasonably ≥0.32.15 because of the system-message normalization) + pull/generate/tool test on Windows GGML + a new router/installer receipt. Status: AUDIT FINDING — TO VERIFY.
+- Catalog: `cookbook/catalog.ts:44-51` has no Qwen 3.5/3.6/3.8; `model-fit.ts:207-214` has no rule for `qwen3.8` (it would fall through to `qwen3`=4); the certified managed model is `qwen2.5:0.5b` (`certify-windows-installer.ps1:2099`) → the receipt proves a smoke model, not the reference target (F-UXM-06). v1.2: `certificateModel` vs `recommendedModel` explicitly in the receipt.
+- The control baseline `Qwen/Qwen3.6-35B-A3B` (MoE 35B/3B active, sha `995ad96e…`) is a **different configuration**; in the production router the route is cloud DashScope (`litellm-config.yaml:211-215`, EXT-4), while the benchmark harness has a local vLLM entry `qwen3.6-35b-a3b-local` (`benchmarks/harness/config/models.json:61-67`) and the runbook `benchmarks/gaia2/PILLAR1-QWEN-LOCAL-RUNBOOK.md` (CONFIRMED AT REVISION) → do not carry over score/hardware; whether the old results are local or cloud = TO VERIFY.
+
+### FRD-10.4 — Installation paths — PROPOSAL — BRIEF DIRECTION (brief §11.3) + PROPOSAL
+
+Managed local runtime on a supported Windows profile; optionally an existing Ollama; a validated OpenAI-compatible endpoint (llama.cpp/LM Studio as presets, R17); BYOK. vLLM = self-host/server path or endpoint, not a mandatory one-click Windows installation. File `path` ≠ API `base_url`. Resumable download, checksum, free disk space, interrupted installation, rollback and health check belong to installation quality; offline package = a separate supported profile.
+
+### FRD-10.5 — Onboarding — PROPOSAL — BRIEF DIRECTION (brief §11.2) + CONFIRMED AT REVISION (state)
+
+`OnboardingWizard.tsx:97` 6 steps, resumable (`useOnboarding.ts:27`), ModelGate hard gate (`ModelGateStep.tsx:63-65`), deterministic before the model (good); the first task is `'Hello! What can you help me with?'` (`OnboardingWizard.tsx:107` `DEFAULT_FIRST_MESSAGE`) → does not produce an artifact; `ALL_ONBOARDING_PERSONAS`/`getPersonasForTemplate` exists-but-unwired; onboarding does **not** ask for a persona choice (F-UXM-10/12). v1.2: a template-specific first task with an artifact; optional mail/calendar connection; no persona/harness/MCP questions; a multi-gigabyte download is not a "ten minutes" criterion.
+
+---
+
+## 11. Surfaces
+
+### FRD-11.1 — Desktop is the authoritative local host — DECISION (D-04) + CONFIRMED AT REVISION
+
+Windows/Tauri primary; sidecar loopback-only (`net-config.ts:24` per S1 C4); a powered-off laptop neither executes local routines nor responds to the phone (D-14). CLI and web/self-host = supported separate installation paths with the same backend contracts. Installer version `0.2.0` (`tauri.conf.json:4`, `Cargo.toml:3`) vs `app/package.json:4` `0.1.0` (drift, F-UXM-01); spec document version ≠ application version (C1).
+
+### FRD-11.2 — IM companion minimum — PROPOSAL (R02, brief §11.6) + CONFIRMED AT REVISION (state)
+
+Existing channels (`channels/{manager,pairing,chat-client,routes}.ts`; deny-by-default, `/pair` single-use code 10 min TTL in-memory, dedup 24h in-memory, rate limit 10/min) provide status/result/forward; **approve/deny over IM is intentionally disabled in v1** (`manager.ts:30-31 APPROVAL_NEEDED_REPLY`, `chat-client.ts:11-13`, `docs/plans/CHANNELS-ARC-2026-07-09.md:23`) (F-CAP-10). v1.2 (G3): confirmation bound to `pending_action.id`/`actionId` via a short-lived one-time token, payload fingerprint, expiry; replaying/forwarding someone else's confirmation does not yield a grant; `senderId` alone is not sufficient (AT-25). No exposure of the loopback sidecar to the public internet; LAN/VPN/relay/PWA are explicit alternatives; Waggle relay = a later service.
+
+### FRD-11.3 — Worker boundary (C20) — PROPOSAL — BRIEF DIRECTION (§17 C20 "EXPLICIT BOUNDARY") + CONFIRMED AT REVISION
+
+`packages/worker` (BullMQ/Redis/Postgres) has its own `chat/task/waggle/group/cron` handlers; `chat-handler.ts:11-24` calls `runAgentLoop` directly with the LiteLLM default model; **zero** references to `recallMemory|buildSystemPrompt|Orchestrator|PERSONAS|MultiMind|FrameStore` (F-TK-10). The local core has unified contracts; the worker is isolated or bound to KVARK, with no new Solo duplication; ADR (9). The Teams server starts only with `DATABASE_URL` + `CLERK_SECRET_KEY` (`local/index.ts:3585-3614`) (F-TK-08). Fate per component (KVARK adapter / extract / legacy / remove with a test) = Delivery plan, not this FRD.
+
+### FRD-11.4 — KVARK connect — PROPOSAL — BRIEF DIRECTION (DIR-20, §18 A27) + PROPOSAL
+
+`KvarkConnection { baseUrl, identity, tokenRef (vault), validatedAt, allowedOrgCapabilities[], sharingPolicy: 'none' (default) , revokedAt? }`. Connect = validation of connection+identity; gate on a **live connection** (`getKvarkConfig(vault) !== null` + health), not on `tier === 'ENTERPRISE'` (`settings.ts:1051`, `marketplace.ts:190`); registration `createKvarkTools({ client: new KvarkClient(getKvarkConfig(vault)) })` at the place where tools are assembled; Settings fields (`SettingsApp.tsx:1332-1343`, "Test Connection" `disabled`) to be wired up or removed; disconnect/revoke terminates further access, including cached org context per policy; an unavailable on-prem KVARK does **not** fall back to personal BYOK/cloud (D-03; `handleKvarkError` already has no fallback); the personal mind is not copied (R14). RED test for AT-26 (ADR-08-T3): server + vault `kvark:connection` + fake KVARK server health OK → the tool registry has 4 KVARK tools; without the entry or with a health failure → 0 (F-TK-11/12). Tier gates that actually block Solo (F-TK-19): `embeddingProviders` (FREE has no `litellm`), sessions 10/workspace, routes cost/cloud-sync/admin/team/enterprise-packs/governance, UI Approvals/Team, skill promotion — each gets a decision in the WB inventory (Delivery plan), and a G/PR assignment per ADR-08 O2: G1 only approvals, per-workspace cost and local audit export (W0-PR12); session cap, `embeddingProviders` and dead tier code G3 (WB-PR4); in-app "Upgrade to Team" copy G3 (WB-PR5, after DQ-03); skill promotion G3 (WB-PR3); this FRD contracts only: approvals (§6.6), per-workspace cost and local audit export are not behind a paywall (brief §12.2; `cost.ts:210,272`, `settings.ts:1192`).
+
+---
+
+## 12. Security, privacy, egress
+
+| ID | Contract | State | Status |
+|---|---|---|---|
+| FRD-12.1 | **Taint/provenance:** every `ContextPackage.source` carries `trust` (FrameSource) and `taint`; harvested content = `taint:'harvested'`; text within it cannot change policy, request the vault or approve sending (brief §11.4). | the taint field does not exist; the approval floor is the actual protection (F-CAP-05). | PROPOSAL — BRIEF DIRECTION (§18 A13) + PROPOSAL |
+| FRD-12.2 | **Injection defense-in-depth:** `scanForInjection` on the ingest and read paths; never as evidence that the content is not malicious. | write-side guard exists (`hook-runtime.ts:191`; `harvest/pipeline.ts:108-142`); read-side in the hook path does not (F-HM-04); Waggle recall scans (`orchestrator.ts:923-933`). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-12.3 | **Secrets never in the prompt/trace/event:** resolver/hook/brief/evolution redact; a test asserts that `buildSystemPrompt`/trace/`RunEvent` do not contain vault values. | env allowlist fail-closed, runner redaction and brief redaction exist; hook SessionStart does not redact (F-HM-13); evolution sends traces containing secrets to Anthropic (F-EVO-07 repro); dedicated test UNKNOWN (F-CAP-06). | CONFIRMED AT REVISION + PROPOSAL |
+| FRD-12.4 | **Vault-only secrets** (CLAUDE.md §7); `kvark:connection` token in the vault. | vault upsert is generic (`vault.ts:153-171`). | CONFIRMED AT REVISION (applicable project rule `CLAUDE.md` §7 "Non-Negotiable"; not a D-nn) + PROPOSAL (`kvark:connection` in the vault) |
+| FRD-12.5 | **Egress measurement per profile:** purely local/offline profile → measurement of **unapproved** egress (expected 0 destinations outside the allowlist); BYOK/live-channel profile → confirmation of allowed destinations and minimization (not "zero traffic"); KVARK profile → a separate on-prem model/evaluator boundary. | does not exist as a test; the reranker/embedding model download (`~/.waggle/models/*`) is legitimate egress that must go into the offline profile's allowlist or into the offline bundle (F-HM-01). | PROPOSAL (brief §16 after AT-30) |
+| FRD-12.6 | **Approvals/revocation do not depend on the model's statement;** IM confirmation only with secure binding. | §6.6, §11.2. | PROPOSAL — BRIEF DIRECTION (§18 A15) |
+| FRD-12.7 | **Threat model of installations:** MCP binary/marketplace bounded (`installer.ts:392`; `forceInsecure` from the client body with audit `marketplace.ts:482-503`); `THREAT_MODEL.md` exists (175 lines, `c520bfb0` 2026-08-24; Controls + Known Gaps) — it does not cover the inline install boundary (starter-pack/proposal, `forceInsecure`, SecurityGate), MCP binary install, egress profiles or PostHog (grep over `git show 2af0904d:THREAT_MODEL.md` = 0) → an addendum is missing (ADR-10-P6). | CONFIRMED AT REVISION (mechanism, F-CAP-06) + AUDIT FINDING — TO VERIFY (document and gap: own read-only check outside phase-A, see ADR-10 "Anchor provenance") | PROPOSAL (A14: addendum) |
+| FRD-12.8 | **Erasure/export cover the new stores** (run store, checkpoints, artifacts, WorkItems) through the existing `erased_subjects`/`stableHarvestId`; a technical test is not a legal certification. | `erase` exists in `waggle-memory-mcp`, not in the hive-mind MCP (F-HM-17); checkpoint-referenced context has no invalidation (F-HM-18). | PROPOSAL — BRIEF DIRECTION (§18 A3) + PROPOSAL |
+| FRD-12.9 | **Rollback ≠ restoring erased rights** (DIR-21): a code rollback does not revive erased data/revoked consent/credentials; a sent email is not rolled back by restoring the database. Mechanism: `erased_subjects` export in the snapshot manifest (GDPR-H-04) and the revocation ledger `revocations.json` (GDPR-H-05, `WAGGLE-MIGRATIONS-v1.2.md`; FRD-14.16; W1-PR15, G2) with a Class B restore test that re-applies erasures and revocations (MIG-00.6); evidence = AT-27. | no revocation ledger: `VaultStore.delete` and `ApprovalGrantStore.revoke` delete without a trace (GDPR-H-05: grant `revoke` CONFIRMED AT REVISION [F-CAP-09], the rest AUDIT FINDING — TO VERIFY); snapshot/restore does not exist in the code (GDPR-H-04). | PROPOSAL — BRIEF DIRECTION (DIR-21) + PROPOSAL (ledger) |
+| FRD-12.10 | **License/NOTICE consistency** (C5): `packages/optimizer/LICENSE`, `packages/weaver/LICENSE` "proprietary and confidential" alongside `"license":"MIT"` in package.json; 3 hive-mind NOTICE files declare agent/evolution/vault/tiers/Tauri/WaggleDance proprietary and reference a nonexistent `EXTRACTION.md`; 9 manifests without `license`; the repo is **public** (live GitHub 27.09.2026) while CLAUDE.md/AGENTS.md/README say "remains private" (F-TK-13, F-REL-08). | CONFIRMED AT REVISION (files) / AUDIT FINDING — TO VERIFY (decision) | UNKNOWN — open: DQ-02 (licensing implementation, brief §20.3); does not open D-01 |
+| FRD-12.11 | **One telemetry switch + disclosure** (PRD-02-12; ADR-10 O4; replaces FRD v1.1 §12 "any future cloud telemetry is opt-in"): the Settings "anonymous telemetry" switch controls the local telemetry store **and** PostHog from the same handler (`optOutPostHog`/`optInPostHog` alongside `adapter.toggleTelemetry`) or PostHog runs with `opt_out_capturing_by_default: true` until the user turns it on; onboarding disclosure (what is sent, to whom) **before** the first `onboarding_complete` capture; release checklist item "`VITE_POSTHOG_KEY` baked into the candidate?". Test (ADR-10-T2): toggle OFF → `localStorage['waggle:telemetry-opt-out']==='true'` and `posthog.capture` is not called; ON → both systems, with the disclosure shown. | PostHog capture exists and the default is opted-in when the key is baked in; the Settings switch does not turn it off (`apps/web/src/lib/posthog.ts:39,42,49-60,114-127,133-166`; `SettingsApp.tsx:722-731`; `OnboardingWizard.tsx:463`; 0 callers of `optOutPostHog`/`optInPostHog`); `grep POSTHOG` in `.github/workflows/*.yml` and `app/package.json` = 0 → whether the key is in the candidate is UNKNOWN (ADR-10-K3). | AUDIT FINDING — TO VERIFY (ADR-10-K3, the writer's own check outside phase-A) + PROPOSAL (G1: Delivery plan W0-PR17, TM-25) |
+
+---
+
+## 13. Observability and benchmark manifest
+
+### FRD-13.1 — Per-run record — PROPOSAL (FRD v1.1 §13 refined)
+
+`RunRecord { runId, recipeId/version, modelRef, runtimeRef, taskShape, interaction, mode, phases: [{ phaseId, attempts, durationMs, tokens, observedToolCalls, gateResults, verdict }], checkpoints[], retries, budget, proofReceipts[], finalStatus, qualification }`. No secrets; context as references (`contextRef`), not copies.
+
+### FRD-13.2 — Trace qualification — PROPOSAL — BRIEF DIRECTION (brief §7.3) + PROPOSAL
+
+Every `execution_traces` row gets `qualification: 'qualified' | 'legacy_unqualified'` (column or tag) + `verifierVersion` + the origin of the status. Only `qualified` rows enter eval candidacy, and even then they are not automatically gold. Migration: `task_shape LIKE 'harness:%' AND outcome='verified'` → `legacy_unqualified` (§14). Dashboard test: `gate_passed` is not counted as content-confirmed.
+
+### FRD-13.3 — Metrics — PROPOSAL (C21 operationalization)
+
+completion rate (per `mode`), gate failure rate per gate type, resume success (AT-07), unknown_outcome rate (AT-08), human intervention count (approvals + corrections), latency p50/p95 per task shape, tokens/compute/usd, quality score (only from `ProofReceipt.level ≥ 2` or independent scoring), memory contribution (ablation delta, not the number of frames). Thresholds: UNKNOWN until the baseline (brief §16: before the locked test, not after).
+
+### FRD-13.4 — Benchmark manifest (brief §13.6) — PROPOSAL — BRIEF DIRECTION (DIR-22/23) + PROPOSAL
+
+```
+BenchmarkManifest {
+  codeSha, installerSha256?, model: { id, hfRevision, quant, runtime, version }, hardware: { gpu, vram, ram, cpu, os },
+  dataset: { name, version, hash, split }, scorer: { name, version, hash, judgeModel?, judgeVersion?, promptHash? },
+  toolVersions, skillVersions, contextLimits, tokenLimits, attempts, seeds, timeouts, pauseRecoveryMode,
+  profile: 'raw_model' | 'raw_model_min_tool_adapter' | '+skills' | '+memory' | '+harness' | '+memory+harness' | '+evolved',
+  ablationFlags: { memory, skills, harness, evolution }, // ne mogu isključiti strict verify (A25)
+  outputs: { completeOutputsRef, graderOutputsRef, recountScript },
+  cost: { modelInference, evaluator, toolApi, gpuTimeHours, energyAssumption?, humanReview? },  // odvojeno
+  contaminationFirewall: { mindReset: true, cachesReset: true, artifactsReset: true, goldExcludedFromMemory: true },
+  holdoutViews
+}
+```
+- Production path mandatory (DIR-22): the benchmark adapter translates the input and starts an isolated run through the **same** sidecar `/api/chat`/work path; it must not covertly use a better harness. A raw model on a tool benchmark gets a minimal sufficient tool adapter (brief §13.2). The baseline is scored by the same independent scorer.
+- State: `benchmarks/gaia2/adapter.ts` = narrow-proxy (cost-projection, not a full evaluation); the τ² adapter was **not found** at HEAD (git grep only docs), it exists on `origin/feature/harness-sota-bench` (66 commits ahead, 2022 behind; cherry-pick inventory F-REL-12; do **not** carry over the `fe7804bf` cost-tracker and the pilot "beats" results) (EXT-10, F-REL-12). Whether `waggle-bridge-server.ts` uses the production `/api/chat` = UNVERIFIED.
+- Primary professional-work test: **PROPOSAL** (not approved) APEX-Agents 1.1 (CC-BY-4.0, 240 tasks, Harbor 0.20.0, judge DeepSeek-v4-Flash-0731, published frontier baseline Claude Fable 5.1 68.6% pass@1 — license/tasks/runner/judge/baseline: AUDIT FINDING — TO VERIFY (live 27.09.2026, source: external.md §4.4, §8)) under the conditions from EXT §4.7 (cloud judge cost; local judge = a separate profile; Docker/WSL2 only on the bench machine; rubrics/`solution` do not enter `.mind`). The evidence card and the decision belong to the Benchmark protocol (brief §20.1).
+- Statistics (DIR-23): paired analysis for paired tasks; McNemar only for binary outcomes; CI for the score; equivalence/non-inferiority only with a prespecified margin. "No difference detected" ≠ "they are the same" (N=114, p=0.11 "matches" is a warning, not evidence). The allowed messages depend on the results (brief §13.5).
+- Prices: `cost-tracker.ts:28-30` Opus 4.6/4.7/4.8 $15/$75 (officially **$5/$25**), `:32` Sonnet 5 $3/$15 (officially **$2/$10**), `:39-40` Haiku 3.5 wrong + retired IDs, fallback `:66` 3×; the table feeds the `ModelSpendBudget` reservations → **product impact** (premature `BudgetExceededError` for BYOK Opus users), not only the manifest (F-REL-06, EXT-12). Test `cost-tracker.test.ts:54-55` locks in the wrong value. Status: CONFIRMED AT REVISION (repo: `cost-tracker.ts` lines, test, `models.json`) + AUDIT FINDING — TO VERIFY (official prices $5/$25, $2/$10, Haiku 3.5 $0.80/$4 and retired IDs: live 27.09.2026, platform.claude.com; source: external.md §6, §8), same as PRD-14-09; the fix (same scope as Delivery plan W0-PR13) = 4 overpriced rows + Haiku 3.5 `:39-40` (→ $0.80/$4 or a retired marker) + fallback `:66` + comment `:24-25` with URL/date provenance + test + `benchmarks/harness/config/models.json`.
+
+### FRD-13.5 — Release evidence — PROPOSAL — BRIEF DIRECTION (§17 C22 "ACCEPT", brief §15.4) + CONFIRMED AT REVISION
+
+`main 2af0904d` is 618 commits from `c4e6a515` and 560 from `e4bf403e`; 355 files changed, 116 non-test runtime sources, 41 on covered receipt surfaces → **no receipt covers `2af0904d`**; a bounded no-impact attestation is not possible (F-REL-02). Doc drift: `b07a6173` is a PR test-merge with the same tree as `e4bf403e`; PR #83 **was** merged (`44baa77d`, 2026-09-09) while 09-LAUNCH/README say the opposite (F-REL-01). Receipt tools: installer certify is wired; router (`qualify-smart-router.ts`) and auth canary (`test-windows-official-auth-canaries.ps1`) have no npm/CI caller; **a crash-injection receipt over the packaged installer does not exist** (F-REL-03) → mandatory for AT-07/AT-30. Live GitHub (27.09.2026): `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` undefined (publish fail-closed ✓), `production` env without protection rules, `main` without branch protection, secret scanning disabled on the public repo (F-REL-09) — operational decisions of the owner, not a PR. SBOM/THIRD_PARTY_NOTICES do not exist; the `onnxruntime-node` and `sqlite-vec-windows-x64` npm packages have no LICENSE file → notices are generated from upstream; `npm audit` `continue-on-error: true`; license CI does not exist (F-REL-04/05). All → G3 gate list in the Delivery plan; here only the contract that AT-30 requires notices+SBOM+fresh receipts for the exact candidate SHA.
+
+---
+
+## 14. Migrations (pointer)
+
+The complete migration map is in `docs/plans/WAGGLE-MIGRATIONS-v1.2.md` (brief §20.1; it may be an FRD appendix). Here only the register of mandatory migrations that this FRD implies, with the condition "rollback does not restore erased rights" (DIR-21). All PROPOSAL.
+
+| ID | Subject | Requirement | Origin |
+|---|---|---|---|
+| FRD-14.1 | `agent-runs.json` v1 → run store | `schemaVersion`, dry-run, snapshot, statuses 1:1 per §2.12; legacy `interrupted` preserves the reason; does not repeat unknown side effects; retention/GC; corrupt-load and overflow (`MAX_EVENTS=2_000`) tests do not exist (refute F-DUR-02) | F-DUR-01/02, A2, A8 |
+| FRD-14.2 | `execution_traces.outcome` `CHECK` | table-rebuild for `gate_passed` (or a tag-based alternative); `verified` harness rows → `legacy_unqualified`; `mind/schema.ts:235-253` is part of the OSS substrate → drift baseline update (UNKNOWN whether covered) | F-HARN-06, refute |
+| FRD-14.3 | `evolution_runs.status` `CHECK` | table-rebuild for `rolled_back`, `written_not_active`; `active_from/active_until` | F-EVO-02/10 |
+| FRD-14.4 | `pending_actions.status` | + `dispatching`, `unknown_outcome`; `attemptId`; `providerIdempotencyKey?` | F-DUR-05 |
+| FRD-14.5 | Cron: `timezone`, `occurrenceId`, lease `UNIQUE`/conditional claim, `next_run_at` format | separate the schedule from the execution state; no duplicate catch-up; the format fix depends on confirmation of the FINDING (§9.4) | F-DUR-10 |
+| FRD-14.6 | Loop `loop:<id>` Awareness state → run store | + retrieval exclusion until the migration (in the `hive-mind-core` substrate → OSS forward-port cost) | F-DUR-09 |
+| FRD-14.7 | Persona/spec/skill override → active-version pointer | pinned version for a started run; rollback; `listPersonas` dedupe | F-EVO-01/02 |
+| FRD-14.8 | Context and scope | `contextRef` in the checkpoint; revocation/erasure apply to checkpoint/reference copies | F-HM-18 |
+| FRD-14.9 | Personal-mind run summaries (4 writers) | stop writing content (W0-PR11, G1); existing (legacy) frames: MIG-05(i) — marker `metadata.recallExcluded` with unchanged `importance='normal'`, without deletion, honored on all recall paths (not `importance='temporary'`: `FrameStore.compact()` via cron `memory_compact` deletes `temporary` older than 30 d — MIG-05 Critic note); W0-PR18 (G1), merge after W0-PR11, on a copy per DP-0.09 (Class A over the golden fixture W0-PR19); choice (i)/(ii) = MDQ-07 (Memory owner); erasure rules apply; fleet policy gate redefined | F-HM-05; MIG-05(i) |
+| FRD-14.10 | Tier/billing/team-sync | read-compatible via `LEGACY_TIER_MAP`/`parseTier` (PRO→FREE precedent `09b199aa`); actual subscriber inventory before the change (UNKNOWN; an external call is not allowed); no financial side effects without approval | F-TK-06/07/16 |
+| FRD-14.11 | Hook `temporary` recall exclusion + read-side scan/redaction | no storage change | F-HM-03/04/13 |
+| FRD-14.12 | `cost-tracker.ts` prices | 4 overpriced rows + Haiku 3.5 `:39-40` (correction or retired marker) + fallback `:66` + comment `:24-25` + test + `models.json` (= Delivery plan W0-PR13) | F-REL-06 |
+| FRD-14.13 | Contract for new durable stores (MIG-06): WorkItem, RunEvent journal, `ToolAction`/`ToolAttempt`, Checkpoint, ProofReceipt, artifact manifest, capability request/proposal, OAuth state, negative grants | from day one: `schemaVersion`, scope (`workspace_id`), provenance `(source, source_ref)` where an external subject exists, retention class + GC rule (GC with a `--dry-run` list of candidates; `executed` actions are not deleted by GC before the run retention expires), export and erase mapping (FRD-14.14); retention numbers = MDQ-08 (for confirmation, not a decision); work units: W1-PR2/PR6/PR7 (G2), W4-PR3/PR5/PR6 (G2), W7-PR2 (G3) | MIG-06; S1 A3, A7, A8; F-CAP-02, F-CAP-05(c) |
+| FRD-14.14 | Export/erasure coverage of stores (MIG-08), including the run store and the W4 stores | `POST /api/export` gets sections and `manifest.json` (`schemaVersion`, code SHA, sections, hashes): runs/checkpoints/journal and held actions without `args_json` content (W1-PR14), traces redacted (W1-PR7), routines/occurrence (W1-PR11), evolution runs and override versions (W3e-PR1), grants without fingerprint secrets (W4-PR6), proposal store and OAuth state without state values (W4-PR3/PR5), pairing allowlist without tokens (W8-PR3), WorkItems (W7-PR2); subject erase gets `ExecutionErasure` with the same `(source, source_ref)` key and a write to the same `erased_subjects` ledger (W1-PR14); "no secrets" test over the ZIP; a PR that introduces or changes a store from this list without export/erase mapping does not pass | MIG-08; S1 A3; FRD-12.8 |
+| FRD-14.15 | Versioned migration ledger and runner (MIG-09) | `<dataDir>/migrations/ledger.json` append-only (tmp+rename), entry `{migId, fromVersion, toVersion, codeSha, startedAt, finishedAt, mode: dry-run\|apply\|rollback, receiptPath, outcome}`; migration registry `{id, version, dryRun, snapshot, apply, verify, rollbackClass}`; boot step **before** opening the stores; fail-closed read-only when the data is newer than the code; `--dry-run-all`; the ledger is never restored from a snapshot; in the packaged sidecar bundle (AT-30); W1-PR13 (G2), merge before the MIG-01 apply | MIG-09; MIG INV-21; brief §12.4 |
+| FRD-14.16 | Revocation ledger `revocations.json` (GDPR-H-05) | append-only `{kind, key, revokedAt, reason}` under `dataDir`, outside the files that get restored (MIG §4 invariant 4); hooks in `VaultStore.delete`, `ApprovalGrantStore.revoke` and registry credential revoke (KVARK disconnect is added by WB-PR3); MIG-00.6 Class B restore re-applies all revocations made after the snapshot; W1-PR15 (G2), before the first G2 apply; G1 mutations are Class A and do not depend on it (DP-0.09) | MIG GDPR-H-05, MIG-00.6; DIR-21; F-CAP-09 |
+
+---
+
+## 15. Acceptance tests AT-01..AT-30
+
+All of the below are **proposed criteria** (brief §16), not executed tests. Column "fixture / env / owner / milestone": owner = **role** from Delivery plan §2 "Owner/role" and DP-0.14 (canonical list Delivery plan DP-0.14: Harness, Chat, Durable, Memory, Server, Boundary, Capability, Security, External-executor, Evolution, Model/Runtime, UX, Attention, Channels, Benchmark, Release, OSS/License owner — roles, not names; assignment = PROPOSAL); `fixture: <TBD>` remains only where a fixture is genuinely undefined (AT-24 labeled set); `milestone: G1|G2|G3 (PREDLOG)`. Column "Wave (authoritative for completion evidence)": the wave/PR whose RED→GREEN test **closes** the AT (or the named part of the AT); other waves that list the AT in the Delivery plan's "Exit tests" list are regression or an explicitly marked "part" — source: `WAGGLE-DELIVERY-PLAN-v1.2.md` §2 exit lists + §7 TM rows (CONFIRMED AT REVISION of the package, repeated by grep over the 13 "Exit tests" rows of Delivery plan §2 on 28.09.2026: all 30 ATs appear in ≥1 exit list; AT-06/12/18/19/23/28/30 in 3–4 waves, AT-13 in five (W0, W2, W3e, W7, WB), which is why the authoritative wave is named explicitly; Critic note: the earlier statement "AT-01/06/13/19/22/23/28/30 in 3–4 waves" did not hold — after OD-10 AT-22 is only in the W3 exit list, AT-01 in two (W0, W3), and AT-12/AT-18 had been omitted). When an AT is split across G milestones, the milestone column carries the split form "G1 part / G2 (PR) authoritative"; a **prerequisite** (tool, fixture or RED test that does not close any part of an AT — e.g. W0-PR19, W8-PR1, WB-PR2) is marked as such and does not enter the G columns of PRD-04-01. Numeric thresholds are locked before the final test based on the baseline. **Test location (brief §16 "location")** = the PR from the "Wave" column that writes the test, in the test suite of the package that PR changes; where the "Existing RED/GREEN anchor" column names a file, that is the file that is extended or rewritten; the exact name of the new test file is named by the PR (PROPOSAL; addition from the final completeness check 29.09.2026).
+
+| AT | Scenario and measurable outcome | FRD | Existing RED/GREEN anchor (`2af0904d`) | fixture / env / owner (role) / milestone | Wave (authoritative for completion evidence) |
+|---|---|---|---|---|---|
+| AT-01 | `VERDICT: FAIL`, invalid verdict, missing evidence → a strict run is **not** COMPLETED; CONDITIONAL follows the recipe policy | FRD-05.1, 05.5, 02.6 | repro `docs/plans/v1.2-evidence/phaseA/repro-harness.mjs` 02a–d; tests that turn red: `workflow-tools-harness.test.ts:135-179` | fixture: `research-verify` with FAIL/CONDITIONAL/no-VERDICT · env: vitest, no provider · owner: Harness owner · G1 (W0-PR1/PR2) authoritative / G2 part (W3-PR6) | W0-PR1/PR2 (G1: verify default fail-closed + `VERDICT` value, CONDITIONAL policy) · W3-PR6 (G2 part: strict does not complete without `ProofReceipt`) |
+| AT-02 | `bash echo` is not a passed test; non-zero exit ≠ success; the gate reads the observed journal | FRD-05.2, 05.3 | repro 03a–c, 08a; `system-tools.test.ts:365-370` tolerates the `Exit code:` prefix | fixture: fake bash with exit 1 + output · env: vitest · owner: Harness owner · G1 | W0-PR3/PR4 (G1; only wave) |
+| AT-03 | Budget stop before verify → partial/blocked, `budget.spent` preserved, no "fully verified" | FRD-05.6, 04.5 | repro 05a–c (gate level); the full loop with a real budget has **not** been executed | fixture: small `maxTokenBudget` + "All tests pass" content · env: vitest + fake provider · owner: Harness owner (W0) → Durable owner (W1) · G1 part / G2 (W1-PR4) authoritative | W0-PR5 (G1 part: disclose-only, `budgetStop` meta) · W1-PR4 (G2 authoritative: `Checkpoint.spent` survives restart; together with W0-PR5 closes AT-03 in full) |
+| AT-04 | An activated override enters the next actual prompt; rollback changes the next run; an existing run is pinned | FRD-08.2 | repro `docs/plans/v1.2-evidence/phaseA/repro-shadow.mjs`; RED must go through `resolvePersona`/`buildSystemPrompt`, not `listPersonas().find(id && includes)`; order F-EVO-01 → F-EVO-10 | fixture: deploy `coder` override + `POST /api/chat` · env: server test · owner: Evolution owner · G1 part (W0-PR9 minimum) / G2 (W3e-PR1) authoritative | W0-PR9 (G1 minimum: override in the next actual prompt, `written_not_active`) · W3e-PR1 (G2 authoritative: rollback route + pinned version of a started run; together with W0-PR9 closes AT-04 in full) |
+| AT-05 | The evolved schema is used in target execution; the candidate is executed before scoring; recognizes prompt-as-output | FRD-08.1 (row `EvolveSchema` Stage 1: wire-or-drop, R19), 08.3 | guard tests exist; route test `complete()` = 2/example is missing (`evolution-run-route.test.ts:37-58` stub) | fixture: stub LLM with `callCount()` · env: server test · owner: Evolution owner · G2 | W3e-PR6 (schema in Stage 2 or removed) + W3e-PR8 (route test `complete()` = 2/example) (G2; only wave) |
+| AT-06 | Two concurrent Workspace runs: different runId; events/context/trace do not mix | FRD-02.5, 05.3 | repro 07a–b, 08b (both `harnessId='document-draft'` indistinguishable); not from two HTTP runs | fixture: 2 workspaces, same harness · env: server + fake provider · owner: Harness owner (W0-PR7) → Durable owner (W1-PR8) · G1 part (W0-PR7) / G2 (W1-PR8 + W2-PR1) authoritative | W0-PR7 (G1 part: different `runId` in all three payloads) · W1-PR8 (G2 part: per-run bus/trace) · W2-PR1 (G2 part: context does not mix) — **G2 authoritative = W1-PR8 + W2-PR1 together**: AT-06 in full is closed by a test from two HTTP runs in the exit of whichever of waves W1/W2 closes last (W2-PR1 does not depend on W1-PR8, graph §3, so the order is not known in advance); W3 exit = regression, not new evidence |
+| AT-07 | Crash after a confirmed phase → restart continues the next phase with the same references; spend is not lost | FRD-04.2, 02.3, 04.5 | `long-task-loop-integration.test.ts:221-330` (step-level, unwired); crash-injection over a packaged build does **not exist** (F-REL-03) | fixture: kill after checkpoint · env: vitest + packaged Windows candidate · owner: Durable owner · G2 (unit + packaged receipt C at F2) / G3 (C repeated on the F3 candidate) | W1-PR4/PR5/PR12 (G2: dev crash-injection, restart continues the next phase) · W8-PR2 (G2 part, merge before F2: packaged build, receipt **C** at F2; repeated at F3) |
+| AT-08 | Crash after provider success before ack → the same `actionId` reconciled; no blind resend; `unknown_outcome` visible | FRD-02.4 | `held-action-executor.test.ts:120-128` (idempotent claim); a crash-after-success test does not exist | fixture: fake provider with a receipt · env: vitest · owner: Durable owner · G2 | W1-PR6 + W1-PR12 (G2; only wave) |
+| AT-09 | Two processes take over the same run → only one may perform a new side-effect action | FRD-04.3 | none; the cron lease is not fencing (`cron-store.ts:442-447`) | fixture: two `CronStore`/run store handles over the same `dataDir` · env: vitest · owner: Durable owner · G2 | W1-PR5 + W1-PR12 (G2; only wave) |
+| AT-10 | SSE reconnect/replay does not duplicate cards or actions; detach ≠ cancel; cancel prevents new actions | FRD-02.5, 04.4 | `agent-run-registry.test.ts:104-105` (`resetRequired=false`); chat `sinceSeq` does not exist; R3-008 pin `agent-loop.test.ts:1981-2010` | fixture: SSE client with reconnect · env: server test · owner: Durable owner · Chat owner (`chat.ts` detach/`sinceSeq`) · G2 | W1-PR8/PR9 (G2: `sinceSeq` replay, detach ≠ cancel, ADR-03) · W5-PR1 (G2 UI part: reconnect does not duplicate cards) |
+| AT-11 | A missing connector blocks an **already created** run; a valid setup returns the same run; a callback for a different request/expired grant does not start work | FRD-02.8, FRD-03.5, FRD-03.6, FRD-06.4 | `agent-search.test.ts:44` locks the current open-in; `capability-proposals.test.ts:100,114,171` scope/expiry/replay; api_key connector as technical evidence (R12) | fixture: api_key connector (e.g. Notion/Linear) · env: server test · owner: Capability owner · G2 | W4-PR3/PR4/PR5 (G2); W7 exit = regression on the mail connector, not new evidence |
+| AT-12 | Decline/expiry/revoke survives restart; model/hook/IM cannot reverse it | FRD-06.6 | expiry: `held-action-executor.test.ts:187` ("refuses to run a held action past its expiry"); re-validation at execution: `:198,292`; deny: `approval-flow.test.ts:75` (one-shot, nothing persistent); revoke (`ApprovalGrantStore.revoke` `approval-grants.ts:286`; `DELETE /api/approval/grants/:id` `routes/approval.ts:120`): test **not found** at `2af0904d` (`git grep "\.revoke("` over `*.test.ts` = 0) → RED test missing. Critic note (28.09.2026): the earlier citation of `approval-held.test.ts:302,313` as an expiry/revoke test was incorrect — `:302` = approve idempotency (409 `already_decided`), `:313` = legacy critical grants | fixture: deny + restart · env: server test · owner: Capability owner · Boundary owner (G1 part) · G1 (nav part) / G2 (authoritative) | W0-PR12 (G1 part: Approvals available to the Solo user) · W1-PR6 (G2 part: `BLOCKED_APPROVAL` persistent) · W4-PR6 (G2 authoritative: decline/expiry/revoke survives restart; model/hook/IM do not reverse it) |
+| AT-13 | A sentinel from Workspace A does not appear in personal or Workspace B retrieval | FRD-07.4 | 4 writers + ≥5 tests pin the leak as desired; a sentinel test does not exist; FINDING — TO VERIFY runtime | fixture: sentinel string in a run summary · env: server + 2 workspace minds · owner: Memory owner · G1 (W0-PR11/PR18) authoritative / G2 part (W2-PR1/PR2) | W0-PR11 (G1: sentinel Workspace A → not in personal recall; new writes) + W0-PR18 (G1: legacy leak frames of the 4 writers reclassified on a copy with a recall-exclusion marker, without changing `importance` and without deletion; test: a frame older than 30 d survives `compact()`; MIG-05(i), DP-0.09; Delivery plan G1 (c), W0 exit) · W2-PR1/PR2 (G2 part: extended to Workspace B); W3e-PR4, W7-PR2, WB exit = regression |
+| AT-14 | A RAWDETAIL quote is available in scope; hook `temporary` is not a long-lived fact; re-running extraction does not duplicate | FRD-07.2, 07.3, 07.7 | `w46-rawdetail-recall.test.ts`, `r2-recall-closure.test.ts:27-40`; hook exclusion test missing; `(runId, outputHash)` dedup missing | fixture: raw-turn frames + temporary hook frame · env: vitest (reranker OFF in `vitest.setup.ts:25-26` → the RAWDETAIL lane test must enable it) · owner: Memory owner · G1 part (W0-PR10) / G2 (W2-PR7/PR9) authoritative | W0-PR10 (G1 part: `temporary` excluded from hook recall) · W2-PR7/PR9 (G2 authoritative: RAWDETAIL available in scope, `(runId, outputHash)` dedup) |
+| AT-15 | A revoked/deleted source from the checkpoint context is not used after resume | FRD-02.7, 12.8 | erasure tests exist (`erasure.test.ts`); the checkpoint↔context link does not | fixture: brief frame deleted, then resume · env: server test · owner: Memory owner · G2 (W2-PR2) authoritative / G3 part (W7-PR2) | W2-PR2 (G2; authoritative) · W7-PR2 (G3 part: WorkItem erasure/export) |
+| AT-16 | The external executor receives a real `ContextPackage` and returns the result to the same Workspace; no key leakage; `toolsUsed` = tool-reported | FRD-07.6 | `executor-brief.test.ts` (6), `external-tool-runner.test.ts`; hook redaction/scan missing; E2E with Claude Code/Codex/Hermes has **not** been run | fixture: fake external tool binary · env: server + hook runtime · owner: External-executor owner · Memory owner · G2 (fake; first A receipt at F2) / G3 (A receipt for the exact candidate at F3) | W2-PR6/PR8 (G2: fake external tool, package + `tool-reported`) · W8-PR1 (G1 **prerequisite**, not part of the AT-16 evidence: router/canary entry-point + receipt manifest, before F1 — which is why the PRD-04-01 G1 column does not list it) · A receipt on real accounts (Claude Code/Codex/Hermes canary) at F2/F3 (Delivery plan §5; TM-09) |
+| AT-17 | An existing skill is found and used without a catalog; a missing binary capability is not installed without trust/approval | FRD-06.1, FRD-06.2, FRD-06.5 | `capability-acquisition.test.ts:131`; `installer-security.test.ts` (40); the "read-only persona does not get a write candidate" test is missing | fixture: read-only persona + write skill · env: vitest · owner: Capability owner · G2 | W4-PR2 (G2: envelope test "read-only persona does not get a write candidate"); W5 exit = indirect |
+| AT-18 | UI, agent and routine invoke the same action through the same permission/validation contract | FRD-06.7 | `held-action-executor.test.ts:140,158`; `command-registry*.test.ts` (not opened) | fixture: `install_mcp` from 3 entry points · env: server test · owner: Capability owner · G1 part (W0-PR12) / G3 (W4-PR8) authoritative | W4-PR8 (G3: `ActionDescriptor` source of truth for UI/agent/routine); W0-PR12 and WB exit = part (Approvals available), not authoritative |
+| AT-19 | Injection in an email/source does not change policy, does not exfiltrate the vault, does not authorize sending — also **without** a detected keyword | FRD-09.2, FRD-12.1, FRD-12.2 | `injection-scanner.test.ts`; approval floor tests; a combined test without a keyword is missing | fixture: harvested email with a paraphrased instruction · env: server test · owner: Security owner · Memory owner (W0-PR10 part) · G1 part (W0-PR10) / G2 (W4-PR6/PR7) authoritative / G3 part (W7-PR3/PR6) | W0-PR10 (G1 part: hook read scan/redaction) · W4-PR6/PR7 (G2 authoritative: approval floor without a keyword, vault not in the prompt/trace) · W7-PR3/PR6 (G3 part: harvested email fixture with a paraphrased instruction); W3e-PR4 = secrets in the eval set |
+| AT-20 | Key present but generation does not work → onboarding is not ready; a local model passes generation + tool round-trip; an interrupted pull is recoverable | FRD-10.1, 10.2 | `useHasWorkingModel.test.ts:271-281,301-307,486-495` pin the **wrong** behavior (RED after the fix); post-pull probe `local-inference.ts:355-377` GREEN anchor | fixture: mock probe timeout/offline · env: web vitest + server test + real Windows hardware · owner: Model/Runtime owner · G2 | W6-PR1/PR2/PR3/PR4 (G2; only wave; real Windows hardware for the ladder = W6-PR7) |
+| AT-21 | Research/document fixture → a file that opens, sections, resolvable sources; a deliberately wrong number/citation is caught by the validator or remains explicitly unconfirmed | FRD-05.2, 05.4, 05.7 | validators do not exist; `hasMinSections` exists | fixture: 2 recipes × fixture set with an injected error · env: server + local model · owner: Harness owner · G2 | W3-PR4/PR5 (G2: research-brief + document-production validators); W6 exit = indirect |
+| AT-22 | A new document changes the conclusion in the continuation of the same Workspace; cites the new source version; does not lose confirmed decisions | FRD-02.7, 03.4 | none | fixture: v1 source → v2 source · env: server + local model · owner: Harness owner (recipe) · Memory owner (source version) · G2 | W3-PR4/PR5 (G2; authoritative for AT-22 **as defined here**: new source version, preserved decisions). Critic note: the earlier "AT-22 (failure UX)" in the Delivery plan W1/W5 exit lists, TM-06/TM-14, Disposition A22/C12, MIG-01 and ADR-03-T6 was replaced by a named FRD-05.8 View-work/Stop-copy test without an AT ID (brief §16 has no AT for failure UX — Disposition OD-10); AT-22 remains only the change-input test (W3-PR4/PR5, TM-20, PRD-05-05, R08) — resolved in the third critical pass |
+| AT-23 | A routine after sleep/restart/DST follows the misfire policy; no duplicate occurrence action; the budget does not reset | FRD-09.4, 02.10 | `cron-scheduler-hardening.test.ts:227-250` (sweep); re-fire/catch-up/DST/2-process tests do not exist; **first** repro the `create()→getDue()` format FINDING | fixture: fake clock + real `CronStore` · env: vitest · owner: Durable owner · UX owner (W5 part) · G1 part (W0-PR14, format FINDING) / G2 (W1-PR11, policy) authoritative / G3 part (W5-PR3) | W0-PR14 (G1 part: `create()→getDue()` format FINDING) · W1-PR11 (G2 authoritative: occurrence id, misfire/DST policy, 2 processes) · W5-PR3 (G3 part: next occurrence / blocker / pause-disable in the Home block) |
+| AT-24 | Attention classifier/dedup on a labeled holdout; precision/FP/merge errors; threshold locked before scoring | FRD-09.1, 02.9 | does not exist (WorkItem net-new) | fixture: labeled mail set `<TBD>` · env: offline · owner: Attention owner · G3 | W7-PR4 (G3; only wave) |
+| AT-25 | A paired IM user receives an allowed status; confirms only the matching unexpired request; replay/forward does not yield a grant | FRD-11.2 | `channels-manager.test.ts:143,159,256`, `channels-pairing.test.ts` (13); approval-over-IM does not exist (Not in v1) | fixture: fake Telegram adapter · env: server test · owner: Channels owner · G3 | W8-PR3/PR4 (G3; only wave) |
+| AT-26 | KVARK connect activates only allowed org capabilities; an unavailable on-prem model does not trigger a cloud fallback; the personal mind is not copied | FRD-11.4 | `kvark-wiring.test.ts:46-52` "simulates the if(kvarkConfig) guard" (factory, not registration); RED (ADR-08-T3): server + vault entry + fake KVARK health OK → 4 tools; without an entry or on health fail → 0 | fixture: vault `kvark:connection` + fake KVARK server · env: server test · owner: Boundary owner · G1 (RED test only, prerequisite) / G2 part (W3e-PR2) / G3 (WB-PR3) authoritative | WB-PR2 (G1 prerequisite: RED test only, as `it.fails`, without registration and gate; does not close any part of AT-26, so the PRD-04-01 G1 column does not list it) · W3e-PR2 (G2 part: KVARK mode without a cloud judge; Delivery plan W3e exit, TM-04) · WB-PR3 (G3 authoritative: registration + gate `getKvarkConfig(vault)!==null && health.ok` + connect/validate/disconnect/revoke, no-sharing default) |
+| AT-27 | Migration of the old config/run schema is repeatable; rollback does not duplicate actions and does not restore erased/revoked items | FRD-14.*, 12.9 | `webhook.test.ts:137-147` (PRO→FREE precedent), `d11-datadir-tier.test.ts`; run store migration does not exist; revocation ledger does not exist (GDPR-H-05) | fixture: `agent-runs.json` v1 + legacy `config.json` + golden legacy-datadir tar + SHA-256 from W0-PR19 (`tests/fixtures/legacy-datadir/`, path PROPOSAL; MIG §6 pt.2, MIG-00.7) · env: vitest · owner: Boundary owner (config/tier) · Durable owner (run store, `execution_traces`, revocation ledger) · Evolution owner (`evolution_runs`) · Capability owner (W4 stores) · G1 part (config; MIG-04(A)/MIG-05(i) Class A) / G2 part (run store, revocation ledger + Class B restore, W4 stores) / G3 (WB-PR5, W7-PR2) authoritative | per migration (MIG; aligned with Delivery plan TM-16 and G1 (j)): W0-PR19 (G1 prerequisite: golden fixture over which the tests of all migrations run; merge before W0-PR6/PR18) · W0-PR12 (G1 config part, `tier-enforcement-matrix.test.ts` tripwire; MIG-07.1) · W0-PR6 (MIG-04(A)) + W0-PR18 (MIG-05(i), legacy frames) · W1-PR13 (MIG-09 ledger/runner, merge before the W1-PR2 apply) · W1-PR15 (G2 part: revocation ledger `revocations.json` + Class B restore test with re-application of erasure and revocation over the golden fixture — MIG-00.6, GDPR-H-05, FRD-14.16; the only PR that proves "rollback does not restore … revoked permissions"; merge before the first G2 apply) · W1-PR2 (MIG-01 run store) · W1-PR6/PR10/PR11 (MIG-02) · W1-PR7 (MIG-04(B) `execution_traces` CHECK rebuild) · W1-PR14 (MIG-08 export/erase of the run store) · W1-PR7/PR11, W3e-PR1, W4-PR6, W8-PR3 (MIG-08 export/erase sections of the stores that those PRs change or introduce, FRD-14.14) · W2-PR2 (MIG-05 `context_refs`) · W3e-PR1 (MIG-03 `evolution_runs` CHECK rebuild) · W4-PR3/PR5/PR6 (G2 part: MIG-06/08 — proposal store, OAuth `pendingStates`, negative grants) · WB-PR4 (G3 part: MIG-07.2 dedup of `config.json` readers, without data change) · WB-PR5 (G3 authoritative for the tier part: MIG-07 tier config, after DQ-03) · W7-PR2 (G3 authoritative for the WorkItem part: MIG-06/08); AT-27 in full is closed only after WB-PR5 and W7-PR2 (G3); rollback ≠ restoring erased/revoked applies to each |
+| AT-28 | The benchmark uses the production path; memory/gold from X does not affect Y; manifest + offline recount match the outputs | FRD-13.4 | `recount.mjs` exists (LoCoMo); the production-path adapter does not; contamination reset does not | fixture: 2 independent tasks with sentinel gold · env: bench machine · owner: Benchmark owner · Memory owner (LoCoMo part) · G2 (dev A/B) / G3 (locked) | W2-PR3 (G2 part: LoCoMo same-judge without regression, `recount.mjs` offline — FRD-07.8) · W3-PR7 + B2-PR1/PR2 (G2 authoritative: production adapter, X/Y isolation, manifest, development A/B) · B3-PR1/PR2 (G3: locked study) |
+| AT-29 | Baseline and candidate scored on the same examples; regression/cap → not promoted; holdout access recorded | FRD-08.6, 02.11, 08.5 (recipe part only, with ODB-02) | repro `repro-gepa-delta.mjs`; `compose-evolution.test.ts:342-371` breaks on removal of `combinedDelta` | fixture: deterministic running judge N=400 · env: vitest · owner: Evolution owner · Benchmark owner (holdout access log) · G2 / G3 part (recipe, only with ODB-02 = yes) | W3e-PR3/PR4 (G2: paired anchor score, holdout hash + access log) · W3e-PR9e (G3 part, **only with ODB-02 = yes**: AT-29 for recipe target + invariants; W3e-PR9a..d prerequisite; if ODB-02 = no, the recipe part of AT-29 does not apply — Delivery plan §6.1); B3 exit = reuse of the same test |
+| AT-30 | A clean Windows profile runs the shipped product without developer Node/Python/Docker; uninstall/repair, notices, signed artifact, fresh receipts for the exact SHA | FRD-11.1, 13.5, 12.10, 12.11 | `certify-windows-installer.ps1` (installer receipt); notices/SBOM/crash-injection/router/canary entry points are missing; Authenticode/Deep Security external gates (UNKNOWN) | fixture: clean VM profile · env: release chain · owner: Release owner · G1 (telemetry part) / G3 | W8-PR2/PR5/PR6 + F3 receipt cycle (G3 authoritative: receipts for the exact SHA, notices/SBOM, clean profile, egress part per TM-24; the W8-PR1 entry points are G1, before F1) · W6-PR6 (part: managed model receipt) · OSS-PR3 (part: notices in the package) · W0-PR17 (G1 part: a single telemetry switch covers the local store and PostHog, ADR-10-T2); Authenticode/Deep Security = external gates, UNKNOWN |
+
+Addition (brief §16): for the offline profile, measurement of unapproved egress; for BYOK/live-channel, allowed destinations and minimization; KVARK tests are a separate on-prem boundary (FRD-12.5).
+
+---
+
+## 16. Traceability PRD → FRD
+
+Two maps. **§16.1** binds the stable IDs from `docs/Waggle_PRD_v1.2_DRAFT.md` (scheme `PRD-SS-NN`, same revision `2af0904d`) to FRD contracts and ATs — this is the matrix from brief §20.1 (D/DIR or C/A/R → PRD → FRD → wave → AT → evidence; the authoritative wave per AT is a column in §15, PR slicing and completion evidence are carried by Delivery plan §2/§7). **§16.2** keeps the map to PRD **v1.1** sections for legacy purposes. All of §16.1 is a planner **PROPOSAL**: both drafts were written in parallel, so reconcile at finalization is mandatory (every PRD ID must have ≥1 FRD contract or an explicit "outside the FRD" reason; every FRD contract ≥1 PRD ID).
+
+### FRD-16.1 — PRD v1.2 `PRD-SS-NN` → FRD → AT — PROPOSAL
+
+| PRD v1.2 ID(s) | Topic | FRD v1.2 | AT |
+|---|---|---|---|
+| PRD-01-01, 01-02, 01-06 | free/OSS/desktop/local-first; no Team/Enterprise SKU; cloud ≠ later layer | FRD-01.6, 11.1, 11.4, 12.4 | AT-26, AT-30 |
+| PRD-01-03 | the code still enforces 4-tier | FRD-06.3 (tier is not a boundary), 14.10 | AT-27 |
+| PRD-01-04, 01-05 | three version numbers kept separate; installer number untouched until §17 | FRD-13.5 | AT-30 |
+| PRD-01-07 | repo public vs "remains private" | FRD-12.10 | — (decision queue) |
+| PRD-02-01, 02-02, 02-04, 02-08 | complexity inside; Workspace-first; system intelligence; progressive disclosure | FRD-01.1, 01.9, 10.4 | — (principles) |
+| PRD-02-03 | local-first; egress boundary per profile (offline / BYOK-live / KVARK) — aligned with Delivery plan TM-24 | FRD-01.1, 10.4, 12.5, 12.3 | AT-30 (egress part), AT-26 |
+| PRD-02-05 | the server is the authority on evidence | FRD-05.3, 02.2, 02.6, 01.7 (cross-cutting layers: provenance/observability on every action) | AT-01, AT-02 |
+| PRD-02-06 | execution state ≠ cognitive memory | FRD-01.5, 07.2, 14.6 | AT-13, AT-23 |
+| PRD-02-07 | no mode expands permissions | FRD-01.8, 02.1 (`mode`), 06.3 | AT-28 |
+| PRD-02-09 | Preserve → Borrow → Adapt → Build | FRD-01.5 (store ADR), 04.3 (`RecoveryRunner` ADAPT), 06.7 (agent-native pattern only) | — |
+| PRD-02-10 | truthful statuses | FRD-08.7, 10.1, 13.2, 01.7 (learning/evolution as a proposer of verified changes) | AT-04, AT-20 |
+| PRD-02-11 | model-agnostic (brief direction §10.4; aligned with D-05): BYOK + OpenAI-compatible remain; no layer introduces a hidden dependency on a single provider | FRD-10.1, 10.4, 08.4 (Evolution's Anthropic-key dependency, F-EVO-08) | AT-20, AT-05 (executor through the target runtime) |
+| PRD-02-12 | truthful telemetry: one switch (local store + PostHog) + disclosure before the first capture (direction D-05 "show where data goes"; ADR-10 O4) | FRD-12.11 | AT-30 (telemetry part) |
+| PRD-03-01, 03-02 | Home 4 blocks; `HomeCockpit` state | FRD-01.1, 09.1, 02.9 | AT-24 |
+| PRD-03-03, 03-04 | Workspace as the central object; Memory Center tabs | FRD-01.1, 07.2 | — |
+| PRD-03-05 | personas = optional role/mode (C16) | FRD-06.3 (`personaAllowlist/isReadOnly` in the envelope), 08.2 (active-version) | AT-04, AT-17 |
+| PRD-03-06 | two-layer navigation; "New Agent"/⌘K are not tier-gated | FRD-01.1, 06.6 | — |
+| PRD-03-07 | Work Progress / View work | FRD-05.8, 02.5 | AT-06, AT-10 |
+| PRD-03-08 | three meanings of "Harvest" (C7): memory import / attention feed / Build-vs-Borrow | FRD-09.1 (Attention → `WorkItem`), 02.9 (`WorkItem` contract), 07.2 (Harvest = memory import, RAWDETAIL corpus); Build-vs-Borrow process = outside the FRD (terminology, PRD §15) | — (terminology; disposition C7) |
+| PRD-03-09 | mobile = IM companion | FRD-11.2 | AT-25 |
+| PRD-03-10 | Routines in the mental model (D-07, D-14): next occurrence / last result / blocker / pause-disable of a routine ≠ mid-phase pause; Home block over the existing `CronStore`/`/api/automations` | FRD-09.3, 02.10, 01.1 | AT-23 |
+| PRD-04-01..04-05 | G1/G2/G3, critical path, receipts state | FRD-13.5; milestone column in §15; Delivery plan | AT-30 |
+| PRD-05-01, 05-02 | one complete job; two recipe variants | FRD-05.7 | AT-21 |
+| PRD-05-03 | existing harnesses as the starting point | FRD-05.2, 05.7 | AT-01 |
+| PRD-05-04 | server-side router | FRD-05.7, 03.2 | AT-06 |
+| PRD-05-05 | acceptance verticals | FRD-05.2, 05.4 | AT-21, AT-22 |
+| PRD-06-01, 06-02 | interaction × mode; default conversation | FRD-01.8, 02.1, 03.0, 03.2 | AT-06 |
+| PRD-06-03 | three levels of verification + CONDITIONAL | FRD-02.6, 05.4, 05.5 | AT-01 |
+| PRD-06-04, 06-09 | budget stop does not create success (DIR-08; F-HARN-05) | FRD-05.6, 04.5 | AT-03 |
+| PRD-06-05 | F-HARN-01 verify skip default | FRD-05.1 | AT-01 |
+| PRD-06-06 | F-HARN-02 VERDICT regex | FRD-05.2 (verdict gate), 05.5 | AT-01 |
+| PRD-06-07 | F-HARN-03 bash-as-test; exit code discarded | FRD-05.2 (test gate), 05.3 | AT-02 |
+| PRD-06-08 | F-HARN-04 `run_harness` as a verification tool | FRD-05.3 | AT-02 |
+| PRD-06-10 | F-HARN-06 bridge fabricates `verified`/`ok:true` | FRD-05.3, 02.6 (`TraceOutcome` map), 13.2, 14.2 | AT-06 |
+| PRD-06-11 | F-HARN-08 model-supplied evidence | FRD-02.2 (`observedToolCalls`), 05.3 | AT-02 |
+| PRD-07-01 | run before side effect (DIR-04) | FRD-03.0–03.9 | AT-06, AT-07 |
+| PRD-07-02 | minimal data contracts | FRD-02.1–02.6, FRD-02.12, FRD-13.1 (per-run `RunRecord` as an observability projection of the same contracts) | AT-07, AT-08 |
+| PRD-07-03 | phase = unit of recovery (DIR-05) | FRD-04.2, 02.3 | AT-07 |
+| PRD-07-04 | `actionId ≠ attemptId ≠ providerIdempotencyKey` (DIR-06) | FRD-02.4, 14.4 | AT-08 |
+| PRD-07-05, 07-09 | detach/cancel; R3-008 socket close | FRD-04.4 | AT-10 |
+| PRD-07-06, 07-15 | F-DUR-01 restart → `interrupted`; F-DUR-02 `agent-runs.json` | FRD-04.1, 02.12, 14.1 | AT-07, AT-27 |
+| PRD-07-07 | F-DUR-04 `CheckpointStore`/`RecoveryRunner` 0 callers | FRD-02.3, 04.3 | AT-07 |
+| PRD-07-08 | F-DUR-05 held-action BORROW | FRD-02.4, 06.6 | AT-08, AT-12 |
+| PRD-07-10 | F-DUR-03/C12 state map, `PAUSED` deferred | FRD-04.1, 02.12 | AT-27 |
+| PRD-07-11, 07-19 | F-DUR-10 cron format/lease/tz; misfire and time | FRD-09.4, 02.10, 04.3, 14.5 | AT-09, AT-23 |
+| PRD-07-12, 07-18 | F-DUR-09 Loop state in recall; TOOLLESS carve-out | FRD-09.5, 07.2, 14.6 | AT-13, AT-23 |
+| PRD-07-13 | F-DUR-08/F-HARN-07 global `harnessEvents` | FRD-02.5 | AT-06 |
+| PRD-07-14 | F-DUR-07 per-run budget does not survive | FRD-04.5, 02.3 (`budgetSpent`) | AT-03, AT-07 |
+| PRD-07-16 | F-DUR-13 no server-driven phase executor | FRD-01.2, 03.3, 03.7 | AT-06, AT-07 |
+| PRD-07-17 | routine = recipe trigger (DIR-19) | FRD-09.3, 02.10 | AT-23 |
+| PRD-08-01, 08-02 | one resolver contract; 4 engines (DIR-11) | FRD-06.1, 06.2, 01.3 (capability layer: facade, not physical merging) | AT-17 |
+| PRD-08-03, 08-04 | envelope = intersection; layers unwired | FRD-06.3 | AT-17 |
+| PRD-08-05, 08-06, 08-07 | inline setup (D-10, C14); OAuth state; API-key safe scenario | FRD-06.4, 02.8, 03.5, 03.6 | AT-11 |
+| PRD-08-08 | MCP install via Settings (R11) | FRD-06.5, 12.7 | AT-17 |
+| PRD-08-09, 08-10 | shared actions (DIR-12); `ACTION_REGISTRY` NL bar only | FRD-06.7 | AT-18 |
+| PRD-08-11 | approvals are not a paywall (D-01) | FRD-06.6 | AT-12 |
+| PRD-08-12 | skill paths are preserved; no scope expansion | FRD-06.8 | AT-17 |
+| PRD-09-01 | `recallMemory` stays (D-12, DIR-09) | FRD-07.1, 01.4 (memory layer: wrapper without a new engine) | AT-14 |
+| PRD-09-02, 09-09 | `ContextPackage` wrapper; trust/tokenBudget unwired; every change to the bytes of the recall block requires a LoCoMo same-judge check (F-HM-15) | FRD-02.7, 03.4, 07.8 (LoCoMo regression gate) | AT-14, AT-16, AT-28 (part: `recount.mjs` offline, without regression) |
+| PRD-09-03 | snapshot ≠ overriding deletion; rollback ≠ restoring what was deleted (DIR-21) | FRD-02.7, 12.8, 14.8, 12.9 | AT-15, AT-27 (rollback part) |
+| PRD-09-04 | three storage responsibilities; RAWDETAIL state | FRD-07.2 | AT-14 |
+| PRD-09-05 | hooks: `temporary`, read-side scan | FRD-07.3, 12.2, 14.11 | AT-14, AT-19 |
+| PRD-09-06, 09-07 | minds isolation; leak in 4 places | FRD-07.4, 14.9 | AT-13 |
+| PRD-09-08 | `WAGGLE_CONTEXT_INJECTED` = coordination | FRD-07.5 | AT-16 |
+| PRD-09-10, 09-11 | external executors optional (D-11); brief only on the route-proposal path | FRD-07.6, 12.3 | AT-16 |
+| PRD-09-12 | two MCP servers (R23) | FRD-07.9 | — |
+| PRD-09-13 | idempotent consolidation | FRD-07.7, 03.8 | AT-14 |
+| PRD-10-01 | evolution = part of the thesis (D-13) | FRD-08.1 | AT-04 |
+| PRD-10-02, 10-03 | F-EVO-01 shadowed override; F-EVO-02 no active pointer (`rolled_back` = `evolution_runs` CHECK table-rebuild) | FRD-08.2, 14.7, 14.3 | AT-04, AT-27 (`evolution_runs` migration) |
+| PRD-10-04, 10-06 | F-EVO-03 closed; F-EVO-05 `EvolveSchema` does not enter the Stage | FRD-08.3, 08.1 (row `EvolveSchema` Stage 1: wire-or-drop, R19, W3e-PR6; aligned with disposition R19/C10 and Delivery plan TM-03) | AT-05 |
+| PRD-10-05, 10-09 | F-EVO-04 executor == judge; F-EVO-08 Anthropic key mandatory | FRD-08.4 | AT-05, AT-29 |
+| PRD-10-07, 10-12 | F-EVO-06 delta compares different sets; promotion flow | FRD-08.6, 02.11 | AT-29 |
+| PRD-10-08 | F-EVO-07 traces with secrets bypass `EvalDatasetBuilder` | FRD-08.6, 12.3 | AT-13, AT-19, AT-29 |
+| PRD-10-10 | F-EVO-10 false UX claims | FRD-08.7, 02.11 (`written_not_active`) | AT-04 |
+| PRD-10-11 | F-EVO-09 `AgentLearning` dead; a replacement exists (C10) | FRD-08.1 | — |
+| PRD-10-13 | bounded recipe registry (DIR-14) | FRD-08.5, 02.11 | AT-29 (a variant is promoted only on the same examples/budget; aligned with Delivery plan TM-21 and disposition R03) |
+| PRD-11-01, 11-02, 11-03 | Qwen 3.8 27B-class; identity; Ollama pin older than the release | FRD-10.3 | AT-20 |
+| PRD-11-04, 11-05, 11-07 | hardware ladder; NVIDIA/Apple-only detection; pull without resume | FRD-10.2 | AT-20 |
+| PRD-11-06 | installation paths | FRD-10.4 | AT-20 |
+| PRD-11-08 | F-UXM-02/03 readiness false positives | FRD-10.1 | AT-20 |
+| PRD-11-09 | onboarding 6 steps | FRD-10.5 | — |
+| PRD-11-10 | a11y + labels (functional part): WCAG 2.2 AA as the acceptance target for **new** surfaces; `?forceWizard=true` routes in the axe list (`tests/e2e/runtime-a11y.spec.ts:10-60` does not cover them today, F-UXM-09); new Work Progress labels centralized — aligned with Delivery plan TM-14 and disposition A24 | FRD-05.8 (labels + a11y test of the new surface) | — (no separate AT; a11y exit test W5-PR7; i18n/English-only part = decision queue, brief §20.3, without an FRD contract) |
+| PRD-12-01, 12-02 | one WorkItem (DIR-18); one mail/calendar scenario | FRD-02.9, 09.1 | AT-24 |
+| PRD-12-03 | profile per channel (C6) | FRD-09.1, 11.2 | AT-19, AT-24, AT-25 |
+| PRD-12-04 | injection = defense-in-depth; taint (A13) | FRD-09.2, 12.1, 12.2 | AT-19 |
+| PRD-12-05 | approval over IM bound to the run/action | FRD-11.2, 12.6 | AT-25 |
+| PRD-13-01, 13-02, 13-03 | KVARK connect contract; `createKvarkTools` 0 callers; no rewriting of org functions | FRD-11.4, 01.6 | AT-26 |
+| PRD-13-04 | G1 de-gate: Approvals nav (3 places), `cost.ts:210,272`, `settings.ts:1192` audit-export → available to the Solo user (D-01; F-TK-02/03/04, F-CAP-07); `/api/admin/overview` placeholder = candidate for removal | FRD-06.6, 11.4 (org-only stays behind the KVARK connection, not behind the tier) | AT-12 (part: Approvals available to Solo), AT-18 (part) |
+| PRD-13-05, 13-06 | tier inventory (24 files); tier migration; subscribers UNKNOWN; migration rollback does not restore erased/revoked items (A2, DIR-21) | FRD-14.10, FRD-14.13, FRD-14.14, FRD-14.15, FRD-14.16, FRD-06.3, FRD-12.9 | AT-27 |
+| PRD-13-07 | worker boundary (C20) | FRD-11.3 | — |
+| PRD-13-08 | license markings inconsistent | FRD-12.10 | — (decision queue) |
+| PRD-13-09 | release chain code vs live | FRD-13.5 | AT-30 |
+| PRD-14-01, 14-02, 14-03 | benchmark = evidence (D-18); production path (DIR-22); two comparisons (DIR-23) | FRD-13.4 | AT-28 |
+| PRD-14-04 | primary test candidate — NOT APPROVED | FRD-13.4 (APEX-Agents row) | AT-28 |
+| PRD-14-05 | `harness-sota-bench` branch | FRD-13.4 | — |
+| PRD-14-06, 14-08 | allowed messages (C18); locked study and contamination | FRD-13.4 (statistics, `contaminationFirewall`) | AT-28 |
+| PRD-14-07 | development A/B as G2 exit evidence (errors and cost, not a public headline); freezing of hypothesis/metric/sample/budget/stop criteria before B3 | FRD-13.4 (B2 development A/B; `WAGGLE-BENCHMARK-PROTOCOL-DRAFT.md` BP-CMP) | AT-28 (dev A/B part, G2) |
+| PRD-14-09 | `cost-tracker.ts` prices (A29) | FRD-13.4 (prices), 14.12 | AT-28 (manifest `cost` fields), AT-03 (budget: `ModelSpendBudget` does not throw a premature `BudgetExceededError`) — aligned with disposition A29; AT-29 (promotion) does not read prices |
+| PRD-15-01, 15-02 | Build-vs-Borrow (D-17, DIR-24); candidates | FRD-01.5, 04.3, 06.7 | — |
+| PRD-15-03, 15-05, 15-06 | OSS inventory; SBOM/NOTICES; shipping gate | FRD-13.5, 12.10; FR-OSS-01..12 (FRD v1.1 §18) remain valid | AT-30 |
+| PRD-15-04 | OSS drift state | FRD-14.2 (drift baseline), 07.9 | — |
+| PRD-16-01..16-20 | out of scope | FRD-01.9; individually: 16-06 → 08.5; 16-10 → 04.1 (`PAUSED`); 16-11 → 06.5; 16-12 → 06.3; 16-13 → 11.4; 16-14 → 05.2; 16-15 → 09.3; 16-16 → 07.9; 16-18 → 10.4 | — |
+| PRD-17 (open decisions) | decision queue | FRD-12.10 (licenses), 10.3 (model configuration), 14.10 (subscribers), 13.4 (benchmark budget), 09.1 (mail scenario), 11.2 (mobile), 01.8 + 13.3 (thresholds) | — |
+
+**Coverage (mechanical check `docs/plans/v1.2-evidence/tools/check_trace.mjs` over this table — CONFIRMED AT REVISION of the package, repeated on 28.09.2026):** all **166** defined `PRD-SS-NN` IDs have ≥1 row above (the previous draft missed PRD-02-11, PRD-03-10, PRD-13-04, PRD-14-07 — added; PRD-02-12 → FRD-12.11 added in the third critical pass); all **114** FRD contracts from §1–§14 have ≥1 PRD ID — **114/114** (116 defined `FRD-nn.m` minus the maps FRD-16.1/16.2; counting rule: `### FRD-…`, `| FRD-…` and bold `**FRD-…` definitions are counted, including FRD-01.9, FRD-03.0 and FRD-03.9; the previous draft missed FRD-01.3, 01.4, 01.7, 07.8, 12.5, 12.9, 13.1, 14.3 — added; §16.1/§16.2 are the maps themselves, not contracts). Critic note (28.09.2026): the earlier statement "110/110 (112 defined)" was incorrect — it predated the addition of FRD-14.15/14.16, and the earlier tool did not expand the prefix-less range `14.13–14.16` in the PRD-13-05/13-06 row (so it reported FRD-14.13..14.16 as uncovered); the row now carries an explicit list. Items without a **functional** FRD contract (intentionally, decision queue brief §20.3): PRD-01-07 and PRD-13-08 (license decision → FRD-12.10 only as a pointer) and the i18n/English-only part of PRD-11-10 (the a11y/labels part is FRD-05.8). Aligned with Delivery plan §7: TM-24 (`PRD-02-03` → FRD-12.5) and TM-14 (`PRD-11-10` → FRD-05.8) now have the same FRD contract in both documents. Reconcile at finalization remains mandatory for the row text (not for coverage): PROPOSAL.
+
+### FRD-16.2 — Legacy: PRD v1.1 sections + D/DIR/C/A/R → FRD → AT
+
+| PRD v1.1 section / source | FRD v1.2 | AT |
+|---|---|---|
+| §1-2 Product definition, principles; D-01, D-02, D-04, D-05, D-06 | FRD-01.*, 11.1, 11.4, 12.4 | AT-26, AT-30 |
+| §3 User-facing model (Home, Attention, Workspace, Memory); D-07, D-08 | FRD-01.1, 09.1, 02.9 | AT-24 |
+| §4 UX changes (Work Progress, View work, Routines block); DIR-16, A22, A23 | FRD-05.8, 02.5, 09.3, 10.5 | AT-06, AT-10 |
+| §5 Harness and work execution; DIR-03, DIR-07, DIR-08, A4, A5, C17 | FRD-01.8, 05.* | AT-01, AT-02, AT-03, AT-21 |
+| §6 Durable long tasks; DIR-04, DIR-05, DIR-06, A6-A11, C8, C12 | FRD-02.1-02.5, 03.*, 04.* | AT-06..AT-10, AT-27 |
+| §7 Skills, connectors, capability acquisition; D-10, DIR-11, DIR-12, C13, C14, A12-A15, R11-R13 | FRD-06.*, 02.8 | AT-11, AT-12, AT-17, AT-18 |
+| §8 Hive Mind; D-12, DIR-09, DIR-10, C11, A26, R14 | FRD-07.*, 02.7 | AT-13..AT-16, AT-22 |
+| §9 Learning and self-evolution; D-13, DIR-13, DIR-14, DIR-15, C10, A16-A19, R03, R04, R18, R19 | FRD-08.*, 02.11 | AT-04, AT-05, AT-29 |
+| §10 Models and onboarding; D-15, DIR-17, C19, A20, A21, R16, R17 | FRD-10.* | AT-20 |
+| §11 Deployment and KVARK; D-02, D-03, D-04, DIR-20, C4, C20, A27, R02, R15 | FRD-11.* | AT-25, AT-26 |
+| §12 Benchmark and product proof; D-18, DIR-22, DIR-23, C18, A25, A29, R08, R09 | FRD-13.4, 13.5 | AT-28 |
+| §13 Release priorities → G1/G2/G3 (brief §5.1, §15; C9, C22, A1) | FRD-13.5 + Delivery plan | AT-30 |
+| §14-15 OSS-first, Build-vs-Borrow; D-17, DIR-24, A28, R20-R24 | FRD-06.7 (agent-native), 01.5 (durable engine), 12.10, 13.5; FR-OSS-01..12 from FRD v1.1 §18 remain valid | AT-30 |
+| Routines / TOOLLESS; D-14, DIR-19, C15, R05, R10 | FRD-09.3-09.5, 02.10 | AT-23 |
+| Privacy/erasure; A2, A3, DIR-21 | FRD-12.*, 14.* | AT-15, AT-19, AT-27 |
+
+**Legacy from FRD v1.1 that v1.2 changes explicitly:** §3 step order (run before blocking and context, C8); §4 `PAUSED` deferred (C12); §6 lane order = tie-breaker, not priority (C13); §7 "injection before native or external execution" retained, but with `WAGGLE_CONTEXT_INJECTED` as coordination (A26); §8 "executor ≠ judge" becomes desirable, not mandatory (A19); §15 gate "evolved recipe" narrowed to prompt/persona/spec promotion + a separately evaluated bounded recipe registry (R04, DIR-14); §11 mobile = IM companion minimum (R02); §14 "preserve AgentLearning/EvolveSchema" → "wire or replace, not no-op" (C10).
+
+---
+
+## Sources
+
+- **D** — user decisions of 27.09.2026 (brief §3): D-01..D-18 were not reopened.
+- **DIR** — directives from the brief: DIR-01..DIR-25 (cited per section); label **PROPOSAL — BRIEF DIRECTION**, never DECISION (brief §1, §2.1 row P); the same applies to the C/A/R resolutions from brief §17–§19. DECISION in this document = only D-01..D-18; the two founder decisions from memory carry HISTORICAL FOUNDER DECISION (memory, date) (Status convention).
+- **C/A/R** — S1 findings C1–C22 (S1 §1, L26–L47), A1–A29 (S1 §2, L53–L126), cuts R01–R24 (brief §19 numbering over S1 §3); resolutions per brief §17–§19.
+- **S1** — `procitaj-d-projects-waggle-os-docs-waggl-rustling-milner-agent-ac748482c5af17ddf.md`, SHA-256 `b7f03ff7…da8b08` (brief §22); copy `docs/plans/v1.2-evidence/inputs/S1-audit-2026-09-27.md`.
+- **S4/S5** — PRD/FRD v1.1 (`Waggle_PRD_v1.1_2026-09-27.docx`, `Waggle_FRD_v1.1_2026-09-27.docx`; extracts `docs/plans/v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.md`, `docs/plans/v1.2-evidence/inputs/Waggle_FRD_v1.1_2026-09-27.md`).
+- **PRD v1.2 DRAFT** — `docs/Waggle_PRD_v1.2_DRAFT.md` (same revision `2af0904d`; ID scheme `PRD-SS-NN`), source for §16.1; written in parallel with this FRD, reconciliation mandatory at finalization.
+- **§16.1 coverage check** — `docs/plans/v1.2-evidence/tools/check_trace.mjs` (attached to the package; `node docs/plans/v1.2-evidence/tools/check_trace.mjs` from the repo root; mechanical: defined `PRD-SS-NN` from the PRD and `FRD-nn.m` from this document ↔ §16.1 tokens, with range expansion; result 28.09.2026: 166/166 PRD, 114/114 FRD contracts — 116 defined minus the maps FRD-16.1/16.2; same as §16.1). **Delivery plan v1.2** — `docs/plans/WAGGLE-DELIVERY-PLAN-v1.2.md` §2 "Owner/role" + "Exit tests" per wave, DP-0.14, §7 TM-01..TM-25: source for owner roles and the "Wave (authoritative for completion evidence)" column in §15. **Disposition** — `docs/plans/WAGGLE-AUDIT-DISPOSITION-v1.2.md` (C17/R06 coding path, A24 a11y/i18n).
+- **ADR package (brief §20.2, all ten written as DRAFT / PROPOSAL; CONFIRMED AT REVISION of the package 27.09.2026)** — `docs/decisions/2026-09-27-ADR-01..10` + `ADR-INDEX.md`: ADR-01 conversation/work modes (§2.1, §5) · ADR-02 durable store/phase resume/action idempotency (§2.2–2.4, §4) · ADR-03 detach/cancel vs R3-008 (§4.4, FRD-04.4) · ADR-04 inline capability/OAuth vs held-action/D3 (§2.8, §6) · ADR-05 RAWDETAIL/context/hook precedence (§7) · ADR-06 active override/promotion/rollback (§8) · **ADR-07 Routines vs TOOLLESS Loops** (§9.3–9.5, §2.10) · **ADR-08 individual tiers and KVARK boundary** (§11.3–11.4, §6.6) · **ADR-09 secondary worker** (§11) · **ADR-10 release/privacy profiles** (§12–§13). No ADR has been approved or implemented.
+- **Phase A (validated findings, overriding S1 where they differ):** `docs/plans/v1.2-evidence/phaseA/harness.md` + `harness.refute.md` (7/7 HOLDS; paths corrected), `durable.md` + `durable.refute.md` (F-DUR-10 new FINDING `next_run_at` format; F-DUR-09 HOLDS+), `evolution.md` + `evolution.refute.md` (F-EVO-09 WEAKENED: corrections already produce signals), `hivemind.md` + `hivemind.refute.md` (F-HM-02 WEAKENED: `memory_compact` cron exists; F-HM-05 policy gate), `capability.md`, `ux-model.md`, `tiers-kvark.md`, `release-oss.md`, `external.md` (EXT-1..12), `oss-drift-check-output.txt`, repro scripts `repro-harness.mjs`, `repro-shadow.mjs`, `repro-gepa-delta.mjs`.
+- **Repo** — `D:/Projects/waggle-os` @ `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`, read-only; types read directly for §2.12: `packages/shared/src/types.ts:376-452,770-790`, `packages/agent/src/workflow-harness.ts:20-210`, `packages/agent/src/long-task/checkpoint.ts:25-120`, `packages/core/src/cron-store.ts:80-165`, `packages/hive-mind-core/src/mind/execution-traces.ts:14-62`, `packages/hive-mind-core/src/mind/frames.ts:20-40`, `packages/hive-mind-core/src/mind/evolution-runs.ts:20-100`, `packages/agent/src/capability-acquisition.ts:19-36`, `packages/agent/src/task-shape.ts:10-44`, `packages/server/src/local/routes/capability-proposals.ts:1-60`, `packages/server/src/local/approval-grants.ts:1-60`, `packages/server/src/local/executor-brief.ts:1-60`, `packages/server/src/local/agent-run-registry.ts:20-60`, `apps/web/src/lib/types.ts:570-590`, `packages/agent/src/agent-loop.ts:48,106,895`.
+- **Limitations of this draft:** no vitest was run for the purposes of this document; all "test exists" statements mean "pins behavior", not "executed". Live GitHub/HF/Ollama data reflect the state as of 27.09.2026 (external.md), not a property of the revision. Estimates and wave slicing are a **PROPOSAL** of the Delivery plan; owner roles and the "authoritative wave" in §15 are taken from Delivery plan §2/§7 as PROPOSAL (roles, not names), while G-milestone assignments remain PROPOSAL.
