@@ -1,6 +1,8 @@
 # ADR-06 — Active-version pointer za override-e, promotion policy sa uparenim holdout-om i rollback
 
 **Revizija dokumenta:** 1.2 DRAFT · 27.09.2026 · pregledana revizija koda `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`
+**Revizija dokumenta:** 1.2.1 DRAFT · 30.09.2026 · završno zatvaranje (H-01..H-12)
+**Izmene 1.2.1:** H-10 — ADR-06-O11 dopunjen: ograničena recipe evolucija je preporučeni ciljani obim (PREDLOG, ODB-02 opcija A, Delivery §6.1); ODB-02 ČEKA ODLUKU OSNIVAČA; tvrdnja o doprinosu po Benchmark BP-MSG-01. Status ADR-a i RAT-05 nepromenjeni.
 **Datum:** 2026-09-27
 **Status:** DRAFT — predlog ugovora; ograničena recipe evolution (DIR-14) je zasebno procenjen obim, ovde samo granica
 **Autor:** planer (Fable 5.1)
@@ -57,7 +59,7 @@
 
 **ADR-06-O10 (PREDLOG) — learning: jedan kanal, ne dva (R18, C10).** Zadržati postojeći put `analyzeAndRecordCorrection → improvement_signals → # User Corrections`; dodati samo (a) `traceRecorder.markCorrected(prevTraceId)` kad `detectCorrection` pogodi (da eval skup vidi `corrected`), (b) persona signal iz `finalizeOnce` ako se persona-effectiveness zadržava kao zahtev, (c) `markSurfaced` semantiku razrešiti (NEPOZNATO ko je zove). `AgentLearning.formatLearningPrompt` i `improvement-wiring.ts`: **remove** (ukloniti export `index.ts:231`, preformulisati PRD §9) osim ako founder zadrži persona-effectiveness — tada wire kroz isti signal kanal, bez drugog prompt bloka.
 
-**ADR-06-O11 (PREDLOG) — ograničena recipe evolution (DIR-14) je zaseban obim.** Registry odobrenih varijanti za research/document (npr. osnovni postupak ± provera kontradikcija ± dozvoljena retrieval/review varijanta); kandidati menjaju instrukcije, raspored odobrenih opcionalnih faza i budžete u limitu. Invariants: scope, egress zabrane, approvals, budget cap, obavezni gates, kontaminaciona granica, značenje uspeha. Recipe koji pobeđuje preskakanjem bezbednosne provere nije kandidat. **Nije** sadržan u S1 W3e; planer ga procenjuje odvojeno; ako se odloži, prikazati koji korisnički ishod/javna tvrdnja otpada (brief §10.3).
+**ADR-06-O11 (PREDLOG) — ograničena recipe evolution (DIR-14) je zaseban obim.** Registry odobrenih varijanti za research/document (npr. osnovni postupak ± provera kontradikcija ± dozvoljena retrieval/review varijanta); kandidati menjaju instrukcije, raspored odobrenih opcionalnih faza i budžete u limitu. Invariants: scope, egress zabrane, approvals, budget cap, obavezni gates, kontaminaciona granica, značenje uspeha. Recipe koji pobeđuje preskakanjem bezbednosne provere nije kandidat. **Nije** sadržan u S1 W3e; planer ga procenjuje odvojeno; ako se odloži, prikazati koji korisnički ishod/javna tvrdnja otpada (brief §10.3). Preporuka obima (revizija 1.2.1, H-10; PREDLOG): ciljani obim prvog javnog izdanja, ODB-02 opcija A (Delivery plan §6.1); ODB-02 ČEKA ODLUKU OSNIVAČA. Tvrdnja o doprinosu: Benchmark BP-MSG-01.
 
 ## §3 — Šta zamenjuje i zašto
 

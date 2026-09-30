@@ -1,6 +1,8 @@
 # ADR-08 — Individualni Waggle bez tier granice; KVARK konekcija kao capability granica (sprovođenje D-01/D-02/D-03, ne ponovno odlučivanje)
 
 **Revizija dokumenta:** 1.2 DRAFT · 27.09.2026 · pregledana revizija koda `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`
+**Revizija dokumenta:** 1.2.1 DRAFT · 30.09.2026 · završno zatvaranje (H-01..H-12)
+**Izmene 1.2.1:** H-11 — pokazivači na PRD-13-10/FRD-11.4 u K9 i P4 (vlasnik KVARK API-ja NEPOPUNJENO; kapija KVARK-IF). Odluke D-01/D-02/D-03 i O3–O6 nepromenjene.
 **Datum:** 2026-09-27
 **Status:** DRAFT — predlog realizacije; **ne odlučuje** da li je Waggle besplatan (D-01), da li Team dolazi kroz KVARK (D-02) ni da li KVARK ostaje on-prem (D-03) — to su date odluke; ne odlučuje licencu (decision queue O-2) ni sudbinu pretplatnika (O-3/DQ-03)
 **Autor:** planer (Fable 5.1)
@@ -29,7 +31,7 @@
 
 **ADR-08-K8 (POTVRĐENO NA REVIZIJI) — www i dokumentacija prodaju Team.** `apps/www/messages/en.json:196-250` („Memory is free forever. Pay when you scale.“, `$49/seat/month`, „Get Team“ → Stripe checkout, „Talk to KVARK“), `Pricing.tsx:10,42-58`; `FinalCTA.tsx:5,33,38` i `download/page.tsx:18` → `github.com/marolinik/waggle-os` (repo je **javan** po live GitHub 27.09.2026 — release-oss.md F-REL-08; CLAUDE.md:84 „remains private“ zastarelo). CLAUDE.md §1 tier tabela i „Moat strategy … Team collaboration … is the upgrade trigger“. [F-TK-05, F-REL-08]
 
-**ADR-08-K9 (NEPOZNATO) — KVARK strana.** Ne postoji u repou specifikacija KVARK organizational capabilities API-ja osim `KvarkClient` (search/feedback/action/ask_document) i `docs/kvark-http-api-requirements.md` (nije revalidiran u fazi A). Vlasnik KVARK zavisnosti, dostupnost policy/ACL endpointa, entities API za team-sync kompatibilnost — NEPOZNATO; brief §12.1 traži da planer navede potrebne contract/interface promene i vlasnika.
+**ADR-08-K9 (NEPOZNATO) — KVARK strana.** Ne postoji u repou specifikacija KVARK organizational capabilities API-ja osim `KvarkClient` (search/feedback/action/ask_document) i `docs/kvark-http-api-requirements.md` (nije revalidiran u fazi A). Vlasnik KVARK zavisnosti, dostupnost policy/ACL endpointa, entities API za team-sync kompatibilnost — NEPOZNATO; brief §12.1 traži da planer navede potrebne contract/interface promene i vlasnika. Dopuna 1.2.1 (H-11): portfolio granica (KVARK radi bez Waggle-a; Waggle ne gradi JA/MI/KOMPANIJA, roster ni KVARK Workspace) i stavke ugovora sa vlasnikom KVARK API-ja su u PRD-13-10 i FRD-11.4 (tabela „Ugovor sa KVARK API-jem”); vlasnik je i dalje NEPOPUNJENO.
 
 ## §2 — Odluka (predlog realizacije)
 
@@ -95,7 +97,7 @@ Napomena kritike (28.09.2026): uslovi WB-PR6 usklađeni u jedan skup — ishod l
 
 **ADR-08-P3 (PREDLOG).** Receipt: 08.2a–c diraju rute/UI (tier gates) → deo kandidata freeze-a (S1 WB „Yes“); KVARK registracija dira sastavljanje alata → tool-context receipt površina.
 
-**ADR-08-P4 (PREDLOG).** KVARK contract/interface zahtevi ka KVARK timu (brief §12.1): health/identity validacija, lista `allowedOrgCapabilities`, policy/ACL za envelope sloj (ADR-04 O5 sloj 2), revocation semantika, opciono entities API za team-sync adapter; **vlasnik: NEPOZNATO** (vodi se u ADR-INDEX §3 kao „KVARK interface vlasnik (NEPOZNATO)“ i §4 ADR-08 stavka, uz K9; ne dodaje se nova founder stavka van brief §20.3 — founder queue ostaje PRD §17 O-1..O-9 = Delivery plan §6 DQ-01..09, a nijedan postojeći DQ ne pokriva ovu stavku). Unavailable UX: „KVARK nije dostupan — radim sa workspace memorijom“ (postojeći tekst `handleKvarkError`).
+**ADR-08-P4 (PREDLOG).** KVARK contract/interface zahtevi ka KVARK timu (brief §12.1): health/identity validacija, lista `allowedOrgCapabilities`, policy/ACL za envelope sloj (ADR-04 O5 sloj 2), revocation semantika, opciono entities API za team-sync adapter; **vlasnik: NEPOZNATO** (vodi se u ADR-INDEX §3 kao „KVARK interface vlasnik (NEPOZNATO)“ i §4 ADR-08 stavka, uz K9; ne dodaje se nova founder stavka van brief §20.3 — founder queue ostaje PRD §17 O-1..O-9 = Delivery plan §6 DQ-01..09, a nijedan postojeći DQ ne pokriva ovu stavku). Unavailable UX: „KVARK nije dostupan — radim sa workspace memorijom“ (postojeći tekst `handleKvarkError`). Dopuna 1.2.1 (H-11): ove stavke se vode kao [05 N-29](../handoff/05-RISKS-DECISIONS-ESCALATION.md) i kapija `KVARK-IF` pre merge-a WB-PR3 (PRD-13-10 t.4); to je spoljna zavisnost, ne nova DQ stavka.
 
 **ADR-08-P5 (PREDLOG).** Licence/NOTICE protivrečnosti (`optimizer`/`weaver` „proprietary“ uz MIT; 3× NOTICE; `EXTRACTION.md` ne postoji; 9 manifesta bez `license`) su **decision queue O-2**, ne ovaj ADR (ADR-10 P-lista). D-01 ne rešava automatski prava (brief §12.3).
 

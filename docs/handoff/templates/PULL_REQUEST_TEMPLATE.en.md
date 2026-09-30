@@ -9,6 +9,10 @@ docs/handoff/02-WORKING-AGREEMENT.md §8/§9 (DoR/DoD).
 Target branch: integration/waggle-next — NEVER main.
 Every claim in the description carries a label: DECISION / CONFIRMED AT REVISION / AUDIT FINDING — TO VERIFY /
 PARTIAL/UNWIRED / PROPOSAL / DEFERRED / UNKNOWN.
+Document revision: 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)
+Changes in 1.2.1: H-01 — push only to <ODOBRENI_TIMSKI_REMOTE>; H-02 — DOCX hashes in the package manifest;
+H-04 — worktree/stash check per TSA-03 A, TSA-04, TSA-05, hotspot test TSA-07, re-run TSA-08
+(proposals NOT APPROVED); H-05 — safe test profile (BTP); H-06 — merge gates from backlog.csv.
 -->
 
 ## Identity
@@ -20,7 +24,7 @@ PARTIAL/UNWIRED / PROPOSAL / DEFERRED / UNKNOWN.
 - **AT ID / named FRD test:** <!-- the part of the AT that FRD §15 ("Wave (authoritative …)") assigns to this PR; e.g. AT-01, FRD-05.8, Disposition OD-10; or "none — reason" -->
 - **Role (owner) / name:** <!-- e.g. Harness owner / … -->
 - **Hotspot files and merge owner:** <!-- DP-0.14 table; "none" if there are none -->
-- **Merge blockers:** <!-- RAT-nn / DQ-nn / ODB-01 / ODB-02 / "none" -->
+- **Merge gates (backlog.csv `merge_gates`):** <!-- every item from the ticket's merge_gates with status and closure evidence (link to the decision, merge SHA of the prerequisite ticket); "none" only if the field is empty apart from MERGE-AUTH -->
 
 ## What and why
 
@@ -101,9 +105,10 @@ Rationale (which covered surface changes: chat/persona/memory/routing/provider/t
 Source: [`docs/plans/SAFE-IMPLEMENTATION-CHECKLIST.md`](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md). A single "no" stops the PR.
 
 **Before every PR**
-- [ ] Own worktree from `integration/waggle-next`. Existing worktrees and the 2 stashes untouched. No entry deleted or pruned.
+- [ ] Own worktree from `integration/waggle-next` (only for W0-PR19 and after TSA-05 is confirmed: a detached baseline worktree at `2af0904d`). No one else's entry in `git worktree list`/`git stash list` removed or changed; on the founder's machine its 10 worktree entries and 2 stashes untouched. Own entry removed only per TSA-04.
 - [ ] Branch `<wave-id>/<tema>` with an allowed prefix. The target is `integration/waggle-next`, not `main`.
 - [ ] Env isolation per the checklist (`WAGGLE_DATA_DIR`, `WAGGLE_PORT≠3333`, `PORT≠3100`, `WAGGLE_DESKTOP_PORT_FALLBACK` unset, `HIVE_MIND_DATA_DIR`, E2E env, `HOME`/`USERPROFILE`/`HERMES_HOME` for hook tests). Nothing touches `~/.waggle`.
+- [ ] Safe test profile (BTP) for sidecar/web/E2E, hook/launch/canary and the root suite until W0-PR20 is merged (checklist "Safe test profile (BTP)"); snapshot of `~/.waggle` and the clients before/after identical. A scratch profile is not a sandbox.
 - [ ] External writes disabled (`WAGGLE_SIGNAL_EMIT=0`; no channel tokens, Stripe keys, `DATABASE_URL`/`CLERK_SECRET_KEY`; `VITE_POSTHOG_KEY`/`VITE_CLERK_*`/`VITE_WAGGLE_ENABLE_CLERK` unset; `apps/web/.env.local` not copied).
 - [ ] No run with a real account or a paid API without ODB-01/DQ-04 approval for that run, a dedicated VM and a cap.
 - [ ] Node 22.23.2. No `npm install`/`npm ci` while dev servers hold `.node` files.
@@ -112,23 +117,24 @@ Source: [`docs/plans/SAFE-IMPLEMENTATION-CHECKLIST.md`](../../plans/SAFE-IMPLEME
 - [ ] Installer/packaged tests (if any) only on a dedicated VM or a disposable Windows account. No script refusal bypassed.
 - [ ] No Fusion/council/5-hats/agent-fusion surface (DECISION D-16).
 - [ ] Gates green locally before review. Source not changed while the suite was running.
-- [ ] Hotspot merge via the owner. No second merge of the same hotspot today without an integration test.
+- [ ] Hotspot merge via the owner. No second merge of the same hotspot (the same row of the table in 02 §3) today without an integration test (TSA-07: test, command, SHA of the integration branch with the previous PR, output and exit code stated in this PR).
 - [ ] For a change in `packages/hive-mind-core/src/{mind,harvest}/**`: recorded for the `scripts/oss-drift-baseline.json` review.
 - [ ] The branch has been integrated with `integration/waggle-next` within the last 24 h (merge after push, no force-push).
 
 **Absolute prohibitions (I confirm the PR does not violate them)**
 - [ ] No merge into `main`, no force-push, no `git tag v*` and no tag push.
+- [ ] The branch has been pushed only to `<ODOBRENI_TIMSKI_REMOTE>`, never to the public `origin` (`git remote get-url --push origin` checked; checklist, H-01).
 - [ ] `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` is not defined. No release, publication, attestation or local signing.
 - [ ] No change to repo visibility, license/NOTICE text (before DQ-02), Stripe/billing or www pricing (before DQ-01/DQ-03).
 - [ ] No replacement of the installed application on the founder's machine and no installation of unverified binary or MCP code from tests.
-- [ ] No changes to GitHub repo/org settings and no manual triggering or re-running of workflows.
+- [ ] No changes to GitHub repo/org settings and no manual triggering of workflows. Re-run only per TSA-08 (after confirmation), recorded in this PR (run ID, reason).
 - [ ] `release.yml` not touched (unless this is a W8 PR with founder review).
 
 ## Ledger and documentation
 
 - [ ] `docs/TECH-DEBT.md`: new/discovered debt recorded before merge · closed row given status + SHA · wrong row corrected · "not applicable"
 - [ ] Docs updated for changed behavior, commands or configuration · "not applicable"
-- [ ] PRD/FRD `.md` change: DOCX re-exported and hashes updated (Delivery §6.1, Disposition OD-9) in a doc-only PR · "not applicable"
+- [ ] PRD/FRD or `00-START-HERE` `.md` change: DOCX re-exported and hashes updated in `docs/plans/WAGGLE-V1.2-PACKAGE-MANIFEST.md` §3 in a doc-only PR · "not applicable"
 - [ ] No `// TODO` without an ID
 
 ## Finding against the plan

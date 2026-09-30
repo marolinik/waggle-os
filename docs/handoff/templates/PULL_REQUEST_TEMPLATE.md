@@ -7,6 +7,10 @@ docs/handoff/02-WORKING-AGREEMENT.md §8/§9 (DoR/DoD).
 Ciljna grana: integration/waggle-next — NIKAD main.
 Svaka tvrdnja u opisu nosi oznaku: ODLUKA / POTVRĐENO NA REVIZIJI / NALAZ AUDITA — ZA PROVERU /
 DELIMIČNO/NEPOVEZANO / PREDLOG / ODLOŽENO / NEPOZNATO.
+Revizija dokumenta: 1.2.1 DRAFT · 30.09.2026 · završno zatvaranje (H-01..H-12)
+Izmene 1.2.1: H-01 — push samo na <ODOBRENI_TIMSKI_REMOTE>; H-02 — heševi DOCX-a u manifestu paketa;
+H-04 — worktree/stash provera po TSA-03 A, TSA-04, TSA-05, hotspot test TSA-07, re-run TSA-08
+(predlozi NEODOBRENO); H-05 — bezbedan test profil (BTP); H-06 — kapije merge-a iz backlog.csv.
 -->
 
 ## Identitet
@@ -18,7 +22,7 @@ DELIMIČNO/NEPOVEZANO / PREDLOG / ODLOŽENO / NEPOZNATO.
 - **AT ID / imenovani FRD test:** <!-- deo AT-a koji FRD §15 („Wave (autoritativan …)”) pripisuje ovom PR-u; npr. AT-01, FRD-05.8, Disposition OD-10; ili „nema — razlog” -->
 - **Uloga (owner) / ime:** <!-- npr. Harness owner / … -->
 - **Hotspot fajlovi i merge vlasnik:** <!-- DP-0.14 tabela; „nijedan” ako nema -->
-- **Blokade za merge:** <!-- RAT-nn / DQ-nn / ODB-01 / ODB-02 / „nema” -->
+- **Kapije merge-a (backlog.csv `merge_gates`):** <!-- svaka stavka iz merge_gates tiketa sa statusom i dokazom zatvaranja (link na odluku, SHA merge-a tiketa-preduslova); „nema” samo ako je polje prazno osim MERGE-AUTH -->
 
 ## Šta i zašto
 
@@ -99,8 +103,9 @@ Obrazloženje (koja pokrivena površina se menja: chat/persona/memory/routing/pr
 Izvor: [`docs/plans/SAFE-IMPLEMENTATION-CHECKLIST.md`](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.md). Jedno „ne” zaustavlja PR.
 
 **Pre svakog PR-a**
-- [ ] Sopstveni worktree iz `integration/waggle-next`. Postojeći worktree-jevi i 2 stash-a netaknuti. Nijedan unos nije brisan ni prune-ovan.
+- [ ] Sopstveni worktree iz `integration/waggle-next` (samo za W0-PR19 i posle potvrde TSA-05: detached baseline worktree na `2af0904d`). Nijedan tuđ unos u `git worktree list`/`git stash list` nije uklonjen ni izmenjen; na mašini osnivača njenih 10 worktree unosa i 2 stash-a netaknuti. Sopstveni unos uklonjen samo po TSA-04.
 - [ ] Grana `<wave-id>/<tema>` sa dozvoljenim prefiksom. Cilj je `integration/waggle-next`, ne `main`.
+- [ ] Bezbedan test profil (BTP) za sidecar/web/E2E, hook/launch/canary i root suite do merge-a W0-PR20 (checklist „Bezbedan test profil (BTP)”); snimak `~/.waggle` i klijenata pre/posle identičan. Scratch profil nije sandbox.
 - [ ] Env izolacija po checklist-u (`WAGGLE_DATA_DIR`, `WAGGLE_PORT≠3333`, `PORT≠3100`, `WAGGLE_DESKTOP_PORT_FALLBACK` unset, `HIVE_MIND_DATA_DIR`, E2E env, `HOME`/`USERPROFILE`/`HERMES_HOME` za hook testove). Ništa ne dira `~/.waggle`.
 - [ ] Spoljni upisi isključeni (`WAGGLE_SIGNAL_EMIT=0`; bez channel tokena, Stripe ključeva, `DATABASE_URL`/`CLERK_SECRET_KEY`; `VITE_POSTHOG_KEY`/`VITE_CLERK_*`/`VITE_WAGGLE_ENABLE_CLERK` unset; `apps/web/.env.local` nije kopiran).
 - [ ] Nema run-a sa realnim nalogom ili plaćenim API-jem bez ODB-01/DQ-04 odobrenja za taj run, namenske VM i cap-a.
@@ -110,23 +115,24 @@ Izvor: [`docs/plans/SAFE-IMPLEMENTATION-CHECKLIST.md`](../../plans/SAFE-IMPLEMEN
 - [ ] Installer/packaged testovi (ako postoje) samo na namenskoj VM ili disposable Windows nalogu. Nijedno odbijanje skripta nije zaobiđeno.
 - [ ] Nema Fusion/council/5-hats/agent-fusion površine (ODLUKA D-16).
 - [ ] Gates lokalno zeleni pre review-a. Source nije menjan dok je suite radio.
-- [ ] Hotspot merge preko vlasnika. Nema drugog merge-a istog hotspota danas bez integracionog testa.
+- [ ] Hotspot merge preko vlasnika. Nema drugog merge-a istog hotspota (isti red tabele u 02 §3) danas bez integracionog testa (TSA-07: test, komanda, SHA integracione grane sa prethodnim PR-om, izlaz i exit kod navedeni u ovom PR-u).
 - [ ] Za izmenu u `packages/hive-mind-core/src/{mind,harvest}/**`: zabeleženo za `scripts/oss-drift-baseline.json` review.
 - [ ] Grana je integrisana sa `integration/waggle-next` u poslednja 24 h (merge posle push-a, bez force-push-a).
 
 **Apsolutne zabrane (potvrđujem da ih PR ne krši)**
 - [ ] Nema merge-a u `main`, force-push-a, `git tag v*` ni push-a tagova.
+- [ ] Grana je push-ovana samo na `<ODOBRENI_TIMSKI_REMOTE>`, nikad na javni `origin` (`git remote get-url --push origin` proveren; checklist, H-01).
 - [ ] `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` nije definisan. Nema release-a, publikacije, attestation-a ni lokalnog potpisivanja.
 - [ ] Nema promene vidljivosti repoa, licence/NOTICE teksta (pre DQ-02), Stripe/billing-a ni www pricing-a (pre DQ-01/DQ-03).
 - [ ] Nema zamene instalirane aplikacije na founder mašini niti instalacije neproverenog binarnog ili MCP koda iz testova.
-- [ ] Nema izmena GitHub repo/org podešavanja ni ručnog pokretanja ili re-run-a workflow-a.
+- [ ] Nema izmena GitHub repo/org podešavanja ni ručnog pokretanja workflow-a. Re-run samo po TSA-08 (posle potvrde), zabeležen u ovom PR-u (run ID, razlog).
 - [ ] `release.yml` nije diran (osim ako je ovo W8 PR sa founder review-om).
 
 ## Ledger i dokumentacija
 
 - [ ] `docs/TECH-DEBT.md`: novi/otkriveni dug upisan pre merge-a · zatvoren red dobio status + SHA · pogrešan red ispravljen · „nije primenljivo”
 - [ ] Docs ažurirani za promenjeno ponašanje, komande ili konfiguraciju · „nije primenljivo”
-- [ ] Izmena PRD/FRD `.md`: DOCX ponovo izvezen i heševi ažurirani (Delivery §6.1, Disposition OD-9) u doc-only PR-u · „nije primenljivo”
+- [ ] Izmena PRD/FRD ili `00-START-HERE` `.md`: DOCX ponovo izvezen i heševi ažurirani u `docs/plans/WAGGLE-V1.2-PACKAGE-MANIFEST.md` §3 u doc-only PR-u · „nije primenljivo”
 - [ ] Nijedan `// TODO` bez ID-a
 
 ## Nalaz protiv plana

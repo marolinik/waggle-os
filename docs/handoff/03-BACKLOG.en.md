@@ -4,6 +4,10 @@
 
 **Document revision: 1.2 DRAFT · 29.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`**
 
+**Document revision: 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)**
+
+**Changes in 1.2.1:** H-01/H-02 — current state of the package (commit `2758f4e5` on the public `origin`; the closure revision is not committed) and the handover channel in §6 pt.4, §7 N-07 and WB-PR1. H-03 — IDs of LOW findings in the cards (`finish/…`), gate findings in the typed fields; corrected LOW findings `finish/estimates/f1/03`, `finish/estimates/f1/05`, `finish/facts/f1/06` and `finish/traceability/f1/06` mirrored into the cards (W0-PR12, W1-PR1, W1-PR4, W2-PR1). H-04 — §6 gates 2–3 refer to TEAM-START-AUTHORIZATION (NOT APPROVED). H-05 — ticket W0-PR20 (card, overview, §2.1, §3, §6) and the safe test profile (BTP). H-06 — typed fields and readiness (§0, §0.1), W0-PR20, INT-01..INT-05 and the tracker import (§8), aligned overview, cards ("Readiness" row), §2, §6, §7. H-07 — outcomes per FRD-05.9 in W0-PR1, W0-PR2, W0-PR8 and W3-PR6. H-08 — W0-PR3: server-observed validator invocation and negative examples. H-09 — acyclic release path (§2.3; W8-PR6; new ticket W8-PR7, conditional on REL-BOOT). H-10 — ODB-02 recommendation and status (§2.3, §5, W3e-PR9e). H-11 — KVARK/LM TEK boundary (WB-PR3 gate `KVARK-IF`, B2-PR3, W6-PR7, §2.3). H-12 — sprint start = T0; link to Delivery §4.4 (§6). This revision is not an implementation approval; it does not change any PROPOSAL/DQ/RAT/ODB status.
+
 > **Implementation is NOT approved.** This backlog is a planning artifact. Coding starts only when the founder approves the delivery plan in writing ([WAGGLE-DELIVERY-PLAN-v1.2.md](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)). From the first commit onward, everything follows the **mandatory** safe strategy: DP-0.01..DP-0.16 (Delivery §0) and [SAFE-IMPLEMENTATION-CHECKLIST.md](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md). Every checklist item is yes/no, and a single "no" stops work. The status of all tickets is `TODO — čeka odobrenje plana`. Founder decisions D-01..D-18 (brief §3) are closed and this backlog does not reopen them. — PROPOSAL — BRIEF DIRECTION (DIR-01, authority boundary).
 
 Readers: tech lead, developers, QA. Read [00-START-HERE.md](00-START-HERE.en.md) before this file. The environment is in [01-ONBOARDING-DEV-ENV.md](01-ONBOARDING-DEV-ENV.en.md), the way of working (branches, PRs, review, gates) in [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md), the code map in [04-CODEBASE-MAP.md](04-CODEBASE-MAP.en.md). Risks, the decision queue and escalation are in [05-RISKS-DECISIONS-ESCALATION.md](05-RISKS-DECISIONS-ESCALATION.en.md). The machine-readable version of all tickets is [backlog.csv](backlog.csv) (RFC 4180, UTF-8).
@@ -14,33 +18,61 @@ Readers: tech lead, developers, QA. Read [00-START-HERE.md](00-START-HERE.en.md)
 
 | # | Rule | Status |
 |---|---|---|
-| B-01 | **One ticket = one PR ID from Delivery §2** ("PR slicing" per wave). `ticket_id` is literally the PR ID from the plan. Tickets are not invented, merged or dropped. | PROPOSAL |
+| B-01 | **One ticket = one PR ID from Delivery §2** ("PR slicing" per wave). `ticket_id` is literally the PR ID from the plan. Tickets are not invented, merged or dropped. Additions in revision 1.2.1: `W0-PR20` (new PR ID in Delivery §2 W0; H-05), `W8-PR7` (new PR ID in Delivery §2 W8, conditional on REL-BOOT; H-09) and the integration jobs `INT-01..INT-05` (B-04). | PROPOSAL |
 | B-02 | The plan itself splits two PR IDs from §2 into named sub-PRs, so the sub-PRs are counted: **W3e-PR9 → W3e-PR9a..PR9e** (§2 W3e, §4.1.1, §4.2 review count "+5") and **B2-PR0 → B2-PR0a/PR0b/PR0c** (§2 B1–B3 "split in §4.1.1 into PR0a/b/c", §3 graph, §4.2 "B2-PR0a/b/c are counted as 3 PRs"). The umbrella ID (W3e-PR9, B2-PR0) is not a separate ticket. | PROPOSAL (interpretation of §2/§4.1.1) |
-| B-03 | Total **123 tickets**: G1 = 25, G2 = 65, G3 = 33 (of which W3e-PR9a..e = 5, only with ODB-02). This matches the review count in Delivery §4.2: G1 ~26 PRs = 25 tickets + 1 integration doc-only PR; G2 66–68 = 65 + 1–3 integration PRs; G3 29–31 (+5) = 28 (+5) + 1–3. | CONFIRMED AT REVISION of the package (count of §2 and §4.2, 29.09.2026) |
-| B-04 | **Integration PRs from the Delivery §4.1 row "Integration/spec sync"** (G1: ID reconcile FRD §16.1 ↔ PRD v1.2 ↔ §7, one doc-only PR; G2: hotspot integration tests; G3: reconcile after DQ decisions) **have no PR ID in §2**, so they are not tickets. They are tracked in §6 and §7 of this file. ID: UNKNOWN. | UNKNOWN |
+| B-03 | Total **130 rows**: **125 PR tickets** — G1 = 26 (25 + W0-PR20), G2 = 65, G3 = 34 (33 + W8-PR7; of which W3e-PR9a..e = 5, only with ODB-02, and W8-PR7, only with REL-BOOT = yes) — and **5 integration jobs** INT-01..INT-05 (G1: INT-01, INT-02, INT-05; G2: INT-03; G3: INT-04). W0-PR20 was added in revision 1.2.1 (H-05) and entered in Delivery §2; W8-PR7 was added in revision 1.2.1 (H-09) and entered in Delivery §2 W8. The review count in Delivery §4.2 and the totals in §4.1–§4.3 are from revision 1.2 (G1 ~26 PRs = 25 tickets + 1 integration doc-only PR = INT-02; G2 66–68 = 65 + 1–3 integration PRs = INT-03; G3 29–31 (+5) = 28 (+5) + 1–3 = INT-04) and do not include W0-PR20 (estimate 1–2 / 0.5–1, PROPOSAL 1.2.1), W8-PR7 (estimate UNKNOWN), INT-01 (not a PR) or INT-05 (doc-only PR from TSA-06). | CONFIRMED AT REVISION of the package for 123 tickets (29.09.2026); additions in 1.2.1: PROPOSAL; 130 = CSV count after 1.2.1 (H-05, H-06, H-09) |
+| B-04 | **Integration and reconcile jobs have an ID** `INT-nn` (in the CSV `wave` = `INT`). INT-02, INT-03 and INT-04 are the three items of the Delivery §4.1 row "Integration/spec sync" (G1 ID reconcile, G2 hotspot integration tests, G3 reconcile after DQ decisions). INT-01 is setting up `integration/waggle-next` with the package (00 §6 (h); §7 N-07). INT-05 is the doc-only alignment of `AGENTS.md`/`CLAUDE.md` with TSA-06/TSA-10. Owner, dependencies, gates and completion criterion: §8.1 and the CSV. | PROPOSAL (IDs added in revision 1.2.1, H-06) |
 | B-05 | **Estimates** are copied from Delivery §4.1.1 (classic / AI eng-days, expert range, not P50). Where the plan gives only a PR group total, the per-ticket field stays empty, and the group and its total are in the note. No number has been re-estimated. | PROPOSAL (plan's numbers) |
 | B-06 | **AT/PRD/FRD IDs** come from FRD §15 (column "Wave"), Delivery §2 (exit tests and PR table rows) and Delivery §7 (TM rows). A TM row is a group row: it names a wave or a PR group, so the CSV columns `prd_ids`/`frd_ids` carry the union of the TM rows in which the ticket appears. The `notes` column names those TM rows. The distribution of PRD/FRD IDs per individual PR within a TM row is not given in the plan (UNKNOWN). | PROPOSAL |
 | B-07 | **Files.** For G1 tickets, paths were verified with `git ls-tree` against `2af0904d` (29.09.2026). Line numbers are taken from the plan; for `ci.yml:3-6`, `feature-flags.ts:26`, `workflow-harness.ts:474-482`, `cost-tracker.ts:24-32`, `dock-tiers.ts:82`, `cost.ts:210,272`, `settings.ts:1192`, `local/index.ts:612` and `package.json:48` the content was re-read. For G2/G3 the paths are from the plan and were not re-verified. | CONFIRMED AT REVISION (G1 paths); PROPOSAL (G2/G3) |
-| B-08 | **Status** of every ticket: `TODO — čeka odobrenje plana`. Pre-merge gates (RAT-nn, DQ-nn, ODB-nn) are in the ticket's column/note. A gate is not a dependency on another ticket. | PROPOSAL |
+| B-08 | **Status** of every ticket: `TODO — čeka odobrenje plana`. The working rules are in six typed CSV fields (§0.1), not only in `notes`: a gate is not a technical dependency, a mandatory order is not a technical dependency, and a merge gate does not forbid preparation in a branch. | PROPOSAL (1.2.1, H-06) |
 | B-09 | Fact status labels: **DECISION** (only D-01..D-18), **CONFIRMED AT REVISION**, **AUDIT FINDING — TO VERIFY**, **PARTIAL/UNWIRED**, **PROPOSAL**, **DEFERRED**, **UNKNOWN**. "Module exists" is not evidence of an E2E function. | as in the package |
+| B-10 | **Typed fields, the gate registry and readiness** are in §0.1; the mechanical check is `node docs/plans/v1.2-evidence/tools/check_backlog.mjs` (exit 0). When `notes` and the typed fields differ, the fields apply. | PROPOSAL (1.2.1, H-06) |
 
-**Definition of Ready (every ticket; PROPOSAL, derived from the checklist):** plan approved; owner role assigned to a person (DP-0.14); dependent tickets merged into `integration/waggle-next`; the ticket's gate (RAT/DQ/ODB) closed if it is a pre-merge gate; env template from the checklist sections "Env isolation" and "External writes disabled" ready; RED test and its file known.
+**Definition of Ready (every ticket; PROPOSAL, derived from the checklist):** the ticket is `ready_to_start` per §0.1 — plan approved (`PLAN-APPROVAL`), owner role assigned to a person (`ROLE-ASSIGN`, DP-0.14), technical dependencies and predecessors from `sequence_after` merged into `integration/waggle-next`, start gates and `start_after` events closed; env template from the checklist sections "Env isolation" and "External writes disabled" ready, and for `host:btp` also the safe test profile (BTP, H-05); RED test and its file known. Merge gates are not a condition for starting work.
 
-**Definition of Done (every ticket; PROPOSAL, derived from the checklist and DP-0.06/DP-0.15):** RED test fails on the baseline, then passes after the minimal GREEN; pinning tests named by the plan rewritten in the same PR with a rationale; gates green: `npm run build:packages` · `npm run typecheck:server-tests` · `npm run lint` · `npm run test -- --run --maxWorkers=6`; a ticket that touches `apps/web/**` also has `npm run typecheck:web` · `npm run test -w apps/web` green, because root `vitest.config.ts:43` excludes `apps/**` and the four gates do not run web RED/GREEN tests (CONFIRMED AT REVISION); other supplementary checks per touched surface are in [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md) §6.3; the PR description contains all mandatory fields (finding ID, AT or "none — reason", RED→GREEN evidence, rewritten tests, affected receipts I/R/P/A/C, migration/rollback, status labels); review by the hotspot owner; merge only into `integration/waggle-next`, never into `main`; checklist without a single "no".
+**Definition of Done (every ticket; PROPOSAL, derived from the checklist and DP-0.06/DP-0.15):** the ticket is `ready_to_merge` per §0.1 (all `merge_gates` closed, the tickets listed in them merged); RED test fails on the baseline, then passes after the minimal GREEN; pinning tests named by the plan rewritten in the same PR with a rationale; gates green: `npm run build:packages` · `npm run typecheck:server-tests` · `npm run lint` · `npm run test -- --run --maxWorkers=6`; a ticket that touches `apps/web/**` also has `npm run typecheck:web` · `npm run test -w apps/web` green, because root `vitest.config.ts:43` excludes `apps/**` and the four gates do not run web RED/GREEN tests (CONFIRMED AT REVISION); other supplementary checks per touched surface are in [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md) §6.3; the PR description contains all mandatory fields (finding ID, AT or "none — reason", RED→GREEN evidence, rewritten tests, affected receipts I/R/P/A/C, migration/rollback, status labels); review by the hotspot owner; merge only into `integration/waggle-next`, never into `main`; checklist without a single "no".
+
+### 0.1 Typed fields, registry and readiness (revision 1.2.1; PROPOSAL)
+
+| Field (CSV) | Meaning | Who changes it |
+|---|---|---|
+| `technical_dependencies` | Tickets whose code, schema or document this ticket uses. They must be merged into `integration/waggle-next` before work starts. Formerly the column `depends_on` (transition: §8.2 pt.3). | tech lead, together with a change to Delivery §2/§3 |
+| `sequence_after` | Mandatory work order without a technical dependency (same lane, Delivery §3 critical path). The predecessor must be merged before work starts. | tech lead, doc-only PR with a rationale |
+| `start_gates` | Registry gates that must be closed before work starts, even in a branch: decisions, ratifications, approvals and findings whose outcome determines the content or cost of the work. | registry; decisions are closed by the founder |
+| `merge_gates` | Registry gates or ticket IDs (merge prerequisite) that must be closed or merged before the merge. Work in a branch is allowed before that. | registry; tech lead |
+| `milestone_gate` | `start_after:<događaj>` — work does not start before the event; `merge_before:<događaj>` — the ticket must be merged before the event. The events are in the registry: F1, G1-EXIT, B2-DEVRUN, B2-VALRUN, F2, G2-EXIT, B3-RUN, F3-SRC, F2F3-CFR, F3 (= F3a); after the last merge come K-SIGN, F3b and the PUBLIC-GO gate (Delivery §5.1, H-09), which no ticket has in `milestone_gate`. | tech lead; Release and Benchmark owner |
+| `resource_constraints` | `lane:`, `hotspot:`, `host:`, `hw:`, `budget:`, `human:` from the registry. Constraints on scheduling and place of execution. They do not enter automatic readiness, but are respected during assignment and merge: `hotspot:` per 02 §3 and TSA-07; `host:` per DP-0.11 and H-05; `budget:dq-04` means a paid call only within the approved DQ-04 cap (BC-03). | tech lead |
+
+Lists are separated by `;`, without spaces. Every ID exists in [backlog.csv](backlog.csv) or in [backlog-gates.csv](backlog-gates.csv) (columns `gate_id, kind, naziv, zatvara_se_kad, vlasnik, izvor, requires`).
+
+**Readiness in the tracker:**
+- `ready_to_start` = all `start_gates` closed · all `start_after` events closed · all `technical_dependencies` and `sequence_after` merged.
+- `ready_to_merge` = `ready_to_start` · all `merge_gates` closed and the tickets in them merged · Definition of Done met.
+- An event closes only when all tickets with `merge_before:<događaj>` are merged (or DEFERRED) and its `requires` from the registry are closed.
+- A merge gate does not forbid preparation in a branch. A start gate forbids preparation too, because its outcome determines the content or cost of the work.
+- Every row has the global gates `PLAN-APPROVAL` and `ROLE-ASSIGN` (start) and `MERGE-AUTH` (merge; except INT-01, which is not a PR). `ROLE-ASSIGN`, `REVIEW-2` and `FOUNDER-REVIEW` are closed per ticket, not globally.
+- Gates that depend on NOT APPROVED proposals (TSA-xx, `MERGE-AUTH`) are entered so that the tracker blocks work until the proposal is confirmed; the entry is not a confirmation.
+- Delivery §3: "all W3e PRs that change persona resolution or the prompt path" are merged before the B2 dev run. W3e-PR1 carries `merge_before:B2-DEVRUN`. For W3e-PR2..PR8 the author states when opening the PR whether it changes persona resolution or the prompt path; if it does, the tech lead adds `merge_before:B2-DEVRUN` with a doc-only PR before the merge.
+- The milestone serialization from Delivery §4.3 (G2 after G1, G3 after G2) is entered as `start_after:G1-EXIT` in G2 rows and `start_after:G2-EXIT` in G3 rows. This is the PROPOSAL schedule of the plan; an overlap (e.g. W1-PR1, W1-PR13, W1-PR15 with the tail of G1) is introduced only by a doc-only PR that changes this field and Delivery §4.3.
+- Variant "W3e-PR9 in G2" (Delivery §4.3; ODB-02): W3e-PR9a..e then get `milestone` G2, `start_after:G1-EXIT`, `merge_before:B2-DEVRUN` and `merge_before:F2` (doc-only PR with the founder decision).
+- When `notes` and the typed fields differ, the fields apply; `notes` are rationale and history.
+
+**Mechanical check:** `node docs/plans/v1.2-evidence/tools/check_backlog.mjs` (exit 0). It checks the CSV shape, unique IDs, existence of all references, absence of cycles, simulated readiness scenarios (among others: B3-PR1 and B3-PR2 are not `ready_to_start` before F2, nothing starts before `sequence_after`, W1-PR2 may be prepared while RAT-02 is open, but not merged) and agreement of the cards and the overview with the CSV. `--cards` prints the exact "Readiness" row for every card. A pass checks the documentation, not the application.
 
 ---
 
 ## 1. Overview by wave
 
-Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 ("—" = the plan gives only a group total, see the note in the CSV); owner = role (DP-0.14), not a name.
+Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 ("—" = the plan gives only a group total, see the note in the CSV); owner = role (DP-0.14), not a name. "Technical dependencies" = CSV `technical_dependencies`; the other typed fields are in the "Readiness" row of every card (§0.1).
 
 <!-- GEN:OVERVIEW:BEGIN -->
 
-### W0 (20 tickets; G1)
+### W0 (21 tickets; G1)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
-| W0-PR0 | G1 | CI filters for `integration/**` (ci.yml, tauri-build-pr.yml) | — | — (prerequisite; TM-19 carries AT-30) | — (group) | UNKNOWN (proposal: Release owner) |
+| W0-PR0 | G1 | CI filters for `integration/**` (ci.yml, tauri-build-pr.yml) | INT-01 | — (prerequisite; TM-19 carries AT-30) | — (group) | UNKNOWN (proposal: Release owner) |
 | W0-PR1 | G1 | Verify default fail-closed + harness:phase:skipped | W0-PR0 | AT-01 | — (group) | Harness owner |
 | W0-PR2 | G1 | VERDICT value in the gate; CONDITIONAL ≠ PASS | W0-PR0, W0-PR1, W0-PR8 | AT-01 | — (group) | Harness owner |
 | W0-PR3 | G1 | Exit code is not lost; bash gate = real test/typecheck | W0-PR0, W0-PR1, W0-PR8 | AT-02 | — (group) | Harness owner |
@@ -60,22 +92,23 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 | W0-PR17 | G1 | Telemetry truthfulness: one switch for the local store and PostHog + disclosure | W0-PR0 | AT-30 part (telemetry) | 0.5–1 / 0.5–0.5 | Release owner |
 | W0-PR18 | G1 | MIG-05(i): reclassification of legacy leak frames (metadata.recallExcluded) | W0-PR0, W0-PR11, W0-PR19 | AT-13 (G1, legacy); AT-27 part (MIG-05(i), Class A) | 1–1.5 / 0.5–1 | Memory owner (MDQ-07) |
 | W0-PR19 | G1 | Golden legacy-datadir fixture generator (at revision 2af0904d) | W0-PR0 | prerequisite for AT-27 (FRD §15) | 1–1.5 / 0.5–1 | UNKNOWN |
+| W0-PR20 | G1 | dataDir isolation: documents/pins, marketplace, SecurityGate and adapters bypassing `WAGGLE_DATA_DIR` + sentinel regression | W0-PR0 | DP-0.08 sentinel test (no AT ID) | 1–2 / 0.5–1 | Server owner |
 
 ### W1 (15 tickets; G2)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W1-PR1 | G2 | A8 spike (Reflow ADAPT vs minimal BUILD) + review ADR-02/ADR-03 | W0-PR7, W0-PR8 | AT-07, AT-08, AT-09 (spike criterion: BvB T1–T3 + T9 on the prototype) | 5–6 / 3–4 | Durable owner |
-| W1-PR2 | G2 | Run store + schemaVersion + retention/GC + migration of agent-runs.json v1 (MIG-01) | W1-PR1, W1-PR13, W1-PR15 | AT-27 part (run store) | 8–10 / 4–5 | Durable owner |
+| W1-PR2 | G2 | Run store + schemaVersion + retention/GC + migration of agent-runs.json v1 (MIG-01) | W1-PR1 | AT-27 part (run store) | 8–10 / 4–5 | Durable owner |
 | W1-PR3 | G2 | Canonical/legacy status map in shared | W1-PR2 | FRD-05.8 status-map test (no AT ID) | 2–3 / 1–2 | Durable owner |
 | W1-PR4 | G2 | Server-driven phase executor (DurableRun before side-effect, Checkpoint.spent) | W1-PR3 | AT-03 (G2 authoritative); AT-07 | 9–12 / 4–6 | Durable owner (hotspot agent-loop.ts: Harness owner) |
 | W1-PR5 | G2 | Lease/fencing for the run + explicit resume API | W1-PR4 | AT-07; AT-09 | — (group) | Durable owner |
 | W1-PR6 | G2 | ToolAction/ToolAttempt: stable actionId, unknown_outcome; pending_actions transitional status | W1-PR4 | AT-08; AT-12 part (BLOCKED_APPROVAL durable); AT-27 part (MIG-02) | — (group) | Durable owner (Boundary owner: held actions) |
-| W1-PR7 | G2 | ProofReceipt + execution_traces CHECK rebuild (gate_passed) + MIG-08 traces section | W1-PR4, W1-PR13, W1-PR14, W1-PR15 | AT-01 part (G2 exit (c)); AT-27 part (MIG-04(B)) | 4.5–7 / 2.5–2.5 | Harness owner (schema.ts: Memory owner, drift baseline) |
+| W1-PR7 | G2 | ProofReceipt + execution_traces CHECK rebuild (gate_passed) + MIG-08 traces section | W1-PR4 | AT-01 part (G2 exit (c)); AT-27 part (MIG-04(B)) | 4.5–7 / 2.5–2.5 | Harness owner (schema.ts: Memory owner, drift baseline) |
 | W1-PR8 | G2 | Per-run event bus + GET /api/runs/:id/stream?sinceSeq= | W1-PR7 | AT-06 part (per-run bus); AT-10 | — (group) | Durable owner (Chat owner: chat.ts) |
 | W1-PR9 | G2 | Detach ≠ cancel in chat (ADR-03) | W1-PR8 | AT-10 | — (group) | Chat owner |
 | W1-PR10 | G2 | Loop execution state from Awareness into the run store | W1-PR9 | AT-23 part; AT-27 part (MIG-02) | — (group) | Durable owner |
-| W1-PR11 | G2 | Routines: occurrence identity, misfire policy, timezone, DST + MIG-08 section | W1-PR9, W0-PR14, W1-PR14 | AT-23 (G2 authoritative); AT-27 part (MIG-02; MIG-08) | — (group) | Durable owner |
+| W1-PR11 | G2 | Routines: occurrence identity, misfire policy, timezone, DST + MIG-08 section | W1-PR9, W0-PR14 | AT-23 (G2 authoritative); AT-27 part (MIG-02; MIG-08) | — (group) | Durable owner |
 | W1-PR12 | G2 | Crash-injection e2e (dev Node) | W1-PR5, W1-PR6, W1-PR9 | AT-07; AT-08; AT-09 | 1–1 / 0.5–0.5 | Durable owner |
 | W1-PR13 | G2 | MIG-09 versioned migration ledger + runner | W0-PR7, W0-PR8 | AT-27 part (MIG-09) | 3–4 / 1.5–2 | Durable owner |
 | W1-PR14 | G2 | MIG-08 export/erasure for the run store (ExecutionErasure) | W1-PR2 | AT-27 part (MIG-08) | 2–3 / 1–1.5 | Durable owner |
@@ -83,9 +116,9 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W2 (10 tickets; G2)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
-| W2-PR1 | G2 | ContextPackage type + ContextBuilder facade over recallMemory + ablation flag | W0-PR10, W0-PR11 | AT-06 part; AT-13 part | 3–4 / 1.5–2 | Memory owner |
+| W2-PR1 | G2 | ContextPackage type + ContextBuilder facade over recallMemory + ablation flag + review ADR-05 (O1–O4) | W0-PR10, W0-PR11 | AT-06 part; AT-13 part | 3–4 / 1.5–2 | Memory owner |
 | W2-PR2 | G2 | Pinning the package for a run + invalidation (erasure/revoke/scope) | W2-PR1, W1-PR4 | AT-15 (G2 authoritative); AT-13 part; AT-27 part (MIG-05 context_refs) | 3–3.5 / 1.5–2 | Memory owner |
 | W2-PR3 | G2 | Trust/taint labels in the recall block render line | W2-PR2 | AT-28 part (LoCoMo same-judge without regression) | 1.5–2 / 0.5–1 | Memory owner |
 | W2-PR4 | G2 | Token budget per model tier at package level | W2-PR3 | — (TM-08; per-PR UNKNOWN) | 2–3 / 0.5–1 | Memory owner |
@@ -98,7 +131,7 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W3 (8 tickets; G2)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W3-PR1 | G2 | Review ADR-01 + ExecutionMode table in FRD | — | — | 1–2 / 0.5–0.5 | Harness owner |
 | W3-PR2 | G2 | Router conversation/work server-side | W3-PR1, W1-PR4, W2-PR1 | — (TM-01/TM-20; per-PR UNKNOWN) | 4–5 / 2–3 | Harness owner (hotspot: Chat owner) |
@@ -111,9 +144,9 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W3e (13 tickets; G2/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
-| W3e-PR1 | G2 | Active-version pointer + rollback route + rolled_back (CHECK rebuild) + MIG-08 | W0-PR9, W1-PR13, W1-PR14, W1-PR15 | AT-04 (G2 authoritative); AT-27 part (MIG-03) | 6–7.5 / 3–4 | Evolution owner |
+| W3e-PR1 | G2 | Active-version pointer + rollback route + rolled_back (CHECK rebuild) + MIG-08 | W0-PR9 | AT-04 (G2 authoritative); AT-27 part (MIG-03) | 6–7.5 / 3–4 | Evolution owner |
 | W3e-PR2 | G2 | EvolutionLLM adapter over the provider router + composePersonaPrompt | W0-PR9 | AT-26 part (KVARK without cloud judge) | 2–3 / 1–1.5 | Evolution owner |
 | W3e-PR3 | G2 | Paired scoring (anchor) + drift watch of the active version | W0-PR9 | AT-29 | 2.5–4 / 1.5–2 | Evolution owner |
 | W3e-PR4 | G2 | builder.build() with secret scan/split/holdout instead of sourceFromTraces | W0-PR9 | AT-29; AT-13/AT-19 (eval set) | 2–3 / 1.5–2 | Evolution owner (Memory owner: eval dataset scope) |
@@ -129,20 +162,20 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W4 (8 tickets; G2/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W4-PR1 | G2 | PermissionEnvelope type + computation from existing sources | — | — (TM-10; per-PR UNKNOWN) | 3.5–4 / 1–1.5 | Capability owner |
 | W4-PR2 | G2 | Resolver facade + filterCandidates(envelope) + read-only persona test | W4-PR1 | AT-17 | 3–4 / 1.5–1.5 | Capability owner |
-| W4-PR3 | G2 | Typed CapabilityRequest + api_key card + durable proposal store (MIG-06/08) | W4-PR2, W1-PR13, W1-PR14, W1-PR15 | AT-11; AT-27 part | 4.5–5 / 1.5–2 | Capability owner |
+| W4-PR3 | G2 | Typed CapabilityRequest + api_key card + durable proposal store (MIG-06/08) | W4-PR2 | AT-11; AT-27 part | 4.5–5 / 1.5–2 | Capability owner |
 | W4-PR4 | G2 | BLOCKED_CAPABILITY resume on SetupCompleted | W4-PR3, W1-PR4 | AT-11 | 4–6 / 2–3 | Capability owner (hotspot: Chat owner) |
-| W4-PR5 | G2 | OAuth state bound to the request + persistence + PKCE + callback (MIG-06/08) | W4-PR4, W1-PR13, W1-PR14, W1-PR15 | AT-11 part; AT-27 part | 3.5–4.5 / 1.5–2 | Security owner (wave: Capability owner) |
-| W4-PR6 | G2 | Negative grant / decline expiry (MIG-06/08) + revoke RED→GREEN (AT-12) | W4-PR4, W1-PR13, W1-PR14, W1-PR15 | AT-12 (G2 authoritative); AT-19 (G2 authoritative, with W4-PR7); AT-27 part | 1.5–2 / 0.5–1 | Security owner (wave: Capability owner) |
+| W4-PR5 | G2 | OAuth state bound to the request + persistence + PKCE + callback (MIG-06/08) | W4-PR4 | AT-11 part; AT-27 part | 3.5–4.5 / 1.5–2 | Security owner (wave: Capability owner) |
+| W4-PR6 | G2 | Negative grant / decline expiry (MIG-06/08) + revoke RED→GREEN (AT-12) | W4-PR4 | AT-12 (G2 authoritative); AT-19 (G2 authoritative, with W4-PR7); AT-27 part | 1.5–2 / 0.5–1 | Security owner (wave: Capability owner) |
 | W4-PR7 | G2 | THREAT_MODEL.md addendum + test "no vault value in the prompt/trace" | W4-PR4 | AT-19 (G2 authoritative, with W4-PR6) | 1–1.5 / 0.5–1 | Security owner |
 | W4-PR8 | G3 | ActionDescriptor as the source of truth for side-effect endpoints | — | AT-18 (G3 authoritative) | 4–6 / 2–2.5 | Capability owner |
 
 ### W5 (7 tickets; G2/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W5-PR1 | G2 | step payload + StepContentBlock + bridge per-run bus → step | W1-PR8 | AT-10 (UI part) | 3.5–5 / 2–2.5 | UX owner; Chat owner (SSE step) |
 | W5-PR2 | G2 | View-work drawer + run-status-labels.ts | W5-PR1 | FRD-05.8 View-work test (no AT ID) | 3.5–5 / 2–2.5 | UX owner |
@@ -154,7 +187,7 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W6 (8 tickets; G2/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W6-PR1 | G2 | Readiness truthfulness (useHasWorkingModel + ModelGate) | — | AT-20 | 3–4 / 1.5–2 | Model/Runtime owner |
 | W6-PR2 | G2 | reason in ModelProbeResult + UI messages | — | AT-20 | 1.5–2 / 0.5–1 | Model/Runtime owner |
@@ -167,7 +200,7 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### W7 (7 tickets; G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W7-PR1 | G3 | Channel profile table + evidence card per channel (doc) | — | — (TM-12) | 1–1 / 0.5–0.5 | Attention owner |
 | W7-PR2 | G3 | WorkItem store + erasure/export (MIG-06/08) | — | AT-15 part; AT-27 (WorkItem part, G3 authoritative); AT-13 (regression) | 5–6 / 2–2.5 | Attention owner; Memory owner (erasure) |
@@ -177,20 +210,21 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 | W7-PR6 | G3 | Convert-to-work → DurableRun with taint | W7-PR4, W2-PR3 | AT-19 part (G3) | 2–3 / 1–1.5 | Attention owner; Security owner |
 | W7-PR7 | G3 | Second source (calendar of the same ecosystem) | W7-PR3 | — (TM-12) | 2–3 / 1–1.5 | Attention owner |
 
-### W8 (6 tickets; G1/G2/G3)
+### W8 (7 tickets; G1/G2/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | W8-PR1 | G1 | Receipt entry points (router npm, canary pwsh) + receipt manifest | W0-PR0 | prerequisite for AT-16/AT-30 (FRD §15) | 2–2 / 1–1 | Release owner |
 | W8-PR2 | G2 | Crash-injection receipt script over the packaged build | W1-PR4, W1-PR5 | AT-07 part (packaged, receipt C at F2); AT-30 | 2–3 / 1–1 | Release owner |
-| W8-PR3 | G3 | IM approve token flow + pairing persistence (Telegram only) + MIG-06/08 | W1-PR14 | AT-25; AT-27 part (MIG-08 pairing) | 3–4 / 2–2.5 | Channels owner |
+| W8-PR3 | G3 | IM approve token flow + pairing persistence (Telegram only) + MIG-06/08 | — | AT-25; AT-27 part (MIG-08 pairing) | 3–4 / 2–2.5 | Channels owner |
 | W8-PR4 | G3 | Status push / routine result / forward→WorkItem (Telegram only) | W8-PR3 | AT-25 | 1.5–2.5 / 1–1.5 | Channels owner |
 | W8-PR5 | G3 | Certify: notices/SBOM asserts + packaged migration step over the golden fixture | OSS-PR3 | AT-30 | 1.5–2 / 1–1.5 | Release owner |
 | W8-PR6 | G3 | Release checklist doc + review ADR-10 | — | AT-30 (egress part, TM-24) | 1–1.5 / 1–1 | Release owner |
+| W8-PR7 | G3 | release.yml: bootstrap identity as a protected input (+ promotion without rebuild only if ADR-10-T13 fails) — conditional, REL-BOOT | — | AT-30 | UNKNOWN / UNKNOWN | Release owner |
 
 ### WB (6 tickets; G1/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | WB-PR1 | G1 | Tier/KVARK inventory table in FRD + review ADR-08/ADR-09 | W0-PR0 | — | — (group) | Boundary owner |
 | WB-PR2 | G1 | KVARK RED test as it.fails (ADR-08-T3), without registration and gate | WB-PR1 | prerequisite for AT-26 (FRD §15) | — (group) | Boundary owner |
@@ -201,7 +235,7 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### OSS (5 tickets; G1/G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | OSS-PR1 | G1 | Provenance inventory (FR-OSS-04) + Build-vs-Borrow record of W1/W3 candidates | W0-PR0 | — (TM-18) | — (group) | OSS/License owner |
 | OSS-PR2 | G1 | License consistency lint in report mode (without changing LICENSE/NOTICE) | W0-PR0 | — (TM-18) | — (group) | OSS/License owner |
@@ -211,13 +245,13 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### B1 (1 ticket; G2)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | B1-PR1 | G2 | Evidence card + draft protocol (documentation) | — | — (TM-17) | 2–3 / 1–2 | Benchmark owner |
 
 ### B2 (7 tickets; G2)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | B2-PR0a | G2 | Harbor 0.20.0 + three images on the bench machine | B1-PR1 | — (TM-17) | 0.5–1 / 0.5–0.5 | Benchmark owner |
 | B2-PR0b | G2 | Ruler: reference agent + deviation analysis (B2-EXIT-0) | B2-PR0a | — (TM-17) | 0.5–1.5 / 0.5–1 | Benchmark owner |
@@ -229,12 +263,22 @@ Columns: G = milestone; estimate = classic / AI eng-days from Delivery §4.1.1 (
 
 ### B3 (2 tickets; G3)
 
-| Ticket | G | Title | Depends on | AT | Estimate cl. / AI | Owner |
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
 |---|---|---|---|---|---|---|
 | B3-PR1 | G3 | Pre-registration document (hash) before looking at test answers | B2-PR2 | AT-28; AT-29 | 3–5 / 1.5–2.5 | Benchmark owner |
 | B3-PR2 | G3 | Results + recount + message (DIR-23) | B3-PR1 | AT-28; AT-29 | 9–15 / 4.5–7.5 | Benchmark owner |
 
-Total: **123 tickets** — G1 25, G2 65, G3 33 (of which W3e-PR9a..e = 5, only with ODB-02).
+### INT (5 integration jobs; G1/G2/G3)
+
+| Ticket | G | Title | Technical dependencies | AT | Estimate cl. / AI | Owner |
+|---|---|---|---|---|---|---|
+| INT-01 | G1 | Integration branch integration/waggle-next with the v1.2 package | — | — | — (UNKNOWN) | Accountable tech lead (ESK-01) |
+| INT-02 | G1 | ID reconcile FRD §16.1 ↔ PRD v1.2 ↔ Delivery §7 (doc-only) | INT-01, WB-PR1 | — | 1–1 / 0.5–0.5 | UNKNOWN (proposal: tech lead) |
+| INT-03 | G2 | Hotspot integration tests chat.ts/agent-loop.ts | W1-PR4, W1-PR8, W1-PR9, W3-PR2, W4-PR1 | — | 2–3 / 1–1.5 | Chat owner; Harness owner |
+| INT-04 | G3 | Reconcile after DQ-02/03/06/07 decisions (doc-only) | — | — | 0–1 / 0–0.5 | UNKNOWN (proposal: tech lead) |
+| INT-05 | G1 | Alignment of AGENTS.md/CLAUDE.md with TSA-06/TSA-10 (doc-only) | INT-01 | — | — (UNKNOWN) | Accountable tech lead (ESK-01) |
+
+Total: **130 rows** — 125 PR tickets (G1 26, G2 65, G3 34; of which W3e-PR9a..e = 5, only with ODB-02, and W8-PR7, only with REL-BOOT = yes) and 5 integration jobs INT-01..INT-05 (G1 3, G2 1, G3 1).
 
 <!-- GEN:OVERVIEW:END -->
 
@@ -242,13 +286,13 @@ Total: **123 tickets** — G1 25, G2 65, G3 33 (of which W3e-PR9a..e = 5, only w
 
 ## 2. Dependency order
 
-The source is Delivery §3 (graph and critical path). This is a summary for sprint planning. Per-ticket edges are in the "Depends on" column and in the CSV column `depends_on`.
+The source is Delivery §3 (graph and critical path). This is a summary for sprint planning. Per-ticket technical dependencies are in the "Technical dependencies" column (§1) and in the CSV column `technical_dependencies`. The mandatory order, start and merge gates, milestone gates and resources are in the other typed fields (§0.1) and in the "Readiness" row of every card.
 
 ### 2.1 G1 (PROPOSAL — planner direction; ratification RAT-01)
 
 ```
-W0-PR0 (CI za integration/**)
-  ├─► Harness lane:  W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9          (redosled u lane-u, NIJE ivica: kritična putanja „serijski 3–4 rd”, Delivery §3)
+INT-01 (integraciona grana) ─► W0-PR0 (CI za integration/**)
+  ├─► Harness lane:  W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9          (sequence_after, nije tehnička zavisnost: kritična putanja „serijski 3–4 rd”, Delivery §3)
   │                   W0-PR1 + W0-PR8 ─► W0-PR2, W0-PR3          (vidljivost F-HARN-02/03, W0 „Rizik”)
   │                   W0-PR4, W0-PR5                              (nezavisni u lane-u)
   │                   W0-PR7 + W0-PR19 ─► W0-PR6                  (resolver + golden fixture)
@@ -258,16 +302,18 @@ W0-PR0 (CI za integration/**)
   ├─► Boundary+Release lane: W0-PR12, W0-PR13, W0-PR15, W0-PR16, W0-PR17
   │                   WB-PR1 ─► WB-PR2 (samo it.fails) ; OSS-PR1, OSS-PR2 ; W8-PR1
   ├─► Durable-probe lane: W0-PR14
-  └─► ID reconcile doc-only PR (bez PR ID-a) ─► F1 freeze (I + P + R; ODB-01) ─► [RAT-01] zatvaranje G1
+  ├─► Server lane (1.2.1): W0-PR20                                (izolacija dataDir-a; nezavisan, samo ivica W0-PR0)
+  └─► INT-02 (ID reconcile, doc-only; posle WB-PR1) ─► F1 freeze (I + P + R; ODB-01) ─► [RAT-01] zatvaranje G1
 ```
 
-Note: Delivery §3 says "W0-PR19 before PR6/PR18", not before W0-PR11. An open LOW finding requires either an exception for the `w0/*` worktree on `2af0904d` or W0-PR19 before W0-PR11 ([WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md)). The diagram therefore draws only the edges from Delivery §3 (`─►`; they are the same in CSV `depends_on`); W0-PR10 does not use the fixture. The exception is the "Harness lane" row with the arrow `→`: W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9 is the work order in one worktree with one owner (Delivery §3 critical path "W0 (PR1/PR7/PR8/PR9 serially 3–4 wd)"), not an edge. The Delivery §3 graph releases W0-PR1..PR19 in parallel after W0-PR0 ("in parallel in 4 worktrees") and gives no edges PR1→PR7→PR8→PR9, so `depends_on` does not contain them; the order is in CSV `notes` for W0-PR1, W0-PR7, W0-PR8 and W0-PR9 and in §6 (the tracker keeps it as a work order, not as a blocker). The order "W0-PR19 before W0-PR11" depends on the founder's answer to the LOW finding ([00-START-HERE.md](00-START-HERE.en.md) §6 question (b); here §6 "Before day 1", pt.3) and is not an edge in the CSV.
+Note: Delivery §3 says "W0-PR19 before PR6/PR18", not before W0-PR11. An open LOW finding (`finish/checklist/f1/13`) requires either an exception for the `w0/*` worktree on `2af0904d` or W0-PR19 before W0-PR11 ([WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md)). The diagram draws the edges from Delivery §3 (`─►`; in the CSV `technical_dependencies`); W0-PR10 does not use the fixture. The "Harness lane" row with the arrow `→` is the mandatory work order W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9 (Delivery §3 critical path "W0 (PR1/PR7/PR8/PR9 serially 3–4 wd)"), not a technical dependency: in the CSV it is `sequence_after` (W0-PR7 after W0-PR1, W0-PR8 after W0-PR7, W0-PR9 after W0-PR8), so the tracker enforces it as a start blocker (§0.1). The order "W0-PR19 before W0-PR11" depends on the founder's answer to the LOW finding ([00-START-HERE.md](00-START-HERE.en.md) §6 question (b); here §6 "Before day 1", pt.3) and is not an edge in the CSV. If the founder chooses that variant, W0-PR11 gets `W0-PR19` in `merge_gates` (registry, gate `finish/checklist/f1/13`).
 
 ### 2.2 G2 (PROPOSAL; ratifications RAT-02..RAT-07 in Delivery §6.1)
 
 - **Critical path (Delivery §3):** W1-PR1 → [RAT-02] W1-PR2 → W1-PR3 → W1-PR4 → W3-PR2 (after W3-PR1 + [RAT-03], and W2-PR1 + [RAT-04]) → W3-PR3 → W3-PR4 ‖ W3-PR5 → W3-PR6 (+ W1-PR7) → W3-PR7 → B2-PR1 → B2 dev run (wall-clock, not a ticket) → B2-PR2a → re-run (not a ticket) → validation run (not a ticket) → B2-PR2 → **F2** (R + P + A + C + internal I; ODB-01). Chain total: **36.5–57 wd**.
 - **Before the W1-PR2 apply:** W1-PR13 (MIG-09 runner) and W1-PR15 (revocation ledger) run in separate worktrees in parallel with W1-PR1.
 - **W1-PR14** (MIG-08 `ExecutionErasure`) is a merge prerequisite for W1-PR7, W1-PR11, W3e-PR1, W4-PR3, W4-PR5, W4-PR6 (and, in G3, W8-PR3).
+- **Typed (1.2.1):** W1-PR13/PR14/PR15 as a merge prerequisite are in `merge_gates` (W1-PR2, W1-PR7, W1-PR11, W3e-PR1, W4-PR3, W4-PR5, W4-PR6; G3: W8-PR3), so preparation in a branch may start earlier; "before the B2 dev run" is `merge_before:B2-DEVRUN` (W2-PR1, W2-PR3, W2-PR4, W2-PR6, W3e-PR1, W6-PR6, B2-PR1, B2-PR3); B2-PR2a is `start_after:B2-DEVRUN`, and B2-PR2 `start_after:B2-VALRUN`; the G2 hotspot integration tests are INT-03.
 - **Must be merged before the B2 dev run:** W2-PR3/PR4/PR6 and all W3e PRs that change persona resolution or the prompt path. At the latest before F2, otherwise the P receipt is repeated.
 - **Latest decision dates:** DQ-04 ≈ 16 wd from the start of G2 (LoCoMo gate W2-PR3, B2-PR0), DQ-05 ≈ 20 wd (W6-PR6 → B2-PR3). After that, every day shifts G2 1:1.
 - **In parallel, off the critical path:** W2-PR1..PR10, W1-PR5..PR15, W3e-PR1..PR8, W4-PR1..PR7, W5-PR1/PR2, W6-PR1..PR4/PR6/PR7, W8-PR2, B1-PR1, B2-PR0a/b/c, B2-PR3, W3-PR8.
@@ -276,8 +322,8 @@ Note: Delivery §3 says "W0-PR19 before PR6/PR18", not before W0-PR11. An open L
 ### 2.3 G3 (PROPOSAL; depends on DQ-02/03/06/07/08 before the start of G3, RAT-08, RAT-09, ODB-02)
 
 - W7-PR1..PR7 (DQ-06; serial part W7-PR2 → PR3 → PR4 → PR6), W8-PR3 → W8-PR4 (DQ-07), W4-PR8, W5-PR3..PR7 (W5-PR3 after W1-PR11), W6-PR5/PR8 (after W6-PR1..PR3).
-- OSS-PR3/PR4/PR5 (DQ-02) → W8-PR5; [RAT-08] WB-PR3, WB-PR4; WB-PR5/PR6 (DQ-03; WB-PR6 also after RAT-08); [RAT-09] W8-PR6; W3e-PR9a..e only with ODB-02 = yes.
-- B3-PR1 (after F2) → B3 execution (10–20 wd wall-clock, PROPOSAL placeholder, UNKNOWN) → B3-PR2 → F2→F3 benchmark carry-forward review → **F3** → founder-gated merge `integration/waggle-next` → `main` → GO decision (DQ-01). The tag is not pushed from this plan (DP-0.11, DP-0.12).
+- OSS-PR3/PR4/PR5 (DQ-02) → W8-PR5; ~~~~ WB-PR5/PR6 (DQ-03; WB-PR6 also after RAT-08); [RAT-09] W8-PR6; W3e-PR9a..e only with ODB-02 = yes (recommendation PROPOSAL: yes, option A; AWAITING FOUNDER DECISION; Delivery §6.1 "ODB-02 — options").
+- B3-PR1 (after F2) → B3 execution (10–20 wd wall-clock, PROPOSAL placeholder, UNKNOWN) → B3-PR2 → F2→F3 benchmark carry-forward review → **F3a** on `S` → controlled step K (founder-approved fast-forward `main` → `S` + tag → hosted signing, without publication) → **F3b** on the signed `A_sig` → GO decision (DQ-01) → promotion of the same `A_sig` (Delivery §5.1). Only the repo owner pushes the tag, in step K, with written founder approval; the team does not push it (DP-0.11, DP-0.12). In the CSV: B3-PR1 `start_after:F2` and `merge_before:B3-RUN`; B3 execution is the event `B3-RUN`; B3-PR2 `start_after:B3-RUN`; the F3 chain is `F3-SRC` (frozen candidate source SHA; all G3 tickets `merge_before:F3-SRC`; gates `REL-BOOT` and `REL-T13` closed) → `F2F3-CFR` → `F3` (F3a) → `K-SIGN` → `F3b` → `PUBLIC-GO` (registry; Delivery §5.1, H-09). The reconcile after DQ decisions is INT-04.
 
 ---
 
@@ -285,7 +331,7 @@ Note: Delivery §3 says "W0-PR19 before PR6/PR18", not before W0-PR11. An open L
 
 Each card applies only after the founder's approval of the plan. Common conditions for **all** G1 tickets (not repeated in the cards):
 - Branch `w0/<tema>` (or `wb/`, `oss/`, `w8/`) from `integration/waggle-next`, in its own worktree (DP-0.05). Never `main`.
-- Env isolation per the checklist: `WAGGLE_DATA_DIR=<scratch>/data-<agent>`, `WAGGLE_PORT≠3333`, `PORT≠3100`, `WAGGLE_DESKTOP_PORT_FALLBACK` unset, `HIVE_MIND_DATA_DIR` the same isolated dir, `WAGGLE_SIGNAL_EMIT=0`, no Stripe/channel/Clerk/PostHog keys (DP-0.08, DP-0.10).
+- Env isolation per the checklist: `WAGGLE_DATA_DIR=<scratch>/data-<agent>`, `WAGGLE_PORT≠3333`, `PORT≠3100`, `WAGGLE_DESKTOP_PORT_FALLBACK` unset, `HIVE_MIND_DATA_DIR` the same isolated dir, `WAGGLE_SIGNAL_EMIT=0`, no Stripe/channel/Clerk/PostHog keys (DP-0.08, DP-0.10). Sidecar/web/E2E, hook/launch/canary, the root suite until the W0-PR20 merge, and every run of code at revision `2af0904d` go only in the BTP (checklist "Safe test profile (BTP)").
 - Node `22.23.2`. Gates from DP-0.06 green locally before review and on the integration branch after merge.
 - Tickets that touch `apps/web/**` (per the cards: W0-PR9 `EvolutionTab.tsx`, W0-PR12, W0-PR16, W0-PR17) run, in addition to the four gates, both `npm run typecheck:web` and `npm run test -w apps/web`. Root `vitest.config.ts:43` excludes `apps/**`, so `npm run test` does not run web tests such as `posthog.test.ts`, `OnboardingWizard.test.tsx`, `p1a-routes.test.ts`, `command-catalog.test.ts` and `EvolutionTab.test.tsx` (all exist on `2af0904d`; CONFIRMED AT REVISION). Without these two commands, "gates green" does not prove RED→GREEN for the web part. Other supplementary checks per touched surface: [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md) §6.3.
 - G1 exit (m): all DP-0.06 gates green on the integration branch. G1 exit (l) and F1 come after all G1 tickets (§6).
@@ -302,50 +348,54 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Evidence:** F-REL-10 — [release-oss.md](../plans/v1.2-evidence/phaseA/release-oss.en.md). CONFIRMED AT REVISION (`ci.yml:3-6` re-read 29.09.2026).
 - **Risks:** more CI runs consume the Actions budget (context DP-0.12). The Windows lane `tauri-build-pr.yml` takes longer.
 - **Rollback:** revert the PR. No data.
-- **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1 (classic / AI). Open LOW finding: the group is underestimated by ≈0.5–1 classic and ≤0.5 AI day, with no change in weeks.
+- **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1 (classic / AI). Open LOW finding (`finish/estimates/f1/02`): the group is underestimated by ≈0.5–1 classic and ≤0.5 AI day, with no change in weeks.
 - **Owner:** UNKNOWN. W0 "Owner/role" does not name F-REL-10. Proposal: Release owner. **Receipts:** none (CI configuration).
+- **Readiness (from backlog.csv):** technical: INT-01 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: merge_before:F1 · resources: lane:integracija
 
 ### W0-PR1 — Verify default fail-closed
 
 - **Goal:** the verify phase is never skipped silently (F-HARN-01; FRD-05.1; DIR-03/07).
-- **Scope — in:** `shouldSkipVerify` (`workflow-harness.ts:474-482`) skips verify only when `WAGGLE_AUTO_VERIFY==='0'` or an explicit run option exists. `catch → false`. New event `harness:phase:skipped`. `getRunSummary` (`:424`) shows "Completed (verify skipped)". Unification with the dead `FEATURE_FLAGS.VERIFIER_AUTO_RUN` (`feature-flags.ts:26`, 0 consumers).
+- **Scope — in:** `shouldSkipVerify` (`workflow-harness.ts:474-482`) skips verify only when `WAGGLE_AUTO_VERIFY==='0'` or an explicit run option exists. `catch → false`. New event `harness:phase:skipped`. `getRunSummary` (`:424`) shows "Completed (verify skipped)" only for an explicit opt-out outside strict (FRD-05.9 R5, row N8); a bare "Completed" with a skipped verify does not exist. Unification with the dead `FEATURE_FLAGS.VERIFIER_AUTO_RUN` (`feature-flags.ts:26`, 0 consumers).
 - **Scope — out:** durable executor (W1-PR4), `ProofReceipt` (W1-PR7), strict mode as the default (ADR-01, W3).
 - **Files:** [`packages/agent/src/workflow-harness.ts`](../../packages/agent/src/workflow-harness.ts) (`:313`, `:424`, `:474-482`), [`packages/agent/src/feature-flags.ts`](../../packages/agent/src/feature-flags.ts) (`:26`). Hotspot: `workflow-harness.ts` → Harness owner (DP-0.14).
-- **RED first:** a run without `WAGGLE_AUTO_VERIFY` reaches the verify phase. File: [`packages/agent/tests/workflow-tools-harness.test.ts`](../../packages/agent/tests/workflow-tools-harness.test.ts). **Rewrite** `:135-179`, which relies on auto-skip, in the same PR.
-- **Acceptance:** AT-01 (G1 part, together with W0-PR2). G1 exit (a): `getRunSummary` never shows "Completed" with a skipped verify. Env `WAGGLE_AUTO_VERIFY` is not set in the test.
+- **RED first:** a run without `WAGGLE_AUTO_VERIFY` reaches the verify phase. File: [`packages/agent/tests/workflow-tools-harness.test.ts`](../../packages/agent/tests/workflow-tools-harness.test.ts). **Rewrite** `:135-179`, which relies on auto-skip, in the same PR. Additional RED (FRD-05.9 N8): with `WAGGLE_AUTO_VERIFY==='0'` verify is `skipped`, `completed=true`, and `getRunSummary` contains "Completed (verify skipped)", never a bare "Completed".
+- **Acceptance:** AT-01 (G1 part, together with W0-PR2). G1 exit (a): `getRunSummary` never shows a bare "Completed" with a skipped verify; the only allowed label is "Completed (verify skipped)" for an explicit opt-out outside strict (FRD-05.9 R5, N8). Env `WAGGLE_AUTO_VERIFY` is not set in the test.
 - **Evidence:** F-HARN-01 (HOLDS) — [harness.md](../plans/v1.2-evidence/phaseA/harness.en.md), [harness.refute.md](../plans/v1.2-evidence/phaseA/harness.refute.en.md). CONFIRMED AT REVISION (`shouldSkipVerify` returns `true` without the env; re-read 29.09.2026).
 - **Risks:** verify now runs in every harness run, so latency and token cost increase. F-HARN-02/03 become visible only after PR1 and PR8, so the order is PR1 → PR8 → PR2/PR3 (W0 "Risk").
 - **Rollback:** revert the PR. No data.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
 - **Owner:** Harness owner. **Receipts:** I (integration branch SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:workflow-harness
 
 ### W0-PR2 — `VERDICT` value in the gate
 
 - **Goal:** `VERDICT: FAIL` fails the phase, and CONDITIONAL is not PASS (F-HARN-02; FRD-05.5).
-- **Scope — in:** `passed = verdict === 'PASS'`. `GateResult.verdict`. CONDITIONAL defaults to `passed:false` + `reason` + an optional per-phase `conditionalPolicy`. The verdict is written to the checkpoint and to `HarnessPhaseCompleteEvent`.
+- **Scope — in:** `passed = verdict === 'PASS'`. `GateResult.verdict`. CONDITIONAL defaults to `passed:false` + `reason` + an optional per-phase `conditionalPolicy`; in G1 only the default `require_supplement` is implemented (FRD-05.9 N3 default), and under the strict flag from W0-PR8 no policy yields `completed=true` (S3). The paths `complete_with_limitation`/`require_user_review` to "COMPLETED with warnings" = W3-PR6. The verdict is written to the checkpoint and to `HarnessPhaseCompleteEvent`.
 - **Scope — out:** CONDITIONAL policy per recipe (W3-PR6), thresholds (DQ-09).
 - **Files:** [`packages/agent/src/builtin-harnesses.ts`](../../packages/agent/src/builtin-harnesses.ts) (`:43-51`, `:125-128`).
-- **RED first:** FAIL → the phase fails; CONDITIONAL → not PASS; missing VERDICT → not PASS. Fixture from FRD §15 AT-01: `research-verify` with FAIL/CONDITIONAL/no-VERDICT; repro `repro-harness.mjs` 02a–d. File: the plan does not name it, and a `builtin-harnesses` test does not exist on `2af0904d`. PROPOSAL: a new `packages/agent/tests/builtin-harnesses-verdict.test.ts` or an extension of `workflow-tools-harness.test.ts`.
-- **Acceptance:** AT-01 (G1 part). The three RED cases pass after GREEN. The existing PASS path stays green.
+- **RED first:** FAIL → the phase fails; CONDITIONAL → not PASS; missing VERDICT → not PASS. Fixture from FRD §15 AT-01: `research-verify` with FAIL/CONDITIONAL/no-VERDICT; repro `repro-harness.mjs` 02a–d. File: the plan does not name it, and a `builtin-harnesses` test does not exist on `2af0904d`. PROPOSAL: a new `packages/agent/tests/builtin-harnesses-verdict.test.ts` or an extension of `workflow-tools-harness.test.ts`. Additionally (FRD-05.9 G1 subset): CONDITIONAL with the default policy → the run is not `completed` (N3); strict flag + CONDITIONAL with any `conditionalPolicy` → the run is not `completed` (S3); missing VERDICT = FAIL (R3).
+- **Acceptance:** AT-01 (G1 part). The three RED cases and the two additional FRD-05.9 cases (N3 default, S3) pass after GREEN. The existing PASS path stays green.
 - **Evidence:** F-HARN-02 — [harness.md](../plans/v1.2-evidence/phaseA/harness.en.md); repro [repro-harness.mjs](../plans/v1.2-evidence/phaseA/repro-harness.mjs).
 - **Risks:** harnesses that "pass" today with CONDITIONAL start failing. That is the desired behavior, but it changes the outcome of the chat turn.
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
-- **Owner:** Harness owner. **Depends on:** W0-PR0, W0-PR1, W0-PR8 (visibility order). **Receipts:** I (SHA).
+- **Owner:** Harness owner. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0, W0-PR1, W0-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:harness
 
 ### W0-PR3 — Exit code is not lost
 
-- **Goal:** a non-zero exit is not success, and `bash echo` is not a passed test (F-HARN-03; FRD-05.2).
-- **Scope — in:** `system-tools.ts:684-691` always returns `Exit code: N` (or a structured `{ok:false, exitCode}`). `tool-executor.ts` sets `succeeded=false` on a non-zero exit. `PhaseOutput.toolCalls[].ok/exitCode`. The bash gate accepts exact names + a test/typecheck pattern + `ok!==false`.
-- **Scope — out:** observed journal as the sole source (W1), strict mode (W3).
-- **Files:** [`packages/agent/src/system-tools.ts`](../../packages/agent/src/system-tools.ts) (`:681-691`), [`packages/agent/src/tool-executor.ts`](../../packages/agent/src/tool-executor.ts) (`:285-298`), [`packages/agent/src/builtin-harnesses.ts`](../../packages/agent/src/builtin-harnesses.ts) (`:13-24`, `:181`), [`packages/agent/src/workflow-harness.ts`](../../packages/agent/src/workflow-harness.ts) (`:76`).
-- **RED first:** `echo hi` is not a test; `Exit code: 1` → fail. Repro `repro-harness.mjs` 03a–c, 08a. File: [`packages/agent/tests/system-tools.test.ts`](../../packages/agent/tests/system-tools.test.ts) (`:365-370` stays green because it uses `toContain('err')`). PROPOSAL for the gate part: a new test alongside the existing `tool-executor-*.test.ts`.
-- **Acceptance:** AT-02 (G1; the only wave, together with W0-PR4). A non-zero exit yields `succeeded=false` and a gate failure.
+- **Goal:** a non-zero exit is not success. A test/build gate passes only on a server-observed invocation of an approved validator (FRD-05.2 "Validator invocation", VI-1..VI-9), not on the command text, the output text or the model's claim (F-HARN-03, F-HARN-08; H-08).
+- **Scope — in:** `system-tools.ts:684-691` always returns `Exit code: N` (or a structured `{ok:false, exitCode}`). `tool-executor.ts` sets `succeeded=false` on a non-zero exit. The server `bash` executor passes a structured record `{executor, argv, cwd, exitCode, timedOut, background, executorError}` to the observed ledger (W0-PR8 provider); `onToolResult` today receives only text (`chat-agent-run.ts:214`), and parsing the text `Exit code: N` is not a source. `approvedValidators` G1 list for `code-review-fix` (VI-1). The verify-phase gate of `code-review-fix` replaces `hasToolCalls(['bash','Bash','run_command'])` with rules VI-2..VI-8: exact executor, `argv` exactly equal to the approved one, `cwd` = workspace root, exit from process metadata, freshness after the last change. A command regex may remain only as a hint in `reason`/`warnings` (VI-9). No universal shell interpreter.
+- **Scope — out:** a durable RunEvent journal as the source (W1-PR7); full FRD-05.9 outcome per mode (W3-PR6); a separate shell-less argv executor and result parsers (VI-6) — DEFERRED, no ticket; extending the validator list per workspace — DEFERRED.
+- **Files:** [`packages/agent/src/system-tools.ts`](../../packages/agent/src/system-tools.ts) (`:598-627`, `:681-691`), [`packages/agent/src/tool-executor.ts`](../../packages/agent/src/tool-executor.ts) (`:285-298`), [`packages/agent/src/builtin-harnesses.ts`](../../packages/agent/src/builtin-harnesses.ts) (`:13-24`, `:176-182`), [`packages/agent/src/workflow-harness.ts`](../../packages/agent/src/workflow-harness.ts) (`:76`), [`packages/server/src/local/routes/chat-agent-run.ts`](../../packages/server/src/local/routes/chat-agent-run.ts) (`:214-225`, together with W0-PR8). New module for rules VI-1..VI-8: PROPOSAL path `packages/agent/src/validator-invocation.ts` (does not exist on `2af0904d`; grep before creating, CLAUDE.md §3.6).
+- **RED first:** one case each for AT-02-N1..N15 from FRD-05.2: none is PASS, including `echo "npm test"`, `echo "pytest"`, `npm test || true` and `npm test; exit 0` with a failing test, as well as `npm test` with exit 1 whose output falsely claims `Exit code: 0`. `Exit code: 1` → fail. Repro `repro-harness.mjs` 03a–c, 08a. GREEN: AT-02-P1 and P2 pass. Files: [`packages/agent/tests/system-tools.test.ts`](../../packages/agent/tests/system-tools.test.ts) (`:365-370` stays green because it uses `toContain('err')`); the gate part in a new `packages/agent/tests/builtin-harnesses.test.ts` (ADR-01-T3) and a new `packages/agent/tests/validator-invocation.test.ts` (PROPOSAL paths).
+- **Acceptance:** AT-02 (G1; the only wave, together with W0-PR4) and ADR-01-T3. A non-zero exit yields `succeeded=false` and a gate failure. All 17 AT-02 examples (P1–P2, N1–N15) yield the verdict from FRD-05.2. Runtime confirmation has not been done until then.
 - **Evidence:** F-HARN-03 — [harness.md](../plans/v1.2-evidence/phaseA/harness.en.md), [harness.refute.md](../plans/v1.2-evidence/phaseA/harness.refute.en.md) (path correction: `packages/agent/src/`, not `server/src/local/`).
-- **Risks:** tools that today return empty output with a non-zero exit change the turn outcome.
+- **Risks:** tools that today return empty output with a non-zero exit change the turn outcome. Projects whose test command is not on the G1 list get `validator_not_observed` until the list is extended. The scope is larger than originally (structured executor record + VI rules); the estimate for the group W0-PR1..PR8 has not been recalculated, so the tech lead confirms it during sprint planning.
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
-- **Owner:** Harness owner. **Depends on:** W0-PR0, W0-PR1, W0-PR8. **Receipts:** I (SHA).
+- **Owner:** Harness owner. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0, W0-PR1, W0-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:workflow-harness
 
 ### W0-PR4 — `run_harness` leaves `VERIFICATION_TOOL_EXACT`
 
@@ -360,6 +410,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
 - **Owner:** Harness owner. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:agent-loop
 
 ### W0-PR5 — Budget stop: disclose-only + `budgetStop` meta
 
@@ -374,6 +425,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
 - **Owner:** Harness owner. **Receipts:** R (budget path), I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:agent-loop
 
 ### W0-PR6 — Bridge truthfulness without schema + MIG-04(A)
 
@@ -387,7 +439,8 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Risks:** the evolution eval set loses the "positives" from harness traces. This is intentional and changes the W3e input. Restoring `personal.mind` from a snapshot in G1 is not a tested path; it is performed only with explicit founder approval.
 - **Rollback:** revert the code. The tags are additive and old code ignores them (Class A).
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
-- **Owner:** Harness owner (MDQ-06 = engineering decision of the Harness/Evolution owner). **Depends on:** W0-PR0, W0-PR7, W0-PR19. **Receipts:** I (SHA).
+- **Owner:** Harness owner (MDQ-06 = engineering decision of the Harness/Evolution owner). **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0, W0-PR7, W0-PR19 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, finish/checklist/f1/13 · milestone: merge_before:F1 · resources: lane:harness, hotspot:server-index
 
 ### W0-PR7 — Additive `runId` in harness events
 
@@ -402,20 +455,22 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
 - **Owner:** Harness owner. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: W0-PR1 · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:workflow-harness
 
 ### W0-PR8 — Self-reported evidence labeled
 
 - **Goal:** the gate distinguishes evidence the server observed from evidence the model reported (F-HARN-08; FRD-05.3).
-- **Scope — in:** `PhaseOutput.toolCalls` gets `selfReported:true`. Strict mode (for now an opt-in flag) rejects self-reported evidence. `WorkflowToolsConfig.observedToolCalls(sinceMarker)` is a provider that the server populates from `onToolResult` (`chat-agent-run.ts:214-225`).
+- **Scope — in:** `PhaseOutput.toolCalls` gets `selfReported:true`. Strict mode (for now an opt-in flag) rejects self-reported evidence. `WorkflowToolsConfig.observedToolCalls(sinceMarker)` is a provider that the server populates from `onToolResult` (`chat-agent-run.ts:214-225`). Under the strict flag `shouldSkipVerify()` returns `false` regardless of `WAGGLE_AUTO_VERIFY` or a run opt-out (FRD-05.9 R5, S5); a rejected opt-out is recorded as a warning.
 - **Scope — out:** strict as the default mode (ADR-01, W3); observed journal in the run store (W1).
-- **Files:** [`packages/agent/src/workflow-tools.ts`](../../packages/agent/src/workflow-tools.ts) (`:330-358`, `:412-422`), [`packages/server/src/local/routes/chat-agent-run.ts`](../../packages/server/src/local/routes/chat-agent-run.ts). Hotspot `chat-agent-run.ts` → Chat owner.
-- **RED first (strict):** fabricated `tool_calls` → the gate fails. File: `workflow-tools-harness.test.ts`; the transitional approach does not break `:82-106`.
-- **Acceptance:** AT-01 and AT-02 through G1 exit (a), which requires F-HARN-08 RED→GREEN. The FRD §15 "Wave" column does not list W0-PR8.
+- **Files:** [`packages/agent/src/workflow-tools.ts`](../../packages/agent/src/workflow-tools.ts) (`:330-358`, `:412-422`), [`packages/server/src/local/routes/chat-agent-run.ts`](../../packages/server/src/local/routes/chat-agent-run.ts). Hotspot `chat-agent-run.ts` → Chat owner. Plus [`packages/agent/src/workflow-harness.ts`](../../packages/agent/src/workflow-harness.ts) (`:474-482`, strict flag in `shouldSkipVerify`; hotspot → Harness owner).
+- **RED first (strict):** fabricated `tool_calls` → the gate fails. File: `workflow-tools-harness.test.ts`; the transitional approach does not break `:82-106`. Additional RED (FRD-05.9 S5): strict flag + `WAGGLE_AUTO_VERIFY==='0'` → verify runs; the run is not `completed` until verify passes.
+- **Acceptance:** AT-01 (G1 part: FRD-05.9 S4 self-reported and S5 opt-out under the strict flag; the FRD §15 "Wave" column lists W0-PR8 since revision 1.2.1) and AT-02 through G1 exit (a), which requires F-HARN-08 RED→GREEN.
 - **Evidence:** F-HARN-08 — [harness.md](../plans/v1.2-evidence/phaseA/harness.en.md).
 - **Risks:** touches the hot path `chat-agent-run.ts`.
 - **Rollback:** revert the PR. The flag is opt-in.
 - **Estimate:** group W0-PR1..PR8 = 4.5–6 / 2–3.
 - **Owner:** Harness owner (hotspot review: Chat owner). **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: W0-PR7 · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, handoff/newcomer/r2/08 · milestone: merge_before:F1 · resources: lane:harness, hotspot:workflow-harness, hotspot:chat
 
 ### W0-PR9 — Persona shadowing, then activation check
 
@@ -430,6 +485,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR. Override files are not changed.
 - **Estimate:** 1.5–2 / 0.5–0.5 (classic / AI).
 - **Owner:** Harness owner per W0 "Owner/role". FRD §15 lists the Evolution owner for AT-04; the tech lead confirms. **Receipts:** P, I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: W0-PR8 · start: PLAN-APPROVAL, ROLE-ASSIGN, handoff/newcomer/r2/04 · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:harness, hotspot:chat
 
 ### W0-PR10 — Hook read path trio in `hive-mind-core`
 
@@ -444,6 +500,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR. No data.
 - **Estimate:** group W0-PR10+PR11 = 2–3 / 1–1.5.
 - **Owner:** Memory owner. **Receipts:** I (SHA). The A receipt is not run in G1; the hook path enters the A canaries at F2.
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: merge_before:F1 · resources: lane:memory, hotspot:hive-mind-core
 
 ### W0-PR11 — Workspace → personal leak in 4 places + fleet policy gate
 
@@ -458,6 +515,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR. The new pointer frames remain (`temporary`), with no loss of user data.
 - **Estimate:** group W0-PR10+PR11 = 2–3 / 1–1.5.
 - **Owner:** Memory owner (hotspot review: Chat owner). **Receipts:** P, I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:memory, hotspot:chat
 
 ### W0-PR12 — Boundary quick de-gates
 
@@ -468,10 +526,11 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **RED first:** the tripwire rows in `tier-enforcement-matrix.test.ts` expect `minTier:'FREE'` and fail on the baseline. `GET /api/cost/by-workspace`, `GET /api/costs` and audit-export respond to a FREE user. Web: Approvals is visible in the dock and ⌘K. **Must be rewritten in the same PR (DP-0.15):** [`apps/web/src/test/p1a-routes.test.ts`](../../apps/web/src/test/p1a-routes.test.ts) `:232-239` (`:235` requires that FREE does not see Approvals and fails as soon as `dock-tiers.ts:82` is de-gated; the `governance` assertions `:236`, `:238` remain); [`packages/server/tests/tier-enforcement-matrix.test.ts`](../../packages/server/tests/tier-enforcement-matrix.test.ts) rows `:53` (`/api/cost/by-workspace`) and `:56` (`/api/admin/audit-export`) → `minTier:'FREE'`, and the tests `:131-180` (TRIAL expiry `:131-144` and `:155-165`, 403 response shape `:169-179`: `TIER_INSUFFICIENT`, `upgradeUrl`, "requires the TEAMS tier") use `/api/cost/by-workspace` as the TEAMS canary and are redirected to an endpoint that stays TEAMS after W0-PR12 (e.g. `POST /api/cloud-sync/toggle` with `{enabled:true}` or `POST /api/team/connect`; `GET /api/admin/overview` is a removal candidate in WB-PR4 — PRD-13-04, Delivery §2 WB — so it is a weaker choice). [`apps/web/src/test/p7-a6-approval-gating.test.tsx`](../../apps/web/src/test/p7-a6-approval-gating.test.tsx) does not pin the tier gate (it only checks `ApprovalModal` with `riskLevel:'critical'` and `canAlwaysAllow(approvalClass)`) and does not change. [`apps/web/src/lib/command-catalog.test.ts`](../../apps/web/src/lib/command-catalog.test.ts) does not mention Approvals or `minBillingRank`. The E2E `tests/e2e/waggle-complete.spec.ts:192-214,614-643,690-701` accepts both 403 and 200, so it does not break. — CONFIRMED AT REVISION (read-only, `git show 2af0904d:<fajl>`, 29.09.2026).
 - **Acceptance:** AT-12 part and AT-18 part (G1: Approvals available to the Solo user), AT-27 config part (G1 exit (j): no change to the `config.json` schema, tripwire updated in the same PR; MIG-07.1). G1 exit (d).
 - **Evidence:** F-TK-02, F-TK-03, F-TK-04 — [tiers-kvark.md](../plans/v1.2-evidence/phaseA/tiers-kvark.en.md); F-CAP-07 — [capability.md](../plans/v1.2-evidence/phaseA/capability.en.md).
-- **Risks:** low. Open LOW finding: the W0 exit test list does not list the AT-27 part, although G1 exit (j) requires it.
+- **Risks:** low. LOW finding (`finish/traceability/f1/06`): the W0 exit test list did not list the AT-27 part, although G1 exit (j) requires it; corrected in Delivery §2 W0 "Exit tests" (revision 1.2.1, confirmed by the final check on 30.09.2026; registry: condition of the `G1-EXIT` gate, met by the text).
 - **Rollback:** revert the PR. No writes to config.
 - **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1.
 - **Owner:** Boundary owner. **Receipts:** I (SHA; routes and UI).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, handoff/newcomer/r2/04 · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release, host:btp
 
 ### W0-PR13 — Pricing table with a provenance comment
 
@@ -486,6 +545,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1.
 - **Owner:** Release owner. **Receipts:** R (budget), I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ### W0-PR14 — Cron `getDue` RED repro
 
@@ -500,6 +560,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR. `next_run_at` values written in the new format: UNKNOWN until the fix is designed.
 - **Estimate:** 0.5–0.5 / 0.5–0.5.
 - **Owner:** Durable owner. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:durable-probe, hotspot:cron
 
 ### W0-PR15 — Candidate and receipts doc drift
 
@@ -514,6 +575,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1.
 - **Owner:** Release owner. **Receipts:** I (SHA, code comment only).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release, hotspot:orchestrator
 
 ### W0-PR16 — Stop/disconnect copy in chat
 
@@ -528,6 +590,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group W0-PR0+PR12+PR13+PR15+PR16 = 1–1.5 / 0.5–1.
 - **Owner:** Chat owner (Disposition A9: Chat owner, Durable owner). W0 "Owner/role" does not name F-DUR-06. **Receipts:** I (SHA, UI).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release, host:btp
 
 ### W0-PR17 — Telemetry truthfulness
 
@@ -542,6 +605,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** 0.5–1 / 0.5–0.5.
 - **Owner:** Release owner (ADR-10-K3 PostHog toggle). **Receipts:** I (SHA, UI).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, finish/checklist/f1/12 · milestone: merge_before:F1 · resources: lane:boundary-release, host:btp
 
 ### W0-PR18 — MIG-05(i): reclassification of legacy leak frames
 
@@ -555,7 +619,8 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Risks:** extending the recall filter may push the estimate toward the upper bound (UNKNOWN until design). Restoring `personal.mind` from a snapshot in G1 is not a tested path (`personal.mind` also carries `pending_actions`, so a restore could revert `executed` to `approved`); it is performed only with explicit founder approval. RAT-04 (ADR-05) has not yet been given; the PR goes in as a PROPOSAL and is undone by removing the marker if ratification changes O3.
 - **Rollback:** Class A. Reverting the code leaves a marker that old code ignores, so the leak becomes visible in recall again. That is an isolation regression, not data loss, and it is stated in the receipt.
 - **Estimate:** 1–1.5 / 0.5–1.
-- **Owner:** Memory owner (MDQ-07 = engineering decision of the Memory owner). **Depends on:** W0-PR0, W0-PR11, W0-PR19. **Receipts:** P (recall content), I (SHA).
+- **Owner:** Memory owner (MDQ-07 = engineering decision of the Memory owner). **Receipts:** P (recall content), I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0, W0-PR11, W0-PR19 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, finish/checklist/f1/13 · milestone: merge_before:F1 · resources: lane:memory, hotspot:orchestrator, hotspot:hive-mind-core
 
 ### W0-PR19 — Golden legacy-datadir fixture generator
 
@@ -566,17 +631,55 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **RED first:** determinism test: two generations yield the same SHA-256 (or a documented time normalization).
 - **Acceptance:** the fixture and SHA-256 are in the repo; they are used by the W0-PR6 (MIG-04(A)) and W0-PR18 (MIG-05(i)) tests and by all G2 migrations (MIG §6 pt.6). FRD §15 tracks it as an AT-27 prerequisite.
 - **Evidence:** [WAGGLE-MIGRATIONS-v1.2.md](../plans/WAGGLE-MIGRATIONS-v1.2.en.md) §6 pt.2.
-- **Risks — blocks the start:** the checklist allows only worktrees from `integration/waggle-next`, while the plan requires generation in a separate worktree at `2af0904d`. An open LOW finding requests explicit permission for one `w0/*` worktree at `2af0904d` (or W0-PR19 before W0-PR11). **Before starting, request a founder decision** ([WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md); [00-START-HERE.md](00-START-HERE.en.md) §6 question (b)).
+- **Risks — blocks the start:** the checklist allows only worktrees from `integration/waggle-next`, while the plan requires generation in a separate worktree at `2af0904d`. An open LOW finding (`finish/checklist/f1/13`) requests explicit permission for one `w0/*` worktree at `2af0904d` (or W0-PR19 before W0-PR11). **Before starting, request a founder decision** ([WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md); [00-START-HERE.md](00-START-HERE.en.md) §6 question (b)).
+- **Place of execution:** the generator executes code at revision `2af0904d`, which contains the leaks addressed by W0-PR20. It therefore runs only in the BTP (checklist "Safe test profile (BTP)") and does not call the `documents`, `pins` or marketplace install paths.
 - **Rollback:** delete the fixture and the generator. No data.
 - **Estimate:** 1–1.5 / 0.5–1.
 - **Owner:** UNKNOWN (the plan does not assign one). **Receipts:** none (no production change).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, finish/checklist/f1/13 · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:memory, host:btp
+
+### W0-PR20 — dataDir isolation: documents/pins and other writes bypassing `WAGGLE_DATA_DIR`
+
+- **Goal:** a sidecar with an isolated `dataDir` does not read or write `os.homedir()/.waggle` on any known path (DP-0.08; [01 §9.5](01-ONBOARDING-DEV-ENV.en.md) "Known leaks", rows 1–7). Added in revision 1.2.1 (H-05). A finding from the handover check `handoff/consistency/r2/08`, without a phase-A F-ID.
+- **Status:** TODO — awaiting plan approval. Implementation task specified, code not fixed. Runtime not reproduced.
+- **Scope — in:**
+  - **A1** `documents.ts:37`: path `<dataDir>/workspaces/<id>/documents.json` from `server.localConfig.dataDir`. No `os.homedir()` fallback: without a `dataDir` the route returns an error and does not write.
+  - **A2** `pins.ts:32`: the same for `pins.json`, plus `assertSafeSegment(id, 'id')` on all `/api/workspaces/:id/pins*` routes, following the pattern of `documents.ts:70` (R2-005).
+  - **A3** `MarketplaceInstaller` (`packages/marketplace/src/installer.ts:47-50`, `:89-91`): the root for `skills/`, `plugins/`, `plugins/registry.json` and `.mcp.json` is set by the caller. The server passes `dataDir` everywhere (`routes/marketplace.ts:417,581,611`; `routes/capability-proposals.ts:108`). The default root for the CLI (`packages/marketplace/src/cli.ts`) may stay; the server does not use it.
+  - **A4** `SecurityGate` (`packages/marketplace/src/security.ts:183`, `:222`): the server passes a `cache_dir` under `dataDir` (`routes/marketplace.ts:291,698,1046`; through A3 and `installer.ts:118`). The constructor without an explicit `cache_dir` does not create a directory in the user's home; the PR chooses lazy creation or a mandatory parameter.
+  - **A5** `getToolRegistry()` in `routes/tools.ts:408` and `routes/external-tool-runs.ts:201` passes `dir = <dataDir>/adapters`.
+  - **B1** `held-action-executor.ts:210-211` (`workspace_id === null` → root `os.homedir()`): the Server owner and Security owner record the decision in the PR description. Either a root under `dataDir` with a RED test, or a justified exception and a test that pins it. No silent change.
+  - **B2** `lifecycle.ts:257` (LiteLLM log in `os.homedir()` without `configPath`): the log under `dataDir`, or a rationale in the PR that this branch does not exist in the sidecar flow.
+  - Rewrite of `packages/server/tests/local/phase2-traversal-documents.test.ts`: the route is registered with an isolated `dataDir`. Today the GET cases `:82-98` read the real `os.homedir()/.waggle`, and `:59` checks the real home.
+- **Scope — out:** configuration of external clients that hook install writes by design (`packages/hive-mind-hooks-*/src/paths.ts`, including Claude Desktop `%APPDATA%\Claude` and the pointer `~/.waggle/claude-desktop/`, `claude-desktop/src/paths.ts:25-29,40`); reading sources for harvest (`routes/harvest.ts:282,1045`; `local/index.ts:1575-1576`) and tool detection; CLI packages (`packages/cli/src/auth.ts:8`, `repl.ts:71`). Also out: migration of existing `documents.json`/`pins.json`/skill files from `~/.waggle` into a custom `WAGGLE_DATA_DIR`. For the default profile (`WAGGLE_DATA_DIR` not set) the path stays the same. No silent read fallback from `os.homedir()`.
+- **Files (exist on `2af0904d`):** [`packages/server/src/local/routes/documents.ts`](../../packages/server/src/local/routes/documents.ts), [`packages/server/src/local/routes/pins.ts`](../../packages/server/src/local/routes/pins.ts), [`packages/marketplace/src/installer.ts`](../../packages/marketplace/src/installer.ts), [`packages/marketplace/src/security.ts`](../../packages/marketplace/src/security.ts), [`packages/server/src/local/routes/marketplace.ts`](../../packages/server/src/local/routes/marketplace.ts), [`packages/server/src/local/routes/capability-proposals.ts`](../../packages/server/src/local/routes/capability-proposals.ts), [`packages/server/src/local/routes/tools.ts`](../../packages/server/src/local/routes/tools.ts), [`packages/server/src/local/routes/external-tool-runs.ts`](../../packages/server/src/local/routes/external-tool-runs.ts), [`packages/server/src/local/held-action-executor.ts`](../../packages/server/src/local/held-action-executor.ts), [`packages/server/src/local/lifecycle.ts`](../../packages/server/src/local/lifecycle.ts), [`packages/server/tests/local/phase2-traversal-documents.test.ts`](../../packages/server/tests/local/phase2-traversal-documents.test.ts). New test: the PR names the exact name (proposal `packages/server/tests/local/datadir-sentinel.test.ts`). No file is a DP-0.14 hotspot.
+- **Phases (while `AGENTS.md` §4, "5 files per phase", applies, until TSA-06 is confirmed):** F1 = A1 + A2 + sentinel test (documents/pins part) + rewrite of `phase2-traversal-documents.test.ts`; F2 = A3 + A4 + test extension; F3 = A5 + B1 + B2 + test extension. Each phase has ≤ 5 files and its own RED→GREEN evidence.
+- **RED first:** the sentinel test fails on `2af0904d` at least for A1, A2, A3 and A4, and the pins traversal test fails on `2af0904d`. The RED output goes into the PR description.
+- **Acceptance — sentinel regression (normative):**
+  1. The test creates two temporary directories with `mkdtemp`: a protected profile `P` and a `dataDir` `D`. `os.homedir()` (and the `default` export of the `node:os` module) is mocked to `P`. `HOME` and `USERPROFILE` are set to `P` for the duration of the test and restored after it.
+  2. Before the operations, sentinel files are written into `P/.waggle/`: `SENTINEL-DO-NOT-TOUCH.txt` (random content), `workspaces/ws-sentinel/documents.json` and `workspaces/ws-sentinel/pins.json` with sentinel entries, and `adapters/sentinel-adapter.json` (a valid manifest). A listing of all files and directories in `P` is recorded, with size and SHA-256.
+  3. Through the sidecar routes (`server.inject`, `dataDir` = `D`) the following are executed: register, list and versions of a document; add, list, update and delete of a pin; marketplace install and uninstall of a local fixture skill package, without network; loading the tool registry through the route from `routes/tools.ts:408`; a memory write and recall through the existing route; a hook runtime write with `HIVE_MIND_DATA_DIR` = `D`.
+  4. After the operations, the snapshot of `P` is identical to the snapshot before them: the same files, directories, sizes and SHA-256, without a single new entry (e.g. `P/.waggle/security-cache`, `skills/`, `plugins/`).
+  5. The responses do not contain sentinel entries from `P` (documents, pins, `sentinel-adapter`): no reads from the protected profile.
+  6. The written data exists under `D`: `D/workspaces/ws-sentinel/documents.json` and `pins.json`, the skill and `plugins/registry.json` under `D`, the `SecurityGate` cache under `D`.
+  7. `POST /api/workspaces/..%2f..%2fevil/pins` returns 400 and does not create a file outside `D`.
+  8. `git grep -n "homedir" -- packages/server/src/local/routes/documents.ts packages/server/src/local/routes/pins.ts` returns 0 lines.
+  9. The DP-0.06 gates are green. The root suite was run in the BTP, with a snapshot per 01 §9.5 (files and directories) before and after, and the snapshots are identical.
+  Hook install into an external client's configuration is not part of this test, because by design it writes into the user's home. It is covered by the BTP and the client snapshot (01 §9.5–§9.6).
+- **Runtime confirmation (after merge, before F1; not done; gate `handoff/consistency/r2/08` in the requires of F1, `backlog-gates.csv`):** on the BTP, on a build of the exact integration-branch SHA after the W0-PR20 merge, an isolated sidecar is started per 01 §9.3 **without** scratch `USERPROFILE`/`HOME`. Step 4 is omitted only for this check: the BTP is disposable, and the goal is to prove the fix, not a workaround. The operations from pt.3 are executed through the HTTP API. The snapshot of the BTP account's `~/.waggle` (01 §9.5) before and after must be identical. The SHA, commands, both snapshots and exit codes are recorded in the PR's integration record. Until then there is no claim "dataDir isolation confirmed"; only "sentinel test passes" applies.
+- **Evidence:** [01 §9.5](01-ONBOARDING-DEV-ENV.en.md) "Known leaks"; [05](05-RISKS-DECISIONS-ESCALATION.en.md) N-28; closure record, H-05.
+- **Risks:** users with a custom `WAGGLE_DATA_DIR` do not see the old `documents.json`/`pins.json`/skill files under `~/.waggle` after the fix. The PR states this in the migration field ("no migration; known impact"); the number of such users is UNKNOWN. A change to the `MarketplaceInstaller`/`SecurityGate` API also touches the CLI `packages/marketplace/src/cli.ts`.
+- **Rollback:** revert the code. Data written under `dataDir` stays there, and the old code does not read it: this is an isolation regression, not data loss. No schema.
+- **Estimate:** 1–2 / 0.5–1. PROPOSAL of revision 1.2.1: a new estimate, not from Delivery §4.1.1 of revision 1.2 and not in its totals.
+- **Owner:** Server owner; review: Security owner, Capability owner for `packages/marketplace/**`, `routes/marketplace.ts` and `routes/capability-proposals.ts`, External-executor owner for `routes/tools.ts` and `routes/external-tool-runs.ts`. **Receipts:** I (SHA).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: merge_before:F1 · resources: lane:server, host:btp
 
 ### WB-PR1 — Tier/KVARK boundary inventory + review of ADR-08 and ADR-09
 
 - **Goal:** a fate table for every tier/KVARK component in the FRD, and a review of the existing ADR-08/ADR-09 drafts (no new ADRs).
 - **Scope — in:** inventory from F-TK-18/19: 24 non-test src files with TRIAL/TEAMS/ENTERPRISE literals (+ unquoted), 21 test files, the actual FREE gates, decorative flags (0 consumers), KVARK state (`createKvarkTools` 0 production callers, `new KvarkClient` 0). Fates: KVARK adapter / extract / legacy compat / remove with a test (PROPOSAL). Review of ADR-08 (O1–O7) and ADR-09 (O1–O7), with preparation for RAT-08.
 - **Scope — out:** code. Stripe (no change until DQ-03). KVARK tool registration (WB-PR3, G3).
-- **Files:** FRD table ([`Waggle_FRD_v1.2_DRAFT.md`](../Waggle_FRD_v1.2_DRAFT.en.md)), [ADR-08](../decisions/2026-09-27-ADR-08-individual-tiers-kvark-boundary.en.md), [ADR-09](../decisions/2026-09-27-ADR-09-secondary-worker-parity.en.md). Prerequisite: the package is untracked in the worktree `D:/Projects/waggle-v12-handoff` (branch `docs/waggle-v1.2-planning` = `2af0904d`, no commit, not on origin) — CONFIRMED AT REVISION (read-only, 29.09.2026). How the package enters `integration/waggle-next`: UNKNOWN (founder/tech lead).
+- **Files:** FRD table ([`Waggle_FRD_v1.2_DRAFT.md`](../Waggle_FRD_v1.2_DRAFT.en.md)), [ADR-08](../decisions/2026-09-27-ADR-08-individual-tiers-kvark-boundary.en.md), [ADR-09](../decisions/2026-09-27-ADR-09-secondary-worker-parity.en.md). Prerequisite: the package must be on `integration/waggle-next`. State on 30.09.2026 (read-only): the package is committed (`2758f4e5`, branch `docs/waggle-v1.2-planning`, on `origin`), the closure revision 1.2.1 is not committed ([00 §1.1](00-START-HERE.en.md)), and `integration/waggle-next` does not exist. How the package enters the integration branch: awaiting the founder (00 §6 (h); 03 §7 N-07).
 - **RED first:** none (documentation).
 - **Acceptance:** every component from F-TK-18/19 has a row and a fate; the ADR-08/09 review comments are recorded; no ADR is marked as approved.
 - **Evidence:** F-TK-11, F-TK-18, F-TK-19 — [tiers-kvark.md](../plans/v1.2-evidence/phaseA/tiers-kvark.en.md).
@@ -584,6 +687,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the document.
 - **Estimate:** group WB-PR1/PR2 (G1) = 3–5 / 1.5–2.5.
 - **Owner:** Boundary owner. **Receipts:** none.
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ### WB-PR2 — KVARK RED test as `it.fails`
 
@@ -597,7 +701,8 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Risks:** the fake KVARK server must listen only locally and must not touch the network (DP-0.10).
 - **Rollback:** delete the test.
 - **Estimate:** group WB-PR1/PR2 (G1) = 3–5 / 1.5–2.5.
-- **Owner:** Boundary owner. **Depends on:** WB-PR1. **Receipts:** none.
+- **Owner:** Boundary owner. **Receipts:** none.
+- **Readiness (from backlog.csv):** technical: WB-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ### OSS-PR1 — Provenance inventory + Build-vs-Borrow record W1/W3
 
@@ -612,6 +717,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the document.
 - **Estimate:** group OSS-PR1/PR2 (G1) = 4–5 / 2–3.
 - **Owner:** OSS/License owner. **Receipts:** none.
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ### OSS-PR2 — License consistency lint in report mode
 
@@ -626,6 +732,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** group OSS-PR1/PR2 (G1) = 4–5 / 2–3.
 - **Owner:** OSS/License owner. **Receipts:** none.
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ### W8-PR1 — Receipt entry points for R and A + receipt manifest
 
@@ -640,6 +747,7 @@ Each card applies only after the founder's approval of the plan. Common conditio
 - **Rollback:** revert the PR.
 - **Estimate:** 2–2 / 1–1.
 - **Owner:** Release owner. **Receipts:** tooling for R and A (no logic change).
+- **Readiness (from backlog.csv):** technical: W0-PR0 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:boundary-release
 
 ---
 
@@ -653,16 +761,18 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR1 — A8 spike (Reflow ADAPT vs minimal BUILD) + review ADR-02/ADR-03
 
-- **Owner:** Durable owner · **Depends on:** W0-PR7, W0-PR8 · **Gate:** RAT-02 ratifies the outcome (ADR-02 O8)
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W0-PR7, W0-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Time-boxed spike on a throwaway prototype of both branches in a dev Node environment; the outcome is recorded in ADR-02 O8. T4–T8/T10 are the exit of the chosen branch in W1/F2. If the time-box expires without an outcome, it goes to RAT-02 with partial results.
 - **Files (from the plan, not re-verified):** long-task/checkpoint.ts; recovery.ts; agent-run-registry.ts:539-574; held-action-executor.ts (BORROW assets)
 - **AT:** AT-07, AT-08, AT-09 (spike criterion: BvB T1–T3 + T9 on the prototype) · **ADR:** ADR-02 (O8); ADR-03 · **Trace:** TM-05, TM-18
 - **Estimate (classic / AI):** 5–6 / 3–4 · **Receipts:** — (no runtime change)
-- **Note:** F-DUR-04, F-DUR-05; W1 input contract W0-PR7/PR8; open LOW: T7 → W1-PR14 + W1-PR15
+- **Note:** F-DUR-04, F-DUR-05; W1 input contract W0-PR7/PR8; T7 → W1-PR14 + W1-PR15 (LOW `finish/estimates/f1/05` corrected in Delivery §2, revision 1.2.1)
 
 #### W1-PR2 — Run store + schemaVersion + retention/GC + migration of agent-runs.json v1 (MIG-01)
 
-- **Owner:** Durable owner · **Depends on:** W1-PR1, W1-PR13, W1-PR15 · **Gate:** RAT-02 before merge
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-02, REVIEW-2, W1-PR13, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** SQLite candidate store; migration with dry-run, snapshot, statuses 1:1, interrupted keeps its reason + cursor; overflow and corrupt-load tests (F-DUR-02).
 - **Files (from the plan, not re-verified):** agent-run-registry.ts:29,510-537
 - **AT:** AT-27 part (run store) · **ADR:** ADR-02 · **MIG:** MIG-01 · **Trace:** TM-05, TM-16
@@ -671,7 +781,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR3 — Canonical/legacy status map in shared
 
-- **Owner:** Durable owner · **Depends on:** W1-PR2
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** queued→QUEUED, starting or running→RUNNING, waiting_for_approval→BLOCKED_APPROVAL, cancelling transitional, completed→COMPLETED, cancelled→CANCELLED, failed→FAILED_FINAL, interrupted legacy with a resume check, paused DEFERRED; COLLABORATION_RUN_STATUSES is not truncated.
 - **Files (from the plan, not re-verified):** packages/shared/src/types.ts:398-405
 - **AT:** FRD-05.8 status-map test (no AT ID) · **ADR:** ADR-02 · **Trace:** TM-05
@@ -680,16 +791,18 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR4 — Server-driven phase executor (DurableRun before the side effect, Checkpoint.spent)
 
-- **Owner:** Durable owner (hotspot agent-loop.ts: Harness owner) · **Depends on:** W1-PR3
+- **Owner:** Durable owner (hotspot agent-loop.ts: Harness owner)
+- **Readiness (from backlog.csv):** technical: W1-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:workflow-harness, hotspot:agent-loop
 - **Scope (Delivery §2):** Phase = unit of recovery; HarnessRunState serialized; run_harness becomes a thin client of the same executor; behind a feature flag (work mode opt-in) until AT-07/10 pass.
-- **Files (from the plan, not re-verified):** workflow-harness.ts:118-128,213-374; workflow-tools.ts:362-434
+- **Files (from the plan, not re-verified):** workflow-harness.ts:110-128,213-374; workflow-tools.ts:362-434
 - **AT:** AT-03 (G2 authoritative); AT-07 · **ADR:** ADR-02 · **Trace:** TM-05, TM-02
 - **Estimate (classic / AI):** 9–12 / 4–6 · **Receipts:** wave W1: I, R, P, C (per-PR UNKNOWN)
-- **Note:** F-DUR-13, F-DUR-07; critical path; open LOW: HarnessRunState is at workflow-harness.ts:110-128
+- **Note:** F-DUR-13, F-DUR-07; critical path; HarnessRunState is at workflow-harness.ts:110-128 (LOW `finish/facts/f1/06` corrected in Delivery §2 and here, revision 1.2.1)
 
 #### W1-PR5 — Lease/fencing for the run + explicit resume API
 
-- **Owner:** Durable owner · **Depends on:** W1-PR4
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** One active executor per phase; interrupted → queued only through the resume API with checkpoint validation (not a change to ALLOWED_TRANSITIONS); BORROW the harvest M-08 resume pattern.
 - **Files (from the plan, not re-verified):** agent-run-registry.ts:41,137,282,510-520
 - **AT:** AT-07; AT-09 · **ADR:** ADR-02 · **Trace:** TM-05
@@ -698,7 +811,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR6 — ToolAction/ToolAttempt: stable actionId, unknown_outcome; pending_actions transitional status
 
-- **Owner:** Durable owner (Boundary owner: held actions) · **Depends on:** W1-PR4
+- **Owner:** Durable owner (Boundary owner: held actions)
+- **Readiness (from backlog.csv):** technical: W1-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:cron
 - **Scope (Delivery §2):** Statuses planned/approved/dispatching/succeeded/failed/unknown_outcome; providerIdempotencyKey where the service supports it; BORROW the held-action pattern.
 - **Files (from the plan, not re-verified):** held-action-executor.ts:154-166,233-235; cron-store.ts:88,551-556
 - **AT:** AT-08; AT-12 part (BLOCKED_APPROVAL durable); AT-27 part (MIG-02) · **ADR:** ADR-02 · **MIG:** MIG-02 · **Trace:** TM-05, TM-16
@@ -707,7 +821,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR7 — ProofReceipt + execution_traces CHECK rebuild (gate_passed) + MIG-08 traces section
 
-- **Owner:** Harness owner (schema.ts: Memory owner, drift baseline) · **Depends on:** W1-PR4, W1-PR13, W1-PR14, W1-PR15
+- **Owner:** Harness owner (schema.ts: Memory owner, drift baseline)
+- **Readiness (from backlog.csv):** technical: W1-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, W1-PR13, W1-PR14, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:hive-mind-core
 - **Scope (Delivery §2):** ProofReceipt + three verification levels = the only path to COMPLETED in strict; TraceOutcome gate_passed via table-rebuild; eval-dataset positives = success, verified (ProofReceipt-backed); downgrade script without deleting rows.
 - **Files (from the plan, not re-verified):** hive-mind-core/src/mind/execution-traces.ts:20; schema.ts:235-253
 - **AT:** AT-01 part (G2 exit (c)); AT-27 part (MIG-04(B)) · **ADR:** ADR-02 · **MIG:** MIG-04(B); MIG-08 · **Trace:** TM-05, TM-16
@@ -716,7 +831,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR8 — Per-run event bus + GET /api/runs/:id/stream?sinceSeq=
 
-- **Owner:** Durable owner (Chat owner: chat.ts) · **Depends on:** W1-PR7
+- **Owner:** Durable owner (Chat owner: chat.ts)
+- **Readiness (from backlog.csv):** technical: W1-PR7 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** RunEvent{runId, seq, phase/attempt, type, label, status, evidenceRefs}; replay does not duplicate cards; bridge harnessEvents → per-run; HarnessTraceBridge gets a context resolver.
 - **Files (from the plan, not re-verified):** routes/agent-runs.ts:20-22,73-84
 - **AT:** AT-06 part (per-run bus); AT-10 · **ADR:** ADR-03 · **Trace:** TM-06
@@ -725,7 +841,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR9 — Detach ≠ cancel in chat (ADR-03)
 
-- **Owner:** Chat owner · **Depends on:** W1-PR8 · **Gate:** RAT-02 (ADR-03) before merge
+- **Owner:** Chat owner
+- **Readiness (from backlog.csv):** technical: W1-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-02 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat, hotspot:agent-loop
 - **Scope (Delivery §2):** work run: closing the socket = detach (RunEvent(detached)); cancel only via POST /api/runs/:id/control {action:cancel}; R3-008 close→abort remains for conversation; subagents request-bound vs detached durable.
 - **Files (from the plan, not re-verified):** routes/chat.ts:1604-1612; agent-loop.ts:1090-1108; chat-collaboration.ts:110-128,302-308; fleet-run-executor.ts:480-515
 - **AT:** AT-10 · **ADR:** ADR-03 (O1/O4) · **Trace:** TM-06
@@ -734,7 +851,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR10 — Loop execution state from Awareness into the run store
 
-- **Owner:** Durable owner · **Depends on:** W1-PR9
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:server-index
 - **Scope (Delivery §2):** `loop:<id>` state outside Awareness (the report frame stays); AwarenessLayer.toContext() today renders the Loop into the recall context.
 - **Files (from the plan, not re-verified):** loop-executor.ts:212-230,311-322; local/index.ts:2596-2597
 - **AT:** AT-23 part; AT-27 part (MIG-02) · **ADR:** ADR-07 (O7) · **MIG:** MIG-02 · **Trace:** TM-07, TM-16
@@ -743,7 +861,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR11 — Routines: occurrence identity, misfire policy, timezone, DST + MIG-08 section
 
-- **Owner:** Durable owner · **Depends on:** W1-PR9, W0-PR14, W1-PR14 · **Gate:** RAT-06 before merge
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR9, W0-PR14 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-06, REVIEW-2, W1-PR14 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:cron
 - **Scope (Delivery §2):** Occurrence id in the JobExecutor signature; misfire skip/one catch-up/bounded; timezone field (engineering decision of the Durable owner, MIG-02); DST test; two processes.
 - **Files (from the plan, not re-verified):** cron-store.ts; cron.ts:19,245-314
 - **AT:** AT-23 (G2 authoritative); AT-27 part (MIG-02; MIG-08) · **ADR:** ADR-07 (O2–O4) · **MIG:** MIG-02; MIG-08 · **Trace:** TM-07, TM-16
@@ -752,7 +871,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR12 — Crash-injection e2e (dev Node)
 
-- **Owner:** Durable owner · **Depends on:** W1-PR5, W1-PR6, W1-PR9
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR5, W1-PR6, W1-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: host:btp
 - **Scope (Delivery §2):** Kill after a confirmed phase → restart continues with the next phase; kill after provider success before ack → unknown_outcome visible; two processes → one lease.
 - **Files (from the plan, not re-verified):** new test
 - **AT:** AT-07; AT-08; AT-09 · **ADR:** ADR-02 · **Trace:** TM-05
@@ -761,7 +881,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR13 — MIG-09 versioned migration ledger + runner
 
-- **Owner:** Durable owner · **Depends on:** W0-PR7, W0-PR8
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W0-PR7, W0-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:server-index
 - **Scope (Delivery §2):** Ledger per MIG-ID (version before/after, receipt hash), boot step before the stores are opened, dry-run/apply/rollback commands; merge before the W1-PR2 apply; in parallel with W1-PR1.
 - **Files (from the plan, not re-verified):** local/index.ts:538-622 (store construction); webhook.ts:25-46; agent-run-registry.ts:548-573
 - **AT:** AT-27 part (MIG-09) · **MIG:** MIG-09 · **Trace:** TM-16
@@ -770,7 +891,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR14 — MIG-08 export/erasure for the run store (ExecutionErasure)
 
-- **Owner:** Durable owner · **Depends on:** W1-PR2
+- **Owner:** Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Export sections for runs/checkpoints/journal and erasure via erased_subjects/stableHarvestId; a store without an export/erase mapping does not pass.
 - **Files (from the plan, not re-verified):** routes/export.ts:4-10; data-erase.ts:1-19
 - **AT:** AT-27 part (MIG-08) · **MIG:** MIG-08 · **Trace:** TM-16
@@ -779,7 +901,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W1-PR15 — Revocation ledger revocations.json + Class B restore test
 
-- **Owner:** Durable owner (FRD §15 AT-27) · **Depends on:** W0-PR7, W0-PR8, W0-PR19
+- **Owner:** Durable owner (FRD §15 AT-27)
+- **Readiness (from backlog.csv):** technical: W0-PR7, W0-PR8, W0-PR19 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Append-only {kind, key, revokedAt, reason} under dataDir, outside the files that get restored; hooks in VaultStore.delete, ApprovalGrantStore.revoke and registry credential revoke; Class B restore against the W0-PR19 golden fixture; merge before the first G2 apply.
 - **Files (from the plan, not re-verified):** vault.ts:286; approval-grants.ts:286-292; suppression.ts:54-100; agent-run-registry.ts:548-573
 - **AT:** AT-27 part (Class B restore) · **MIG:** MIG-00.6; GDPR-H-05 · **Trace:** TM-16
@@ -788,18 +911,20 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 ### W2
 
-#### W2-PR1 — ContextPackage type + ContextBuilder facade over recallMemory + ablation flag
+#### W2-PR1 — ContextPackage type + ContextBuilder facade over recallMemory + ablation flag + review ADR-05 (O1–O4)
 
-- **Owner:** Memory owner · **Depends on:** W0-PR10, W0-PR11 · **Gate:** RAT-04 (ADR-05) before merge
-- **Scope (Delivery §2):** recallMemory remains the engine (DIR-09, D-12); the facade returns a reference-first package; runs alongside W1-PR1..PR3.
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W0-PR10, W0-PR11 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-04, finish/estimates/f1/03 · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: hotspot:chat, hotspot:orchestrator
+- **Scope (Delivery §2):** recallMemory remains the engine (DIR-09, D-12); the facade returns a reference-first package; runs alongside W1-PR1..PR3. In addition, review of the existing ADR-05 draft (O1–O4) ahead of RAT-04; no new ADR is written (added in Delivery §2, revision 1.2.1, `finish/estimates/f1/03`).
 - **Files (from the plan, not re-verified):** orchestrator.ts:582-978; chat-turn-preparation.ts:237; chat.ts:390; command.ts:266; commands.ts:74
 - **AT:** AT-06 part; AT-13 part · **ADR:** ADR-05 · **Trace:** TM-08
 - **Estimate (classic / AI):** 3–4 / 1.5–2 · **Receipts:** wave W2: P, A, I, R (per-PR UNKNOWN)
-- **Note:** F-HM-08, F-HM-09; indirectly on the critical path (W3-PR2); open LOW: the ADR-05 review has no unit of work
+- **Note:** F-HM-08, F-HM-09; indirectly on the critical path (W3-PR2); the ADR-05 review is assigned to this PR in Delivery §2 (revision 1.2.1; LOW `finish/estimates/f1/03` — the tech lead confirms the assignment, merge gate)
 
 #### W2-PR2 — Pinning the package to the run + invalidation (erasure/revoke/scope)
 
-- **Owner:** Memory owner · **Depends on:** W2-PR1, W1-PR4
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR1, W1-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Reference + hash in Checkpoint; resume requires a fresh resolution if the source was erased/revoked/its scope changed (no snapshot > erasure).
 - **Files (from the plan, not re-verified):** erased_subjects; erasure.test.ts
 - **AT:** AT-15 (G2 authoritative); AT-13 part; AT-27 part (MIG-05 context_refs) · **ADR:** ADR-05 · **MIG:** MIG-05 (context_refs) · **Trace:** TM-08, TM-16, TM-20
@@ -808,7 +933,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR3 — Trust/taint labels in the recall block render line
 
-- **Owner:** Memory owner · **Depends on:** W2-PR2 · **Gate:** DQ-04 (LoCoMo same-judge rerun = merge gate)
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, DQ-04 · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: hotspot:orchestrator, budget:dq-04
 - **Scope (Delivery §2):** source token in the package and the render line; changes the recall block bytes → LoCoMo same-judge check + recount.mjs before merge.
 - **Files (from the plan, not re-verified):** orchestrator.ts:839-856; executor-brief.ts:186
 - **AT:** AT-28 part (LoCoMo same-judge without regression) · **ADR:** ADR-05 · **Trace:** TM-08
@@ -817,7 +943,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR4 — Token budget per model tier at the package level
 
-- **Owner:** Memory owner · **Depends on:** W2-PR3
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: hotspot:orchestrator
 - **Scope (Delivery §2):** FRAME_LIMITS today is not applied to the W4.5 pre-rendered block; lane caps fixed at 60/40/K=6.
 - **Files (from the plan, not re-verified):** prompt-assembler.ts:118,165-169,369-489; orchestrator.ts:765-771
 - **AT:** — (TM-08; per-PR UNKNOWN) · **Trace:** TM-08
@@ -826,7 +953,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR5 — Fleet/harness/subagent on the same ContextPackage contract
 
-- **Owner:** Memory owner; Harness owner (injection into phases) · **Depends on:** W2-PR3
+- **Owner:** Memory owner; Harness owner (injection into phases)
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:workflow-harness
 - **Scope (Delivery §2):** Fleet today uses buildAssembledPrompt without recalledText; harness/subagent without recall. No new fusion surface (D-16).
 - **Files (from the plan, not re-verified):** fleet-run-executor.ts:647-648; routes/fleet.ts:350-356; subagent-orchestrator.ts; workflow-harness.ts
 - **AT:** — (TM-08; per-PR UNKNOWN) · **Trace:** TM-08
@@ -835,7 +963,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR6 — External handoff for all paths (WAGGLE_CONTEXT_INJECTED, SessionStart, cli-bridge)
 
-- **Owner:** External-executor owner · **Depends on:** W2-PR3
+- **Owner:** External-executor owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** buildExecutorBrief for both /api/tools/run and the interactive launch; only WAGGLE_CONTEXT_INJECTED is added to the allowlist (WAGGLE_RUN_ID already exists); SessionStart shortens recall when the marker + run id are present; cli-bridge reads WAGGLE_RUN_ID.
 - **Files (from the plan, not re-verified):** executor-brief.ts:46-154; route-proposals.ts:205-211; external-tool-runs.ts:103; cli-bridge.ts:240,404-408; external-process-env.ts:29-35
 - **AT:** AT-16 · **ADR:** ADR-05 · **Trace:** TM-09, TM-23
@@ -844,7 +973,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR7 — Idempotent run-end extraction (runId, outputHash)
 
-- **Owner:** Memory owner · **Depends on:** W2-PR3
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:hive-mind-core
 - **Scope (Delivery §2):** Dedup key (runId, outputHash) in metadata; verification of the createPFrame dedup.
 - **Files (from the plan, not re-verified):** frames.ts:109-111,289-294; weaver/consolidation.ts:181-236; cognify.ts:64-70
 - **AT:** AT-14 (G2 authoritative) · **Trace:** TM-08
@@ -853,7 +983,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR8 — External toolsUsed marked tool-reported
 
-- **Owner:** External-executor owner · **Depends on:** W2-PR3
+- **Owner:** External-executor owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** The registry + UI copy distinguish tool-reported from server-observed.
 - **Files (from the plan, not re-verified):** external-tool-runner.ts:519,531; external-tool-runs.ts:922-932
 - **AT:** AT-16 · **Trace:** TM-09, TM-23
@@ -862,7 +993,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR9 — RAWDETAIL FRD record + decision on bundling the reranker
 
-- **Owner:** Memory owner · **Depends on:** W2-PR3
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:hive-mind-core, hotspot:server-index
 - **Scope (Delivery §2):** The lane indexes only harvested conversations (3 writers) and depends on a reranker that is not bundled → offline desktop without the lane; decision: bundle or document.
 - **Files (from the plan, not re-verified):** raw-detail-lane.ts:116-187; inprocess-reranker.ts:56,71,74; local/index.ts:792-800
 - **AT:** AT-14 (G2 authoritative) · **ADR:** ADR-05 · **Trace:** TM-08
@@ -871,7 +1003,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W2-PR10 — memory_compact test in the desktop sidecar
 
-- **Owner:** Memory owner · **Depends on:** W2-PR3
+- **Owner:** Memory owner
+- **Readiness (from backlog.csv):** technical: W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:server-index, host:btp
 - **Scope (Delivery §2):** Test that the existing cron runs in the desktop sidecar; not a new mechanism.
 - **Files (from the plan, not re-verified):** local/index.ts:2033-2058; setup-crons.ts:35; dream-journal.ts:75-77
 - **AT:** — (TM-08; per-PR UNKNOWN) · **Trace:** TM-08
@@ -882,7 +1015,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR1 — Review ADR-01 + ExecutionMode table in the FRD
 
-- **Owner:** Harness owner · **Depends on:** — · **Gate:** RAT-03 after the review (before the W3-PR2 merge)
+- **Owner:** Harness owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Review of the existing draft; conversation/work × normal/strict/benchmark (DIR-03).
 - **Files (from the plan, not re-verified):** docs/decisions/2026-09-27-ADR-01-conversation-work-modes.md; FRD
 - **AT:** — · **ADR:** ADR-01 · **Trace:** TM-01
@@ -891,7 +1025,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR2 — Router conversation/work server-side
 
-- **Owner:** Harness owner (hotspot: Chat owner) · **Depends on:** W3-PR1, W1-PR4, W2-PR1 · **Gate:** RAT-03 before merge; DQ-09 (default mode)
+- **Owner:** Harness owner (hotspot: Chat owner)
+- **Readiness (from backlog.csv):** technical: W3-PR1, W1-PR4, W2-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-03, DQ-09 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** Server-side classification + mode; visible and correctable classification; conversation remains the existing lightweight path; behind a flag.
 - **Files (from the plan, not re-verified):** chat-turn-preparation.ts (after detectTaskShape :381); task-shape.ts:145
 - **AT:** — (TM-01/TM-20; per-PR UNKNOWN) · **ADR:** ADR-01 · **Trace:** TM-01, TM-20
@@ -900,7 +1035,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR3 — Recipe registry + versions + HarnessRecipeVersion minimum
 
-- **Owner:** Harness owner · **Depends on:** W3-PR2
+- **Owner:** Harness owner
+- **Readiness (from backlog.csv):** technical: W3-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** parent, mutations, promotion state, rollback target; the three built-in harnesses become recipe v1 without deletion.
 - **Files (from the plan, not re-verified):** builtin-harnesses.ts:94-259 (become recipe v1)
 - **AT:** — (TM-20; per-PR UNKNOWN) · **ADR:** ADR-01 · **Trace:** TM-20
@@ -909,7 +1045,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR4 — Research-brief recipe + deterministic validators
 
-- **Owner:** Harness owner · **Depends on:** W3-PR3
+- **Owner:** Harness owner
+- **Readiness (from backlog.csv):** technical: W3-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Validators: file parsing, sections, resolvable references, numbers/dates/citations, units, contradictions (not a source quota).
 - **Files (from the plan, not re-verified):** UNKNOWN (new recipe/validator modules)
 - **AT:** AT-21; AT-22 · **ADR:** ADR-01 · **Trace:** TM-20, TM-23
@@ -918,7 +1055,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR5 — Document-production recipe (DOCX/MD) + validators
 
-- **Owner:** Harness owner · **Depends on:** W3-PR3
+- **Owner:** Harness owner
+- **Readiness (from backlog.csv):** technical: W3-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** DOCX/MD parsing, sections; no new native deps (I).
 - **Files (from the plan, not re-verified):** UNKNOWN (new recipe/validator modules)
 - **AT:** AT-21; AT-22 · **ADR:** ADR-01 · **Trace:** TM-20, TM-23
@@ -927,16 +1065,18 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR6 — Three verification levels in ProofReceipt; CONDITIONAL policy per recipe
 
-- **Owner:** Harness owner · **Depends on:** W3-PR4, W3-PR5, W1-PR7
-- **Scope (Delivery §2):** Structural / defined elements / content review with a rubric.
+- **Owner:** Harness owner
+- **Readiness (from backlog.csv):** technical: W3-PR4, W3-PR5, W1-PR7 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, DQ-09 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
+- **Scope (Delivery §2):** Structural / defined elements / content review with a rubric; `GateOutcome` (class, level, `criterionIds`, verdict with `NOT_RUN`); `conditionalPolicy` per recipe only for `work · normal`; overall `verdict`/`level` per FRD-05.9 R6/R7.
 - **Files (from the plan, not re-verified):** ProofReceipt (W1-PR7)
-- **AT:** AT-01 part (G2) · **ADR:** ADR-01 · **Trace:** TM-01, TM-20
+- **AT:** AT-01 part (G2: table test of all FRD-05.9 rows N1–N8, S1–S8, B1–B8 + R4 fail-closed + R12 combination; ADR-01-T11) · **ADR:** ADR-01 · **Trace:** TM-01, TM-20
 - **Estimate (classic / AI):** 4–5 / 1.5–2 · **Receipts:** R; P
 - **Note:** critical path; DQ-09 thresholds
 
 #### W3-PR7 — Production benchmark adapter (benchmark mode) + manifest + run reset
 
-- **Owner:** Benchmark owner · **Depends on:** W3-PR6
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: W3-PR6 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat, host:btp
 - **Scope (Delivery §2):** /api/chat path, isolated run, manifest (SHA, model/quant/runtime, hardware, dataset/scorer hash, limits, seeds, cost), reset of .mind/caches/artifacts/actions incl. pre-seed of `<dataDir>/models` with a per-file hash.
 - **Files (from the plan, not re-verified):** `benchmarks/**`; `chat*.ts` (benchmark flag only)
 - **AT:** AT-28 (G2 authoritative, with B2-PR1/PR2) · **ADR:** ADR-01 · **Trace:** TM-17
@@ -945,7 +1085,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3-PR8 — Cherry-pick of additive files from feature/harness-sota-bench (without fe7804bf)
 
-- **Owner:** Benchmark owner (with Harness owner review) · **Depends on:** —
+- **Owner:** Benchmark owner (with Harness owner review)
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Leakage firewall, gate/preflight/prereg, stats TOST, τ² adapter (Python dev tool, not in the installer), continual; do not carry over as results: 9eb454bd, 16b4dc3d, df159ac2, 18e5b36a (N=114 n.s.).
 - **Files (from the plan, not re-verified):** `benchmarks/**` (113 A + 8 M)
 - **AT:** — (TM-17) · **Trace:** TM-17
@@ -956,7 +1097,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR1 — Active-version pointer + rollback route + rolled_back (CHECK rebuild) + MIG-08
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9, W1-PR13, W1-PR14, W1-PR15 · **Gate:** RAT-05 before merge
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-05, REVIEW-2, W1-PR13, W1-PR14, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: hotspot:hive-mind-core, hotspot:server-index
 - **Scope (Delivery §2):** POST /api/evolution/runs/:uuid/rollback; active_from/active_until; multi-level backup; persona:reloaded consumer + WS relay; MIG-08 section for evolution runs and override versions.
 - **Files (from the plan, not re-verified):** evolution-runs.ts:23-28,95-96; routes/evolution.ts:259; evolution-service.ts:277; index.ts:3189
 - **AT:** AT-04 (G2 authoritative); AT-27 part (MIG-03) · **ADR:** ADR-06 · **MIG:** MIG-03; MIG-08 · **Trace:** TM-03, TM-16
@@ -965,7 +1107,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR2 — EvolutionLLM adapter over the provider router + composePersonaPrompt
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** The complete(prompt) contract is retained; artifacts = executorModel, judgeModel, perExampleOutputs (redacted); KVARK mode without cloud egress.
 - **Files (from the plan, not re-verified):** evolution-llm-wiring.ts (options.model :227)
 - **AT:** AT-26 part (KVARK without a cloud judge) · **ADR:** ADR-06 (O7/O8) · **Trace:** TM-04
@@ -974,7 +1117,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR3 — Paired scoring (anchor) + drift watch of the active version
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9 · **Gate:** DQ-09 (drift watch threshold)
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, DQ-09 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Baseline always scored in the anchor phase; aggregateScores returns n_failed/n_aborted; combinedDelta kept as a field; drift watch only proposes rollback (no automatic rollback).
 - **Files (from the plan, not re-verified):** iterative-optimizer.ts; compose-evolution.test.ts:342-371
 - **AT:** AT-29 · **ADR:** ADR-06 · **Trace:** TM-04
@@ -983,7 +1127,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR4 — builder.build() with secret scan/split/holdout instead of sourceFromTraces
 
-- **Owner:** Evolution owner (Memory owner: eval dataset scope) · **Depends on:** W0-PR9
+- **Owner:** Evolution owner (Memory owner: eval dataset scope)
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** traceFilter personaId/workspaceId, includeCorrections:false, 60/20/20; GEPA on train+val, final paired score on holdout; dataset hash + number of looks at the holdout.
 - **Files (from the plan, not re-verified):** eval-dataset.ts:232-245
 - **AT:** AT-29; AT-13/AT-19 (eval set) · **ADR:** ADR-06 · **Trace:** TM-04
@@ -992,7 +1137,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR5 — Local evaluator default + consent/cap/abort for the cloud judge
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** consent flag + display of where the data goes (D-05); AbortController on SSE close; maxJudgeCalls cap; cost estimate before the run.
 - **Files (from the plan, not re-verified):** EvolutionTab.tsx:1296; IterativeGEPAOptions.signal
 - **AT:** — (TM-04; per-PR UNKNOWN) · **ADR:** ADR-06 (O7/O8) · **Trace:** TM-03, TM-04
@@ -1001,7 +1147,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR6 — EvolveSchema wire-or-drop
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** frozenSchema into the Stage 2 executor and the deploy artifact, or drop it from the default compose (engineering decision of the Evolution owner).
 - **Files (from the plan, not re-verified):** compose-evolution.test.ts:223,370
 - **AT:** AT-05 · **ADR:** ADR-06 · **Trace:** TM-03
@@ -1010,7 +1157,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR7 — Learning channel: markCorrected, persona signal, wire-vs-remove AgentLearning
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** The existing improvement_signals path remains the only channel; no duplication.
 - **Files (from the plan, not re-verified):** chat-turn-completion.ts:253-261; improvement-detector.ts:81-98; chat.ts:1485-1496
 - **AT:** — (TM-03; per-PR UNKNOWN) · **Trace:** TM-03
@@ -1019,7 +1167,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W3e-PR8 — Route test: complete() called with the candidate before the judge
 
-- **Owner:** Evolution owner · **Depends on:** W0-PR9
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W0-PR9 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Number of calls per example = 2; stub callCount() exists.
 - **Files (from the plan, not re-verified):** evolution-run-route.test.ts:37-58
 - **AT:** AT-05 · **Trace:** TM-03
@@ -1030,7 +1179,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR1 — PermissionEnvelope type + computation from existing sources
 
-- **Owner:** Capability owner · **Depends on:** —
+- **Owner:** Capability owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** Intersection of system/egress, KVARK when connected, user grants, workspace/role/read-only, tool capabilities; no tier step.
 - **Files (from the plan, not re-verified):** persona-tool-filter.ts:98-153; chat-governance.ts:87-89; approval-grants.ts; confirmation.ts:337-358
 - **AT:** — (TM-10; per-PR UNKNOWN) · **ADR:** ADR-04 · **Trace:** TM-10
@@ -1039,7 +1189,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR2 — Resolver facade + filterCandidates(envelope) + read-only persona test
 
-- **Owner:** Capability owner · **Depends on:** W4-PR1
+- **Owner:** Capability owner
+- **Readiness (from backlog.csv):** technical: W4-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Filter before ranking; lane order = tie-breaker; no physical merge of the 4 engines (DIR-11).
 - **Files (from the plan, not re-verified):** capability-acquisition.ts:299-311; agent-search.ts:158
 - **AT:** AT-17 · **ADR:** ADR-04 · **Trace:** TM-10
@@ -1048,7 +1199,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR3 — Typed CapabilityRequest + api_key card + durable proposal store (MIG-06/08)
 
-- **Owner:** Capability owner · **Depends on:** W4-PR2, W1-PR13, W1-PR14, W1-PR15 · **Gate:** RAT-07 before merge
+- **Owner:** Capability owner
+- **Readiness (from backlog.csv):** technical: W4-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-07, REVIEW-2, W1-PR13, W1-PR14, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Proposal kind:connector; the card calls the existing POST /api/connectors/:id/connect; the old HTML comment marker is supported transitionally.
 - **Files (from the plan, not re-verified):** CapabilityRequestCard.tsx:94-99; CapabilityProposalStore.issue; agent-search.ts:79
 - **AT:** AT-11; AT-27 part · **ADR:** ADR-04 · **MIG:** MIG-06; MIG-08 · **Trace:** TM-10, TM-16
@@ -1057,7 +1209,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR4 — BLOCKED_CAPABILITY resume on SetupCompleted
 
-- **Owner:** Capability owner (hotspot: Chat owner) · **Depends on:** W4-PR3, W1-PR4
+- **Owner:** Capability owner (hotspot: Chat owner)
+- **Readiness (from backlog.csv):** technical: W4-PR3, W1-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** Run created before blocking (DIR-04); a valid setup returns the same run.
 - **Files (from the plan, not re-verified):** chat-turn-preparation.ts; W1 run store
 - **AT:** AT-11 · **ADR:** ADR-04 · **Trace:** TM-10
@@ -1065,7 +1218,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR5 — OAuth state bound to the request + persistence + PKCE + callback (MIG-06/08)
 
-- **Owner:** Security owner (wave: Capability owner) · **Depends on:** W4-PR4, W1-PR13, W1-PR14, W1-PR15
+- **Owner:** Security owner (wave: Capability owner)
+- **Readiness (from backlog.csv):** technical: W4-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, W1-PR13, W1-PR14, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** pendingStates with requestId/workspaceId/sessionId; callback → internal event → the same run only with a valid grant; Waggle-owned OAuth client out of scope (R12).
 - **Files (from the plan, not re-verified):** oauth.ts:64-65,138-139,200-209,290-311
 - **AT:** AT-11 part; AT-27 part · **ADR:** ADR-04 (O4) · **MIG:** MIG-06; MIG-08 · **Trace:** TM-10, TM-16
@@ -1073,7 +1227,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR6 — Negative grant / decline expiry (MIG-06/08) + revoke RED→GREEN (AT-12)
 
-- **Owner:** Security owner (wave: Capability owner) · **Depends on:** W4-PR4, W1-PR13, W1-PR14, W1-PR15
+- **Owner:** Security owner (wave: Capability owner)
+- **Readiness (from backlog.csv):** technical: W4-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, W1-PR13, W1-PR14, W1-PR15 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** Revocation survives a restart; the model/hook/IM do not undo it; the revoke test does not exist at 2af0904d.
 - **Files (from the plan, not re-verified):** chat-approval-hook.ts:81,123,496-506; approval-grants.ts:286; routes/approval.ts:120
 - **AT:** AT-12 (G2 authoritative); AT-19 (G2 authoritative, with W4-PR7); AT-27 part · **ADR:** ADR-04 · **MIG:** MIG-06; MIG-08 · **Trace:** TM-10, TM-16
@@ -1082,7 +1237,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W4-PR7 — THREAT_MODEL.md addendum + test "no vault values in the prompt/trace"
 
-- **Owner:** Security owner · **Depends on:** W4-PR4
+- **Owner:** Security owner
+- **Readiness (from backlog.csv):** technical: W4-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Inline install boundary (starter-pack/proposal, forceInsecure, SecurityGate), MCP binary install, egress profiles, PostHog; no new threat-model ADR.
 - **Files (from the plan, not re-verified):** THREAT_MODEL.md; installer-security.test.ts:825
 - **AT:** AT-19 (G2 authoritative, with W4-PR6) · **ADR:** ADR-10 (P6) · **Trace:** TM-10
@@ -1093,7 +1249,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W5-PR1 — step payload + StepContentBlock + per-run bus → step bridge
 
-- **Owner:** UX owner; Chat owner (SSE step) · **Depends on:** W1-PR8
+- **Owner:** UX owner; Chat owner (SSE step)
+- **Readiness (from backlog.csv):** technical: W1-PR8 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat
 - **Scope (Delivery §2):** runId, phaseId, status running/done/failed/blocked, evidenceRefs; additive extension of the existing step channel.
 - **Files (from the plan, not re-verified):** chat-agent-run.ts; StepContentBlock; ActivityStream
 - **AT:** AT-10 (UI part) · **ADR:** ADR-03 · **Trace:** TM-06
@@ -1102,7 +1259,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W5-PR2 — View-work drawer + run-status-labels.ts
 
-- **Owner:** UX owner · **Depends on:** W5-PR1
+- **Owner:** UX owner
+- **Readiness (from backlog.csv):** technical: W5-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Drawer for partial/blocked/cancelled/failed without percentages; shared map for Home/Agents/Room.
 - **Files (from the plan, not re-verified):** run-status-labels.ts (new); activity-labels.ts (pattern)
 - **AT:** FRD-05.8 View-work test (no AT ID) · **Trace:** TM-06, TM-14
@@ -1113,7 +1271,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR1 — Readiness truthfulness (useHasWorkingModel + ModelGate)
 
-- **Owner:** Model/Runtime owner · **Depends on:** —
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** ready only after an actual generation; breaks and rewrites useHasWorkingModel.test.ts:271-281,301-307,486-495.
 - **Files (from the plan, not re-verified):** useHasWorkingModel.ts:129-136,174,244; ModelGate.tsx:257-261
 - **AT:** AT-20 · **Trace:** TM-13
@@ -1122,7 +1281,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR2 — reason in ModelProbeResult + UI messages
 
-- **Owner:** Model/Runtime owner · **Depends on:** —
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** timeout/unreachable/cold_start/http_error/empty_content.
 - **Files (from the plan, not re-verified):** ModelGate.tsx:843-858
 - **AT:** AT-20 · **Trace:** TM-13
@@ -1130,7 +1290,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR3 — Tool/structured-output round-trip probe for the work profile
 
-- **Owner:** Model/Runtime owner · **Depends on:** —
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Optional second probe; does not change chat.
 - **Files (from the plan, not re-verified):** UNKNOWN (new probe)
 - **AT:** AT-20 · **Trace:** TM-13
@@ -1138,7 +1299,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR4 — Pull stream:true + NDJSON relay + resume
 
-- **Owner:** Model/Runtime owner · **Depends on:** —
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Post-pull digest + generation probe are retained.
 - **Files (from the plan, not re-verified):** local-inference.ts:313-332,338-377
 - **AT:** AT-20 · **Trace:** TM-13
@@ -1146,7 +1308,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR6 — Ollama repin + catalog + /api/show arch check + certify fields
 
-- **Owner:** Model/Runtime owner · **Depends on:** — · **Gate:** DQ-05 (online confirmation)
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-05 · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Pin 0.32.3 is older than the first Qwen 3.8 release; repin ≥0.32.15 after a pull/generate/tools test; certificateModel vs recommendedModel.
 - **Files (from the plan, not re-verified):** managed-ollama-runtime.ts:28-29,158-237; cookbook/catalog.ts:44-51; model-fit.ts:207-214
 - **AT:** AT-30 part (managed model receipt) · **Trace:** TM-13
@@ -1155,18 +1318,20 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### W6-PR7 — Hardware ladder measurements (≥3 profiles)
 
-- **Owner:** Model/Runtime owner · **Depends on:** — · **Gate:** hardware; DQ-05
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-05 · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hw:gpu-24gb-nvidia, hw:gpu-16gb, hw:cpu-only
 - **Scope (Delivery §2):** 24 GB NVIDIA, 16 GB, CPU-only; numbers are measured, not copied.
 - **Files (from the plan, not re-verified):** document + fixture tasks
 - **AT:** AT-20 (real Windows hardware, FRD §15) · **Trace:** TM-13
 - **Estimate (classic / AI):** 3.5–4.5 / 2–2.5 · **Receipts:** —
-- **Note:** measurement and pull wall-clock are CI/compute G2
+- **Note:** measurement and pull wall-clock are CI/compute G2; server-side FP8 measurements (LM TEK H200) are not a row of this ladder; a remote endpoint = a separate row per FRD-10.4 (PRD-13-10 pt.6)
 
 ### W8
 
 #### W8-PR2 — Crash-injection receipt script against the packaged build
 
-- **Owner:** Release owner · **Depends on:** W1-PR4, W1-PR5
+- **Owner:** Release owner
+- **Readiness (from backlog.csv):** technical: W1-PR4, W1-PR5 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, FOUNDER-REVIEW · milestone: start_after:G1-EXIT, merge_before:F2 · resources: host:vm-disposable, hotspot:release
 - **Scope (Delivery §2):** Runs only on a dedicated VM or a disposable Windows account (DP-0.11).
 - **Files (from the plan, not re-verified):** `scripts/certify-*` (step) or a separate script
 - **AT:** AT-07 part (packaged, receipt C at F2); AT-30 · **Trace:** TM-19
@@ -1177,7 +1342,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B1-PR1 — Evidence card + protocol draft (documentation)
 
-- **Owner:** Benchmark owner · **Depends on:** —
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** Evidence card, split/firewall/manifest definitions; no Harbor, no ruler run and no paid calls. Choice of APEX-Agents 1.1 = PROPOSAL.
 - **Files (from the plan, not re-verified):** docs/plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.md
 - **AT:** — (TM-17) · **Trace:** TM-17
@@ -1188,7 +1354,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR0a — Harbor 0.20.0 + three images on the bench machine
 
-- **Owner:** Benchmark owner · **Depends on:** B1-PR1 · **Gate:** DQ-04; bench machine
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B1-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-04 · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: host:bench
 - **Scope (Delivery §2):** Docker/WSL2 only on the bench machine, not in the product.
 - **Files (from the plan, not re-verified):** bench machine (outside the repo)
 - **AT:** — (TM-17) · **Trace:** TM-17, TM-20
@@ -1197,7 +1364,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR0b — Ruler: reference agent + deviation analysis (B2-EXIT-0)
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR0a · **Gate:** DQ-04 (judge API)
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR0a · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-04 · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: host:bench, budget:dq-04
 - **Scope (Delivery §2):** First paid benchmark step; ruler wall-clock 0.5–1 wd (placeholder, UNKNOWN) and judge cost are CI/compute.
 - **Files (from the plan, not re-verified):** `benchmarks/**`
 - **AT:** — (TM-17) · **Trace:** TM-17, TM-20
@@ -1205,7 +1373,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR0c — Split generation + hashes
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR0b
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR0b · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: host:bench
 - **Scope (Delivery §2):** Dev/validation/sealed split + hash.
 - **Files (from the plan, not re-verified):** `benchmarks/**`
 - **AT:** — (TM-17) · **Trace:** TM-17, TM-20
@@ -1213,7 +1382,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR1 — Harbor agent shim → production sidecar
 
-- **Owner:** Benchmark owner · **Depends on:** W3-PR7
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: W3-PR7 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: host:bench
 - **Scope (Delivery §2):** Shim only; manifest and run reset are in W3-PR7.
 - **Files (from the plan, not re-verified):** `benchmarks/**`
 - **AT:** AT-28 · **ADR:** ADR-01 · **Trace:** TM-17, TM-20
@@ -1222,7 +1392,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR2a — Rework fixes after the B2 dev run (bugs, timeout calibration)
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR1, B2-PR3
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR1, B2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:B2-DEVRUN, start_after:G1-EXIT, merge_before:B2-VALRUN, merge_before:F2 · resources: host:bench
 - **Scope (Delivery §2):** After the dev run (wall-clock 1–3 wd, placeholder). The dev run also depends on W6-PR6, W2-PR1 and B2-PR3.
 - **Files (from the plan, not re-verified):** `benchmarks/**`
 - **AT:** AT-28 · **Trace:** TM-17, TM-20
@@ -1231,7 +1402,8 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR2 — Development run report (after dev, re-run and validation selection)
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR2a
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR2a · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:B2-VALRUN, start_after:G1-EXIT, merge_before:F2 · resources: —
 - **Scope (Delivery §2):** No marketing claims; never "beats" from B2.
 - **Files (from the plan, not re-verified):** `benchmarks/results/<test>-<datum>/`
 - **AT:** AT-28 · **Trace:** TM-17, TM-20
@@ -1240,12 +1412,13 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 #### B2-PR3 — Target model configuration/tuning before A/B
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR0c, W6-PR6 · **Gate:** DQ-04; DQ-05
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR0c, W6-PR6 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-04, DQ-05 · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:B2-DEVRUN, merge_before:F2 · resources: host:bench, budget:dq-04
 - **Scope (Delivery §2):** Sampling, thinking mode, tool parser, ctx/KV; tuning only on the dev split (protocol §7).
 - **Files (from the plan, not re-verified):** `benchmarks/**`
 - **AT:** — (TM-17) · **Trace:** TM-17, TM-20
 - **Estimate (classic / AI):** 5–8 / 3–5 · **Receipts:** no release receipt
-- **Note:** R16; must come before the B2 dev run
+- **Note:** R16; must come before the B2 dev run; profile = DQ-05 (FRD-13.4 `profileId`); the H200 FP8 measurements of the LM TEK program are neither a B2 profile nor a substitute (PRD-13-10 pt.6)
 
 <!-- GEN:G2:END -->
 
@@ -1253,7 +1426,7 @@ Full cards (goal, scope, RED test, risks, rollback) are written during sprint pl
 
 ## 5. G3 tickets — compact cards
 
-G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are decided before G3 starts (Delivery §4.3). W3e-PR9a..e exist only if ODB-02 = yes.
+G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are decided before G3 starts (Delivery §4.3). W3e-PR9a..e exist only if ODB-02 = yes. ODB-02 is AWAITING FOUNDER DECISION; the recommendation (PROPOSAL) is option A: W3e-PR9a..e in G3. Option B ("W3e-PR9 in G2") changes the milestone of these tickets only by a doc-only PR with the founder decision (03 §0.1). Claim about the layer's contribution: Benchmark BP-MSG-01.
 
 <!-- GEN:G3:BEGIN -->
 
@@ -1261,7 +1434,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W3e-PR9a — Registry of approved variants + immutable invariants
 
-- **Owner:** Evolution owner; Harness owner (recipe registry) · **Depends on:** W3-PR3, W3e-PR1, W3e-PR3, W3e-PR4 · **Gate:** ODB-02 = yes (otherwise DEFERRED)
+- **Owner:** Evolution owner; Harness owner (recipe registry)
+- **Readiness (from backlog.csv):** technical: W3-PR3, W3e-PR1, W3e-PR3, W3e-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, ODB-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: host:bench
 - **Scope (Delivery §2):** Test that a candidate cannot change scope, egress, approvals, budget cap, mandatory gates or the contamination boundary.
 - **Files (from the plan, not re-verified):** iterative-optimizer.ts:88-93 (EvolutionTarget has no value → net-new)
 - **AT:** prerequisite for AT-29 (recipe part) · **ADR:** ADR-06 · **Trace:** TM-21
@@ -1270,7 +1444,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W3e-PR9b — Candidate generator (mutations within the registry)
 
-- **Owner:** Evolution owner · **Depends on:** W3e-PR9a · **Gate:** ODB-02 = yes (otherwise DEFERRED)
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W3e-PR9a · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, ODB-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: host:bench
 - **Scope (Delivery §2):** n_kand 2–4 per generation, g 1–2 (PROPOSAL inputs).
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** prerequisite for AT-29 (recipe part) · **ADR:** ADR-06 · **Trace:** TM-21
@@ -1278,7 +1453,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W3e-PR9c — Paired evaluation (reuse W3e-PR3/PR4)
 
-- **Owner:** Evolution owner · **Depends on:** W3e-PR9b · **Gate:** ODB-02 = yes (otherwise DEFERRED)
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W3e-PR9b · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, ODB-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: host:bench
 - **Scope (Delivery §2):** Anchor + holdout from W3e-PR3/PR4.
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** prerequisite for AT-29 (recipe part) · **ADR:** ADR-06 · **Trace:** TM-21
@@ -1286,7 +1462,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W3e-PR9d — Explicit promotion + rollback (reuse W3e-PR1)
 
-- **Owner:** Evolution owner · **Depends on:** W3e-PR9c · **Gate:** ODB-02 = yes (otherwise DEFERRED)
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W3e-PR9c · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, ODB-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Pointer from W3e-PR1.
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** prerequisite for AT-29 (recipe part) · **ADR:** ADR-06 · **Trace:** TM-21
@@ -1294,18 +1471,20 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W3e-PR9e — Tests (AT-29 for the recipe target, invariants)
 
-- **Owner:** Evolution owner · **Depends on:** W3e-PR9d · **Gate:** ODB-02 = yes (otherwise DEFERRED)
+- **Owner:** Evolution owner
+- **Readiness (from backlog.csv):** technical: W3e-PR9d · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, ODB-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Recipe part of AT-29; if ODB-02 = no, it does not apply.
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** AT-29 (G3 recipe part, only with ODB-02 = yes) · **ADR:** ADR-06 · **Trace:** TM-21
 - **Estimate (classic / AI):** 2–3 / 1–1.5 · **Receipts:** P
-- **Note:** the PRD-10-13 claim depends on this
+- **Note:** the PRD-10-13 claim depends on this; the claim allowed per Benchmark BP-MSG-01 (a result without the recipe layer is not evidence of its contribution)
 
 ### W4
 
 #### W4-PR8 — ActionDescriptor as the source of truth for side-effect endpoints
 
-- **Owner:** Capability owner · **Depends on:** —
+- **Owner:** Capability owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** UI, agent and routine invoke the same action through the same permission/validation contract.
 - **Files (from the plan, not re-verified):** command-registry.ts:108-192
 - **AT:** AT-18 (G3 authoritative) · **ADR:** ADR-04 (note: agent tool and held action share ToolDefinition) · **Trace:** TM-11
@@ -1316,7 +1495,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W5-PR3 — Routines Home block + blocked status
 
-- **Owner:** UX owner; Durable owner · **Depends on:** W1-PR11
+- **Owner:** UX owner; Durable owner
+- **Readiness (from backlog.csv):** technical: W1-PR11 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Reads /api/automations; next scheduled time, blocking, pause/disable; removal of the dead running/failed branch.
 - **Files (from the plan, not re-verified):** HomeCockpit.tsx; automations.ts:128-148; types.ts:777
 - **AT:** AT-23 part (G3) · **ADR:** ADR-07 (O9) · **Trace:** TM-07, TM-14
@@ -1325,7 +1505,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W5-PR4 — Nav/⌘K gating + one advanced toggle (A23) + copy lint test
 
-- **Owner:** UX owner · **Depends on:** — · **Gate:** DQ-08 (copy lint allowlist)
+- **Owner:** UX owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, DQ-08 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Power tools only for isPro; New Agent under power; A23 = PROPOSAL — BRIEF DIRECTION.
 - **Files (from the plan, not re-verified):** command-catalog.ts; Sidebar.tsx:180-191; dock-tiers.ts:121-131
 - **AT:** AT-17 indirectly (W5 exit) · **Trace:** TM-14
@@ -1334,7 +1515,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W5-PR5 — First-task artifact + persona copy "role/modes"
 
-- **Owner:** UX owner · **Depends on:** —
+- **Owner:** UX owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Template-specific first task that produces an artifact; wire up or remove the dead ALL_ONBOARDING_PERSONAS/getPersonasForTemplate.
 - **Files (from the plan, not re-verified):** OnboardingWizard.tsx:107; ModelGateStep.tsx
 - **AT:** — · **Trace:** TM-14
@@ -1342,7 +1524,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W5-PR6 — Playwright/visual baseline update
 
-- **Owner:** UX owner · **Depends on:** W5-PR4
+- **Owner:** UX owner
+- **Readiness (from backlog.csv):** technical: W5-PR4 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: host:btp
 - **Scope (Delivery §2):** E2E env isolation per the checklist (WAGGLE_E2E_BASE_URL/PORT, REUSE_EXISTING_SERVER=0).
 - **Files (from the plan, not re-verified):** `tests/visual/**`
 - **AT:** — · **Trace:** TM-14
@@ -1351,7 +1534,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W5-PR7 — axe for ?forceWizard=true routes + centralized strings
 
-- **Owner:** UX owner · **Depends on:** —
+- **Owner:** UX owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Wizard/ModelGate covered by axe; no i18n framework until DQ-08.
 - **Files (from the plan, not re-verified):** tests/e2e/runtime-a11y.spec.ts:10-60; activity-labels.ts
 - **AT:** a11y test (W5 exit; no AT ID) · **Trace:** TM-14
@@ -1361,7 +1545,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W6-PR5 — WMI detection + test with fake output
 
-- **Owner:** Model/Runtime owner · **Depends on:** W6-PR1, W6-PR2, W6-PR3
+- **Owner:** Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: W6-PR1, W6-PR2, W6-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Win32_VideoController + registry qwMemorySize because of the 4 GB AdapterRAM cap.
 - **Files (from the plan, not re-verified):** hardware-detect.ts:330
 - **AT:** — (TM-13; FRD §15 AT-20 is closed by W6-PR1..PR4) · **Trace:** TM-13
@@ -1370,7 +1555,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W6-PR8 — Wizard reorder + OpenAI-compatible presets
 
-- **Owner:** UX owner; Model/Runtime owner · **Depends on:** W6-PR1, W6-PR2, W6-PR3
+- **Owner:** UX owner; Model/Runtime owner
+- **Readiness (from backlog.csv):** technical: W6-PR1, W6-PR2, W6-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Flow: what you want → model → first Workspace + sources → optional mail/calendar → first task; llama.cpp/LM Studio presets.
 - **Files (from the plan, not re-verified):** OnboardingWizard.tsx; ModelGate.tsx
 - **AT:** — (TM-14) · **Trace:** TM-14
@@ -1381,7 +1567,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR1 — Channel profile table + evidence card per channel (doc)
 
-- **Owner:** Attention owner · **Depends on:** — · **Gate:** DQ-06
+- **Owner:** Attention owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** live/bot/export/roadmap per channel.
 - **Files (from the plan, not re-verified):** FRD
 - **AT:** — (TM-12) · **Trace:** TM-12
@@ -1390,7 +1577,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR2 — WorkItem store + erasure/export (MIG-06/08)
 
-- **Owner:** Attention owner; Memory owner (erasure) · **Depends on:** — · **Gate:** DQ-06
+- **Owner:** Attention owner; Memory owner (erasure)
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Action/Commitment/Decision/Signal with provenance, confidence, user correction; merging is reversible.
 - **Files (from the plan, not re-verified):** UNKNOWN (new state layer, not .mind)
 - **AT:** AT-15 part; AT-27 (WorkItem part, G3 authoritative); AT-13 (regression) · **MIG:** MIG-06; MIG-08 · **Trace:** TM-12, TM-16
@@ -1399,7 +1587,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR3 — Sync engine for the chosen ecosystem + cursor/delta + BYO OAuth client
 
-- **Owner:** Attention owner · **Depends on:** W7-PR2 · **Gate:** DQ-06; CASA if Gmail
+- **Owner:** Attention owner
+- **Readiness (from backlog.csv):** technical: W7-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH, CASA-GMAIL · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** historyId/syncToken/delta, lost cursor, revoked credentials, retention.
 - **Files (from the plan, not re-verified):** gmail-connector.ts / outlook-connector.ts (per DQ-06)
 - **AT:** AT-19 part; AT-11 (regression) · **Trace:** TM-12
@@ -1407,7 +1596,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR4 — Classifier + labeled set tooling + eval script
 
-- **Owner:** Attention owner · **Depends on:** W7-PR3 · **Gate:** DQ-09 (threshold before scoring)
+- **Owner:** Attention owner
+- **Readiness (from backlog.csv):** technical: W7-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06, DQ-09 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: human:labeling
 - **Scope (Delivery §2):** Labeled holdout; precision floor locked before scoring; labeling = human hours (8–16 h, size UNKNOWN).
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** AT-24 · **Trace:** TM-12
@@ -1415,7 +1605,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR5 — Home What-Needs-Me list + actions
 
-- **Owner:** Attention owner (home.ts: UX owner) · **Depends on:** — · **Gate:** DQ-06 (W7 input contract)
+- **Owner:** Attention owner (home.ts: UX owner)
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** dismiss/snooze/convert/link/correct.
 - **Files (from the plan, not re-verified):** home.ts; HomeCockpit.tsx
 - **AT:** — (TM-12) · **Trace:** TM-12
@@ -1424,7 +1615,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR6 — Convert-to-work → DurableRun with taint
 
-- **Owner:** Attention owner; Security owner · **Depends on:** W7-PR4, W2-PR3
+- **Owner:** Attention owner; Security owner
+- **Readiness (from backlog.csv):** technical: W7-PR4, W2-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Never executes an unapproved external effect.
 - **Files (from the plan, not re-verified):** UNKNOWN
 - **AT:** AT-19 part (G3) · **Trace:** TM-12
@@ -1433,7 +1625,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W7-PR7 — Second source (calendar of the same ecosystem)
 
-- **Owner:** Attention owner · **Depends on:** W7-PR3
+- **Owner:** Attention owner
+- **Readiness (from backlog.csv):** technical: W7-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-06 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Shares the PR3 cursor pattern.
 - **Files (from the plan, not re-verified):** gcal-connector.ts / outlook-connector.ts (per DQ-06)
 - **AT:** — (TM-12) · **Trace:** TM-12
@@ -1444,7 +1637,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W8-PR3 — IM approve token flow + pairing persistence (Telegram only) + MIG-06/08
 
-- **Owner:** Channels owner · **Depends on:** W1-PR14 · **Gate:** DQ-07
+- **Owner:** Channels owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-07 · merge: MERGE-AUTH, REVIEW-2, W1-PR14 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Short-lived one-time token bound to pending_action.id, payload fingerprint, expiry; replay/forward does not yield a grant; fake Telegram in the test.
 - **Files (from the plan, not re-verified):** pairing.ts:95-123; `channels/*`; channels.json
 - **AT:** AT-25; AT-27 part (MIG-08 pairing) · **MIG:** MIG-06; MIG-08 · **Trace:** TM-22
@@ -1453,7 +1647,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W8-PR4 — Status push / routine result / forward→WorkItem (Telegram only)
 
-- **Owner:** Channels owner · **Depends on:** W8-PR3 · **Gate:** DQ-07
+- **Owner:** Channels owner
+- **Readiness (from backlog.csv):** technical: W8-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-07 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Status push and forward into WorkItem.
 - **Files (from the plan, not re-verified):** `channels/*`
 - **AT:** AT-25 · **Trace:** TM-22
@@ -1462,7 +1657,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W8-PR5 — Certify: notices/SBOM asserts + packaged migration step against the golden fixture
 
-- **Owner:** Release owner · **Depends on:** OSS-PR3 · **Gate:** DQ-02 (via OSS-PR3)
+- **Owner:** Release owner
+- **Readiness (from backlog.csv):** technical: OSS-PR3 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, REVIEW-2, FOUNDER-REVIEW · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: host:vm-disposable, hotspot:release
 - **Scope (Delivery §2):** The only PR with certify asserts for notices/SBOM; execution only on a dedicated VM or a disposable account.
 - **Files (from the plan, not re-verified):** scripts/certify-windows-installer.ps1
 - **AT:** AT-30 · **ADR:** ADR-10 · **Trace:** TM-18
@@ -1471,27 +1667,40 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### W8-PR6 — Release checklist doc + review ADR-10
 
-- **Owner:** Release owner · **Depends on:** — · **Gate:** RAT-09 before merge
-- **Scope (Delivery §2):** Exact commands from package.json/release.yml, without running them.
+- **Owner:** Release owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-09 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
+- **Scope (Delivery §2):** Exact commands from package.json/release.yml, without running them; runbook of the release path F3a → K → F3b → GO → promotion with the list of prerequisites and checks (Delivery §5.1 RP-01..RP-12).
 - **Files (from the plan, not re-verified):** docs (release checklist)
 - **AT:** AT-30 (egress part, TM-24) · **ADR:** ADR-10 (O1–O3, O7) · **Trace:** TM-19, TM-24
 - **Estimate (classic / AI):** 1–1.5 / 1–1 · **Receipts:** —
 - **Note:** GitHub settings = owner actions, not a PR
 
+#### W8-PR7 — release.yml: bootstrap identity as a protected input (conditional, REL-BOOT)
+
+- **Owner:** Release owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, REL-BOOT · merge: MERGE-AUTH, REVIEW-2, FOUNDER-REVIEW · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: hotspot:release
+- **Scope (Delivery §5.1 RP-11):** (a) bootstrap identity `vX.Y.Z@<sha>` from a protected input instead of the hardcoded `0.2.0`, only while no published Windows release exists; (b) only if ADR-10-T13 fails: promotion of the sealed output of an existing run without a rebuild. All existing boundary checks remain (repo, tag, clean checkout, `GITHUB_WORKFLOW_SHA`, ancestry, signer subject, binding SHA). The PR does not run the workflow.
+- **Files (verified on `2af0904d`):** `.github/workflows/release.yml:232-296`; `scripts/publish-windows-release.ps1:563-575,602,633,699`
+- **AT:** AT-30 · **ADR:** ADR-10 (O11, O12) · **Trace:** TM-19
+- **Estimate (classic / AI):** UNKNOWN (estimated by the tech lead) · **Receipts:** — (changes the workflow on `S`; the artifact is produced only in K)
+- **Note:** merge before F3-SRC, because the tag run uses the workflow from `S` (`release.yml:210-211`). REL-BOOT is decided after the REL-T13 gate (ADR-10-T13, before F3-SRC). If REL-T13 requires (b), scope (b) enters this ticket. If the founder decides REL-BOOT = no (allowed only when REL-T13 does not require (b)), the ticket is DEFERRED, and the bootstrap `v0.2.0` is one-time (RP-10). `release.yml` is not touched without founder review.
+
 ### WB
 
 #### WB-PR3 — KVARK registration + gate (vault config and health.ok) + connect/validate/disconnect/revoke
 
-- **Owner:** Boundary owner (local/index.ts: Server owner) · **Depends on:** WB-PR2 · **Gate:** RAT-08 before merge
+- **Owner:** Boundary owner (local/index.ts: Server owner)
+- **Readiness (from backlog.csv):** technical: WB-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-08, REVIEW-2, KVARK-IF · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: hotspot:server-index
 - **Scope (Delivery §2):** Gate getKvarkConfig(vault)!==null && health.ok; no-sharing default; no cloud fallback; isEnterprise from the connection state; revocation ledger hook (W1-PR15).
 - **Files (from the plan, not re-verified):** kvark-tools.ts; local/index.ts (tool registration); SettingsApp.tsx:1332-1343
 - **AT:** AT-26 (G3 authoritative) · **ADR:** ADR-08 (O3) · **MIG:** MIG-07.3 · **Trace:** TM-15
 - **Estimate (classic / AI):** 4–5 / 2–2.5 · **Receipts:** I; P; R
-- **Note:** F-TK-11; surface measured by B3 → carry-forward review
+- **Note:** F-TK-11; surface measured by B3 → carry-forward review; contract and owner of the KVARK API per PRD-13-10 pt.4 and FRD-11.4 (gate KVARK-IF before merge; 05 N-29); no JA/MI/KOMPANIJA, roster or KVARK Workspace functions (PRD-13-10 pt.3)
 
 #### WB-PR4 — Dead tier code + reader dedup + session cap/embeddingProviders + GET /api/admin/overview
 
-- **Owner:** Boundary owner · **Depends on:** — · **Gate:** RAT-08 before merge
+- **Owner:** Boundary owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, RAT-08, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: hotspot:tiers
 - **Scope (Delivery §2):** readTierFromDataDir dedup; session cap and embeddingProviders as a runtime/deployment value with measurement.
 - **Files (from the plan, not re-verified):** connectors.ts:183; workspaces.ts:341; fleet.ts:8; tier-session-cap.ts:4; tiers.ts:85
 - **AT:** AT-27 part (MIG-07.2) · **ADR:** ADR-08 (08.2c/e/f/h/i) · **MIG:** MIG-07.2 · **Trace:** TM-15, TM-16
@@ -1500,7 +1709,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### WB-PR5 — LEGACY_TIER_MAP v2 + config.json v2 + checkout.ts 400 + www/in-app copy + PRO leftovers
 
-- **Owner:** Boundary owner · **Depends on:** — · **Gate:** DQ-03 (and DQ-01 for www copy)
+- **Owner:** Boundary owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-03 · merge: MERGE-AUTH, DQ-01, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Read-compatible mapping; Class A rollback; Stripe unchanged until DQ-03.
 - **Files (from the plan, not re-verified):** checkout.ts; en.json:196-250; Pricing.tsx:10-58; command-catalog.ts:80; WorkspaceDesktopApp.tsx:381,939-949; PlanCards.tsx:59; SettingsApp.tsx:1029,1041
 - **AT:** AT-27 (tier part, G3 authoritative) · **ADR:** ADR-08 (08.2d) · **MIG:** MIG-07.4 · **Trace:** TM-16
@@ -1508,7 +1718,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### WB-PR6 — Team-sync fate (isolate+freeze / legacy compat)
 
-- **Owner:** Boundary owner · **Depends on:** — · **Gate:** RAT-08; DQ-03
+- **Owner:** Boundary owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-03 · merge: MERGE-AUTH, RAT-08, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** The KVARK adapter variant is conditional on ADR-08-K9 (UNKNOWN) and outside the G3 range.
 - **Files (from the plan, not re-verified):** team-sync.ts
 - **AT:** AT-26 (TM-15: personal mind is not copied) · **ADR:** ADR-08 (O5); ADR-09 · **MIG:** MIG-07.5 · **Trace:** TM-15
@@ -1518,7 +1729,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### OSS-PR3 — Notices generator + native LICENSE + fix of EXTRACTION.md in 3 NOTICE
 
-- **Owner:** OSS/License owner · **Depends on:** — · **Gate:** DQ-02
+- **Owner:** OSS/License owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Generator over the resources/node_modules closure + manual entries; certify asserts are in W8-PR5.
 - **Files (from the plan, not re-verified):** scripts/bundle-native-deps.mjs:113-130; 3 hive-mind NOTICE
 - **AT:** AT-30 part (notices) · **ADR:** ADR-10 · **Trace:** TM-18
@@ -1527,7 +1739,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### OSS-PR4 — License CI (blocking) + npm audit decision
 
-- **Owner:** OSS/License owner · **Depends on:** — · **Gate:** DQ-02
+- **Owner:** OSS/License owner
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-02 · merge: MERGE-AUTH, REVIEW-2 · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Borrowed tool per the Build-vs-Borrow record (e.g. license-checker/cargo-about).
 - **Files (from the plan, not re-verified):** .github/workflows/ci.yml
 - **AT:** — (TM-18) · **ADR:** ADR-10 · **Trace:** TM-18
@@ -1535,7 +1748,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### OSS-PR5 — Drift baseline review (maintainer)
 
-- **Owner:** OSS/License owner; Memory owner (maintainer) · **Depends on:** — · **Gate:** DQ-02
+- **Owner:** OSS/License owner; Memory owner (maintainer)
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-02 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Classify the 3 unreviewed; reconcile or re-baseline the 22 blockers with maintainer review.
 - **Files (from the plan, not re-verified):** scripts/oss-drift-baseline.json; scripts/oss-drift-check.mjs
 - **AT:** — (TM-18) · **ADR:** ADR-10 · **Trace:** TM-18
@@ -1545,7 +1759,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### B3-PR1 — Pre-registration document (hash) before looking at test answers
 
-- **Owner:** Benchmark owner · **Depends on:** B2-PR2 · **Gate:** F2 freeze; DQ-04; DQ-09
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B2-PR2 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH, DQ-04, DQ-09 · milestone: start_after:F2, start_after:G2-EXIT, merge_before:B3-RUN, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** Hypothesis, metric, N from B2 variance, budgets, stop criteria, analysis.
 - **Files (from the plan, not re-verified):** `benchmarks/results/<test>-<datum>/`
 - **AT:** AT-28; AT-29 · **Trace:** TM-17
@@ -1554,7 +1769,8 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 #### B3-PR2 — Results + recount + message (DIR-23)
 
-- **Owner:** Benchmark owner · **Depends on:** B3-PR1
+- **Owner:** Benchmark owner
+- **Readiness (from backlog.csv):** technical: B3-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:B3-RUN, start_after:G2-EXIT, merge_before:F3-SRC · resources: —
 - **Scope (Delivery §2):** After B3 execution (10–20 wd wall-clock, PROPOSAL placeholder, UNKNOWN); message per result.
 - **Files (from the plan, not re-verified):** `benchmarks/results/<test>-<datum>/`; recount.mjs
 - **AT:** AT-28; AT-29 · **Trace:** TM-17
@@ -1569,29 +1785,30 @@ G3 starts after F2. Range assumption: DQ-02, DQ-03, DQ-06, DQ-07 and DQ-08 are d
 
 This is a **PROPOSAL** from this handoff, not a decision and not a new estimate. The order is the G1 order from Delivery §3, and the numbers are from Delivery §4.2/§4.3. The plan does not define a sprint length. A sprint of 10 working days is proposed here.
 
-**Sprint start = the day after written founder approval of the delivery plan.** The dates in the plan (G1 18.10.2026–01.11.2026) are calculated from a start on 27.09.2026. The actual start is UNKNOWN, so all dates shift by the time until approval.
+**Sprint start = T0** ([Delivery §4.4.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)): the first working day after the day on which the gates `PLAN-APPROVAL`, `TSA-09`, `Q00-h` and `ROLE-ASSIGN` for the tech lead and the lane roles of week 1 were closed in writing ([backlog-gates.csv](backlog-gates.csv)). The dates in the plan (G1 18.10.2026–01.11.2026) are reference dates, calculated from T_ref = 27.09.2026; they are not a deadline and are not counted retroactively. Sprint 1 = weeks 1–2, and sprint 2 = weeks 3–4 of the first-month frame ([Delivery §4.4.4](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)).
 
 **Before day 1 (gates, no code):**
-1. Written founder approval of the delivery plan.
-2. Roles from DP-0.14 assigned to people (Harness, Chat, Durable, Memory, Server, Boundary, Release, OSS/License for G1). Assignment: UNKNOWN.
-3. Founder decision on the worktree at `2af0904d` for W0-PR19 (open LOW finding). Without it, the Memory lane starts with W0-PR10 and W0-PR11, while W0-PR6 and W0-PR18 wait.
-4. Decision on how the package (PRD/FRD/ADR) enters the integration branch, because WB-PR1 supplements it. The package is untracked in the worktree `D:/Projects/waggle-v12-handoff` (branch `docs/waggle-v1.2-planning` = `2af0904d`, no commit, not on origin) — CONFIRMED AT REVISION (read-only, 29.09.2026). How it enters `integration/waggle-next`: UNKNOWN.
-5. Env template from the checklist reviewed. Node `22.23.2`.
+1. Written founder approval of the delivery plan. Gate: `PLAN-APPROVAL`.
+2. Roles from DP-0.14 assigned to people (Harness, Chat, Durable, Memory, Server, Boundary, Release, OSS/License for G1). Assignment: UNKNOWN. Fields: [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) §1. Gates: `ROLE-ASSIGN` (per ticket) and `MERGE-AUTH`.
+3. Founder decision on the baseline fixture worktree at `2af0904d` for W0-PR19 (open LOW finding `finish/checklist/f1/13`; proposal TSA-05 in [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md)). Without it, the Memory lane starts with W0-PR10 and W0-PR11, while W0-PR6 and W0-PR18 wait. Gate: `finish/checklist/f1/13` (start of W0-PR19).
+4. Decision on how the package (PRD/FRD/ADR) enters the integration branch, because WB-PR1 supplements it. State on 30.09.2026 (read-only): the package is committed (`planning_package_sha` `2758f4e5`, on the public `origin`), the translation `fc0a7b3f` is a local commit, and the closure revision 1.2.1 is not committed ([00 §1.1](00-START-HERE.en.md)). Handover channel and `<ODOBRENI_TIMSKI_REMOTE>`: awaiting the founder (00 §6 (n), H-01). How it enters `integration/waggle-next`: awaiting the founder (00 §6 (h), with a recommendation). Gates: `TSA-09` and `Q00-h`; job: INT-01 (§8.1).
+5. Env template from the checklist reviewed. Node `22.23.2`. A safe test profile (BTP) exists for everyone who runs sidecar/web/E2E, hook/launch/canary or the root suite (checklist "Safe test profile (BTP)"; [01 §9.0](01-ONBOARDING-DEV-ENV.en.md)); the "before" snapshot per 01 §9.5 has been taken.
 
-**Sprint content (25 tickets + 1 doc-only PR):**
+**Sprint content (26 PR tickets + INT-01 + INT-02; INT-05 once TSA-06 and TSA-10 are confirmed):**
 
 | Lane (worktree) | Order | Tickets | Estimate (classic / AI) |
 |---|---|---|---|
-| Integration | day 1 | W0-PR0 → then create 4 agent worktrees from `integration/waggle-next` | in the group PR0+PR12+PR13+PR15+PR16 |
-| Harness | critical sequence 3–4 wd (Delivery §3; order within the lane, not an edge in `depends_on` — §2.1) | W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9; then W0-PR2, W0-PR3 (after PR1 and PR8), W0-PR4, W0-PR5; W0-PR6 after W0-PR7 and W0-PR19 | PR1..PR8: 4.5–6 / 2–3; PR9: 1.5–2 / 0.5–0.5 |
+| Integration | day 1 | INT-01 → W0-PR0 → then create 4 agent worktrees from `integration/waggle-next` | INT-01: UNKNOWN; W0-PR0 in the group PR0+PR12+PR13+PR15+PR16 |
+| Harness | critical sequence 3–4 wd (Delivery §3; `sequence_after`, not a technical dependency — §2.1) | W0-PR1 → W0-PR7 → W0-PR8 → W0-PR9; then W0-PR2, W0-PR3 (after PR1 and PR8), W0-PR4, W0-PR5; W0-PR6 after W0-PR7 and W0-PR19 | PR1..PR8: 4.5–6 / 2–3; PR9: 1.5–2 / 0.5–0.5 |
 | Memory | W0-PR19 first (if approved) | W0-PR19 → W0-PR10 → W0-PR11 → W0-PR18 | PR19: 1–1.5 / 0.5–1; PR10+PR11: 2–3 / 1–1.5; PR18: 1–1.5 / 0.5–1 |
 | Boundary+Release | independent | W0-PR12, W0-PR13, W0-PR15, W0-PR16, W0-PR17; WB-PR1 → WB-PR2; OSS-PR1, OSS-PR2; W8-PR1 | group PR0+PR12+PR13+PR15+PR16: 1–1.5 / 0.5–1; PR17: 0.5–1 / 0.5–0.5; WB-PR1/PR2: 3–5 / 1.5–2.5; OSS-PR1/PR2: 4–5 / 2–3; W8-PR1: 2–2 / 1–1 |
 | Durable-probe | independent | W0-PR14 | 0.5–0.5 / 0.5–0.5 |
-| Integration | end of sprint | ID reconcile doc-only PR (FRD §16.1 ↔ PRD v1.2 ↔ Delivery §7; no PR ID) | 1–1 / 0.5–0.5 (row "Integration/spec sync", G1) |
+| Server (isolation) | independent; runtime confirmation after merge, in the BTP | W0-PR20 | 1–2 / 0.5–1 (revision 1.2.1; not in the capacity below, which is from revision 1.2) |
+| Integration | end of sprint | INT-02 — ID reconcile doc-only PR (FRD §16.1 ↔ PRD v1.2 ↔ Delivery §7) | 1–1 / 0.5–0.5 (row "Integration/spec sync", G1) |
 
 **Capacity (from the plan, not measured):** G1 = 11–16 AI / 22–30 classic eng-days. The effort bound is 3.7–6.4 wd at a parallelism of 2.5–3.0. Serial founder review ~26 PRs ÷ ~3 PRs/day ≈ 8.7 wd (UNKNOWN; at 2 PRs/day ≈ 13 wd). Review is therefore the bottleneck of the first sprint, not engineering work.
 
-**Sprint 1 goal (PROPOSAL):** all 25 G1 tickets and the ID reconcile PR merged into `integration/waggle-next`, with green DP-0.06 gates on the integration branch (G1 exit (m)). Every PR has RED→GREEN evidence and a checklist with no "no".
+**Sprint 1 goal (PROPOSAL):** all 26 G1 PR tickets and INT-02 merged into `integration/waggle-next`, with green DP-0.06 gates on the integration branch (G1 exit (m)). Every PR has RED→GREEN evidence and a checklist with no "no".
 
 **After sprint 1 (sprint 2, PROPOSAL):** CI wall-clock and rework 2–4 wd; **F1** (3–5 wd): internal `certify-windows-installer.ps1` clean-profile on a dedicated VM or a disposable Windows account, P seal and R qualification for the exact SHA of the integration branch, with ODB-01 for paid runs; RAT-01 before G1 closes; the F1 retrospective measures actual AI eng-days per PR against Delivery §4.1.1 (first measurement of AI throughput). G1 total: **3–5 weeks** (13.7–22.0 wd). W1 does not start before the end of G1 (the plan's serial assumption).
 
@@ -1609,16 +1826,100 @@ The IDs `N-01..N-08` are valid only in this document. Outside it they are writte
 | N-02 | Owner role for W0-PR0 and W0-PR19 (the plan does not assign one). For W0-PR9 the plan and FRD §15 list different roles (Harness vs Evolution owner). | owner_role | tech lead |
 | N-03 | Exact files of W0-PR18 and W0-PR19, names of the new test files (FRD §15: "the exact name of the new test file is set by the PR"), location of the OSS-PR1 document and the OSS-PR2 script. | G1 cards | implementer in the PR |
 | N-04 | Per-ticket AT for tickets that a TM row covers only as a group (e.g. W2-PR4/PR5/PR10, W3-PR2/PR3, W3e-PR5/PR7, W4-PR1, W6-PR5/PR8, W7-PR1/PR5/PR7, OSS-PR1/PR2/PR4/PR5, B2-PR0a..c/PR3). Per-PR receipts for waves where the plan gives only the wave (W1, W3, W4, W5, W7). Per-PR PRD/FRD within a TM row. | CSV columns `at_ids`, `receipts_affected`, `prd_ids`, `frd_ids` | tech lead + wave owner |
-| N-05 | Dependency edges that the §3 graph does not provide: ordering within W3e-PR2..PR8, W4-PR8, W5-PR5/PR7, W7-PR1/PR2/PR5, W8-PR6, OSS-PR3..PR5 relative to each other. | `depends_on` (empty or wave only) | tech lead |
-| N-06 | ID and owner of the integration PRs (G1 ID reconcile, G2 hotspot integration tests, G3 reconcile). | §0 B-04 | tech lead |
-| N-07 | Path of the document package into the integration branch. The package is untracked in the worktree `D:/Projects/waggle-v12-handoff` (branch `docs/waggle-v1.2-planning` = `2af0904d`, no commit, not on origin) — CONFIRMED AT REVISION (read-only, 29.09.2026). How it enters `integration/waggle-next`: UNKNOWN. | WB-PR1, W3-PR1 and all review ADR tickets | founder / tech lead |
+| N-05 | Dependency edges that the §3 graph does not provide: ordering within W3e-PR2..PR8, W4-PR8, W5-PR5/PR7, W7-PR1/PR2/PR5, W8-PR6, OSS-PR3..PR5 relative to each other. | `technical_dependencies` (empty or wave only) | tech lead |
+| N-06 | ID and owner of the integration PRs (G1 ID reconcile, G2 hotspot integration tests, G3 reconcile). Resolved in revision 1.2.1: INT-02, INT-03, INT-04 (§8.1); owner names: UNKNOWN until roles are assigned. | §0 B-04 | tech lead |
+| N-07 | Path of the document package into the integration branch. State on 30.09.2026 (read-only): the package is committed (`2758f4e5`, on the public `origin`), the closure revision 1.2.1 is not committed ([00 §1.1](00-START-HERE.en.md)). Handover channel: awaiting the founder (00 §6 (n), H-01). How it enters `integration/waggle-next`: awaiting the founder (00 §6 (h)). → INT-01 (§8.1). | WB-PR1, W3-PR1 and all review ADR tickets | founder / tech lead |
 | N-08 | Start date (approval day), founder review capacity, AI throughput, duration of F1. | §6 calendar | founder; F1 retrospective |
+
+---
+
+## 8. Integration jobs (INT) and tracker import
+
+Added in revision 1.2.1 (H-06). Status: PROPOSAL. Integration jobs are not PR IDs from Delivery §2 (§0 B-04). They carry an ID, owner, dependencies, gates and a completion criterion, just like PR tickets, and in [backlog.csv](backlog.csv) have `wave` = `INT`.
+
+### 8.1 INT cards
+
+#### INT-01 — Integration branch `integration/waggle-next` with the v1.2 package
+
+- **Owner:** accountable tech lead (ESK-01). The branch's source commit is set by the founder's answer to [00 §6 (h)](00-START-HERE.en.md).
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, TSA-09, Q00-h · merge: — · milestone: — · resources: lane:integracija
+- **Scope:** create `integration/waggle-next` on `<ODOBRENI_TIMSKI_REMOTE>` from the commit determined by the answer to (h), without code changes. Branch protection and other repo settings are the founder's decision ([TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) §2). Not a PR, so it has no merge gate.
+- **Completion criterion:** (1) `git ls-remote <ODOBRENI_TIMSKI_REMOTE> refs/heads/integration/waggle-next` returns the SHA recorded in the record of this job and in the [package manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md); (2) `git merge-base --is-ancestor 2af0904df01ca3d374cc78ba95b60dc579dd6a7a <SHA>` returns exit 0; (3) `git diff --name-only 2af0904df01ca3d374cc78ba95b60dc579dd6a7a <SHA>` lists only `docs/…`.
+- **Source:** 00 §6 (h); §6 "Before day 1" pt.4; §7 N-07. **Estimate:** not given in the plan (UNKNOWN).
+
+#### INT-02 — ID reconcile FRD §16.1 ↔ PRD v1.2 ↔ Delivery §7 (doc-only)
+
+- **Owner:** UNKNOWN in the plan; proposal: tech lead.
+- **Readiness (from backlog.csv):** technical: INT-01, WB-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: merge_before:F1 · resources: lane:integracija
+- **Scope:** one doc-only PR that aligns the IDs of PRD v1.2, FRD §16.1 and Delivery §7 after the G1 changes (including the WB-PR1 FRD supplements).
+- **Completion criterion:** on `integration/waggle-next` after the merge, `node docs/plans/v1.2-evidence/tools/check_trace.mjs docs` and `node docs/plans/v1.2-evidence/tools/check_backlog.mjs` return exit 0; every PRD/FRD/AT ID that G1 PRs introduce or change exists in FRD §16.1 and in Delivery §7; merge before F1.
+- **Source:** Delivery §4.1, row "Integration/spec sync" (1). **Estimate:** 1–1 / 0.5–0.5.
+
+#### INT-03 — Hotspot integration tests `chat.ts`/`agent-loop.ts` (W1-PR4/PR8/PR9 × W3-PR2 × W4-PR1)
+
+- **Owner:** Chat owner and Harness owner (hotspot owners, [02 §3](02-WORKING-AGREEMENT.en.md)); accountable tech lead.
+- **Readiness (from backlog.csv):** technical: W1-PR4, W1-PR8, W1-PR9, W3-PR2, W4-PR1 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN · merge: MERGE-AUTH · milestone: start_after:G1-EXIT, merge_before:F2 · resources: hotspot:chat, hotspot:agent-loop
+- **Scope:** integration tests on the integration branch for PRs that share a hotspot table row `chat.ts` + `chat-*.ts` or `agent-loop.ts` + `loop-gates.ts`. The plan counts 1–3 PRs; split per TSA-06.
+- **Completion criterion:** after the merge of W1-PR4, W1-PR8, W1-PR9, W3-PR2 and W4-PR1, for every pair of those PRs that shares a hotspot table row at least one named test exists that exercises the changes of both PRs together (definition from TSA-07 pt.2 (b); a test from PR B per TSA-07 also counts if it covers the pair); the four gates and the supplementary checks ([02 §6.2–§6.3](02-WORKING-AGREEMENT.en.md)) green on `integration/waggle-next`; the result is signed off by the hotspot merge owner (TSA-07 pt.3); merge before F2.
+- **Source:** Delivery §4.1, row "Integration/spec sync" (2). **Estimate:** 2–3 / 1–1.5.
+
+#### INT-04 — Reconcile after DQ-02/03/06/07 decisions (doc-only)
+
+- **Owner:** UNKNOWN in the plan; proposal: tech lead.
+- **Readiness (from backlog.csv):** technical: — · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, DQ-02, DQ-03, DQ-06, DQ-07 · merge: MERGE-AUTH · milestone: start_after:G2-EXIT, merge_before:F3-SRC · resources: —
+- **Scope:** PRD, FRD, Delivery §7 and the backlog (CSV and gate registry) aligned with the recorded decisions DQ-02, DQ-03, DQ-06 and DQ-07.
+- **Completion criterion:** `check_trace.mjs` and `check_backlog.mjs` return exit 0 on the integration branch; each of the four decisions has an entry in the affected documents, with the decision date; merge before F3-SRC.
+- **Source:** Delivery §4.1, row "Integration/spec sync" (3). **Estimate:** 0–1 / 0–0.5.
+
+#### INT-05 — Alignment of `AGENTS.md`/`CLAUDE.md` with TSA-06 and TSA-10 (doc-only)
+
+- **Owner:** accountable tech lead (ESK-01); the PR is approved by the founder, as the owner of those contracts.
+- **Readiness (from backlog.csv):** technical: INT-01 · after: — · start: PLAN-APPROVAL, ROLE-ASSIGN, TSA-06, TSA-10 · merge: MERGE-AUTH, FOUNDER-REVIEW · milestone: — · resources: lane:integracija
+- **Scope:** a separate doc-only PR that, for team work, points `AGENTS.md` §4 and §3.8 and `CLAUDE.md` §4 and §3.8 to [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) (TSA-06, TSA-10). It does not block other tickets; until the merge, the conflict `AGENTS.md §4` ↔ `TSA-06` is resolved by TSA-10 pt.2.
+- **Completion criterion:** the PR changes only `AGENTS.md` and `CLAUDE.md`; the founder's written approval is in the PR; merge into `integration/waggle-next`.
+- **Source:** TEAM-START-AUTHORIZATION TSA-06 ("Alignment of repo files"). **Estimate:** not given in the plan (UNKNOWN).
+
+### 8.2 Tracker import
+
+1. **Before import.** On the same commit, `node docs/plans/v1.2-evidence/tools/check_backlog.mjs` and `node docs/plans/v1.2-evidence/tools/check_trace.mjs docs` return exit 0. The SHA-256 of the files `handoff/backlog.csv`, `handoff/backlog-gates.csv`, `handoff/03-BACKLOG.md`, `Waggle_PRD_v1.2_DRAFT.md` and `Waggle_FRD_v1.2_DRAFT.md` (FRD §15 is the acceptance map) equal the hashes in the [package manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3. On any difference the import is not done.
+2. **Column mapping.**
+
+| CSV column | In the tracker | Note |
+|---|---|---|
+| `ticket_id` | external key and title prefix | not renumbered |
+| `wave`, `milestone` | label; milestone/version | INT rows: label `INT` |
+| `technical_dependencies` | "blocked by" link (type: technical) | blocks the start |
+| `sequence_after` | "blocked by" link (type: order) | a separate link type or the label `redosled`, to distinguish it from technical; blocks the start |
+| `start_gates` | gate record per `gate_id` from the registry + "blocked by" link | a gate is a separate record with a status, not a work ticket; blocks the start |
+| `merge_gates` | "merge gates" field; a ticket from the list as a "merge after" link | does not block the "in progress" status; blocks the merge |
+| `milestone_gate` | `start_after`: "blocked by" link to the event record; `merge_before`: due date/milestone | an event is a separate record from the registry |
+| `resource_constraints` | labels | do not enter automatic readiness |
+| other columns | description or custom fields | as in revision 1.2 |
+
+3. **Transition from revision 1.2.** The column `depends_on` was renamed to `technical_dependencies`. For 114 of 123 tickets the value was carried over 1:1. Nine changes:
+
+| Ticket | `depends_on` (1.2) | `technical_dependencies` (1.2.1) | Moved | Source |
+|---|---|---|---|---|
+| W0-PR0 | — | INT-01 | new edge | INT-01: the integration branch must exist |
+| W1-PR2 | W1-PR1;W1-PR13;W1-PR15 | W1-PR1 | W1-PR13, W1-PR15 → `merge_gates` | Delivery §3: W1-PR13/PR15 "must arrive only before the W1-PR2 apply"; §2 W1-PR13 "merge before the W1-PR2 apply" |
+| W1-PR7 | W1-PR4;W1-PR13;W1-PR14;W1-PR15 | W1-PR4 | W1-PR13, W1-PR14, W1-PR15 → `merge_gates` | Delivery §3: W1-PR14 "merge prerequisite MIG-08 section"; "W1-PR13 + W1-PR15 ──► every G2 apply" |
+| W1-PR11 | W1-PR9;W0-PR14;W1-PR14 | W1-PR9;W0-PR14 | W1-PR14 → `merge_gates` | Delivery §3: merge prerequisite MIG-08 |
+| W3e-PR1 | W0-PR9;W1-PR13;W1-PR14;W1-PR15 | W0-PR9 | W1-PR13, W1-PR14, W1-PR15 → `merge_gates` | Delivery §3: "merge after W1-PR14 and W1-PR13/PR15" |
+| W4-PR3 | W4-PR2;W1-PR13;W1-PR14;W1-PR15 | W4-PR2 | W1-PR13, W1-PR14, W1-PR15 → `merge_gates` | Delivery §3: "W4-PR3 (merge after W1-PR14)"; MIG-06 apply |
+| W4-PR5 | W4-PR4;W1-PR13;W1-PR14;W1-PR15 | W4-PR4 | W1-PR13, W1-PR14, W1-PR15 → `merge_gates` | Delivery §3: merge prerequisite MIG-08; MIG-06 apply |
+| W4-PR6 | W4-PR4;W1-PR13;W1-PR14;W1-PR15 | W4-PR4 | W1-PR13, W1-PR14, W1-PR15 → `merge_gates` | same |
+| W8-PR3 | W1-PR14 | — | W1-PR14 → `merge_gates` | Delivery §3: "(G3: W8-PR3)" merge prerequisite MIG-08 |
+
+New columns (`sequence_after`, `start_gates`, `merge_gates`, `milestone_gate`, `resource_constraints`) and new rows (`W0-PR20`, `INT-01..INT-05`) exist since revision 1.2.1. Gates from the revision 1.2 `notes` ("kapija: …") were carried over into the typed fields; `notes` remain the rationale (§0.1).
+
+4. **Readiness** is computed in the tracker per §0.1. The reference implementation is the simulation in `check_backlog.mjs`.
+5. **A later change** to the fields goes through a doc-only PR that simultaneously changes the CSV, the "Readiness" row in the card (the exact text is given by `node docs/plans/v1.2-evidence/tools/check_backlog.mjs --cards`) and, for new gates, the registry. `check_backlog.mjs` must return exit 0.
 
 ---
 
 ## Sources
 
-- [WAGGLE-DELIVERY-PLAN-v1.2.md](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md): §0 (DP-0.01..DP-0.16), §1 (G1/G2/G3 exit), §2 (PR slicing, owner, hotspot, receipts, rollback), §3 (graph and critical path), §4.1.1 (estimates per PR and per group), §4.2 (review count), §4.3 (calendar), §5 (F1–F4), §6 (DQ-01..DQ-09), §6.1 (RAT-01..RAT-09, ODB-01/02), §7 (TM-01..TM-25).
+- [WAGGLE-DELIVERY-PLAN-v1.2.md](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md): §0 (DP-0.01..DP-0.16), §1 (G1/G2/G3 exit), §2 (PR slicing, owner, hotspot, receipts, rollback), §3 (graph and critical path), §4.1.1 (estimates per PR and per group), §4.2 (review count), §4.3 (calendar), §5 (F1–F4), §6 (DQ-01..DQ-09), §6.1 (RAT-01..RAT-09, ODB-01/02), §7 (TM-01..TM-25).; [backlog-gates.csv](backlog-gates.csv) and [check_backlog.mjs](../plans/v1.2-evidence/tools/check_backlog.mjs) (revision 1.2.1, H-06)
 - [Waggle_FRD_v1.2_DRAFT.md](../Waggle_FRD_v1.2_DRAFT.en.md) §15 (AT-01..AT-30, authoritative wave, fixture, owner), §16.1 (PRD → FRD → AT). [Waggle_PRD_v1.2_DRAFT.md](../Waggle_PRD_v1.2_DRAFT.en.md).
 - [SAFE-IMPLEMENTATION-CHECKLIST.md](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md), [WAGGLE-MIGRATIONS-v1.2.md](../plans/WAGGLE-MIGRATIONS-v1.2.en.md), [WAGGLE-AUDIT-DISPOSITION-v1.2.md](../plans/WAGGLE-AUDIT-DISPOSITION-v1.2.en.md) (A9, C12), [WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md), [ADR-INDEX.md](../decisions/ADR-INDEX.en.md).
 - Phase-A findings: [harness.md](../plans/v1.2-evidence/phaseA/harness.en.md), [evolution.md](../plans/v1.2-evidence/phaseA/evolution.en.md), [durable.md](../plans/v1.2-evidence/phaseA/durable.en.md), [hivemind.md](../plans/v1.2-evidence/phaseA/hivemind.en.md), [capability.md](../plans/v1.2-evidence/phaseA/capability.en.md), [ux-model.md](../plans/v1.2-evidence/phaseA/ux-model.en.md), [tiers-kvark.md](../plans/v1.2-evidence/phaseA/tiers-kvark.en.md), [release-oss.md](../plans/v1.2-evidence/phaseA/release-oss.en.md), [external.md](../plans/v1.2-evidence/phaseA/external.en.md) and `*.refute.md`.

@@ -3,8 +3,11 @@
 > **English translation** of [ci-integration-branch-proposal.md](ci-integration-branch-proposal.md) (Serbian original, same folder). The Serbian original is authoritative; report any discrepancy. Dates are written DD.MM.YYYY; "wd" means working days.
 
 **Document revision: 1.2 DRAFT · 29.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`**
+**Document revision: 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)**
 
-**Status: PROPOSAL.** Nothing in this document has been applied to `.github/` and no workflow has been run. This is a draft of the contents of PR **W0-PR0** ("`integration/**` in the `ci.yml` and `tauri-build-pr.yml` filters", [Delivery plan §2 W0](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md); DP-0.07). The PR is opened only once the founder approves the delivery plan and `integration/waggle-next` exists. The PR's target is `integration/waggle-next`, not `main`.
+Changes 1.2.1: H-09 — the path to a tag is controlled step K after F3a (§3); alignment with H-01 (CI runs on the branch in `<ODOBRENI_TIMSKI_REMOTE>`, §0 and §4) and H-04 TSA-08 (re-run, §4).
+
+**Status: PROPOSAL.** Nothing in this document has been applied to `.github/` and no workflow has been run. This is a draft of the contents of PR **W0-PR0** ("`integration/**` in the `ci.yml` and `tauri-build-pr.yml` filters", [Delivery plan §2 W0](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md); DP-0.07). The PR is opened only once the founder approves the delivery plan and `integration/waggle-next` exists. The PR's target is `integration/waggle-next`, not `main`. The branch and the PR live only on `<ODOBRENI_TIMSKI_REMOTE>` (H-01; [01 §3.2](../01-ONBOARDING-DEV-ENV.en.md)), so the CI from this diff also runs there; the public `origin` is not a destination.
 
 ## 1. Why
 
@@ -61,7 +64,7 @@ What the PR intentionally does **not** change (surgical, `AGENTS.md` §3.3):
 
 - `.github/workflows/release.yml:12-15`: the only trigger is `push.tags: 'v*'`. CONFIRMED AT REVISION.
 - W0-PR0 **does not touch `release.yml`** (DP-0.07). Since `release.yml` is in the `paths` list of `tauri-build-pr.yml`, the reviewer verifies that the diff contains no line in `release.yml`.
-- **No `v*` tag is created or pushed** under this plan. `release.yml` triggers on **any** `v*` tag, and historically non-release tags have already triggered failed runs (DP-0.12; live state AUDIT FINDING — TO VERIFY). `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` remains undefined. The only path to a tag is the founder-gated merge `integration/waggle-next` → `main` after the F3 receipts (Delivery §5 F3, DQ-01).
+- **No `v*` tag is created or pushed** under this plan. `release.yml` triggers on **any** `v*` tag, and historically non-release tags have already triggered failed runs (DP-0.12; live state AUDIT FINDING — TO VERIFY). `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` remains undefined. The only path to a tag is controlled step K after the F3a receipts: a founder-approved fast-forward `main` → `S` and tag `vX.Y.Z` → `S` (Delivery §5.1, DQ-01); the tag is pushed by the repo owner, not the team.
 - The optional narrower trigger `v[0-9]+.[0-9]+.[0-9]+` and a ruleset for `refs/tags/v*` are GitHub operational settings made by the repo owner through W8 (Delivery §2 W8, ADR-10-O8). **They are not part of this PR.**
 
 ## 4. Open (not included in W0-PR0 without a decision)
@@ -69,9 +72,9 @@ What the PR intentionally does **not** change (surgical, `AGENTS.md` §3.3):
 | Item | Status | Who decides |
 |---|---|---|
 | Whether the W0-PR0 PR itself (base `integration/waggle-next`) runs CI before its own merge | UNKNOWN. Gates for W0-PR0 are therefore run locally and the output is pasted | — |
-| Actions budget cost: a `push` to `integration/**` in `tauri-build-pr.yml` runs the Windows (`timeout-minutes: 45`) and macOS matrix (`timeout-minutes: 60`) on every merge that touches `paths` | UNKNOWN (budget not measured) | Release owner → founder |
+| Actions budget cost: a `push` to `integration/**` in `tauri-build-pr.yml` runs the Windows (`timeout-minutes: 45`) and macOS matrix (`timeout-minutes: 60`) on every merge that touches `paths` | UNKNOWN (budget not measured; the monthly limit is entered by the founder in TEAM-START-AUTHORIZATION TSA-08, and the account plan depends on `<ODOBRENI_TIMSKI_REMOTE>`) | Release owner → founder |
 | `hive-mind-cli-cross-platform.yml` (`push`: `main`, `feature/**`; `pull_request`: `main`) and `mind-parity-check.yml`/`sync-mind.yml` (only `main`; `sync-mind` and `mind-parity-check` are deprecation anchors per `CLAUDE.md` §7.5) are not in DP-0.07 | out of scope for W0-PR0 | tech lead per §10 of the working agreement |
-| Manual `workflow_dispatch` or re-run after the merge | **prohibited** without founder approval (checklist, absolute prohibitions) | founder |
+| Manual `workflow_dispatch` or re-run after the merge | **prohibited** without founder approval (checklist, absolute prohibitions). The only proposed exception: a re-run of failed `ci.yml`/`tauri-build-pr.yml` jobs with a recorded infrastructure cause, within budget (TSA-08, NOT APPROVED) | founder |
 
 ## 5. Post-merge verification (PROPOSAL)
 
@@ -81,4 +84,4 @@ What the PR intentionally does **not** change (surgical, `AGENTS.md` §3.3):
 
 ## Sources
 
-[Delivery plan](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) DP-0.07, DP-0.11, DP-0.12, §2 W0 (W0-PR0) and W8, §5 F3, §6 DQ-01 · [SAFE-IMPLEMENTATION-CHECKLIST.md](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) (Baseline, absolute prohibitions) · repo at `2af0904d` (read-only): `.github/workflows/ci.yml:1-6`, `.github/workflows/tauri-build-pr.yml:16-41`, `.github/workflows/release.yml:12-15`, `.github/workflows/hive-mind-cli-cross-platform.yml`, `.github/workflows/mind-parity-check.yml`, `.github/workflows/sync-mind.yml` · [02-WORKING-AGREEMENT.md](../02-WORKING-AGREEMENT.en.md) §10, §14.
+[Delivery plan](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) DP-0.07, DP-0.11, DP-0.12, §2 W0 (W0-PR0) and W8, §5 F3, §5.1 (RP-01..RP-12), §6 DQ-01 · [TEAM-START-AUTHORIZATION](../TEAM-START-AUTHORIZATION.en.md) TSA-08, TSA-09 (PROPOSAL, NOT APPROVED) · [SAFE-IMPLEMENTATION-CHECKLIST.md](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) (Baseline, absolute prohibitions) · repo at `2af0904d` (read-only): `.github/workflows/ci.yml:1-6`, `.github/workflows/tauri-build-pr.yml:16-41`, `.github/workflows/release.yml:12-15`, `.github/workflows/hive-mind-cli-cross-platform.yml`, `.github/workflows/mind-parity-check.yml`, `.github/workflows/sync-mind.yml` · [02-WORKING-AGREEMENT.md](../02-WORKING-AGREEMENT.en.md) §10, §14.

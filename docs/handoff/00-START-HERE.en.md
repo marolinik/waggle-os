@@ -3,64 +3,59 @@
 > **English translation** of [00-START-HERE.md](00-START-HERE.md) (Serbian original, same folder). The Serbian original is authoritative; report any discrepancy. Dates are written DD.MM.YYYY; "wd" means working days.
 
 **Document revision: 1.2 DRAFT · 29.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`**
+**Document revision: 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)**
 
-Who it is for: the tech lead, developers and QA who are taking over Waggle from the founder today. This is the entry point. The document does not copy the package; it tells you what to read, in what order, what you may and must not do, and where work starts once the plan is approved. All relative links start from `docs/handoff/`.
+Changes in 1.2.1: H-02 — package identity (§1.1), a short operational entry point; the history of critique rounds, path normalization, DOCX exports and old hashes moved to [HANDOFF-HISTORY](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md); the package map moved to the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §2; the text of revision 1.2: `git show 2758f4e5:docs/handoff/00-START-HERE.md` · H-01 — distribution status and handoff channel (§1.1, §2, §6 (h)(n), §8) · H-03 — question (g) redirected to the findings register · H-04 — pointers to the [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) proposal (§2, §6 (b)(c)(d)(j)(k)(l)(m)(o), §9) · H-05 — safe test profile (BTP) in §6 row 2 · H-06 — backlog fields and the gate register (§6) · H-09 — release path F3a → K → F3b (§5 pt.4) · H-12 — link to the first-month frame from T0 (§5 pt.3, §6) · final review (H-01/H-04): one rule for "today" until decision (n) — no clone, only `git ls-remote` and a copy of the package verified against the manifest (§2 row 1, §6 step 1; aligned with 01 §0.1, §3.2 and TSA §3); §6 shortened to steps 1–2, the gate and a pointer to 03 §6 / Delivery §4.4.4, and the rationales for questions (a)–(o) moved unchanged to [05 §5.0.1](05-RISKS-DECISIONS-ESCALATION.en.md).
 
-> **Status in one sentence:** the package is a **DRAFT**, implementation is **not approved**, and the first line of code is written only when the founder approves the delivery plan. From that moment on, everything is done according to the mandatory [SAFE-IMPLEMENTATION checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md).
+Who it is for: the tech lead, developers and QA. This is the operational entry point: what the package is, what the team may do today, what awaits approval, in what order work is done and where the sources are. All relative links start from `docs/handoff/`.
+
+> **Status in one sentence:** the package is a **DRAFT**, implementation is **not approved**, the proposal of team authorizations ([TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md)) is **NOT APPROVED** until the founder confirms it, and this documentation refinement is neither an implementation GO nor a ratification of DQ/RAT/ODB items.
 
 Status labels are the same as throughout the package: **DECISION** (founder only, D-01..D-18) · **CONFIRMED AT REVISION** (read or reproduced on `2af0904d`) · **AUDIT FINDING — TO VERIFY** · **PARTIAL/UNWIRED** · **PROPOSAL** · **DEFERRED** · **UNKNOWN**.
 
 ---
 
-## 1. What Waggle is and what this package is
+## 1. What this package is
 
-**Waggle** is a free, open-source, desktop-first and local-first AI work partner for the individual. Its primary job is knowledge work: research, analysis and business artifacts. Coding is supported, but it does not define the product. The primary platform is Windows/Tauri. Team and organizational capabilities do not come through a separate Waggle Team/Enterprise product, but through connecting to **KVARK**, which remains exclusively on-prem ("Waggle = me. KVARK = us."). — DECISION (D-01..D-06; [PRD §1.1](../Waggle_PRD_v1.2_DRAFT.en.md), PRD-01-01/02). The code at `2af0904d` still enforces the 4-tier model with paid TEAMS. That is a gap between the decision and the code which the plan closes through migration, not a reason to reopen the decision. — CONFIRMED AT REVISION (PRD-01-03).
+**Waggle** is a free, open-source, desktop-first and local-first AI work partner for the individual. Its primary job is knowledge work; coding is supported, but it does not define the product. Team capabilities come through connecting to the on-prem **KVARK** ("Waggle = me. KVARK = us."). — DECISION (D-01..D-06; [PRD §1.1](../Waggle_PRD_v1.2_DRAFT.en.md)). The code at `2af0904d` still enforces the 4-tier model with paid TEAMS; the plan closes that gap through migration, not by reopening the decision. — CONFIRMED AT REVISION (PRD-01-03).
 
-**This package** is the v1.2 DRAFT planning package on top of `main` = `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`, and the repo was only read during planning. The package contains:
-- PRD and FRD v1.2 (`.md` + DOCX; the DOCX was re-exported on 29.09.2026 from the normalized `.md`, see "DOCX is current" below);
-- the Delivery plan with waves W0–W8/W3e/WB/OSS/B1–B3, milestones G1 → G2 → G3 and the SAFE-IMPLEMENTATION checklist (Appendix A);
-- the disposition of audit findings C1–C22 / A1–A29 / R01–R24;
-- the Build-vs-Borrow record, the benchmark protocol and the MIG-00..09 migration plan;
-- 10 draft ADRs with an index and acceptance tests AT-01..AT-30.
+**The package** is the v1.2 DRAFT planning package: PRD and FRD v1.2 (`.md` + DOCX), the Delivery plan (waves W0–W8/W3e/WB/OSS/B1–B3, milestones G1 → G2 → G3) with the SAFE-IMPLEMENTATION checklist, the disposition of audit findings, Build-vs-Borrow, the benchmark protocol, migrations MIG-00..09, ADR-01..10 with AT-01..AT-30, and handoff 00–05 with the backlog and templates. Everything in the package is a **PROPOSAL**: no ADR, threshold, date or G structure has been approved. Files in `docs/plans/` and `docs/decisions/` older than 27.09.2026 are not part of the package. The file list, purpose and SHA-256 are in the [package manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md).
 
-Everything in the package is a **PROPOSAL**. No ADR, threshold, date or G structure has been approved ([SUMMARY for the founder](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md)).
+### 1.1 Package identity (read-only check 30.09.2026)
 
-The mechanical PRD ↔ FRD coverage check passed on 29.09.2026 with exit 0: PRD 166/166, FRD contracts 114/114. Command (read-only, from the repo root):
+| Identity | Value | What it means |
+|---|---|---|
+| `code_baseline_sha` | `2af0904df01ca3d374cc78ba95b60dc579dd6a7a` | The application code revision at which all `path:line` and phase-A evidence are valid; = `origin/main` on 30.09.2026. |
+| `planning_package_sha` | `2758f4e5b5be82691ef17624494e12ffc9ad84d1` | The planning package commit (29.09.2026), sole parent `2af0904d`, changes only in `docs/`. This revision was reviewed by the independent review on 30.09.2026. On `origin`. |
+| translation commit | `fc0a7b3fa9193d2c52bc8dfaacc94110e9e404d3` | English translation (`*.en.md`, `backlog.en.csv`, EN DOCX, `handoff/README.md`), parent `2758f4e5`. A local commit, **not** on `origin`. |
+| closure revision | working tree at `fc0a7b3f` + 1.2.1 DRAFT changes (30.09.2026) | Final closure H-01..H-12. **Not committed**; commit and push require separate founder approval. No SHA exists. |
+| `implementation_sha` | — | The future commit with v1.2 code on `integration/waggle-next`. Does not exist; it is created only after implementation is approved. |
 
-```bash
-node docs/plans/v1.2-evidence/tools/check_trace.mjs docs
-```
+**Remote repo and distribution status (30.09.2026).** On `origin` (`github.com/marolinik/waggle-os`) the branch `docs/waggle-v1.2-planning` points to `2758f4e5` (`git ls-remote`), and `gh api repos/marolinik/waggle-os` returns `visibility: public`. The planning package at `2758f4e5` is therefore publicly readable. The push of that branch was made by the founder personally (reflog 30.09.2026 00:04:18 +0200). Whether the public availability is intentional and through which channel the package reaches the team is decided by the founder (H-01; question (n) in §6). Until that decision, the public branch is not a handoff channel and no one pushes to `origin`. None of this is approval of implementation. The distribution status and the limited secret scan are in the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md).
 
-— CONFIRMED AT REVISION of the package (29.09.2026).
+**How to check that you have the same package.** Every file must have the SHA-256 from the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3. A match proves only that the documents are identical, not that the product is correct.
 
-**Where the package physically lives.** Worktree `D:/Projects/waggle-v12-handoff`, branch `docs/waggle-v1.2-planning` at `2af0904d`. The package files are **untracked** on that branch (not committed); `git status` was checked read-only on 29.09.2026. — CONFIRMED AT REVISION. When and how the package is committed is decided by the founder (UNKNOWN). `integration/waggle-next` is created from `2af0904d`, and at that revision PRD/FRD/ADR v1.2 do not exist (`git cat-file -e 2af0904d:docs/Waggle_PRD_v1.2_DRAFT.md` → "exists on disk, but not in '2af0904d'", same for `docs/decisions/ADR-INDEX.md`; CONFIRMED AT REVISION 29.09.2026). That is why the package's path into the integration branch blocks WB-PR1 and the ID-reconcile PR (question (h) in §6).
+**Language and exports.** The Serbian `.md` is authoritative. `*.en.md` is a translation; its status relative to revision 1.2.1 is in manifest §2. The DOCX is an export of the `.md` file; the command and hashes are in manifest §3.
 
-**Paths in the package.** Paths in the new v1.2 files were normalized on 29.09.2026 to the repo layout (`docs/…`, `docs/plans/v1.2-evidence/…`). A grep over PRD, FRD, Delivery, MIG, BvB, Benchmark and ADR-INDEX finds no staging path `out/…`, no unprefixed `phaseA/…` and no `scratchpad/…`. The only exception is the deliberately retained real path of the existing worktree `…/scratchpad/wt202` (DP-0.02). — CONFIRMED AT REVISION of the package (29.09.2026). The map of old and new paths is in [v1.2-evidence/README.md, "Old path map"](../plans/v1.2-evidence/README.en.md#map-of-old-paths). It is needed only for `critic-r2-estimates.json` and historical comments (e.g. the `repro-harness.mjs` header). The DOCX was re-exported from the normalized `.md` and no longer contains staging paths (see below).
-
-**DOCX is current (re-export 29.09.2026 after path normalization).** The first DOCX export (29.09.2026, 00:10) preceded the path normalization (00:24:41), so it carried the text from before normalization with staging paths (`out/…`, `scratchpad/…`, `v12-planning-staging/…`). The PRD and FRD DOCX were therefore re-exported with the same command from Delivery §6.1 (`pandoc -f gfm-tex_math_dollars-tex_math_gfm <fajl>.md -o <fajl>.docx`, run from `docs/`), without changing the `.md` text. The hashes were updated in Delivery §6.1 and Disposition OD-9, where the full values are given: PRD `.md` `8aa74f26…`, `.docx` `932bb0ee…`; FRD `.md` `7ecc197f…`, `.docx` `198ccd6c…`. In the new DOCX, `unzip -p <fajl>.docx word/document.xml | grep` finds no staging paths, and a repeated export into scratch differs only in `docProps/core.xml` (creation time). The "Handoff condition" from Delivery §6.1 is thereby met for the listed hashes. — CONFIRMED AT REVISION of the package (29.09.2026; `pandoc 3.9`, `sha256sum`). The authoritative text remains the `.md`; any later change to the PRD/FRD `.md` again requires an export with the same command and new hashes in §6.1 and OD-9.
-
-Files in `docs/plans/` and `docs/decisions/` older than 27.09.2026 are **not** part of the v1.2 package. They are historical records and do not carry the authority of a D decision (brief §2.1/§21).
+**History** (critique rounds, path normalization of 29.09.2026, DOCX exports of 28.–29.09.2026, earlier hashes and outdated status claims) is in [v1.2-evidence/HANDOFF-HISTORY.md](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md). It is not a current instruction.
 
 ---
 
-## 2. Status: DRAFT, implementation not approved
+## 2. What the team may do today, and what after approval
 
-| Question | Answer |
-|---|---|
-| What is the state of the package? | DRAFT. Last critique round: HIGH 0, MED 12. LOW findings were deliberately left to the founder: 17 open, 8 resolved according to [OPEN-LOW-FINDINGS](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md). After the path normalization on 29.09.2026 that split is inaccurate on one point: the row about `scratchpad/…` paths is among the 17 open ones, but in the table it carries the label "Applied 29.09.2026". The "DOCX export" item among the 8 resolved ones was temporarily inaccurate after normalization; after the re-export on 29.09.2026 the hashes in Delivery §6.1/OD-9 again match the current files (§1, "DOCX is current"). **The status of the 12 MED findings is UNKNOWN:** the package contains neither their list nor a per-item resolution record. The [SUMMARY](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md) ("Last critique round") says only of the LOW findings that they were "left without a new loop". That suggests the MED findings went through a fix loop, but this is not recorded anywhere. `OPEN-LOW-FINDINGS` covers only LOW, and `critic-r2-estimates.json` is the second round (11 findings: 1 HIGH, 5 MED, 5 LOW), not the last one. Check: grep `MED` over `docs/`, 29.09.2026. Until the founder confirms, the team does not claim that MED is 0 (question (g) in §6). |
-| Has code been written? | No. There has been no commit, push, tag, merge, release, E2E, installer, receipt or benchmark run, no Stripe actions and no paid API calls ([SUMMARY](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md), "What was NOT done"). |
-| Who approves? | **Exclusively the founder**, as the decision owner. No agent, lead or workflow message can replace the founder's approval. |
-| What does "approval to start" mean? | Explicit, written approval from the founder that the team may begin implementation according to the [Delivery plan v1.2](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md). In practice this opens W0 and the accompanying G1 PRs (§6 of this file) on the integration branch `integration/waggle-next` (DP-0.04). |
-| What does approval to start **not** include? | Ratifications RAT-01..RAT-09 (draft ADRs and the G structure), approvals ODB-01 (paid receipt runs) and ODB-02 (scope of W3e-PR9), decisions DQ-01..DQ-09 and exceptions to the absolute prohibitions (§8). Each of them has its own founder approval, at the point the plan prescribes ([Delivery §6](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md), §6.1). |
-| What applies after approval? | Every PR, agent and session goes through the [SAFE-IMPLEMENTATION checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md). Every "no" stops work. The exit of each of the 13 waves requires that every one of its PRs passed the checklist without a single "no" item (DP-0.01..DP-0.16). |
-| Does W0 wait for ratifications? | No. No ADR blocks W0, and W0 proceeds even without RAT-01. RAT-01 must arrive before G1 is closed ([Delivery §6.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)). |
+| Action | Today (before the founder's written approval) | After approval |
+|---|---|---|
+| Reading the package and the code | Yes, in this scope until decision (n) (H-01, TSA-09): the package from the copy handed over by the founder, with the SHA-256 from the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3; from git only the read-only `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main`. **No clone at all**, not even a read-only clone of the public repo. Code (`git show 2af0904df01ca3d374cc78ba95b60dc579dd6a7a:<putanja>`, `git grep`) and the other read-only checks from [01 §0.1](01-ONBOARDING-DEV-ENV.en.md) only in a checkout from the channel approved under (n). | Yes; clone only from `<ODOBRENI_TIMSKI_REMOTE>` (TSA-09). |
+| Machine preparation | Only outside the repo: prerequisites without `node_modules`, Node `22.23.2`, a draft env template ([01 §0.1](01-ONBOARDING-DEV-ENV.en.md)). | Per [01 §0.2](01-ONBOARDING-DEV-ENV.en.md). |
+| `npm ci`, build, gates, tests, repro scripts, sidecar/web/E2E | **No, nowhere**, not even in your own fresh clone. The only exception is if the founder confirms TSA-02 in [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md): `npm ci`, build and gates in a fresh clone on a team machine, detached at `2af0904d`, without a branch, commit or push; sidecar/web/E2E and repro scripts not even then (question (o) in §6). | In your own worktree from `integration/waggle-next`, per the SAFE checklist. |
+| Git actions (branch, worktree, commit, push, PR) | **No.** | Per [02](02-WORKING-AGREEMENT.en.md) and the SAFE checklist; push only to the remote the founder approved; never a merge into `main`, a `v*` tag or a release. |
+| Team authorizations (who leads and merges, second reviewer, own clones and worktrees, baseline fixture worktree, PR size, hotspot test, CI re-run, order of precedence) | The existing rules of 01/02 and the checklist apply. [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) is a PROPOSAL, **NOT APPROVED**. The protections of the founder's machine (9 worktrees, docs worktree, 2 stashes, personal paths) are prohibitions concerning that machine, not obligations of team machines (TSA-03 A, revision 1.2.1). | The TSA-01..TSA-10 items the founder confirms apply; for an unconfirmed item the "Today" column applies. |
 
-Until approval arrives, the team may only read the package and the repo, prepare personal machines and prepare questions (§6, steps 1–2). Everything that changes git state (branch, worktree, commit, push), as well as `npm ci`, build, gates, tests, repro scripts and starting the sidecar/web/E2E, waits for approval.
+**Who approves:** exclusively the founder. No agent, lead or workflow message replaces the founder's approval. Approval of the delivery plan opens the W0 and G1 PRs on `integration/waggle-next` (DP-0.04). It does not include RAT-01..RAT-09, ODB-01, ODB-02, DQ-01..DQ-09 or exceptions to the absolute prohibitions (§8). W0 waits for no RAT; RAT-01 must arrive before G1 is closed ([Delivery §6.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)).
 
-**`npm ci`, build, gates, tests and repro scripts before approval: nowhere** (one rule, the same as [01 §0 "Gate"](01-ONBOARDING-DEV-ENV.en.md), [02 §0](02-WORKING-AGREEMENT.en.md) and [04 §13 pt.7](04-CODEBASE-MAP.en.md); a PROPOSAL of this handoff, derived from brief §20.4 as cited by 02 §0; the founder confirms it or grants an exception through question (o) in §6):
-- Before the founder's written approval of the plan, no one runs `npm ci`, `npm run build:packages`, gates, tests, repro scripts (§3) or sidecar/web/E2E. This applies to existing worktrees, to the docs worktree `D:/Projects/waggle-v12-handoff`, and to a separate fresh clone on one's own machine. A clone in which `npm ci` is run is not "outside the repo" in the sense of 02 §0, and `npm ci` and the 6 package-install runtime tests from the local root suite run `npm install` over the network ([01 §6.3](01-ONBOARDING-DEV-ENV.en.md); comment in `ci.yml:88-90`, CONFIRMED AT REVISION 29.09.2026). Only what [01 §0.1](01-ONBOARDING-DEV-ENV.en.md) lists is allowed: reading, read-only checks and preparing the machine outside the repo (prerequisites without `node_modules`, Node `22.23.2`, a draft env template outside the repo).
-- The exception for a separate fresh clone on one's own machine (detached `2af0904d`, no push) is **not approved**. That is question (o) in §6. Until it is answered, the rule above applies.
-- After approval, `npm ci`, build and gates run in your own worktree from `integration/waggle-next`, per [01 §0.2](01-ONBOARDING-DEV-ENV.en.md) (steps 1–6), because the integration branch does not exist until then (DP-0.04). **Never** in any of the 9 worktrees from DP-0.02 (among them `D:/Projects/waggle-os`, main) nor in the docs worktree `D:/Projects/waggle-v12-handoff`. The reason is the trap from [01 §4](01-ONBOARDING-DEV-ENV.en.md): `npm ci` deletes `node_modules`, so a process holding a `.node` file leaves a half-deleted tree.
+**No code has been written.** The only git actions on the package are two docs-only commits (`2758f4e5`, `fc0a7b3f`) and the push of the branch `docs/waggle-v1.2-planning` at `2758f4e5` (§1.1); `git diff --name-only 2af0904d fc0a7b3f` outside `docs/` is empty. There has been no tag, merge, release, E2E, installer, receipt or benchmark run, no Stripe actions and no paid API calls.
+
+Why `npm ci` and tests wait even in your own clone: `npm ci` and the 6 package-install tests of the local root suite run `npm install` over the network ([01 §6.3](01-ONBOARDING-DEV-ENV.en.md); comment in `ci.yml:88-90`), and `npm ci` deletes `node_modules`, so a process holding a `.node` file leaves a half-deleted tree ([01 §4](01-ONBOARDING-DEV-ENV.en.md)). The rule is a PROPOSAL of this handoff derived from brief §20.4 ([02 §0](02-WORKING-AGREEMENT.en.md)). On the founder's machine, build and tests do not go, even after approval, into the existing worktrees (DP-0.02) or into the docs worktree `D:/Projects/waggle-v12-handoff`.
 
 ---
 
@@ -68,12 +63,13 @@ Until approval arrives, the team may only read the package and the repo, prepare
 
 **Day 1 — orientation and rules**
 1. This file.
-2. [WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.md](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md): the estimate, confirmed defects, the biggest UNKNOWN items and the decision queue on one page.
-3. [SAFE-IMPLEMENTATION-CHECKLIST.md](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md): the single source of truth for the operational yes/no list. Read it in full.
-4. [01-ONBOARDING-DEV-ENV.md](01-ONBOARDING-DEV-ENV.en.md): environment, access, first build (before approval, the restriction from §2 applies).
-5. [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md): branches, PRs, review, gates, roles.
+2. [Package manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §1–§2: identity and contents of the package.
+3. [WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.md](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md): the estimate, confirmed defects, the biggest UNKNOWN items and the decision queue on one page.
+4. [SAFE-IMPLEMENTATION-CHECKLIST.md](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md): the single source of truth for the operational yes/no list. Read it in full.
+5. [01-ONBOARDING-DEV-ENV.md](01-ONBOARDING-DEV-ENV.en.md): environment, access, first build (before approval, the restriction from §2 applies).
+6. [02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md): branches, PRs, review, gates, roles.
 
-Alongside these, read the repo rules: [`CLAUDE.md`](../../CLAUDE.md), [`AGENTS.md`](../../AGENTS.md) (the canonical operating contract; `AGENTS.md:6` says of itself that it wins on conflict, but that is not the rule for this package: until a founder decision, the order of precedence is in [02 §0](02-WORKING-AGREEMENT.en.md) ("Order of precedence": UNKNOWN, question (j) in §6; until then the stricter norm applies, and every conflict stops work and goes to the founder); known conflicts with `AGENTS.md` (§3.8, §4) are listed there), [`docs/TESTING.md`](../TESTING.md) and [`docs/TECH-DEBT.md`](../TECH-DEBT.md).
+Alongside these, read the repo rules: [`CLAUDE.md`](../../CLAUDE.md), [`AGENTS.md`](../../AGENTS.md) (the canonical operating contract; `AGENTS.md:6` says of itself that it wins on conflict, but that is not the rule for this package: until a founder decision, the order of precedence is in [02 §0](02-WORKING-AGREEMENT.en.md) ("Order of precedence": proposal TSA-10 in [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md), NOT APPROVED; question (j) in §6; until confirmed the stricter norm applies, and every conflict stops work and goes to the founder); known conflicts with `AGENTS.md` (§3.8, §4) are listed there), [`docs/TESTING.md`](../TESTING.md) and [`docs/TECH-DEBT.md`](../TECH-DEBT.md).
 
 **Day 2 — what is built and in what order**
 1. [Waggle_PRD_v1.2_DRAFT.md](../Waggle_PRD_v1.2_DRAFT.en.md): in full, and especially §1 (definition), §4 (G1/G2/G3) and §17 (open decisions).
@@ -102,182 +98,82 @@ Alongside these, read the repo rules: [`CLAUDE.md`](../../CLAUDE.md), [`AGENTS.m
 6. If the PR changes data: the corresponding MIG row in [WAGGLE-MIGRATIONS-v1.2.md](../plans/WAGGLE-MIGRATIONS-v1.2.en.md).
 7. The PR description per [templates/PULL_REQUEST_TEMPLATE.md](templates/PULL_REQUEST_TEMPLATE.en.md). That is a template PROPOSAL and is not installed in `.github/` ([02 §16](02-WORKING-AGREEMENT.en.md)). For W0-PR0 there is a draft diff in [templates/ci-integration-branch-proposal.md](templates/ci-integration-branch-proposal.en.md) (PROPOSAL, not applied).
 
-**Note on the repro scripts** (CONFIRMED AT REVISION of the package, grep 29.09.2026):
-- All three scripts hardcode the `dist` of the founder's main checkout:
-  - `repro-harness.mjs:4`: `DIST = 'file:///D:/Projects/waggle-os/packages/agent/dist/'`;
-  - `repro-shadow.mjs:10`: `DIST = 'D:/Projects/waggle-os/packages/agent/dist'`;
-  - `repro-gepa-delta.mjs:10`: `DIST = 'D:/Projects/waggle-os/packages/agent/dist'`.
-
-  Without modification they read whatever `dist` is currently in `D:/Projects/waggle-os`, not the `dist` from `2af0904d`.
-- `repro-shadow.mjs` **writes next to itself:** `mkdtempSync(path.join(here, 'shadow-'))` (`:14-15`), i.e. into `docs/plans/v1.2-evidence/phaseA/` inside the repo. It deletes it only at `:42`, without `finally`, so after an error the directory remains. The header ("Writes only under the scratchpad", `:3-4`) is historical. In the other two scripts grep finds no write.
-- **Running: only after the founder's approval of the plan (§2).** Until then the repro scripts are not run anywhere: they require a `dist` built from `2af0904d`, building (`npm ci`, `npm run build:packages`) waits for approval, and the `dist` in `D:/Projects/waggle-os` has not been proven to be from `2af0904d` (point above). After approval: copy all three scripts into a scratch directory outside the repo, as in [v1.2-evidence/README](../plans/v1.2-evidence/README.en.md) ("Running", step 2). In the **copy**, point `DIST` to `packages/agent/dist` of your own worktree from `integration/waggle-next` ([01 §0.2](01-ONBOARDING-DEV-ENV.en.md)), built with `npm run build:packages`. The result is compared with the snapshot only if that `dist` was built from revision `2af0904d` (same README, step 2). The evidence files are not changed. `dist` is never built in `D:/Projects/waggle-os`.
+**Repro scripts** (`phaseA/repro-*.mjs`) are not run anywhere before approval. After approval: a copy outside the repo and `DIST` pointed to your own `dist` built from `2af0904d`, per [v1.2-evidence/README](../plans/v1.2-evidence/README.en.md), "Running", step 2.
 
 ---
 
-## 4. Package map
+## 4. What awaits the founder's approval
 
-Roles in the "Who uses it" column: **PM** (founder or decision owner, planning), **Lead** (tech lead and merge owners of hotspot files), **Dev**, **QA**.
+| Item | What it opens | Status | Source |
+|---|---|---|---|
+| Approval of the delivery plan (start of implementation) | W0 and G1 PRs on `integration/waggle-next` | waiting (question (a) in §6) | [Delivery plan](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) |
+| TEAM-START-AUTHORIZATION | who leads and merges, isolated environments, CI rerun, rules for own clones and worktrees | PROPOSAL, **NOT APPROVED** | [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) |
+| Handoff channel and status of the public copy of the package | the approved remote for clone and push | waiting (H-01; question (n) in §6) | [closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md) |
+| Commit and push of closure revision 1.2.1 | the team takes over the aligned package via git | awaiting separate approval | §1.1; [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) |
+| RAT-01..RAT-09, ODB-01, ODB-02 | ratifications of draft ADRs and the G structure; paid receipt runs; scope of W3e-PR9 | open | [Delivery §6.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) |
+| DQ-01..DQ-09 | product and business decisions | open | [Delivery §6](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) |
+| Questions (a)–(o) before start | — | canonical list | §6 |
 
-| File | Purpose (one line) | Who uses it |
-|---|---|---|
-| [handoff/00-START-HERE.md](00-START-HERE.en.md) | Entry point: status, reading order, first 10 days, prohibitions. | everyone |
-| [handoff/01-ONBOARDING-DEV-ENV.md](01-ONBOARDING-DEV-ENV.en.md) | Environment, access and first build (Windows). | Dev, QA |
-| [handoff/02-WORKING-AGREEMENT.md](02-WORKING-AGREEMENT.en.md) | Way of working: branches, PRs, review, gates, roles. | Lead, Dev, QA |
-| [handoff/03-BACKLOG.md](03-BACKLOG.en.md) | Tickets, where ticket = PR ID from Delivery §2: overview by wave, dependencies, cards (G1 full, G2/G3 compact), DoR/DoD, sprint 1 PROPOSAL. | PM, Lead, Dev, QA |
-| [handoff/backlog.csv](backlog.csv) | Machine-readable version of the tickets from 03 (RFC 4180, UTF-8) for import into a tracker. | PM, Lead |
-| [handoff/04-CODEBASE-MAP.md](04-CODEBASE-MAP.en.md) | Code map for the areas the plan changes: topology, hotspot files and merge owners, `path:line` at `2af0904d`, how to search. | Lead, Dev, QA |
-| [handoff/05-RISKS-DECISIONS-ESCALATION.md](05-RISKS-DECISIONS-ESCALATION.en.md) | Decision queue (DQ/RAT/ODB), UNKNOWN items that block tickets, external gates, risks and escalation rules: which question goes to whom. | everyone |
-| [handoff/templates/PULL_REQUEST_TEMPLATE.md](templates/PULL_REQUEST_TEMPLATE.en.md) | PROPOSAL for a PR description template with the mandatory fields from the checklist; not installed in `.github/`. | Lead, Dev |
-| [handoff/templates/ci-integration-branch-proposal.md](templates/ci-integration-branch-proposal.en.md) | PROPOSAL of a diff for W0-PR0 (`integration/**` in `ci.yml` and `tauri-build-pr.yml`); not applied. | Lead (W0-PR0 owner: UNKNOWN, proposed: Release owner) |
-| [Waggle_PRD_v1.2_DRAFT.md](../Waggle_PRD_v1.2_DRAFT.en.md) (+ [.docx](../Waggle_PRD_v1.2_DRAFT.docx), re-exported 29.09.2026, see §1 "DOCX is current") | What the product is and is not; G1/G2/G3 at the product level; open decisions §17. | PM, Lead |
-| [Waggle_FRD_v1.2_DRAFT.md](../Waggle_FRD_v1.2_DRAFT.en.md) (+ [.docx](../Waggle_FRD_v1.2_DRAFT.docx), re-exported 29.09.2026, see §1 "DOCX is current") | Functional contracts (FRD-nn.m); AT-01..AT-30 (§15); traceability PRD → FRD → AT (§16). | Lead, Dev, QA |
-| [plans/WAGGLE-DELIVERY-PLAN-v1.2.md](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) | Operational plan: DP-0.01..DP-0.16, G exit criteria, waves and PR slicing, graph, estimate, freezes F1–F4, DQ/RAT/ODB, TM matrix. | PM, Lead, Dev, QA |
-| [plans/SAFE-IMPLEMENTATION-CHECKLIST.md](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) | Mandatory yes/no list before every PR, agent and session; absolute prohibitions; mandatory PR description fields. | everyone |
-| [plans/WAGGLE-AUDIT-DISPOSITION-v1.2.md](../plans/WAGGLE-AUDIT-DISPOSITION-v1.2.en.md) | Resolution of every audit finding (C1–C22, A1–A29, R01–R24) with evidence and wave. | PM, Lead |
-| [plans/WAGGLE-BUILD-VS-BORROW-v1.2.md](../plans/WAGGLE-BUILD-VS-BORROW-v1.2.en.md) | BB-01..BB-13 records (Preserve → Borrow → Adapt → Build), criterion for the durable engine, provenance inventory. | Lead, Dev |
-| [plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.md](../plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.en.md) | B1/B2/B3 protocol: test selection, hypotheses, firewall, run reset, statistics, manifest, cost. | Lead (Benchmark owner), QA |
-| [plans/WAGGLE-MIGRATIONS-v1.2.md](../plans/WAGGLE-MIGRATIONS-v1.2.en.md) | MIG-00 contract (snapshot, dry-run, idempotency, rollback Class A/B) and MIG-01..09; MDQ sub-list. | Lead, Dev, QA |
-| [plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.md](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md) | Open LOW findings of the last critique round (inconsistencies in the package). | PM, Lead |
-| [plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.md](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md) | One page: estimate, defects, UNKNOWN, decision queue. | PM, Lead |
-| [decisions/ADR-INDEX.md](../decisions/ADR-INDEX.en.md) | Index of ADR-01..10: topic, what it replaces, wave, key AT, what the ADR package does not decide. | Lead, Dev |
-| [ADR-01](../decisions/2026-09-27-ADR-01-conversation-work-modes.en.md) | Conversation vs work × `normal/strict/benchmark`; server-observed evidence. | Lead, Dev (Harness/Chat) |
-| [ADR-02](../decisions/2026-09-27-ADR-02-durable-store-phase-resume-action-idempotency.en.md) | Durable run store, phase as the unit of recovery, `actionId` ≠ `attemptId`, lease/fencing. | Lead, Dev (Durable) |
-| [ADR-03](../decisions/2026-09-27-ADR-03-detach-cancel-supersedes-r3-008.en.md) | Detach ≠ cancel, `sinceSeq` reconnect, narrowing of R3-008. | Lead, Dev (Durable/Chat) |
-| [ADR-04](../decisions/2026-09-27-ADR-04-inline-capability-oauth.en.md) | Inline capability setup and OAuth (state + PKCE) as continuity of work. | Lead, Dev (Capability/Security) |
-| [ADR-05](../decisions/2026-09-27-ADR-05-rawdetail-context-hook-precedence.en.md) | RAWDETAIL, three storage responsibilities, `ContextPackage`, hook precedence, scope isolation. | Lead, Dev (Memory) |
-| [ADR-06](../decisions/2026-09-27-ADR-06-active-override-promotion-rollback.en.md) | Active-version pointer, promotion with holdout, rollback. | Lead, Dev (Evolution) |
-| [ADR-07](../decisions/2026-09-27-ADR-07-routines-vs-toolless-loops.en.md) | Routines as a trigger vs TOOLLESS Loops; occurrence identity, misfire/DST. | Lead, Dev (Durable) |
-| [ADR-08](../decisions/2026-09-27-ADR-08-individual-tiers-kvark-boundary.en.md) | Individual Waggle without a tier boundary; KVARK connection as the capability boundary. | Lead, Dev (Boundary) |
-| [ADR-09](../decisions/2026-09-27-ADR-09-secondary-worker-parity.en.md) | `packages/worker` = legacy, isolate + freeze, not a parity target. | Lead, Dev (Boundary/Server) |
-| [ADR-10](../decisions/2026-09-27-ADR-10-release-privacy-profiles.en.md) | Release/privacy profiles (P-LOCAL … P-BENCH), egress, telemetry, receipts per profile. | Lead, Dev (Release/Security), QA |
-| [v1.2-evidence/README.md](../plans/v1.2-evidence/README.en.md) | Contents of the evidence folder (snapshot at `2af0904d`), safe read-only running of `check_trace.mjs` and the repro scripts (a copy outside the repo, because `repro-shadow.mjs` creates `shadow-*` next to itself) and the old path map. | Lead, Dev, QA |
-| [v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.md](../plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md) | Founder brief: D-01..D-18 (§3), DIR-01..DIR-25, G direction (§5.1), authority boundaries. | PM, Lead |
-| [v1.2-evidence/inputs/S1-audit-2026-09-27.md](../plans/v1.2-evidence/inputs/S1-audit-2026-09-27.md) | S1 audit of PRD/FRD v1.1 (starting input for the estimate; phase-A overrides it where they differ). | PM, Lead |
-| [v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.md](../plans/v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.md), [FRD v1.1](../plans/v1.2-evidence/inputs/Waggle_FRD_v1.1_2026-09-27.md) (+ `.docx`) | Previous version of the specification (historical input). | PM |
-| [v1.2-evidence/phaseA/](../plans/v1.2-evidence/phaseA/) (`*.md`, `*.refute.md`, `repro-*.mjs`) | Revalidation of findings at `2af0904d` by group, refuter verdicts and repro scripts (table in §3). | Lead, Dev, QA |
-| [v1.2-evidence/phaseA/critic-r2-estimates.json](../plans/v1.2-evidence/phaseA/critic-r2-estimates.json) | Estimate critique findings from the second round (historical trace). | PM, Lead |
-| [v1.2-evidence/phaseA/oss-drift-check-output.txt](../plans/v1.2-evidence/phaseA/oss-drift-check-output.txt) | Read-only output of `oss-drift-check.mjs` (22 known blockers, 3 unreviewed). | Lead (Memory/OSS) |
-| [v1.2-evidence/tools/check_trace.mjs](../plans/v1.2-evidence/tools/check_trace.mjs) | Mechanical check of PRD ↔ FRD §16.1 coverage (exit 1 on a gap). | PM, Lead, QA |
+What the final closure actually resolved and what it did not (H-01..H-12 and the disposition of earlier MED/LOW findings): [closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md).
 
 ---
 
-## 5. Milestones G1 / G2 / G3
+## 5. Order of work
 
-The G structure is a **PROPOSAL** (the planning direction of brief §5.1), and the founder ratifies it through RAT-01. The numbers are copied from [Delivery plan §4.2–§4.3](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) and have not been re-estimated. It is an expert range, not a P50, and it contains no flat AI discount. The exit criteria and the list of what must not be claimed are in [Delivery §1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md).
+1. Before approval: only what §2 allows today and steps 1–2 in §6.
+2. After approval: G1 → G2 → G3 per [Delivery §1–§3](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) (exit criteria, waves, the dependency graph and the critical path). Tickets are in [03-BACKLOG.md](03-BACKLOG.en.md) and [backlog.csv](backlog.csv); the first 10 working days in §6.
+3. The G structure is a PROPOSAL and is ratified through RAT-01. Estimates and the calendar are an expert range in [Delivery §4.2–§4.3](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md), not a promised deadline. The calendar starts from the actual approval date (T0), not from 27.09.2026. The schedule against the actual team composition is confirmed by the tech lead. The frame for the first four weeks from T0 (definition of T0, deliverables and evidence per week, four separate outcomes: internal candidate, benchmark-ready candidate, public-ready artifact and public announcement, and a rough capacity check) is in [Delivery §4.4](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md).
+4. Freezes F1–F4 and the path to a signed and public artifact: [Delivery §5](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) and §5.1 (acyclic path F3a over the frozen source SHA → a controlled, separately approved step K → F3b over the exact signed artifact → a separate public GO). A receipt from `e4bf403e`, `b07a6173` or `c4e6a515` does not cover `2af0904d`. — CONFIRMED AT REVISION (F-REL-02).
 
-| | Meaning | AI-orchestrated eng-days | Classic eng-days | Calendar, cumulative (no breaks) |
+---
+
+## 6. First 10 working days and questions for the founder before start
+
+**Today (before approval) only steps 1–2 are done, in the scope from §2.** Until decision (n) (handoff channel, H-01; TSA-09) the team makes no clone at all, not even a read-only clone of the public repo. From git, only the read-only `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main` is allowed; the package is read from the copy handed over by the founder whose SHA-256 matches the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3. Everything after the gate waits for written approval of the delivery plan.
+
+| # | When (indicative) | What | Source | Done when |
 |---|---|---|---|---|
-| **G1** | Reliable internal candidate | 11–16 | 22–30 | 3–5 weeks → **18.10.2026 – 01.11.2026** |
-| **G2** | Benchmark-ready knowledge-work core | 87–121 (cum. 98–137) | 177–245 (cum. 199–275) | 11–18 weeks → **13.12.2026 – 31.01.2027** |
-| **G3** | Public product | 37–53, with W3e-PR9 41–60 (cum. 135–190 / 139–197) | 75–108.5, with W3e-PR9 83–122.5 (cum. 274–383.5 / 282–397.5) | (a) B3 in parallel: 16–27 weeks → **17.01.2027 – 04.04.2027** (with W3e-PR9 and T_evo before B3 on the same machine: 16–28 → 11.04.2027); (b) B3 serial: 18–30 weeks → **31.01.2027 – 25.04.2027** (with the T_evo placeholder 18–32 → 09.05.2027) |
+| 1 | Day 1 | Reading per §3 (Day 1) from the copy of the package verified against the manifest. Node `22.23.2` (`fnm use 22.23.2`; better-sqlite3 ABI 127), `node -v`. Baseline: `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main` = `2af0904d…`, without a clone ([01 §0.1](01-ONBOARDING-DEV-ENV.en.md) pt.1 and pt.3). Clone, `git show`/`git grep` and the other checks from 01 §0.1 pt.3 only in a checkout from the channel approved under (n). | checklist "Before every PR"; DP-0.01; TSA-09 | Everyone has read the checklist and has no unclear items. `main` = `2af0904d`, or the difference has been escalated to the founder. |
+| 2 | Day 2 | Reading per §3 (Day 2). Env template outside the repo (checklist "Env isolation", "External writes disabled"; [01 §9.2](01-ONBOARDING-DEV-ENV.en.md)) and the **safe test profile (BTP)** (checklist "Safe test profile (BTP)", [01 §9.0](01-ONBOARDING-DEV-ENV.en.md)); the first sidecar/E2E run after approval goes only there, a scratch profile is not a sandbox. The server is not started. List of questions (a)–(o) and a proposed assignment of the DP-0.14 roles. | DP-0.08, DP-0.10, DP-0.14 | The env template has been reviewed. The BTP exists and the "before" snapshot per 01 §9.5 has been taken. Assignment of roles to people: UNKNOWN. |
+| — | **Gate** | **The founder approves the delivery plan (start of implementation)**, with answers to (a), (h), (j), (k), (l) and (n). Without this, nothing proceeds. | §2; gates `PLAN-APPROVAL`, `TSA-09`, `Q00-h`, `ROLE-ASSIGN` ([backlog-gates.csv](backlog-gates.csv)) | Written approval from the founder exists. |
+| 3–10 | Day 3–10 from T0 | After the gate: INT-01 and W0-PR0 (CI for `integration/**`), then the Harness, Memory, Boundary+Release, Durable-probe and Server (W0-PR20) lanes, W0-PR19 only with TSA-05, INT-02 and F1 preparation. Schedule, order and estimates: [03 §6](03-BACKLOG.en.md) (sprint 1) and [Delivery §3 and §4.4.4](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md); cards in 03 §3. The day-by-day schedule from revision 1.2: `git show 2758f4e5:docs/handoff/00-START-HERE.md`. | 03 §6; Delivery §4.4.4 | Per 03 §6 and the G1 exit (Delivery §1). |
 
-How to read the ranges:
-- **Dates** are the end of the n-th calendar week counted from 27.09.2026 (a Sunday), not a working deadline. The last working day is the Friday of that week: G1 16.10/30.10.2026, G2 11.12.2026/29.01.2027. The time from 27.09.2026 until the founder's approval of the plan is not included; the approval date is UNKNOWN.
-- **Breaks are not included in the ranges.** With breaks, G2 is 11–20 weeks (until 14.02.2027), G3 (a) 18–29, (b) 19–33. Every bound after 24.12.2026 shifts by +1–3 weeks. Egzakta's calendar is UNKNOWN.
-- **Sensitivity:** if calculated using the classic column, G2 is 16–28 weeks, G3 (a) 23–39, and (b) 26–45. Until the F1 retrospective measures AI throughput, the real uncertainty is G2 11–28 and G3 16–45 weeks.
-- Waiting time for ratifications (RAT-02, RAT-03, indirectly RAT-04) is not included in the ranges. Every day of waiting shifts G2 and G3 1:1 (Delivery §3, §6.1).
-- **The public G3 date is UNKNOWN.** Authenticode, Deep Security and CASA (if Gmail is pursued) are added at the end and have no evidence of duration.
+**If `main` on `origin` differs from `2af0904d`**, the baseline from the checklist and DP-0.01 no longer holds: work stops, and the question goes to the founder through [05](05-RISKS-DECISIONS-ESCALATION.en.md) before step 3. The team does not choose a new base on its own (UNKNOWN until decided). The list `git diff --name-only 2af0904d <novi SHA>` is made only in a checkout from the approved channel; every phase-A finding, `path:line` and pin test on that list is re-checked ([v1.2-evidence/README](../plans/v1.2-evidence/README.en.md), "Snapshot, not the current truth").
 
-**Freezes (Delivery §5):** F1 at the end of G1 (I + P + R, planned 3–5 wd), F2 at the end of G2 (R + P + A + C + internal I, 4–7 wd), F3 at the end of G3 (full I + R + P + A + C + Authenticode + Deep Security, 5–8 wd), and F4 is a contingency. A receipt from `e4bf403e`, `b07a6173` or `c4e6a515` **does not cover** `2af0904d`. — CONFIRMED AT REVISION (F-REL-02).
-
----
-
-## 6. First 10 working days
-
-The order is taken from the G1 graph and the ordering constraints in [Delivery §3](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) and from the W0 table in §2. The day-by-day schedule is a **PROPOSAL of the order**, not a new estimate; the ranges from §5 apply. Backlog tickets are PR IDs from Delivery §2 (`W0-PR0..PR19`, `WB-PR1/PR2`, `OSS-PR1/PR2`, `W8-PR1`). The cards are in [03-BACKLOG.md](03-BACKLOG.en.md) (G1 full cards in §3, sprint 1 PROPOSAL in §6), and the same tickets for import into a tracker are in [backlog.csv](backlog.csv). Files, the tests the PR changes and finding status are in the W0 table, so they are not repeated here. Every PR ID from the "Ticket / source" column has a full card in [03-BACKLOG.md](03-BACKLOG.en.md) §3: goal, scope, RED test, acceptance, evidence, risks, rollback and estimate. DoR/DoD is in 03 §0, and the sprint 1 PROPOSAL in 03 §6.
-
-**Steps 1–2 can start immediately. All other steps wait for the founder's explicit approval of the delivery plan.**
-
-| # | When (indicative) | What | Ticket ([cards: 03 §3](03-BACKLOG.en.md)) / source | Done when |
-|---|---|---|---|---|
-| 1 | Day 1 | Reading per §3 (Day 1). Access to the repo and the package. Node `22.23.2` (`fnm use 22.23.2`; better-sqlite3 ABI 127), check `node -v`. Read-only confirmation of the baseline in the checkout the team has access to ([01 §0.1](01-ONBOARDING-DEV-ENV.en.md) pt.1 and pt.3; without `npm ci`, build and tests, §2): `git rev-parse origin/main` = `2af0904d…`. If it differs, the rule below the table applies. | checklist "Before every PR"; DP-0.01 | Everyone has read the checklist and has no unclear items. `origin/main` = `2af0904d`, or the difference has been escalated to the founder. |
-| 2 | Day 2 | Reading per §3 (Day 2). **Isolation check without starting servers.** Prepare the env template per the checklist sections "Env isolation" and "External writes disabled": `WAGGLE_DATA_DIR`, `WAGGLE_PORT≠3333`, `PORT≠3100`, `WAGGLE_DESKTOP_PORT_FALLBACK` unset, `HIVE_MIND_DATA_DIR`, `WAGGLE_E2E_*`, `HOME`/`USERPROFILE`/`HERMES_HOME` set to a scratch profile, `WAGGLE_SIGNAL_EMIT=0`, no Stripe/channel/Clerk/PostHog keys. Check that the founder's instance is not listening on 3333. List the questions for the founder (the "Questions before start" entry below). Assign the DP-0.14 roles to people (Harness, Chat, Durable, Memory, Server, Boundary, Capability, Security, External-executor, Evolution, Model/Runtime, UX, Attention, Channels, Benchmark, Release, OSS/License owner). | DP-0.08, DP-0.10, DP-0.14 | The env template has been reviewed. Names per role are recorded (assignment to people: UNKNOWN). |
-| — | **Gate** | **The founder approves the delivery plan (start of implementation).** Without this, nothing proceeds. | §2 of this file | Written approval from the founder exists. |
-| 3 | Day 3 | Create `integration/waggle-next` from `2af0904d` in **your own new worktree** (not in `D:/Projects/waggle-os`). **First PR: CI for the integration branch** — `integration/**` in `on.push.branches` and `on.pull_request.branches` in `.github/workflows/ci.yml` (today `ci.yml:3-6` = only `[main]`, CONFIRMED AT REVISION 29.09.2026) and in `tauri-build-pr.yml`. `release.yml` is not touched. | **W0-PR0**; DP-0.04, DP-0.07 | CI triggers on a PR to `integration/waggle-next`. |
-| 4 | Day 3–4 | Open 4 parallel agent worktrees from the integration branch: **Harness / Memory / Boundary+Release / Durable-probe**. Branches are named `w0/<tema>` (e.g. `w0/harn-01-verify-default`). The rule is one task per branch and one worktree per agent. | Delivery §3 (G1); DP-0.05 | `git worktree list` contains only allowed new entries (checklist). |
-| 5 | Day 3–5 | **Golden legacy fixture** (generated by the code of revision `2af0904d`, determinism = same SHA-256). Merge **before** W0-PR6 and W0-PR18. ⚠ The checklist allows only worktrees from `integration/waggle-next`, but this generator requires a worktree at `2af0904d`. Before starting, request explicit founder permission (open LOW finding). | **W0-PR19**; MIG §6 pt.2, MIG-00.7 | The fixture and SHA-256 are in `tests/fixtures/legacy-datadir/` (exact path UNKNOWN until design). |
-| 6 | Day 4–7 | **Harness lane, W0 RED tests first** (DP-0.15: RED fails on the baseline, then minimal GREEN). Serial critical sequence (3–4 wd): **W0-PR1** (verify fail-closed) → **W0-PR7** (`runId` in events) → **W0-PR8** (self-reported evidence) → **W0-PR9** (persona shadowing + F-EVO-10 in the same PR). Then W0-PR2/PR3 (after PR1), W0-PR4, W0-PR5, then W0-PR6 (after PR7 and PR19). Rewrite the pinning tests listed in the W0 table in the same PR, never silently. | **W0-PR1..PR9**; AT-01, AT-02, AT-03 (part), AT-04 minimum, AT-06 (part) | Every PR has RED→GREEN evidence in its description. |
-| 7 | Day 4–8 | **Memory lane:** **W0-PR10** (hook read path trio in `hive-mind-core`, with a record for the `oss-drift-baseline.json` review) → **W0-PR11** (leak in 4 places + redefinition of the fleet policy gate; sentinel AT-13) → **W0-PR18** (MIG-05(i) reclassification; after PR11 and PR19; only on a copy of the dataDir, with snapshot + `manifest.json` and a Class A rollback test). | **W0-PR10, PR11, PR18**; AT-13, AT-14 (part), AT-19 (part); DP-0.09 | The sentinel from Workspace A is not in the personal or Workspace B recall; the second migration pass is a no-op. |
-| 8 | Day 4–8 | **Boundary+Release lane:** **W0-PR12** (de-gate Approvals in 3 nav places + `cost.ts` + audit-export; tripwire `tier-enforcement-matrix.test.ts`), **W0-PR13** (pricing, with a re-check of prices at merge), **W0-PR15** (doc drift, without sentences about visibility/license — DQ-02), **W0-PR17** (telemetry switch and disclosure). In parallel, independent of W0: **WB-PR1** (inventory + review of ADR-08/09) → **WB-PR2** (only the KVARK RED test `it.fails`), **OSS-PR1/PR2** (inventory and license lint in report mode, without changing the LICENSE/NOTICE text), **W8-PR1** (npm/pwsh entry points for the router/canary receipt + receipt manifest, without a logic change). | **W0-PR12, PR13, PR15, PR17; WB-PR1, WB-PR2; OSS-PR1, OSS-PR2; W8-PR1**; AT-12/AT-18 (part), AT-27 config (part) | Gates are green; no LICENSE/NOTICE text has been changed. |
-| 9 | Day 4–6 | **Durable-probe lane:** **W0-PR14**, RED repro of the `getDue` hypothesis (ISO with `T` versus `datetime('now')`). Fix only if the hypothesis is confirmed. | **W0-PR14**; AT-23 (part); F-DUR-10 = AUDIT FINDING — TO VERIFY | Repro report: confirmed or refuted, with a test. |
-| 10 | Day 8–10 | Remaining W0: **W0-PR16** (Stop/disconnect copy). Integration doc-only PR (ID reconcile). Rebase/merge feature branches onto the integration branch at least once a day. All DP-0.06 gates green on the integration branch: `npm run build:packages` · `npm run typecheck:server-tests` · `npm run lint` · `npm run test -- --run --maxWorkers=6`. **F1 preparation**, without starting paid runs: F1 requires ODB-01 (P/R accounts and budget), a dedicated VM or a disposable Windows account for `certify-windows-installer.ps1`, and RAT-01 before G1 is closed. | W0-PR16; G1 exit (h), (k), (l), (m); Delivery §5 F1, §6.1 | The integration branch is green; F1 prerequisites are listed with an owner. |
-
-**If `origin/main` differs from `2af0904d`** (e.g. a founder or dependabot merge before approval), the baseline from the checklist ("Baseline (immutable)": `main` = `2af0904d…`, `HEAD == origin/main`) and DP-0.01 no longer hold. Work **stops**, and the question goes to the founder through [05](05-RISKS-DECISIONS-ESCALATION.en.md) before step 3. The team does not choose a new base on its own.
-- **Integration branch base:** DP-0.04 and the checklist (PROPOSAL) say `2af0904d`. Whether `integration/waggle-next` is still cut from `2af0904d` or from the new `origin/main` is decided by the founder (UNKNOWN).
-- **Preparation for the decision:** a read-only list `git diff --name-only 2af0904d origin/main` from the checkout from step 1.
-- **Re-check:** every phase-A finding, `path:line` from 03/04 and pin test whose file is on that list is re-checked on the new HEAD before use in a PR ([v1.2-evidence/README](../plans/v1.2-evidence/README.en.md), "Snapshot, not the current truth").
-
-**Questions for the founder before start** (the only canonical list; letters (a)–(o) are stable IDs referenced by 01, 02, 04 and 05, so new questions are appended at the end, without renumbering; they go through [05 §5.0 and §5.5](05-RISKS-DECISIONS-ESCALATION.en.md)):
-- (a) approval of the delivery plan;
-- (b) an exception for a `w0/*` worktree at `2af0904d` for W0-PR19 ([OPEN-LOW-FINDINGS](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md), SAFE checklist row);
-- (c) whether the team works on the founder's machine or on its own clones. DP-0.02/DP-0.03 (9 existing worktrees, 2 stashes) are tied to the founder's machine; which host the work is done on is UNKNOWN;
-- (d) the status of the docs worktree `D:/Projects/waggle-v12-handoff` (`docs/waggle-v1.2-planning`). It is the 10th entry in `git worktree list` (CONFIRMED read-only 29.09.2026), while the checklist lists 9 existing ones and does not mention it;
+**Questions for the founder before start** (the only canonical list; the letters are stable IDs, new questions are appended at the end; rationales and facts: [05 §5.0.1](05-RISKS-DECISIONS-ESCALATION.en.md); recommendations and blockers: [closure record §4](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md)):
+- (a) approval of the delivery plan — `PLAN-APPROVAL`;
+- (b) a detached baseline fixture worktree at `2af0904d` for W0-PR19 — TSA-05;
+- (c) the team on the founder's machine or only on team machines — TSA-03;
+- (d) what is done with the docs worktree `D:/Projects/waggle-v12-handoff` after the handoff — TSA-03 A, together with (h) and (n);
 - (e) the deadline for DQ-04 and DQ-05 (recommendation: before G2);
 - (f) who gives ODB-01 for F1;
-- (g) the status of the 12 MED findings of the last critique round: whether they are resolved in the package and where that is recorded (§2; the package does not list them);
-- (h) how and when the untracked v1.2 package (PRD/FRD/ADR, branch `docs/waggle-v1.2-planning`) is committed or brought into `integration/waggle-next`. That branch is created from `2af0904d`, where PRD/FRD/ADR v1.2 do not exist (§1). The question blocks WB-PR1 (table inventory in the FRD + review of ADR-08/09, Delivery §2 WB) and the ID-reconcile doc-only PR (FRD §16.1 ↔ PRD v1.2 ↔ Delivery §7). It is also gate 4 "Before day 1" in [03 §6](03-BACKLOG.en.md) and N-07 in 03 §7;
-- (i) DOCX re-export of the PRD/FRD with the same `pandoc` command and update of the hashes in Delivery §6.1 and OD-9 (doc-only). **Done 29.09.2026** in the docs worktree, without changing the `.md` text; the "Handoff condition" from §6.1 is met (§1, "DOCX is current"). The founder reviews it together with the whole package; letter (i) is kept for stable references;
-- (j) the order of precedence between `AGENTS.md` (with `CLAUDE.md`), the checklist and DP-0.01..DP-0.16, the Delivery plan, the FRD and this handoff, including the known conflicts with `AGENTS.md` §4 (what a "phase" is and who gives "approval"; W0-PR9 and W0-PR12 do not start until answered) and §3.8 (the founder's personal handoff paths). Until answered, the interim rule from [02 §0](02-WORKING-AGREEMENT.en.md) ("Order of precedence") applies. It is sent together with (a) (§3 of this file);
-- (k) who approves and who merges into `integration/waggle-next`: whether founder review is mandatory for every PR, who performs the merge and who approves when the author is also the role owner. It is sent together with (a) ([02 §7](02-WORKING-AGREEMENT.en.md));
-- (l) ESK-01..ESK-03: the tech lead's name, the escalation channel to the founder with the expected response time, and who assigns the DP-0.14 roles to people. They are requested together with (a); without role names, DoR blocks every PR ([05 §5.0](05-RISKS-DECISIONS-ESCALATION.en.md); 02 §8; 03 §0);
-- (m) whether the Harness owner co-approves merges of the chat hotspot (`chat.ts` + `chat-*.ts`): DP-0.14 says `Harness/Chat owner`, while the W0 rows say only Chat owner. This must be resolved before the first merge of W0-PR8, W0-PR9 or W0-PR11 ([02 §3](02-WORKING-AGREEMENT.en.md), [04 §2](04-CODEBASE-MAP.en.md));
-- (n) who gives a new team member access to the repo (repo visibility: `CLAUDE.md:84`/`AGENTS.md:68` say private, the live check on 27.09.2026 says public — AUDIT FINDING — TO VERIFY, DP-0.13) and how the package reaches the team on a host that is not the founder's machine, together with (c), (d) and (h) ([01 §3.2](01-ONBOARDING-DEV-ENV.en.md), §0.1 pt.5);
-- (o) whether, before approval of the plan, the team may create a separate fresh clone on its own machine (detached `2af0904d`, no push) and run `npm ci`, `npm run build:packages`, tests and repro scripts in it (§2, §3). Until answered: no.
+- (g) not a question for the founder: the status of earlier findings is in [FINDINGS-DISPOSITION.csv](../plans/v1.2-evidence/findings/FINDINGS-DISPOSITION.csv) (H-03);
+- (h) how the package gets into `integration/waggle-next` — `Q00-h`, INT-01; closure D-4;
+- (i) DOCX export: not a founder decision; manifest §3;
+- (j) order of precedence of documents — TSA-10, TSA-06; 02 §0;
+- (k) who approves and merges into `integration/waggle-next` — TSA-01; 02 §7;
+- (l) ESK-01..ESK-03: tech lead, escalation channel, role assignment — 05 §5.0; TSA §1;
+- (m) whether the Harness owner co-approves merges of the chat hotspot — TSA-01 pt.2; 02 §3;
+- (n) distribution, handoff channel and `<ODOBRENI_TIMSKI_REMOTE>` (H-01) — TSA-09; closure D-1..D-3. Until decided, the rule for today from the start of this section applies;
+- (o) isolated onboarding in a fresh clone before approval of the plan — TSA-02; until answered: no.
 
-G1 does not finish in 10 days. The whole of G1 takes 3–5 weeks, including the F1 cycle of 3–5 wd and serial review.
+G1 does not finish in 10 days: for reference 3–5 weeks from T0 ([Delivery §4.4.1 and §4.4.4](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)).
 
 ---
 
 ## 7. What is decided and what is open
 
-**Decided: DECISION D-01..D-18** (brief §3; closed, **not to be reopened**; the full text and consequences are in [brief §3](../plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md), and the map to disposition rows is in [Disposition §0.1](../plans/WAGGLE-AUDIT-DISPOSITION-v1.2.en.md)):
+**Decided:** DECISION D-01..D-18 ([brief §3](../plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md); map to disposition rows: [Disposition §0.1](../plans/WAGGLE-AUDIT-DISPOSITION-v1.2.en.md)). They are not reopened; a conflict between code or a finding and D-nn is recorded and reported to the founder for information (§9).
 
-| ID | Decision |
-|---|---|
-| D-01 | Waggle is free/open-source for the individual (no paywall for memory, harness, skills, basic evolution, approvals, routines). |
-| D-02 | Waggle = me; KVARK = us. There is no separate Waggle Team/Enterprise product. |
-| D-03 | KVARK remains exclusively on-prem; there is no cloud fallback in KVARK mode. |
-| D-04 | Desktop-first/local-first; Windows/Tauri is primary; cloud convenience is a later phase. |
-| D-05 | BYOK remains; the product shows where data goes. |
-| D-06 | Knowledge work is the primary job; coding is supported, but it is not the identity. |
-| D-07 | Home is preserved, not redesigned from scratch. |
-| D-08 | The Workspace is the central object; chat lives inside the Workspace. |
-| D-09 | Technical agents stay below the surface; advanced access remains. |
-| D-10 | Skills and connectors are used inline; OAuth and secrets are not handled in LLM text. |
-| D-11 | External executors (Claude Code/Codex/Hermes) are an optional capability; the result returns to the same Workspace. |
-| D-12 | Hive Mind remains the memory foundation; retrieval and isolation are preserved, without rewriting the engine. |
-| D-13 | Evolution is part of the product thesis: candidate execution, evaluation, activation, rollback. |
-| D-14 | Long-running work and routines are part of the product. |
-| D-15 | The reference target is the Qwen 3.8 27B class; the older model is the control baseline. |
-| D-16 | Fusion is not in this scope (no council/5-hats/agent-fusion). |
-| D-17 | BORROW → ADAPT → BUILD. |
-| D-18 | The benchmark is key evidence, not decoration; the test is not designed so that Waggle must win. |
+**Open:** DQ-01..DQ-09 ([Delivery §6](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md); PRD §17 `O-1..O-9` = DQ-01..09) · RAT-01..RAT-09, ODB-01, ODB-02 ([Delivery §6.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)) · sub-lists `MDQ-01..12` ([Migrations §7](../plans/WAGGLE-MIGRATIONS-v1.2.en.md)), `Q-00..Q-10` ([Benchmark §15](../plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.en.md)), `Q1..Q6` ([BvB §6](../plans/WAGGLE-BUILD-VS-BORROW-v1.2.en.md)) · disposition of findings and package inconsistencies: [closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md), [FINDINGS-DISPOSITION.csv](../plans/v1.2-evidence/findings/FINDINGS-DISPOSITION.csv), [OPEN-LOW-FINDINGS](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md) · UNKNOWN registers: [BvB §7](../plans/WAGGLE-BUILD-VS-BORROW-v1.2.en.md), [Benchmark §18](../plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.en.md), [ADR-INDEX §4](../decisions/ADR-INDEX.en.md), [SUMMARY "Biggest UNKNOWNs"](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md).
 
-**Open** (ID only; the authoritative text, recommendation and impact are at the links):
-- **Decision queue DQ-01..DQ-09** (founder; [Delivery §6](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) is authoritative, PRD §17 `O-1..O-9` = DQ-01..09): DQ-01 naming/GO · DQ-02 license · DQ-03 subscribers · DQ-04 benchmark budget · DQ-05 model/hardware · DQ-06 mail/calendar · DQ-07 mobile · DQ-08 UI language · DQ-09 thresholds/modes.
-- **Ratifications and approvals RAT-01..RAT-09, ODB-01, ODB-02** (founder; [Delivery §6.1](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)), together with the PR before whose merge they must arrive.
-- **Sub-lists**, which do not redefine DQ: `MDQ-01..12` ([Migrations §7](../plans/WAGGLE-MIGRATIONS-v1.2.en.md)), `Q-00..Q-10` ([Benchmark §15](../plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.en.md)), `Q1..Q6` ([BvB §6](../plans/WAGGLE-BUILD-VS-BORROW-v1.2.en.md)). Most are engineering decisions of the role owner.
-- **Package inconsistencies:** [OPEN-LOW-FINDINGS](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md).
-- **UNKNOWN registers:** [BvB §7](../plans/WAGGLE-BUILD-VS-BORROW-v1.2.en.md), [Benchmark §18](../plans/WAGGLE-BENCHMARK-PROTOCOL-DRAFT.en.md), [ADR-INDEX §4](../decisions/ADR-INDEX.en.md), [SUMMARY "Biggest UNKNOWNs"](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md).
-
-Rule: an open question never carries the DECISION label. It is written as "open — DQ-nn (founder)" or "open — engineering decision of the owner (role)" (Delivery, "How to read statuses").
+Rule: an open question never carries the DECISION label. It is written as "open — DQ-nn (founder)" or "open — engineering decision of the owner (role)".
 
 ---
 
 ## 8. Absolute prohibitions
 
-They apply **without exception until the founder explicitly approves the specific action**. The authoritative list is in the [SAFE-IMPLEMENTATION checklist, "Absolute prohibitions"](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) and in DP-0.11/DP-0.12. This is only an overview:
-
-- **No merge into `main`.** All branches target `integration/waggle-next`. A merge into `main` is a founder-gated step, only after the F3 receipts.
-- **No force-push.**
-- **No `git tag v*` and no pushing of tags.** `release.yml:12-15` triggers on any `v*` tag, so a tag would start the release pipeline. `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` stays undefined.
-- **No release, publication, attestation, or local signing of a release artifact.**
-- **No replacing the installed application on the founder's machine.** Installer, packaged, crash-injection and migration tests against a packaged build are run only on a dedicated VM or a disposable Windows account. Any "Refusing …" rejection by a script stops the work.
-- **No external writes:** no real email or message, no channel tokens, no marketplace install of an unverified binary, `WAGGLE_SIGNAL_EMIT=0`, tests do not touch `~/.waggle`, hook tests do not touch the real `~/.claude`/`~/.codex`/Hermes config. A run with a real account or a paid API proceeds only with ODB-01 or DQ-04 approval for that run, with a cap.
-- **No Stripe/billing actions,** cancellations, refunds, or changes to www pricing before DQ-01/DQ-03.
-- **No change to repo visibility, the license, or the NOTICE text** (before DQ-02). No changes to GitHub repo/org settings and no manual workflow runs.
-- **Existing worktrees and stashes must not be touched:** no `prune`/`remove`, no `stash pop/drop/apply`.
-- **No Fusion/council/5-hats surface** (DECISION D-16; the PR is rejected at review).
+The authoritative list is the [SAFE-IMPLEMENTATION checklist, "Absolute prohibitions"](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md), together with DP-0.11/DP-0.12; it is not repeated here. In short: no merge into `main`, force-push, `git tag v*`, release, publication or signing; no push of internal planning documentation or team branches to the public `origin` (push only to `<ODOBRENI_TIMSKI_REMOTE>`, after the founder's recorded decision on the handoff channel, H-01); no replacing the installed application or touching the founder's data; no external writes or paid calls without approval for the specific run; no change to repo visibility, the license or the NOTICE text; no Fusion/council surface (DECISION D-16). An exception applies only with the founder's written approval for the specific action.
 
 ---
 
@@ -290,28 +186,18 @@ They apply **without exception until the founder explicitly approves the specifi
 | Product decision from D-01..D-18 | Not reopened: closed. The question is reformulated as implementation of the decision. A conflict between code or a finding and D-nn is recorded and reported to the founder for information (a report, without reopening; 02 §10 pt.3, 05 §5.3). | brief §3 |
 | Decision queue item | Founder | Delivery §6 (DQ-01..09) |
 | Ratification of an ADR / the G structure; paid run; scope of W3e-PR9 | Founder | Delivery §6.1 (RAT-01..09, ODB-01, ODB-02) |
-| Exception to a prohibition or the checklist (e.g. W0-PR19 worktree) | Founder, in writing, before the action | checklist; DP-0.11 |
+| Exception to a prohibition or the checklist (e.g. W0-PR19 worktree) | Founder, in writing, before the action | checklist; DP-0.11; proposal TSA-05 ([TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md)) |
 | Engineering decision within a role (e.g. MDQ-07, timezone field ADR-07 O4, Q1/Q6) | Role owner from DP-0.14 | Delivery DP-0.14; Migrations §7 |
-| Merge into a hotspot file | Merge owner (role); no two hotspot merges on the same day without an integration test (what that test is: UNKNOWN, and until the tech lead decides there is no second merge of the same hotspot on the same day, [02 §3](02-WORKING-AGREEMENT.en.md)) | DP-0.14; checklist |
+| Merge into a hotspot file | Merge owner (role); no two hotspot merges on the same day without an integration test (what that test is: UNKNOWN, and until the tech lead decides there is no second merge of the same hotspot on the same day, [02 §3](02-WORKING-AGREEMENT.en.md); proposed definition: TSA-07 in [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md), NOT APPROVED) | DP-0.14; checklist |
 | Change in `packages/hive-mind-core/src/**` | Memory owner + maintainer review of the drift baseline; never directly on the mirror | `CLAUDE.md` §7.5 |
 | External gates (Authenticode, Deep Security, CASA, GitHub settings) | Founder / repo owner, through W8; not a PR or an agent action | Delivery §2 W8; ADR-10-O8 |
-| Error or inconsistency in the package | The lead records it, the founder decides; the package is not changed silently | OPEN-LOW-FINDINGS |
+| Error or inconsistency in the package | The lead records it, the founder decides; the package is not changed silently | [closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md); OPEN-LOW-FINDINGS |
 | Finding that is not in the package (new defect) | RED test + status AUDIT FINDING — TO VERIFY, then lead → founder if it changes scope or G | DP-0.15 |
 
 ---
 
 ## Sources
 
-[Delivery plan v1.2](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) §0 (DP-0.01..DP-0.16), §1, §2 W0/WB/OSS/W8, §3, §4.2, §4.3, §5, §6, §6.1 · [SAFE-IMPLEMENTATION checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) · [SUMMARY for the founder](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md) · [PRD v1.2](../Waggle_PRD_v1.2_DRAFT.en.md) §1 · [FRD v1.2](../Waggle_FRD_v1.2_DRAFT.en.md) §15 · [ADR-INDEX](../decisions/ADR-INDEX.en.md) · [brief §3](../plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md) · [OPEN-LOW-FINDINGS](../plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md).
+Package contents, the purpose of each file and SHA-256: [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md). Handoff history: [HANDOFF-HISTORY](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md). Closure of H-01..H-12: [closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md). Key sources: [Delivery plan v1.2](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) §0–§6.1 · [SAFE-IMPLEMENTATION checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) · [PRD v1.2](../Waggle_PRD_v1.2_DRAFT.en.md) · [FRD v1.2](../Waggle_FRD_v1.2_DRAFT.en.md) §15–§16 · [ADR-INDEX](../decisions/ADR-INDEX.en.md) · [brief §3](../plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md) · [SUMMARY](../plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md) · [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) (PROPOSAL, NOT APPROVED).
 
-Read-only checks for this file (29.09.2026, at `2af0904d`):
-- `git rev-parse HEAD`;
-- `git status --porcelain`;
-- `git worktree list`;
-- `git stash list`;
-- `.github/workflows/ci.yml:1-6`;
-- `package.json` (`engines.node >=22.19.0`, scripts `build:packages`, `typecheck:server-tests`, `lint`, `test`, `persona:seal`);
-- `node docs/plans/v1.2-evidence/tools/check_trace.mjs docs` (exit 0);
-- `sha256sum docs/Waggle_{PRD,FRD}_v1.2_DRAFT.{md,docx}` against Delivery §6.1 after the re-export on 29.09.2026 (all four hashes match); `unzip -p docs/Waggle_{PRD,FRD}_v1.2_DRAFT.docx word/document.xml | grep` for `out/`, `scratchpad/` and `v12-planning-staging/` (0 hits);
-- grep `out/`, `phaseA/`, `scratchpad/` over PRD/FRD/Delivery/MIG/BvB/Benchmark/ADR-INDEX (0 hits except `…/scratchpad/wt202`);
-- `git cat-file -e 2af0904d:docs/Waggle_PRD_v1.2_DRAFT.md` and `…:docs/decisions/ADR-INDEX.md` (they do not exist at `2af0904d`).
+Read-only checks for revision 1.2.1 (30.09.2026): `git rev-parse origin/main` (= `2af0904d…`); `git log -1` and parents for `2758f4e5` (parent `2af0904d`) and `fc0a7b3f` (parent `2758f4e5`); `git diff --name-only 2af0904d fc0a7b3f` (108 files, all in `docs/`); `git ls-remote origin` (branch `docs/waggle-v1.2-planning` = `2758f4e5`, no `refs/heads/integration/*`); `git reflog` for `refs/remotes/origin/docs/waggle-v1.2-planning` (push 30.09.2026 00:04:18 +0200); `gh api repos/marolinik/waggle-os` (`visibility: public`); `node docs/plans/v1.2-evidence/tools/check_trace.mjs docs` (result in manifest §4). Checks from 29.09.2026: [HANDOFF-HISTORY §7](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md).

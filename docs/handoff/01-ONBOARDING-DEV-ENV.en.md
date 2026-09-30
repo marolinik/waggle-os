@@ -4,6 +4,10 @@
 
 **Document revision: 1.2 DRAFT · 29.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`**
 
+**Document revision: 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)**
+
+Changes 1.2.1: H-01 — handover channel and the approved team remote: clone/push only from/to `<ODOBRENI_TIMSKI_REMOTE>`, push URL check, prohibition of a bare `git push` on the founder's machine (§0.1 item 5, §3.2, §3.3); H-02 — package identity (`2758f4e5` on `origin`, `fc0a7b3f` locally, 1.2.1 uncommitted), "untracked" kept as a historical record, hashes in the manifest (§0.1 item 5, §1 pandoc row, §3.1, §3.2, §13 item 4); H-04 — protections of the founder's machine as prohibitions, not obligations of team hosts; proposals TSA-02/03/04/08 marked as NOT APPROVED together with the norm they replace (§0, §0.2, §3.1, §3.2, §3.3, §11.8, §12, §13 item 1); H-05 — safe test profile (BTP, new §9.0), the scratch profile is not a sandbox, extended list of leaks with the W0-PR20 fix, snapshots including directories and the Claude Desktop configuration (§0.1, §0.2, §7, §9.0–§9.6, §13 item 3); H-06 — labels of the integration jobs INT-01/INT-02 (§0.2, §1, §3.2). H-03, H-07..H-11: no change to this document; H-12 points to §9.0. This revision is not an implementation approval; the proposals from [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) do not apply before the founder's confirmation, and the PROPOSAL/ODB/DQ/RAT statuses are not changed by it. · Final review (H-01/H-04): a single rule for "today" until decision (n), aligned with 00 §2/§6 and TSA §3 — no clone at all, not even a read-only clone of the public repo; only a copy of the package verified against the manifest and `git ls-remote` (§0.1 items 1, 3, 5; §3.2 note). · Final review (H-02): the expected SHA of the `docs/waggle-v1.2-planning` branch in the team clone is the SHA of the 1.2.1 closure commit from manifest §1 (after decision D-3), not `planning_package_sha` `2758f4e5` (§0.1 item 5, §3.2).
+
 Intended for: the tech lead, developers and QA taking over Waggle from the founder. This document describes how to set up
 an isolated development environment on Windows (the primary platform), the order in which to build and test, and which
 pitfalls in this repo have already cost time. The commands were verified against [`package.json`](../../package.json),
@@ -31,40 +35,50 @@ at `2af0904d` for this document and carry `fajl:linija`. Working rules are PROPO
 > changes git state (branch, worktree, commit, push), as well as `npm ci`, builds, gates, tests, repro scripts and
 > starting the sidecar/web/E2E, waits for that approval, **even in a separate fresh clone on one's own machine**
 > ([00 §2 and §6](00-START-HERE.en.md); [02 §0](02-WORKING-AGREEMENT.en.md); [04 §13 item 7](04-CODEBASE-MAP.en.md)). The rule is
-> a PROPOSAL of this handoff; the founder confirms it or grants an exception for one's own fresh clone via question (o) in 00 §6,
-> and until the answer arrives the prohibition applies. The `integration/waggle-next` branch does not exist as of 29.09.2026 (§3.2) and is not
+> a PROPOSAL of this handoff. An exception for one's own fresh clone on a team machine is proposed by
+> [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) TSA-02 (isolated onboarding: detached `2af0904d`, no
+> branch, commit or push; only `npm ci`, build and gates), and until the founder confirms it (question (o) in 00 §6) the prohibition applies.
+> The `integration/waggle-next` branch does not exist as of 30.09.2026, neither locally nor on `origin` (§3.2), and is not
 > to be created before approval. The commands in §3.2–§3.3, §4–§7 and §9.3–§9.4 (except read-only steps 1–2 in §9.3) apply only after approval.
 
 ### 0.1 Before plan approval (immediately; aligned with 00 §6, steps 1–2)
 
-1. Read the package per [00 §3](00-START-HERE.en.md) (Day 1 and Day 2), the SAFE checklist in full, and this document. Code is
-   read without modification, in a checkout the team has access to or against the revision
+1. Read the package per [00 §3](00-START-HERE.en.md) (Day 1 and Day 2), the SAFE checklist in full, and this document. The package is
+   read from the copy handed over by the founder whose SHA-256 matches the [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3.
+   Until decision (n) (H-01, TSA-09) the team makes no clone at all, not even a read-only clone of the public repo ([00 §2](00-START-HERE.en.md)).
+   Code is read without modification only in a checkout from the channel approved under (n)
    (`git show 2af0904df01ca3d374cc78ba95b60dc579dd6a7a:<putanja>`, `git grep`; [04 §13 item 3](04-CODEBASE-MAP.en.md)).
 2. Install the prerequisites from §1 that do not require `node_modules` (PowerShell 7, Git, fnm, Node; Rust/MSVC only for
    desktop work) and switch to Node `22.23.2` (§2): `node -v` = `v22.23.2`, `npm -v` = `10.9.8`. This is
    preparation of a personal machine outside the repo (02 §0). Playwright Chromium (`npx playwright install chromium`) comes after
    approval, together with `npm ci`.
-3. Read-only checks: `git rev-parse origin/main` = `2af0904df01ca3d374cc78ba95b60dc579dd6a7a` (00 §6 item 1),
-   `git worktree list` only as a read operation (§3.1), a shell env preflight (§9.3, step 1) and a check that the founder's instance is not
+3. Read-only checks: `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main` =
+   `2af0904df01ca3d374cc78ba95b60dc579dd6a7a` (00 §6 item 1; no clone). `git rev-parse origin/main` and
+   `git worktree list` (read only, §3.1) only in a checkout from the channel approved under (n). A shell env preflight (§9.3, step 1) and a check that the founder's instance is not
    listening on 3333 (§9.3, step 2). The server is not started. In addition, a first snapshot of `~/.waggle` (§9.5; reads
    `~/.waggle`, writes only to `%TEMP%`) and a second one after several hours without any dev work: if they differ, an installed Waggle
    is running on that machine, a comparison there does not prove isolation, and the dev sidecar/E2E are not run there (§9.5).
 4. Prepare a draft env template per §9.2 and the checklist ("Env isolation", "External writes disabled") **outside the repo**
-   (00 §6 item 2). It goes into the worktree as `.env.dev.local` only after approval.
+   (00 §6 item 2). It goes into the worktree as `.env.dev.local` only after approval. In addition, prepare a safe test profile
+   (BTP, §9.0) outside the repo; the first sidecar/E2E run after approval happens only there.
 5. List the questions for the founder (00 §6, "Questions for the founder before the start"). The list also includes question (n), alongside (h):
-   how the untracked package gets into the repo and onto the integration branch, and who grants the team push (write) rights for
-   the `integration/waggle-next` and `<wave-id>/*` branches. The package is untracked today, so this is a blocker for every host
-   other than the founder's machine (§3.2).
+   the package handover channel and `<ODOBRENI_TIMSKI_REMOTE>`, who grants the team read/write access and push (write) rights for
+   the `integration/waggle-next` and `<wave-id>/*` branches, and how the package (the approved 1.2.1 closure commit from manifest §1,
+   after D-3; `2758f4e5` lacks the H-01..H-12 corrections) gets onto the integration branch (INT-01). The package is committed (`2758f4e5`), but the closure
+   revision 1.2.1 is not ([00 §1.1](00-START-HERE.en.md)). Until the decision, the team reads a copy whose SHA-256 matches the
+   [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3; a team host has no approved clone source or push
+   destination, so no clone (not even a read-only clone of the public repo), branch or push is made (§3.2).
 
 ### 0.2 After the founder's plan approval (00 §2)
 
 1. The tech lead creates `integration/waggle-next` from `2af0904d` in their own new worktree (§3.2; 00 §6 item 3,
-   W0-PR0). Then everyone creates their own worktree from that branch (§3.3). Do not touch existing worktrees and stashes.
+   INT-01, W0-PR0), in a clone from the approved team remote (H-01). Then everyone creates their own worktree from that
+   branch (§3.3). On the founder's machine, do not touch existing worktrees and stashes (DP-0.02, DP-0.03); on a team machine, do not touch other people's entries (§3.1).
 2. Verify that no node process holds `.node` files, then `npm ci` (§4).
 3. `npm run build:packages` (§5).
 4. Create a per-worktree `.env.dev.local` with an isolated `WAGGLE_DATA_DIR`/`WAGGLE_PORT` (§9.2) and snapshot
    the "before" state of `~/.waggle` and of the external clients' configuration (§9.5).
-5. Run the gates from §7 on a clean tree. Tie the result to the commit SHA.
+5. Run the gates from §7 on a clean tree (the root suite, until W0-PR20 is merged, only in the BTP, §9.0). Tie the result to the commit SHA.
 6. At the end of the day, snapshot `~/.waggle` and the client configuration again ("after") and compare (§9.5).
 
 ---
@@ -81,7 +95,7 @@ at `2af0904d` for this document and carry `fajl:linija`. Working rules are PROPO
 | npm | **`10.9.8`** | `packageManager: "npm@10.9.8"` (`package.json`). Node `22.23.2` on the reference machine ships exactly `npm 10.9.8` | CONFIRMED AT REVISION |
 | Rust toolchain + MSVC build tools | CI: `toolchain: 1.94.0` (`.github/workflows/tauri-build-pr.yml:64`) | Only for the desktop build (`npm --prefix app run tauri:build:win`). The repo has no `rust-toolchain` file | CONFIRMED AT REVISION (CI pin); local minimum: UNKNOWN |
 | Playwright Chromium | via `@playwright/test ^1.63.0` (root devDependency) | E2E/visual (§6.4). Installation: `npx playwright install chromium` (CI: `--with-deps chromium`, `ci.yml:144`) | CONFIRMED AT REVISION |
-| pandoc | **`3.9`** (Delivery §6.1: `pandoc 3.9` on the host; `pandoc --version` on the reference machine 29.09.2026 = `pandoc 3.9`) | Only for doc-only PRs that change the PRD/FRD `.md`; in G1 these are WB-PR1 (FRD table) and the ID-reconcile doc-only PR ([03](03-BACKLOG.en.md)). The DoD requires a fresh DOCX export and new hashes ([02 §9](02-WORKING-AGREEMENT.en.md); [05 §6](05-RISKS-DECISIONS-ESCALATION.en.md)). Command from Delivery §6.1: `pandoc -f gfm-tex_math_dollars-tex_math_gfm <fajl>.md -o <fajl>.docx`. After the export: `Get-FileHash -Algorithm SHA256` for `.md` and `.docx`, and record the hashes in Delivery §6.1 and Disposition OD-9. The DOCX hash changes on every export (`docProps/core.xml` carries the creation time, Delivery §6.1), so it is recorded after every export | CONFIRMED AT REVISION of the package (Delivery §6.1); whether a different pandoc version produces the same DOCX: UNKNOWN |
+| pandoc | **`3.9`** ([manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md) §3: `pandoc 3.9`; `pandoc --version` on the reference machine 29.09.2026 = `pandoc 3.9`) | Only for doc-only PRs that change the PRD/FRD or `00-START-HERE` `.md`; in G1 these are WB-PR1 (FRD table) and the ID-reconcile doc-only PR INT-02 ([03](03-BACKLOG.en.md)). The DoD requires a fresh DOCX export and new hashes ([02 §9](02-WORKING-AGREEMENT.en.md); [05 §6](05-RISKS-DECISIONS-ESCALATION.en.md)). Command from manifest §3: `pandoc -f gfm-tex_math_dollars-tex_math_gfm <fajl>.md -o <fajl>.docx`. After the export: `Get-FileHash -Algorithm SHA256` for `.md` and `.docx`, and record the hashes in manifest §3. The DOCX hash changes on every export (`docProps/core.xml` carries the creation time), so it is recorded after every export | CONFIRMED AT REVISION of the package (manifest §3; export history: [HANDOFF-HISTORY](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md) §4); whether a different pandoc version produces the same DOCX: UNKNOWN |
 | Docker, Python, LiteLLM, Ollama | **not required** for the default gate | Docker (Postgres 5434 + Redis 6381) is needed only for `npm run test:infra` (`vitest.config.ts:39-45`). The installed desktop must not depend on any of them (`CLAUDE.md` §1) | CONFIRMED AT REVISION |
 
 RAM: the local root suite is run with `--maxWorkers=6` (DP-0.06). That number comes from an 80 GB machine (§6.2).
@@ -133,62 +147,95 @@ On Windows, `fnm exec --using=22.23.2 …` does not work reliably (a silent no-o
 
 ### 3.1 What must not be touched
 
+**The founder's machine — prohibitions, not obligations of the team** (DP-0.02, DP-0.03; [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) TSA-03 A, applied in revision 1.2.1 per the founder's instruction):
 - **Existing worktrees** on the founder's machine: 9 entries from DP-0.02 ([delivery plan §0](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md)).
   They are not deleted, not checked out and not pruned. When an entry becomes "prunable", do **not** run
   `git worktree prune` / `git worktree remove` without the founder's explicit approval.
 - After 27.09.2026 there is also the planning docs worktree `D:/Projects/waggle-v12-handoff` (branch
-  `docs/waggle-v1.2-planning`, `2af0904d`) that carries this package. Leave it untouched as well. Source:
-  `git worktree list`, 29.09.2026.
+  `docs/waggle-v1.2-planning`; locally `fc0a7b3f` + the uncommitted closure revision 1.2.1, on `origin`
+  `2758f4e5`) that carries this package. Leave it untouched as well. Source: `git worktree list`,
+  `git ls-remote origin`, 30.09.2026.
 - **Stashes** `stash@{0}` and `stash@{1}` (DP-0.03): no `stash pop/drop/apply`.
+- Whether the team works on the founder's machine at all: proposal TSA-03 B is "no" (NOT APPROVED; 00 §6 (c)).
+
+**Team machine.** A fresh clone has none of the founder's worktrees or stashes and should not have them. At the start and at the end
+of a session, snapshot `git worktree list` and `git stash list`; no entry that does not belong to you is removed or changed.
+One's own finished worktree: §3.3.
+
 - **Git prohibitions** (DP-0.11, DP-0.12; [checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md) "Absolute prohibitions"):
   no merge into `main`, no force-push, no `git tag v*` and no pushing of tags (`release.yml:12-15` triggers on
-  every `v*` tag), no manual triggering or re-running of workflows, no changes to repo/org settings.
+  every `v*` tag), no manual triggering or re-running of workflows (exception only per TSA-08, after confirmation),
+  no changes to repo/org settings.
 - Pitfalls when re-running CI: §11.8.
 
 ### 3.2 Integration branch (once; tech lead; only after plan approval)
 
 DP-0.04 is a PROPOSAL: `integration/waggle-next` is created from `2af0904d` in **their own new worktree**, not in
-`D:/Projects/waggle-os`. State as of 29.09.2026: the local clone has neither a local nor a remote-tracking reference
-`integration/waggle-next`, which means the branch has not been created yet. State on origin without a fetch: UNKNOWN.
+`D:/Projects/waggle-os`. Establishing the branch with the package is the integration job INT-01 ([03](03-BACKLOG.en.md) §8).
+State as of 30.09.2026: `git ls-remote origin` returns no `refs/heads/integration/*` branch, so
+`integration/waggle-next` exists neither locally nor on `origin`.
 The paths below are a PROPOSAL.
 
 ```powershell
-# Timska mašina: svež klon (repository.url iz package.json)
-git clone https://github.com/marolinik/waggle-os.git D:\waggle\waggle-os
-git -C D:\waggle\waggle-os rev-parse origin/main       # uporediti sa 2af0904df01ca3d374cc78ba95b60dc579dd6a7a
+# PREDLOG; važi tek posle odluke osnivača o kanalu predaje (00 §6 (n), H-01) i odobrenja starta.
+# <ODOBRENI_TIMSKI_REMOTE> = URL koji osnivač upiše u TEAM-START-AUTHORIZATION. Javni
+# https://github.com/marolinik/waggle-os.git NIJE odredište za push interne dokumentacije ni timskih grana.
+
+# Timska mašina: svež klon SAMO iz odobrenog timskog remote-a
+git clone <ODOBRENI_TIMSKI_REMOTE> D:\waggle\waggle-os
+git -C D:\waggle\waggle-os remote -v                     # jedini remote; fetch i push = <ODOBRENI_TIMSKI_REMOTE>
+git -C D:\waggle\waggle-os rev-parse origin/main         # = 2af0904df01ca3d374cc78ba95b60dc579dd6a7a (ili baseline koji osnivač zapiše)
+git -C D:\waggle\waggle-os rev-parse origin/docs/waggle-v1.2-planning   # = SHA commita zatvaranja 1.2.1 iz manifesta §1 (posle D-3), NE planning_package_sha 2758f4e5 (bez korekcija H-01..H-12)
 
 git -C D:\waggle\waggle-os worktree add -b integration/waggle-next D:\waggle\wt\integration 2af0904df01ca3d374cc78ba95b60dc579dd6a7a
-git -C D:\waggle\wt\integration push -u origin integration/waggle-next    # nov branch, bez --force
+
+# Provera pre SVAKOG push-a (i za <wave-id>/* grane): push URL mora biti odobreni timski remote
+$pushUrl = git -C D:\waggle\wt\integration remote get-url --push origin
+if ($pushUrl -ne '<ODOBRENI_TIMSKI_REMOTE>') { throw "STOP: push remote '$pushUrl' nije odobreni timski remote (H-01)" }
+git -C D:\waggle\wt\integration push -u origin integration/waggle-next   # nov branch, bez --force
 ```
 
+Remote rules (PROPOSAL, NOT APPROVED until the founder confirms; H-01):
+- If `git remote -v` shows `github.com/marolinik/waggle-os` or any URL other than `<ODOBRENI_TIMSKI_REMOTE>`, work stops and is escalated ([05 §5.3](05-RISKS-DECISIONS-ESCALATION.en.md)). The public repo is not added as a remote. Comparison with the public `main` is read-only: `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main`.
+- On the founder's machine, `D:/Projects/waggle-os` and `D:/Projects/waggle-v12-handoff` have `origin` = the public repo, and the local branch `docs/waggle-v1.2-planning` tracks `origin/docs/waggle-v1.2-planning` (`git config --get branch.docs/waggle-v1.2-planning.remote` → `origin`, 30.09.2026). That is why a bare `git push` is not used there. Any push goes explicitly to the URL `<ODOBRENI_TIMSKI_REMOTE>` and only with the H-01 decision.
+- Today (before the decision on the channel and the start approval) nobody pushes to any remote.
+- The team remote serves development, not release. `release.yml` at `2af0904d` accepts only `GITHUB_REPOSITORY` = `marolinik/waggle-os` (`release.yml:46`, `:206`), so the transition to the public repo (merge into `main`, tag, signing, publication) remains a separate founder-gated step (Delivery §5; H-09).
+
 On the founder's machine, the same `worktree add` is run with `git -C D:/Projects/waggle-os …` and a target directory **outside**
-`D:/Projects/waggle-os`. The first PR on the integration branch adds `integration/**` to `ci.yml`
+`D:/Projects/waggle-os` (proposal TSA-03 B, NOT APPROVED: the team does not work on the founder's machine; after confirmation this recipe
+is dropped). The first PR on the integration branch adds `integration/**` to `ci.yml`
 (`on.push.branches`, `on.pull_request.branches`; today `ci.yml:3-6` = only `[main]`) and to `tauri-build-pr.yml`,
 and does not touch `release.yml` (DP-0.07). Until that PR lands, the integration branch has no CI.
 
-> **Blocker for every host other than the founder's machine.** The entire package (PRD/FRD v1.2, delivery plan, checklist, draft ADRs,
-> evidence and all of `docs/handoff/`) is **untracked** as of 29.09.2026 in `D:/Projects/waggle-v12-handoff` (branch
-> `docs/waggle-v1.2-planning`; [00 §1](00-START-HERE.en.md) "Where the package physically lives"; `git status`, read-only) —
-> CONFIRMED AT REVISION. A fresh clone of `marolinik/waggle-os` from the recipe above therefore contains none of the package
-> documents, and all relative links in it are broken. The package must also be on the integration branch for two steps of the
-> plan: recording decisions into the package documents via a doc-only PR ([02 §10](02-WORKING-AGREEMENT.en.md), item 4) and WB-PR1, which
-> extends the FRD ([03](03-BACKLOG.en.md) WB-PR1; 03 §7 N-07). Repo visibility: the documents say private
-> (`CLAUDE.md:84`, `AGENTS.md:68` "remains private"), but a live check on 27.09.2026 found `marolinik/waggle-os`
-> **public** (DP-0.13; F-REL-08 in [release-oss.md](../plans/v1.2-evidence/phaseA/release-oss.en.md): `gh api` →
-> `private:false`, unauthenticated `curl` → HTTP 200) — AUDIT FINDING — TO VERIFY (DQ-02). This document
-> does not change visibility (DP-0.13). If the live state is accurate, the clone from the recipe above needs no special access.
-> Something else remains open: `push -u origin integration/waggle-next` and pushing `<wave-id>/*` branches require write rights
-> on the repo, and it is not recorded who grants them to the team or how. The founder decides how and when the package is committed; today
-> that is UNKNOWN. **Question for the founder:** how does the untracked package get into the repo and onto `integration/waggle-next` before
-> the start of W0, and who grants the team push (write) rights, and how. This is question (n) in the list "Questions for
-> the founder before the start" in [00 §6](00-START-HERE.en.md), alongside (c), (d) and (h), and it is cited in §0.1 item 5. Until the answer
-> arrives, a team on another host can execute neither 00 §6 item 1 ("Access to the repo and the package") nor this document.
+> **The package on a team host and the handover channel (state as of 30.09.2026).** The package is committed: `planning_package_sha` =
+> `2758f4e5` (branch `docs/waggle-v1.2-planning`), and that branch has been on the public `origin` since 29./30.09.2026
+> (`git ls-remote --heads origin docs/waggle-v1.2-planning` → `2758f4e5…`; `gh api repos/marolinik/waggle-os` →
+> `private:false`, `visibility:public`) — CONFIRMED AT REVISION (read-only, 30.09.2026). The translation is the local commit
+> `fc0a7b3f`, and the closure revision 1.2.1 is not committed ([00 §1.1](00-START-HERE.en.md);
+> [manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md)). A clone of `main` contains none of the package documents, because
+> `2af0904d` does not have them. The public branch is not the handover channel: it has neither the translation nor the closure changes, and whether the public availability
+> is intentional is for the founder to decide ([00 §6](00-START-HERE.en.md) (n); H-01). The proposed channel (a private team repo, or a private
+> snapshot with a known baseline for reading and assessment only) and the access rules are in
+> [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) TSA-09 (PROPOSAL, NOT APPROVED). The package must be on the
+> integration branch (INT-01) for recording decisions via a doc-only PR ([02 §10](02-WORKING-AGREEMENT.en.md), item 4) and for WB-PR1
+> ([03](03-BACKLOG.en.md) WB-PR1; 03 §7 N-07); how it gets there is question (h). Repo visibility is not changed (DP-0.13):
+> `CLAUDE.md:84` and `AGENTS.md:68` say "remains private" — AUDIT FINDING — TO VERIFY (DQ-02; F-REL-08 in
+> [release-oss.md](../plans/v1.2-evidence/phaseA/release-oss.en.md)). Pushing the `integration/waggle-next` and `<wave-id>/*`
+> branches requires write rights on the **approved** remote, and who grants them is not recorded (question (n), alongside (c), (d) and (h);
+> §0.1 item 5). Historical record: on 29.09.2026 the package was untracked in `D:/Projects/waggle-v12-handoff`, so a fresh clone
+> of the public repo contained none of the package documents ([HANDOFF-HISTORY](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md) §2).
+> Until (n) is decided, a team on another host has no approved clone source or push destination: it reads the package from a copy
+> verified against the manifest, makes no clone (not even a read-only clone of the public repo), branch or push; of 00 §6 item 1 it executes
+> only the reading of that copy and a read-only `git ls-remote https://github.com/marolinik/waggle-os.git refs/heads/main`, and
+> it does not execute the commands of this document after §0.1.
 
 ### 3.3 One worktree per developer/agent
 
 DP-0.05 and the checklist prescribe one short-lived branch per task and one worktree per parallel agent. The branch
 name is `<wave-id>/<tema>`, and the allowed prefixes are `w0`–`w8`, `w3e`, `wb`, `oss`, `b1`–`b3`. The branch targets
 `integration/waggle-next`, never `main`.
+
+In the team clone `origin` = `<ODOBRENI_TIMSKI_REMOTE>` (§3.2). Before the first push of every `<wave-id>/*` branch, the same push URL check as in §3.2 applies.
 
 ```powershell
 git -C D:\waggle\waggle-os fetch origin
@@ -208,11 +255,12 @@ git -C D:\waggle\wt\w0-harn-01 merge origin/integration/waggle-next
 Once the branch has been pushed, it is synced by **merge**. Rebasing an already pushed branch requires a force-push, which is
 prohibited (DP-0.11). Rebase is an option only before the first push.
 
-Whether one's own `<wave-id>/*` worktree may be removed (`git worktree remove <putanja>`) after the PR is merged:
-UNKNOWN, a question of interpreting a checklist item, for the founder. The checklist ("I work in my own worktree …") says
-"no existing entry is deleted, checked out or pruned" and does not exempt one's own worktree, and the team does not interpret that
-item on its own ([02 §2.2](02-WORKING-AGREEMENT.en.md)). Until the founder decides per [02 §10](02-WORKING-AGREEMENT.en.md),
-no entry from `git worktree list` is removed, not even one's own. `git worktree prune` is never run (DP-0.02).
+Removal of one's own `<wave-id>/*` worktree after the PR is merged is proposed by
+[TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) TSA-04: only on a team machine, after the merge into
+`integration/waggle-next`, with an empty `git status --porcelain`, without unpushed commits and stashes of that branch,
+with the command `git worktree remove <putanja>` without `--force` (PROPOSAL, NOT APPROVED). Until the founder confirms it, no entry from
+`git worktree list` is removed, not even one's own ([02 §2.2](02-WORKING-AGREEMENT.en.md)). On the founder's machine
+`git worktree prune` is never run (DP-0.02); on a team machine only per TSA-04 item 5.
 
 ### 3.4 Hotspot files and the OSS substrate
 
@@ -378,6 +426,8 @@ npm run lint
 npm run test -- --run --maxWorkers=6
 ```
 
+Until W0-PR20 is merged, the root suite runs only in the BTP (§9.0; §9.5 row 4); the other three gates may also run outside it.
+
 When a PR touches the relevant parts, the CI steps are added as well: `npm run typecheck:web`,
 `npx tsc --noEmit --project app/tsconfig.json`, `npm run test -w apps/web`. For UI PRs, also `npm run test:e2e:smoke`
 with the isolation from §9.4.
@@ -416,6 +466,16 @@ The exit code is read directly, never through a pipe (§11.3). The PR descriptio
 Goal: no dev sidecar, test or E2E run reads or writes `~/.waggle`, the ports of the installed Waggle, or the
 configuration of external clients (`~/.claude`, `~/.codex`, Hermes).
 
+### 9.0 Safe test profile (BTP) — mandatory before the first sidecar/E2E run
+
+The authoritative definition is the checklist item "Safe test profile (BTP)". This is only a practical summary.
+
+- **What the BTP is:** a disposable Windows VM or a dedicated Windows user account created solely for testing. It contains no tokens, keys, data or auth state of the founder, nor copies of them. The installed Waggle is not running, the ports from §9.3 step 2 are free, and the AI clients are signed out or signed in only with fixture accounts. It is neither the founder's machine nor the founder's account.
+- **What goes only into the BTP:** the dev sidecar and web (§9.3), E2E (§9.4), hook/launch/canary (§9.6), the root suite (`npm run test`) until W0-PR20 is merged, and every run of code at revision `2af0904d` (and the W0-PR19 generator). The rule also applies after W0-PR20. Relaxing it requires a change to DP-0.08 approved by the founder.
+- **Preparation:** the BTP is created outside the repo. This is machine preparation and is allowed even before plan approval. The tech lead chooses the method (Hyper-V, cloud VM, local account). A VM that costs money follows the money rule from [TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) §2. A dedicated local account costs nothing.
+- **The scratch profile is not a sandbox.** A scratch `HOME`/`USERPROFILE`/`HERMES_HOME` in the sidecar and E2E run terminal (§9.3 step 4, §9.4) remains mandatory inside the BTP, as an additional layer. It redirects only the paths that go through `os.homedir()` in that terminal and its child processes. It does not redirect `%APPDATA%` (Claude Desktop hook, §9.5 row 8), `%LOCALAPPDATA%` (npm cache, Playwright), ports, HKCU (`installMode: "currentUser"`) or processes outside the terminal.
+- **Evidence:** a before and after snapshot per §9.5 in the real profile of the BTP account. "The sentinel test passes" (W0-PR20) is not runtime evidence of isolation. Runtime confirmation is a separate step of the W0-PR20 card ([03](03-BACKLOG.en.md)) and has not been done.
+
 ### 9.1 Env variables (verified in code)
 
 | Variable | Behavior at `2af0904d` | Evidence | Dev/test value |
@@ -435,13 +495,13 @@ configuration of external clients (`~/.claude`, `~/.codex`, Hermes).
 | `WAGGLE_E2E_REUSE_EXISTING_SERVER` | `!== '0'` takes over a server that is already listening | `playwright.config.ts:57,116` | `0` |
 | `WAGGLE_E2E_SKIP_LITELLM` | `!== '0'` adds `--skip-litellm` to the webServer command. With `'0'` the E2E sidecar brings up LiteLLM on the shared `:4000` | `playwright.config.ts:56,114` | unset (§9.4) |
 | `WAGGLE_E2E_DATA_DIR` | data dir of the E2E sidecar, otherwise tmp. Must be unset with `WAGGLE_E2E_SOLO_ONBOARDING=1` | `playwright.config.ts:30-46` | `<scratch>/e2e-<agent>` |
-| `HOME`, `USERPROFILE`, `HERMES_HOME` | hook install writes to `opts.home ?? homedir()`. Hermes on Windows reads `HERMES_HOME` > `%LOCALAPPDATA%\hermes` | `packages/hive-mind-hooks-hermes/src/paths.ts:72-87`, `external-process-env.ts:8-12` | scratch profile **only** for the terminal/process of the dev sidecar and the E2E run (§9.3, §9.4; closes the leaks from §9.5) and for hook/launch/canary tests (§9.6). Does not go into `.env.dev.local` (§9.2) and is not set globally |
+| `HOME`, `USERPROFILE`, `HERMES_HOME` | hook install writes to `opts.home ?? homedir()`. Hermes on Windows reads `HERMES_HOME` > `%LOCALAPPDATA%\hermes` | `packages/hive-mind-hooks-hermes/src/paths.ts:72-87`, `external-process-env.ts:8-12` | scratch profile **only** for the terminal/process of the dev sidecar and the E2E run (§9.3, §9.4; an additional layer inside the BTP, §9.0; not a sandbox) and for hook/launch/canary tests (§9.6). Does not go into `.env.dev.local` (§9.2) and is not set globally |
 | `VITE_POSTHOG_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_WAGGLE_ENABLE_CLERK` | baked into the Vite bundle. PostHog is opted-in by default | `apps/web/src/lib/posthog.ts:39,42,51-60`, `apps/web/src/lib/clerk.ts:42-43` | **unset**. `apps/web/.env.local` is not copied into agent worktrees (DP-0.10). Status of this row: AUDIT FINDING — TO VERIFY, as in the checklist |
 
 State carriers that the same `WAGGLE_DATA_DIR` isolates (DP-0.08): `agent-runs.json`, `personal.mind`,
 `workspaces/<id>/workspace.mind`, config, `personas/*.json`, `behavioral-overrides/*.json`, `vault.json`
 (`packages/core/src/vault.ts:50`), `marketplace.db` (`local/index.ts:694`), routines (`CronStore` over
-`personal.mind`, `local/index.ts:585`).
+`personal.mind`, `local/index.ts:585`). It does not isolate the locations from §9.5 "Known leaks" (fix W0-PR20).
 
 ### 9.2 Per-worktree `.env.dev.local` (example; PROPOSAL)
 
@@ -497,7 +557,7 @@ Get-NetTCPConnection -State Listen -LocalPort 3333,3341,3100,3101,4000,8080,8181
 # 3) Build, dok terminal još ima pravi profil
 npm run build:packages
 
-# 4) Scratch profil SAMO za ovaj terminal i njegove child procese (zatvara curenja iz §9.5).
+# 4) Scratch profil SAMO za ovaj terminal i njegove child procese (dodatni sloj unutar BTP-a, §9.0; nije sandbox).
 #    Od ovog koraka terminal služi samo za sidecar: bez npm, git i drugih alata; posle rada se zatvara.
 $scratchProfile = 'D:\waggle\scratch\w0-harn-01\profile'
 New-Item -ItemType Directory -Force $scratchProfile | Out-Null
@@ -519,9 +579,11 @@ The list covers every variable from `.env.dev.local`: a shell value would silent
 When `WAGGLE_INSTANCE_ID` is set, `/api/auth/session-token` takes the managed-desktop branch and, without Tauri
 credentials, returns 403 `DESKTOP_BOOTSTRAP_REQUIRED` (`local/index.ts:519-522`, `:2946-2955`).
 
-Step 4 is a mandatory part of the recipe (PROPOSAL of this document; the checklist requires that no run touches `~/.waggle`).
-`WAGGLE_DATA_DIR` does not cover `documents.ts:37` and `pins.ts:32` (§9.5), and on Windows `os.homedir()` reads
-`USERPROFILE`. The check in step 4 confirms this on the machine itself. A rebuild after a change in a package (§11.9) runs in
+Step 4 is a mandatory part of the recipe inside the BTP (§9.0; the checklist requires that no run touches `~/.waggle`).
+At `2af0904d`, `WAGGLE_DATA_DIR` does not cover the locations from §9.5 "Known leaks" (fix W0-PR20). On Windows
+`os.homedir()` reads `USERPROFILE`, so the scratch profile redirects those locations that go through `os.homedir()`. It does not
+redirect `%APPDATA%`/`%LOCALAPPDATA%`, ports, HKCU or processes outside this terminal, so it is not a sandbox and does not
+replace the BTP. The check in step 4 confirms only that `os.homedir()` in this terminal points to scratch. A rebuild after a change in a package (§11.9) runs in
 a second terminal, with the real profile, and the sidecar is restarted in its own. If the sidecar does not work under the scratch profile
 (missing configuration, model, tool), work stops and the problem is reported to the tech lead. The scratch profile is not removed to make the
 sidecar work.
@@ -608,9 +670,12 @@ A snapshot is taken before the session and after it (all runs, including tests),
 function Save-WaggleHomeSnapshot([string]$Out) {
   $w = Join-Path $env:USERPROFILE '.waggle'
   if (-not (Test-Path $w)) { 'ABSENT' | Set-Content $Out; return }
-  Get-ChildItem $w -Recurse -Force -File |
+  Get-ChildItem $w -Recurse -Force |
     Sort-Object FullName |
-    ForEach-Object { '{0}|{1}|{2:o}' -f $_.FullName, $_.Length, $_.LastWriteTimeUtc } |
+    ForEach-Object {
+      if ($_.PSIsContainer) { 'D|{0}' -f $_.FullName }
+      else { 'F|{0}|{1}|{2:o}' -f $_.FullName, $_.Length, $_.LastWriteTimeUtc }
+    } |
     Set-Content $Out
 }
 Save-WaggleHomeSnapshot "$env:TEMP\waggle-home-before.txt"
@@ -620,9 +685,11 @@ Compare-Object (Get-Content "$env:TEMP\waggle-home-before.txt") (Get-Content "$e
 # prazan izlaz = netaknuto
 ```
 
+The snapshot also records directories: a new empty directory (for example `~/.waggle/security-cache`, §9.5 row 4) is a change.
+
 The same applies to the configuration of external clients (§9.6), which a gate run may touch via hook tests. Exactly what
 the hook installer writes is snapshotted: `settings.json`, `hooks.json` and `config.yaml`, their backup copies
-`<fajl>.hive-mind-backup.<vreme>` and `hive-mind-install.json` (`packages/hive-mind-hooks-{claude-code,codex,hermes}/src/paths.ts`;
+`<fajl>.hive-mind-backup.<vreme>` and `hive-mind-install.json` (`packages/hive-mind-hooks-{claude-code,codex,hermes,claude-desktop}/src/paths.ts`; Claude Desktop under `%APPDATA%\Claude`, `claude-desktop/src/paths.ts:25-29`, and its pointer under `~/.waggle/claude-desktop/` is covered by the `~/.waggle` snapshot;
 `packages/hive-mind-hooks-core/src/paths-core.ts:18-20`). Hermes on Windows: `HERMES_HOME`, otherwise
 `%LOCALAPPDATA%\hermes` (`packages/hive-mind-hooks-hermes/src/paths.ts:76-84`). The rest of `~/.claude` and `~/.codex`
 is changed by the client itself while the developer uses it, so the whole directory is not snapshotted (PROPOSAL).
@@ -630,10 +697,12 @@ is changed by the client itself while the developer uses it, so the whole direct
 ```powershell
 function Save-ClientConfigSnapshot([string]$Out) {
   $hermes = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA 'hermes' }
+  $claudeDesktop = if ($env:WAGGLE_CLAUDE_DESKTOP_CONFIG_DIR) { $env:WAGGLE_CLAUDE_DESKTOP_CONFIG_DIR } else { Join-Path $env:APPDATA 'Claude' }
   $targets = @(
     @{ Dir = Join-Path $env:USERPROFILE '.claude'; Names = 'settings.json*', 'hive-mind-install.json' },
     @{ Dir = Join-Path $env:USERPROFILE '.codex';  Names = 'hooks.json*', 'hive-mind-install.json' },
-    @{ Dir = $hermes;                               Names = 'config.yaml*', 'hive-mind-install.json' }
+    @{ Dir = $hermes;                               Names = 'config.yaml*', 'hive-mind-install.json' },
+    @{ Dir = $claudeDesktop;                        Names = 'claude_desktop_config.json*' }
   )
   $(foreach ($t in $targets) {
     if (-not (Test-Path $t.Dir)) { "ABSENT|$($t.Dir)"; continue }
@@ -653,10 +722,10 @@ Compare-Object (Get-Content "$env:TEMP\waggle-clients-before.txt") (Get-Content 
 Both snapshots are taken in a terminal with the **real** profile. In the sidecar or E2E run terminal (§9.3 step 4, §9.4)
 `$env:USERPROFILE` points to scratch, so the function would snapshot the wrong directory.
 
-On a machine where the **installed** Waggle is running, its sidecar changes `~/.waggle` independently of development. There, the comparison
-proves nothing. That is why on such a machine, including the founder's machine, the dev sidecar and E2E are **not started** until
-the leaks from the table below are fixed (PROPOSAL, consistent with the checklist: no test touches `~/.waggle`).
-Dev work goes to a machine without a running installed Waggle or to a dedicated account/VM.
+On a machine where the **installed** Waggle is running, its sidecar changes `~/.waggle` independently of development, so the comparison
+proves nothing. That is why the dev sidecar, web, E2E, hook/launch/canary runs, the root suite until W0-PR20 is merged, and
+runs of code at revision `2af0904d` are executed only in the BTP (§9.0; checklist "Safe test profile (BTP)"), never
+on the founder's machine or account (DP-0.11). Snapshots are taken in the real profile of the BTP account.
 
 **When the comparison is inconclusive or shows a change:** work stops. No further runs until the cause is determined.
 "Inconclusive" means that the installed Waggle ran during the session, that the "before" snapshot is missing, or that it was
@@ -665,36 +734,46 @@ changed that client's settings or hooks during the session. Escalate the same da
 their live `~/.waggle` or their clients' configuration may have been touched ([02 §10](02-WORKING-AGREEMENT.en.md), [05 §5](05-RISKS-DECISIONS-ESCALATION.en.md)).
 The result is not declared clean on the basis of such a comparison.
 
-**Known leaks bypassing `WAGGLE_DATA_DIR`** (read at `2af0904d` for this document; the phase-A finding does not
-cover this; report to the Server owner):
+**Known leaks bypassing `WAGGLE_DATA_DIR`** (code reading at `2af0904d`, 29–30.09.2026; the phase-A finding does not
+cover this; runtime not reproduced; fix: W0-PR20, [03](03-BACKLOG.en.md)):
 
-| Location | Behavior | Status |
-|---|---|---|
-| `packages/server/src/local/routes/documents.ts:37` | `documents.json` always goes to `os.homedir()/.waggle/workspaces/<id>/`, regardless of `dataDir` | CONFIRMED AT REVISION |
-| `packages/server/src/local/routes/pins.ts:32` | `pins.json` likewise, always under `os.homedir()/.waggle` | CONFIRMED AT REVISION |
-| `packages/agent/src/tool-manifest-loader.ts:141`, `packages/hive-mind-core/src/mind/inprocess-embedder.ts:33`, `packages/marketplace/src/db.ts:24` | default path under `~/.waggle` when the caller does not pass `dir`/`cacheDir`/a path. Whether the sidecar flow passes it for every call: UNKNOWN (`core/src/config.ts:436` sets `cacheDir` to the config dir for embedding) | UNKNOWN |
-| `packages/server/src/local/held-action-executor.ts:210-211` | for `workspace_id === null` tools are bound to `os.homedir()` | CONFIRMED AT REVISION (behavior); impact on isolation: UNKNOWN |
+| # | Location | Behavior | Status | Covered by |
+|---|---|---|---|---|
+| 1 | `packages/server/src/local/routes/documents.ts:37` | `documents.json` is always read and written under `os.homedir()/.waggle/workspaces/<id>/`, regardless of `dataDir` | CONFIRMED AT REVISION | W0-PR20 A1 |
+| 2 | `packages/server/src/local/routes/pins.ts:32` | the same for `pins.json`; `:id` is not checked with `assertSafeSegment` (`documents.ts:70` checks it) | CONFIRMED AT REVISION; traversal via `:id`: AUDIT FINDING — TO VERIFY | W0-PR20 A2 |
+| 3 | `packages/marketplace/src/installer.ts:47-50`, `:89-91` | install/uninstall writes `skills/`, `plugins/` and `plugins/registry.json` under `os.homedir()/.waggle`; the server creates the installer without a root (`routes/marketplace.ts:417,581,611`; `routes/capability-proposals.ts:108`); `.mcp.json` follows only the env `WAGGLE_DATA_DIR`, not the `dataDir` option | CONFIRMED AT REVISION | W0-PR20 A3 |
+| 4 | `packages/marketplace/src/security.ts:183`, `:222` | `SecurityGate` without `cache_dir` creates `os.homedir()/.waggle/security-cache` in the constructor; the server (`routes/marketplace.ts:291,698,1046`; `installer.ts:118`) and server tests (e.g. `packages/server/tests/local/marketplace-security.test.ts:59`) create it without `cache_dir`, so the root suite does this too | CONFIRMED AT REVISION (code) | W0-PR20 A4 |
+| 5 | `packages/agent/src/tool-manifest-loader.ts:141` | without `dir` it reads `os.homedir()/.waggle/adapters/*.json`; the sidecar calls `getToolRegistry()` without `dir` (`routes/tools.ts:408`, `routes/external-tool-runs.ts:201`), so an isolated sidecar loads the adapters of the real profile | CONFIRMED AT REVISION (read) | W0-PR20 A5 |
+| 6 | `packages/server/src/local/held-action-executor.ts:210-211` | for `workspace_id === null` tools get `os.homedir()` as their root | CONFIRMED AT REVISION (behavior); impact on isolation: UNKNOWN | W0-PR20 B1 (decision in the PR) |
+| 7 | `packages/server/src/local/lifecycle.ts:257` | without `configPath` the LiteLLM log `litellm.child.log` goes to `os.homedir()` | CONFIRMED AT REVISION; the recipe excludes it with `WAGGLE_SKIP_LITELLM=1` | W0-PR20 B2 |
+| 8 | `packages/hive-mind-hooks-claude-desktop/src/paths.ts:25-29`, `:40` | the Claude Desktop hook (`hookCapable: true`, `packages/shared/src/tool-detection.ts:136`) writes `%APPDATA%\Claude\claude_desktop_config.json` (the bin does not pass `home`; `APPDATA` passes into the hook process, `external-process-env.ts:12`) and the pointer `~/.waggle/claude-desktop/hive-mind-install.json` | CONFIRMED AT REVISION (code) | not in W0-PR20 (external client configuration by design); BTP and client snapshot |
 
-On Windows `os.homedir()` reads `USERPROFILE`. A scratch profile **only for the sidecar and E2E run terminals** therefore
-redirects these leaks as well, so it is a mandatory part of the recipe in §9.3 (step 4) and §9.4. The variable is not set
-globally: npm and git would then not read the user's `~/.npmrc` and `~/.gitconfig`, and other tools would also lose their
-configuration. On Windows the npm cache is under `%LOCALAPPDATA%` and remains (§9.4). Paths computed from `%LOCALAPPDATA%`/`%APPDATA%`
-are not redirected by a scratch `USERPROFILE`. Whether the sidecar flow uses them for writes: UNKNOWN (the exception is Hermes, which is why
-`HERMES_HOME` is also set).
+Resolved by reading (30.09.2026), not a leak in the sidecar flow: `marketplace.db` (`local/index.ts:694`), embedding
+`cacheDir` (`core/src/config.ts:436` via `new WaggleConfig(fullConfig.dataDir)`, `local/index.ts:762`),
+the reranker (`local/index.ts:791-800`) and the `dataDir || ~/.waggle` fallbacks in routes, because the sidecar always
+resolves `dataDir` (`service.ts:121`). Reading `~/.claude` for harvest (`routes/harvest.ts:282,1045`;
+`local/index.ts:1575-1576`), tool detection and the hook configuration of the other clients are external sources by
+design: they are covered by the BTP, not by W0-PR20.
+
+On Windows `os.homedir()` reads `USERPROFILE`. The scratch profile in the sidecar and E2E run terminal (§9.3 step 4,
+§9.4) therefore redirects rows 1–7 until W0-PR20 is merged. It is an additional layer inside the BTP, not a sandbox: it does not
+redirect row 8 (`%APPDATA%`), `%LOCALAPPDATA%` (npm cache, Playwright), ports, HKCU or other processes.
+The variable is not set globally: npm and git would then not read the user's `~/.npmrc` and `~/.gitconfig`, and other
+tools would also lose their configuration. The code fix is W0-PR20, with a sentinel test. Runtime confirmation after the merge
+has not been done (W0-PR20 card, "Runtime confirmation").
 
 ### 9.6 Hook, launch and canary tests
 
 `WAGGLE_DATA_DIR` and `HIVE_MIND_DATA_DIR` do **not** isolate the configuration of external clients.
 `POST /api/tools/hooks` → `runHookCommand` (`packages/server/src/local/routes/tools.ts:753-766`,
 `packages/agent/src/tool-launcher.ts:532-568`) writes to `~/.claude/settings.json`, `~/.codex/hooks.json` and the Hermes
-`config.yaml`. Such tests, as well as `POST /api/tools/launch` (`tools.ts:400`), therefore run only under
-`HOME`/`USERPROFILE` (+ `HERMES_HOME`) on a scratch profile or on a disposable Windows account/VM (DP-0.08). A run with
+`config.yaml`, and the Claude Desktop hook writes `%APPDATA%\Claude\claude_desktop_config.json` (§9.5 row 8), which the scratch profile does not redirect. Such tests, as well as `POST /api/tools/launch` (`tools.ts:400`), therefore run only in the BTP (§9.0), with `HOME`/`USERPROFILE` (+ `HERMES_HOME`) on a scratch profile as an additional layer (DP-0.08). A run with
 real accounts or a paid API (P/R/A receipts, LoCoMo rerun, B2/B3, GEPA fidelity) happens only with
 a specific ODB-01/DQ-04 approval for that run, on a dedicated VM, with a cap set before the start (DP-0.10).
 
 **Hook tests in the root gate (rule; PROPOSAL, review item).** The scratch profile from the previous paragraph applies to
 manual and E2E runs through the server, to launch tests and to canary tests. The root gate `npm run test -- --run --maxWorkers=6`
-(§7) runs in a terminal with the real profile (§9.3 step 3), and it covers all `packages/*/tests/**/*.test.ts`
+(§7) runs in a terminal with the real profile (§9.3 step 3), and until W0-PR20 is merged only in the BTP (§9.0; §9.5 row 4), and it covers all `packages/*/tests/**/*.test.ts`
 (`vitest.config.ts:29-32`). This includes `packages/hive-mind-hooks-*/tests`, `packages/hive-mind-core/tests/hook-runtime.test.ts`
 and the new RED tests of W0-PR10 ([03](03-BACKLOG.en.md) W0-PR10). For these tests:
 
@@ -786,7 +865,9 @@ should be kept in a separate command.
 - A job that "fails" in 3–4 s with no failed step and with a 404 log blob most often was not even started. The run annotation
   reads "The job was not started because an Actions budget is preventing further use" (`gh run view <run>`).
   That is not a test failure. **A re-run is a manual workflow trigger and belongs to owner actions** (DP-0.11, checklist): the team
-  does not trigger it itself, but reports to the repo owner. When the budget is tight, do not open unnecessary PRs or make unnecessary pushes.
+  does not trigger it itself, but reports to the repo owner. Proposal TSA-08 (NOT APPROVED): after confirmation, the Release owner or the tech lead may re-run failed jobs of
+  `ci.yml`/`tauri-build-pr.yml` on team branches when the cause is recorded as infrastructural (budget after renewal,
+  runner, network), at most 2 times per head SHA, within a budget recorded by the founder. Until confirmation the prohibition applies. When the budget is tight, do not open unnecessary PRs or make unnecessary pushes.
   Approximate cost per PR push (record): ubuntu `test` job 38–46 min, plus verify-windows and two verify-macos
   jobs.
 - On the GitHub Windows runner, the first real HTTP request from a fresh `pwsh` is slow. Timing tests of the PowerShell HTTP
@@ -821,8 +902,8 @@ the sidecar. `tsx` has no watch in this flow.
 | `~/.waggle` changed after the session | leak bypassing `WAGGLE_DATA_DIR` (§9.5) or the installed Waggle was running | **stop** and do not start further runs. Compare the snapshots, identify the file and escalate the same day to the tech lead and the Server owner, and to the founder if the live `~/.waggle` may have been touched (§9.5). Check that the sidecar/E2E terminal had the scratch profile (§9.3 step 4, §9.4) |
 | Two sidecars "see" each other via LiteLLM | both use the fixed `:4000` | `WAGGLE_SKIP_LITELLM=1` (§9.1) |
 | Diff changes the entire file | CRLF/LF mix | §11.6 |
-| CI job failed in 3–4 s | Actions budget | run annotation, report to the owner, no re-run on your own (§11.8) |
-| `git worktree list` shows "prunable" | directory vanished (e.g. Temp cleanup) | do **not** prune. Report to the founder (DP-0.02) |
+| CI job failed in 3–4 s | Actions budget | run annotation, report to the owner; re-run only per TSA-08, after confirmation (§11.8) |
+| `git worktree list` shows "prunable" | directory vanished (e.g. Temp cleanup) | on the founder's machine: do **not** prune, report to the founder (DP-0.02); on a team machine: prune only if TSA-04 is confirmed and `git worktree prune --dry-run -v` lists exclusively one's own entries, otherwise report to the tech lead |
 | Path too long during `npm ci`/checkout | Windows MAX_PATH | shorter base path (e.g. `D:\waggle\wt\…`). Whether `git config core.longpaths true` is needed: UNKNOWN (not set on the reference clone) |
 | `packages/marketplace/marketplace.db` modified after tests | it has been recorded that parallel vitest runs may corrupt the seed | do not commit the change, restore the file to the index version and do not run two suites in parallel in the same worktree. Whether it still occurs: UNKNOWN |
 
@@ -831,12 +912,16 @@ the sidecar. `tsx` has no watch in this flow.
 ## 13. UNKNOWN (open for the tech lead)
 
 1. Why the record requires `--maxWorkers=6` ("default OOMs") even though `vitest.config.ts:28` already has `maxWorkers: 4`. CI
-   uses `--maxWorkers=2` (`ci.yml:86`), not 4 as DP-0.06 states. Measure and record in `docs/TESTING.md`.
+   uses `--maxWorkers=2` (`ci.yml:86`), not 4 as DP-0.06 states. Measure and record in `docs/TESTING.md`
+   (the first measurement on a team machine is proposed by TSA-02 item 5, after confirmation; not done).
 2. Minimum versions of Git for Windows and Rust/MSVC for the local build. CI pins only Rust `1.94.0`.
-3. Whether the sidecar flow passes `dir`/`cacheDir` for `tool-manifest-loader`, `inprocess-embedder` and the marketplace
-   DB, or whether they fall back to `~/.waggle`. `documents.ts:37` and `pins.ts:32` definitely write to `~/.waggle`.
-4. State of `integration/waggle-next` on origin (not fetched) and whether the team needs `test:infra`
-   (Docker) for v1.2.
+3. Resolved in revision 1.2.1 (H-05, code reading at `2af0904d`): the sidecar passes a path under `dataDir` for
+   the marketplace DB (`local/index.ts:694`), the embedding `cacheDir` (`core/src/config.ts:436`, `local/index.ts:762`) and
+   the reranker (`local/index.ts:791-800`). For `tool-manifest-loader` it does not (`routes/tools.ts:408`,
+   `routes/external-tool-runs.ts:201`). That path, `documents.ts:37`, `pins.ts:32`, `MarketplaceInstaller` and
+   `SecurityGate` are in W0-PR20 (§9.5). Runtime not reproduced.
+4. Whether the team needs `test:infra` (Docker) for v1.2. (`integration/waggle-next` does not exist on `origin`,
+   `git ls-remote` 30.09.2026.)
 5. The effect of `WAGGLE_DATA_DIR`/`WAGGLE_PORT` in `.env` on vitest processes, `core.longpaths`, and whether the corruption of the
    `marketplace.db` seed still occurs.
 
@@ -857,6 +942,14 @@ the sidecar. `tsx` has no watch in this flow.
 hook tests listed in §9.6. Outside the repo (read-only, 29.09.2026): npm 10.9.8
 `@npmcli/config/lib/definitions/definitions.js`, `playwright-core` 1.63.0 (`computeDefaultCacheDirectory`),
 `pandoc --version`.
+Revision 1.2.1 (30.09.2026, read-only): `git ls-remote origin`, `gh api repos/marolinik/waggle-os`,
+`git config --get branch.docs/waggle-v1.2-planning.remote`, `git worktree list`; code at `2af0904d`:
+`release.yml:46,206`, `packages/marketplace/src/{installer.ts,security.ts}`, `packages/agent/src/tool-manifest-loader.ts`,
+`packages/server/src/local/{lifecycle.ts,held-action-executor.ts,routes/marketplace.ts,routes/tools.ts}`,
+`packages/hive-mind-hooks-claude-desktop/src/paths.ts`. Package 1.2.1:
+[TEAM-START-AUTHORIZATION](TEAM-START-AUTHORIZATION.en.md) (TSA-02, 03, 04, 08, 09; PROPOSAL, NOT APPROVED),
+[package manifest](../plans/WAGGLE-V1.2-PACKAGE-MANIFEST.en.md), [HANDOFF-HISTORY](../plans/v1.2-evidence/HANDOFF-HISTORY.en.md),
+[closure record](../plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md) (H-01, H-02, H-04, H-05).
 Package: [delivery plan](../plans/WAGGLE-DELIVERY-PLAN-v1.2.en.md) §0 (DP-0.01..DP-0.16, incl. DP-0.13), §6.1;
 phase-A [release-oss.md](../plans/v1.2-evidence/phaseA/release-oss.en.md) (F-REL-08);
 [SAFE-IMPLEMENTATION checklist](../plans/SAFE-IMPLEMENTATION-CHECKLIST.en.md);

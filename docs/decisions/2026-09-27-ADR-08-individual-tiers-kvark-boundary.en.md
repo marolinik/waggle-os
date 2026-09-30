@@ -3,6 +3,8 @@
 > **English translation** of [2026-09-27-ADR-08-individual-tiers-kvark-boundary.md](2026-09-27-ADR-08-individual-tiers-kvark-boundary.md) (Serbian original, same folder). The Serbian original is authoritative; report any discrepancy. Dates are written DD.MM.YYYY; "wd" means working days.
 
 **Document revision:** 1.2 DRAFT · 27.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`
+**Document revision:** 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)
+**Changes 1.2.1:** H-11 — pointers to PRD-13-10/FRD-11.4 in K9 and P4 (KVARK API owner UNFILLED; gate KVARK-IF). Decisions D-01/D-02/D-03 and O3–O6 unchanged.
 **Date:** 2026-09-27
 **Status:** DRAFT — implementation proposal; **does not decide** whether Waggle is free (D-01), whether Team comes through KVARK (D-02) or whether KVARK remains on-prem (D-03) — these are given decisions; does not decide the license (decision queue O-2) or the fate of subscribers (O-3/DQ-03)
 **Author:** planner (Fable 5.1)
@@ -31,7 +33,7 @@
 
 **ADR-08-K8 (CONFIRMED AT REVISION) — www and the documentation sell Team.** `apps/www/messages/en.json:196-250` ("Memory is free forever. Pay when you scale.", `$49/seat/month`, "Get Team" → Stripe checkout, "Talk to KVARK"), `Pricing.tsx:10,42-58`; `FinalCTA.tsx:5,33,38` and `download/page.tsx:18` → `github.com/marolinik/waggle-os` (the repo is **public** per live GitHub 27.09.2026 — release-oss.md F-REL-08; CLAUDE.md:84 "remains private" is outdated). The CLAUDE.md §1 tier table and "Moat strategy … Team collaboration … is the upgrade trigger". [F-TK-05, F-REL-08]
 
-**ADR-08-K9 (UNKNOWN) — the KVARK side.** The repo contains no specification of the KVARK organizational capabilities API other than `KvarkClient` (search/feedback/action/ask_document) and `docs/kvark-http-api-requirements.md` (not revalidated in phase A). Owner of the KVARK dependency, availability of policy/ACL endpoints, an entities API for team-sync compatibility — UNKNOWN; brief §12.1 requires the planner to list the required contract/interface changes and the owner.
+**ADR-08-K9 (UNKNOWN) — the KVARK side.** The repo contains no specification of the KVARK organizational capabilities API other than `KvarkClient` (search/feedback/action/ask_document) and `docs/kvark-http-api-requirements.md` (not revalidated in phase A). Owner of the KVARK dependency, availability of policy/ACL endpoints, an entities API for team-sync compatibility — UNKNOWN; brief §12.1 requires the planner to list the required contract/interface changes and the owner. Supplement 1.2.1 (H-11): the portfolio boundary (KVARK works without Waggle; Waggle does not build I/WE/COMPANY, the roster or a KVARK Workspace) and the contract items with the KVARK API owner are in PRD-13-10 and FRD-11.4 (table "Contract with the KVARK API"); the owner is still UNFILLED.
 
 ## §2 — Decision (implementation proposal)
 
@@ -97,7 +99,7 @@ Critic note (28.09.2026): the WB-PR6 conditions are aligned into a single set �
 
 **ADR-08-P3 (PROPOSAL).** Receipt: 08.2a–c touch routes/UI (tier gates) → part of the candidate freeze (S1 WB "Yes"); KVARK registration touches tool assembly → tool-context receipt surface.
 
-**ADR-08-P4 (PROPOSAL).** KVARK contract/interface requirements for the KVARK team (brief §12.1): health/identity validation, the `allowedOrgCapabilities` list, policy/ACL for the envelope layer (ADR-04 O5 layer 2), revocation semantics, optionally an entities API for the team-sync adapter; **owner: UNKNOWN** (tracked in ADR-INDEX §3 as "KVARK interface owner (UNKNOWN)" and in the §4 ADR-08 item, together with K9; no new founder item is added outside brief §20.3 — the founder queue remains PRD §17 O-1..O-9 = Delivery plan §6 DQ-01..09, and no existing DQ covers this item). Unavailable UX: "KVARK is not reachable — working with workspace memory" (existing `handleKvarkError` text).
+**ADR-08-P4 (PROPOSAL).** KVARK contract/interface requirements for the KVARK team (brief §12.1): health/identity validation, the `allowedOrgCapabilities` list, policy/ACL for the envelope layer (ADR-04 O5 layer 2), revocation semantics, optionally an entities API for the team-sync adapter; **owner: UNKNOWN** (tracked in ADR-INDEX §3 as "KVARK interface owner (UNKNOWN)" and in the §4 ADR-08 item, together with K9; no new founder item is added outside brief §20.3 — the founder queue remains PRD §17 O-1..O-9 = Delivery plan §6 DQ-01..09, and no existing DQ covers this item). Unavailable UX: "KVARK is not reachable — working with workspace memory" (existing `handleKvarkError` text). Supplement 1.2.1 (H-11): these items are tracked as [05 N-29](../handoff/05-RISKS-DECISIONS-ESCALATION.en.md) and the gate `KVARK-IF` before the merge of WB-PR3 (PRD-13-10 item 4); this is an external dependency, not a new DQ item.
 
 **ADR-08-P5 (PROPOSAL).** License/NOTICE contradictions (`optimizer`/`weaver` "proprietary" alongside MIT; 3× NOTICE; `EXTRACTION.md` does not exist; 9 manifests without `license`) are **decision queue O-2**, not this ADR (ADR-10 P-list). D-01 does not automatically resolve the rights (brief §12.3).
 

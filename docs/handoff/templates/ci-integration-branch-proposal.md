@@ -1,8 +1,11 @@
 # PREDLOG — CI filteri za integracionu granu (W0-PR0)
 
 **Revizija dokumenta: 1.2 DRAFT · 29.09.2026 · pregledana revizija koda `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`**
+**Revizija dokumenta: 1.2.1 DRAFT · 30.09.2026 · završno zatvaranje (H-01..H-12)**
 
-**Status: PREDLOG.** Ništa iz ovog dokumenta nije primenjeno na `.github/` i nijedan workflow nije pokrenut. Ovo je nacrt sadržaja PR-a **W0-PR0** („`integration/**` u `ci.yml` i `tauri-build-pr.yml` filtere”, [Delivery plan §2 W0](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.md); DP-0.07). PR se otvara tek kad founder odobri delivery plan i kad postoji `integration/waggle-next`. Cilj PR-a je `integration/waggle-next`, ne `main`.
+Izmene 1.2.1: H-09 — put ka tagu je kontrolisani korak K posle F3a (§3); usklađenje sa H-01 (CI radi na grani u `<ODOBRENI_TIMSKI_REMOTE>`, §0 i §4) i H-04 TSA-08 (re-run, §4).
+
+**Status: PREDLOG.** Ništa iz ovog dokumenta nije primenjeno na `.github/` i nijedan workflow nije pokrenut. Ovo je nacrt sadržaja PR-a **W0-PR0** („`integration/**` u `ci.yml` i `tauri-build-pr.yml` filtere”, [Delivery plan §2 W0](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.md); DP-0.07). PR se otvara tek kad founder odobri delivery plan i kad postoji `integration/waggle-next`. Cilj PR-a je `integration/waggle-next`, ne `main`. Grana i PR žive samo na `<ODOBRENI_TIMSKI_REMOTE>` (H-01; [01 §3.2](../01-ONBOARDING-DEV-ENV.md)), pa i CI iz ovog diff-a radi tamo; javni `origin` nije odredište.
 
 ## 1. Zašto
 
@@ -59,7 +62,7 @@ Proveren sa `git apply --check` nad worktree-jem na `2af0904d` (29.09.2026; bez 
 
 - `.github/workflows/release.yml:12-15`: jedini trigger je `push.tags: 'v*'`. POTVRĐENO NA REVIZIJI.
 - W0-PR0 **ne dira `release.yml`** (DP-0.07). Kako je `release.yml` u `paths` listi `tauri-build-pr.yml`, reviewer proverava da diff nema nijednu liniju u `release.yml`.
-- **Nijedan `v*` tag se ne pravi i ne push-uje** iz ovog plana. `release.yml` se okida na **bilo koji** `v*` tag, i istorijski ne-release tagovi su već pokretali neuspešne runove (DP-0.12; live stanje NALAZ AUDITA — ZA PROVERU). `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` ostaje nedefinisan. Jedini put ka tagu je founder-gated merge `integration/waggle-next` → `main` posle F3 receipts (Delivery §5 F3, DQ-01).
+- **Nijedan `v*` tag se ne pravi i ne push-uje** iz ovog plana. `release.yml` se okida na **bilo koji** `v*` tag, i istorijski ne-release tagovi su već pokretali neuspešne runove (DP-0.12; live stanje NALAZ AUDITA — ZA PROVERU). `WINDOWS_PUBLIC_RELEASE_AUTHORIZED` ostaje nedefinisan. Jedini put ka tagu je kontrolisani korak K posle F3a receipts: founder-odobren fast-forward `main` → `S` i tag `vX.Y.Z` → `S` (Delivery §5.1, DQ-01); tag push-uje vlasnik repoa, ne tim.
 - Opcioni uži trigger `v[0-9]+.[0-9]+.[0-9]+` i ruleset za `refs/tags/v*` su GitHub operativna podešavanja vlasnika repoa kroz W8 (Delivery §2 W8, ADR-10-O8). **Nisu deo ovog PR-a.**
 
 ## 4. Otvoreno (ne ulazi u W0-PR0 bez odluke)
@@ -67,9 +70,9 @@ Proveren sa `git apply --check` nad worktree-jem na `2af0904d` (29.09.2026; bez 
 | Stavka | Status | Ko odlučuje |
 |---|---|---|
 | Da li sam W0-PR0 PR (base `integration/waggle-next`) pokreće CI pre svog merge-a | NEPOZNATO. Gates se za W0-PR0 zato pokreću lokalno i izlaz se lepi | — |
-| Trošak Actions budžeta: `push` na `integration/**` u `tauri-build-pr.yml` pokreće Windows (`timeout-minutes: 45`) i macOS matricu (`timeout-minutes: 60`) na svaki merge koji dira `paths` | NEPOZNATO (budžet nije meren) | Release owner → founder |
+| Trošak Actions budžeta: `push` na `integration/**` u `tauri-build-pr.yml` pokreće Windows (`timeout-minutes: 45`) i macOS matricu (`timeout-minutes: 60`) na svaki merge koji dira `paths` | NEPOZNATO (budžet nije meren; mesečni limit upisuje osnivač u TEAM-START-AUTHORIZATION TSA-08, a plan naloga zavisi od `<ODOBRENI_TIMSKI_REMOTE>`) | Release owner → founder |
 | `hive-mind-cli-cross-platform.yml` (`push`: `main`, `feature/**`; `pull_request`: `main`) i `mind-parity-check.yml`/`sync-mind.yml` (samo `main`; `sync-mind` i `mind-parity-check` su deprecation anchor-i po `CLAUDE.md` §7.5) nisu u DP-0.07 | van obima W0-PR0 | tech lead po §10 radnog dogovora |
-| Ručni `workflow_dispatch` ili re-run posle merge-a | **zabranjeno** bez founder odobrenja (checklist, apsolutne zabrane) | founder |
+| Ručni `workflow_dispatch` ili re-run posle merge-a | **zabranjeno** bez founder odobrenja (checklist, apsolutne zabrane). Jedini predloženi izuzetak: re-run neuspelih job-ova `ci.yml`/`tauri-build-pr.yml` sa zapisanim infrastrukturnim uzrokom, u budžetu (TSA-08, NEODOBRENO) | founder |
 
 ## 5. Verifikacija posle merge-a (PREDLOG)
 
@@ -79,4 +82,4 @@ Proveren sa `git apply --check` nad worktree-jem na `2af0904d` (29.09.2026; bez 
 
 ## Izvori
 
-[Delivery plan](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.md) DP-0.07, DP-0.11, DP-0.12, §2 W0 (W0-PR0) i W8, §5 F3, §6 DQ-01 · [SAFE-IMPLEMENTATION-CHECKLIST.md](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.md) (Baseline, apsolutne zabrane) · repo na `2af0904d` (read-only): `.github/workflows/ci.yml:1-6`, `.github/workflows/tauri-build-pr.yml:16-41`, `.github/workflows/release.yml:12-15`, `.github/workflows/hive-mind-cli-cross-platform.yml`, `.github/workflows/mind-parity-check.yml`, `.github/workflows/sync-mind.yml` · [02-WORKING-AGREEMENT.md](../02-WORKING-AGREEMENT.md) §10, §14.
+[Delivery plan](../../plans/WAGGLE-DELIVERY-PLAN-v1.2.md) DP-0.07, DP-0.11, DP-0.12, §2 W0 (W0-PR0) i W8, §5 F3, §5.1 (RP-01..RP-12), §6 DQ-01 · [TEAM-START-AUTHORIZATION](../TEAM-START-AUTHORIZATION.md) TSA-08, TSA-09 (PREDLOG, NEODOBRENO) · [SAFE-IMPLEMENTATION-CHECKLIST.md](../../plans/SAFE-IMPLEMENTATION-CHECKLIST.md) (Baseline, apsolutne zabrane) · repo na `2af0904d` (read-only): `.github/workflows/ci.yml:1-6`, `.github/workflows/tauri-build-pr.yml:16-41`, `.github/workflows/release.yml:12-15`, `.github/workflows/hive-mind-cli-cross-platform.yml`, `.github/workflows/mind-parity-check.yml`, `.github/workflows/sync-mind.yml` · [02-WORKING-AGREEMENT.md](../02-WORKING-AGREEMENT.md) §10, §14.

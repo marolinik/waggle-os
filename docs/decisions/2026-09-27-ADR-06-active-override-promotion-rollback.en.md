@@ -3,6 +3,8 @@
 > **English translation** of [2026-09-27-ADR-06-active-override-promotion-rollback.md](2026-09-27-ADR-06-active-override-promotion-rollback.md) (Serbian original, same folder). The Serbian original is authoritative; report any discrepancy. Dates are written DD.MM.YYYY; "wd" means working days.
 
 **Document revision:** 1.2 DRAFT · 27.09.2026 · reviewed code revision `2af0904df01ca3d374cc78ba95b60dc579dd6a7a`
+**Document revision:** 1.2.1 DRAFT · 30.09.2026 · final closure (H-01..H-12)
+**Changes 1.2.1:** H-10 — ADR-06-O11 supplemented: bounded recipe evolution is the recommended target scope (PROPOSAL, ODB-02 option A, Delivery §6.1); ODB-02 AWAITS A FOUNDER DECISION; contribution claim per Benchmark BP-MSG-01. ADR status and RAT-05 unchanged.
 **Date:** 2026-09-27
 **Status:** DRAFT — contract proposal; bounded recipe evolution (DIR-14) is a separately estimated scope, only its boundary is set here
 **Author:** planner (Fable 5.1)
@@ -59,7 +61,7 @@
 
 **ADR-06-O10 (PROPOSAL) — learning: one channel, not two (R18, C10).** Keep the existing path `analyzeAndRecordCorrection → improvement_signals → # User Corrections`; add only (a) `traceRecorder.markCorrected(prevTraceId)` when `detectCorrection` hits (so that the eval set sees `corrected`), (b) a persona signal from `finalizeOnce` if persona-effectiveness is retained as a requirement, (c) resolve the `markSurfaced` semantics (UNKNOWN who calls it). `AgentLearning.formatLearningPrompt` and `improvement-wiring.ts`: **remove** (remove the export `index.ts:231`, rephrase PRD §9) unless the founder keeps persona-effectiveness — in that case, wire it through the same signal channel, without a second prompt block.
 
-**ADR-06-O11 (PROPOSAL) — bounded recipe evolution (DIR-14) is a separate scope.** A registry of approved variants for research/document (e.g. the base procedure ± contradiction check ± a permitted retrieval/review variant); candidates change the instructions, the arrangement of approved optional phases, and budgets within the limit. Invariants: scope, egress prohibitions, approvals, budget cap, mandatory gates, contamination boundary, meaning of success. A recipe that wins by skipping a safety check is not a candidate. It is **not** included in S1 W3e; the planner estimates it separately; if it is deferred, show which user outcome/public claim drops out (brief §10.3).
+**ADR-06-O11 (PROPOSAL) — bounded recipe evolution (DIR-14) is a separate scope.** A registry of approved variants for research/document (e.g. the base procedure ± contradiction check ± a permitted retrieval/review variant); candidates change the instructions, the arrangement of approved optional phases, and budgets within the limit. Invariants: scope, egress prohibitions, approvals, budget cap, mandatory gates, contamination boundary, meaning of success. A recipe that wins by skipping a safety check is not a candidate. It is **not** included in S1 W3e; the planner estimates it separately; if it is deferred, show which user outcome/public claim drops out (brief §10.3). Scope recommendation (revision 1.2.1, H-10; PROPOSAL): target scope of the first public release, ODB-02 option A (Delivery plan §6.1); ODB-02 AWAITS A FOUNDER DECISION. Contribution claim: Benchmark BP-MSG-01.
 
 ## §3 — What it replaces and why
 
