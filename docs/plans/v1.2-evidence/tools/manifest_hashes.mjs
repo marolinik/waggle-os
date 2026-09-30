@@ -5,6 +5,7 @@
 //   --write  recompute and replace only the table between the HASHES markers in the manifest and
 //            in its English pair (.en.md, same rows). Run it after every DOCX export or package edit;
 //            neither manifest lists its own hash or the other's (each carries a copy of the table).
+// Text files (.md/.csv/.json/.mjs/...) are hashed after CRLF -> LF, DOCX as raw bytes.
 // A pass proves only that the documents are identical to the manifest; it says nothing about the application.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +41,14 @@ function packageFiles() {
   return [...new Set(files.map((f) => f.replace(/^\.\//, '')))].filter((f) => f !== MANIFEST_REL && f !== MANIFEST_EN_REL).sort();
 }
 
-const sha256 = (rel) => crypto.createHash('sha256').update(fs.readFileSync(path.join(DOCS, rel))).digest('hex');
+// Text files are hashed with CRLF normalized to LF, so the hash does not depend on the clone's
+// core.autocrlf; binary files (DOCX) are hashed as raw bytes.
+const TEXT = /\.(md|csv|json|mjs|js|py|txt)$/i;
+const sha256 = (rel) => {
+  const raw = fs.readFileSync(path.join(DOCS, rel));
+  const bytes = TEXT.test(rel) ? Buffer.from(raw.toString('latin1').replace(/\r\n/g, '\n'), 'latin1') : raw;
+  return crypto.createHash('sha256').update(bytes).digest('hex');
+};
 
 function splitManifest(file = MANIFEST, rel = MANIFEST_REL) {
   const text = fs.readFileSync(file, 'utf8');

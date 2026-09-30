@@ -103,7 +103,7 @@ Roles in the "Who uses it" column: **PM** (founder or decision owner, planning),
 
 **Exports of revision 1.2.1 (30.09.2026):** `Waggle_PRD_v1.2_DRAFT.docx` and `Waggle_FRD_v1.2_DRAFT.docx` (from `docs/`) and `handoff/00-START-HERE.docx` (from `docs/handoff/`) were re-exported with the command above from the current Serbian `.md` text. The `word/document.xml` of the new DOCX files contains no staging paths (`scratchpad/`, `v12-planning-staging/`; the hits for `out/` are the words "timeout/…" from the text itself). With the same command on 30.09.2026, after the EN synchronization and the final review, all six DOCX files were re-exported (Serbian and `*.en.docx` for PRD, FRD and `00-START-HERE`); no `word/document.xml` contains `scratchpad`, `v12-planning-staging`, `AppData` or `MarkoMarkovic`.
 
-**How the table is maintained.** The table between the markers below is written only by the tool: `node docs/plans/v1.2-evidence/tools/manifest_hashes.mjs --write` (from the repo root). Identity check, read-only: the same tool without arguments (exit 0 = all files match; exit 1 = a difference, a missing file, or a package file not in the table). Any change to a package file after generation (including EN synchronization and a DOCX re-export) makes the table stale: export, then `--write`, then check. This manifest and its English pair do not list their own hashes; `--write` writes the same table into both, and the check reports a difference if the tables differ. For import into the tracker ([03 §8.2](../handoff/03-BACKLOG.en.md) item 1) the rows for `handoff/backlog.csv`, `handoff/backlog-gates.csv`, `handoff/03-BACKLOG.md`, `Waggle_PRD_v1.2_DRAFT.md` and `Waggle_FRD_v1.2_DRAFT.md` must match.
+**How the table is maintained.** The table between the markers below is written only by the tool: `node docs/plans/v1.2-evidence/tools/manifest_hashes.mjs --write` (from the repo root). Identity check, read-only: the same tool without arguments (exit 0 = all files match; exit 1 = a difference, a missing file, or a package file not in the table). Any change to a package file after generation (including EN synchronization and a DOCX re-export) makes the table stale: export, then `--write`, then check. Text files (`.md`, `.csv`, `.json`, `.mjs`) are hashed after CRLF → LF normalization and DOCX as raw bytes, so the result does not depend on the clone's `core.autocrlf` (a Windows clone with `autocrlf=true` gives the same result as an LF clone); therefore the hashes in this table are not compared with `sha256sum` of the raw file. This manifest and its English pair do not list their own hashes; `--write` writes the same table into both, and the check reports a difference if the tables differ. For import into the tracker ([03 §8.2](../handoff/03-BACKLOG.en.md) item 1) the rows for `handoff/backlog.csv`, `handoff/backlog-gates.csv`, `handoff/03-BACKLOG.md`, `Waggle_PRD_v1.2_DRAFT.md` and `Waggle_FRD_v1.2_DRAFT.md` must match.
 
 <!-- HASHES:BEGIN -->
 | File | SHA-256 |
@@ -186,18 +186,18 @@ Roles in the "Who uses it" column: **PM** (founder or decision owner, planning),
 | `docs/plans/v1.2-evidence/README.en.md` | `5d0e47186fb29d5447c591734bc89cde2ac8347a95755f431416faae9519b386` |
 | `docs/plans/v1.2-evidence/README.md` | `e56f9a19f203a463bb10b580cc520503e68538e6b67514e99f83cf1f5414b600` |
 | `docs/plans/v1.2-evidence/findings/FINDINGS-DISPOSITION.csv` | `f62bd813ace47d744a5d07f789319cb571450c04c8a6f9e2f76a5052b6d1577a` |
-| `docs/plans/v1.2-evidence/findings/all-critic-findings.json` | `8146d061709e1d718347a9e2b6075311e1f89fbc9ff1d37d760995763aa75fc3` |
-| `docs/plans/v1.2-evidence/findings/all-fixer-reports.json` | `9c5e381f6557bbda2a69e6eedaf316be19237461a60e4bd9db0b8693ad9c187a` |
+| `docs/plans/v1.2-evidence/findings/all-critic-findings.json` | `0a09f5c0f13171f1f61f6d0cbeac755e49d3d8da1a35e3aba679b928231f13e4` |
+| `docs/plans/v1.2-evidence/findings/all-fixer-reports.json` | `e5629d52db25a375c26692837a9d41416e9a8c11004b966c1614344c8e52f8f6` |
 | `docs/plans/v1.2-evidence/inputs/S1-audit-2026-09-27.md` | `b7f03ff7eb35c7fb1c8e069cb32814a961755306e2217255c0e6229abcda8b08` |
 | `docs/plans/v1.2-evidence/inputs/Waggle_FRD_v1.1_2026-09-27.docx` | `1b9fae5596983c2980750e8794dd731478306b440667c4b9403e001b672c8dd0` |
-| `docs/plans/v1.2-evidence/inputs/Waggle_FRD_v1.1_2026-09-27.md` | `fb25539416005fe6a78088dc9cf4f1d882484b68647c88ed1fc52b3468b201cb` |
+| `docs/plans/v1.2-evidence/inputs/Waggle_FRD_v1.1_2026-09-27.md` | `47d38637944c762185c0024be10bbc84210592ec9e8f8085e46f1e0b941f6f2d` |
 | `docs/plans/v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.docx` | `69f8d0cc88fd2953c47118d30bc268f4774b882d88c4e1c0a608b2f9defba969` |
-| `docs/plans/v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.md` | `ccbc3631579453e4a0ec2fe8bae42eb597867a6741c436cd6674c27303da03b2` |
+| `docs/plans/v1.2-evidence/inputs/Waggle_PRD_v1.1_2026-09-27.md` | `cf606d4f7c22263d675d8727ea66c5580ed02524815f72d115a9f046d52bf80b` |
 | `docs/plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.en.md` | `b8683a644a6aba9dd70744758cfe3b5bb72f1c28851c29d1170a625641b1381f` |
 | `docs/plans/v1.2-evidence/inputs/Waggle_Planner_Brief_v1.0_2026-09-27.md` | `2dc0815527bbfc401f1d815722f98f170e450be6415372eefeddeaf8da5056e5` |
 | `docs/plans/v1.2-evidence/phaseA/capability.en.md` | `ed9658f59352382a3d913f7e79b111dbe9549573fa500a71f238e00da8cefddc` |
 | `docs/plans/v1.2-evidence/phaseA/capability.md` | `b00bff7438eaa818a92af9849db0acf04d8cad8ae18e07ed5407f0c9929069d5` |
-| `docs/plans/v1.2-evidence/phaseA/critic-r2-estimates.json` | `3abcf6580e175a62c313b670e21d9e621375a9967e6f58dffc49a1468f78e9b0` |
+| `docs/plans/v1.2-evidence/phaseA/critic-r2-estimates.json` | `ffa39c80ef29b4e92d0ad33830beced77107958f4bf1b1d45a1d44481a5e52f2` |
 | `docs/plans/v1.2-evidence/phaseA/durable.en.md` | `632f96beea083e1f4bf226fa06375b40a1f9dd45ba877acd95db24bc74cc595b` |
 | `docs/plans/v1.2-evidence/phaseA/durable.md` | `f2f817ca55fd8a7c0ba461b559e97524dd5ddddbc83abcd1ff8e6f1ed999f1be` |
 | `docs/plans/v1.2-evidence/phaseA/durable.refute.en.md` | `9d28f1cb0fa6beef7e91542848ef775d3b495c914201fc834d96026074ccdad8` |
@@ -228,7 +228,7 @@ Roles in the "Who uses it" column: **PM** (founder or decision owner, planning),
 | `docs/plans/v1.2-evidence/phaseA/ux-model.md` | `5744145ca6c84a32545745e3ba534411dbb2f583a2a993b1d86ea475c973fca4` |
 | `docs/plans/v1.2-evidence/tools/check_backlog.mjs` | `431d89a920e0898292fad00f059950bf7580b91b6040ecf13213722e1116b8c4` |
 | `docs/plans/v1.2-evidence/tools/check_trace.mjs` | `494cb94731ceb029912a61d155ef30c8313e5ddd1e39ca3b55048a6e19070814` |
-| `docs/plans/v1.2-evidence/tools/manifest_hashes.mjs` | `e2a2d272e739db34393d57cf08219a52571a2fbb37269e2b41770a5077f597f8` |
+| `docs/plans/v1.2-evidence/tools/manifest_hashes.mjs` | `a98e0a8820eeae99b6ef792e1a5474419e9645db647dd9551a233483f4979890` |
 <!-- HASHES:END -->
 
 ---
