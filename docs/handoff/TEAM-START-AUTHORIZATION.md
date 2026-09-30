@@ -195,10 +195,10 @@ Varijanta B, komande (samo osnivač, posle odluke; lokalno čitanje istorije, be
 Tim (read-only provera snapshot-a):
     git bundle verify waggle-v12-<planning_sha8>.bundle
     git clone -b docs/waggle-v1.2-planning waggle-v12-<planning_sha8>.bundle D:\waggle\waggle-read
-    git -C D:\waggle\waggle-read rev-parse HEAD                     # = SHA commita zatvaranja 1.2.1 iz manifesta §1 (posle D-3)
+    git -C D:\waggle\waggle-read merge-base --is-ancestor 1613a81ee8b5a6e66e0b5da5a32c4c185c426814 HEAD   # exit 0: sadrži commit zatvaranja 1.2.1 (manifest §1)
     git -C D:\waggle\waggle-read merge-base --is-ancestor 2af0904df01ca3d374cc78ba95b60dc579dd6a7a HEAD   # exit 0
     git -C D:\waggle\waggle-read diff --name-only 2af0904df01ca3d374cc78ba95b60dc579dd6a7a HEAD   # samo docs/…
-Pre pravljenja bundle-a osnivač proverava da grana pokazuje na SHA commita zatvaranja 1.2.1 iz manifesta §1 (posle D-3), ne na `2758f4e5`. Snapshot nema remote za push i ne zamenjuje Varijantu A za razvoj.
+Pre pravljenja bundle-a osnivač proverava da grana sadrži commit zatvaranja 1.2.1 `1613a81e` iz manifesta §1 (`merge-base --is-ancestor`), ne samo `2758f4e5`. Snapshot nema remote za push i ne zamenjuje Varijantu A za razvoj.
 
 ### TSA-10 — Hijerarhija dokumenata i bezbednosni ciljevi
 

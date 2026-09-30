@@ -14,24 +14,24 @@ Manifest opisuje **dokumente** planskog paketa. Poklapanje heševa dokazuje samo
 |---|---|---|
 | `code_baseline_sha` | `2af0904df01ca3d374cc78ba95b60dc579dd6a7a` | Revizija aplikacionog koda na kojoj važe svi `path:line` i phase-A dokazi; = `origin/main` 30.09.2026. |
 | `planning_package_sha` | `2758f4e5b5be82691ef17624494e12ffc9ad84d1` | Commit planskog paketa (29.09.2026), jedini roditelj `2af0904d`, 59 fajlova, svi u `docs/`. Ovu reviziju je pregledao nezavisni pregled 30.09.2026. Na `origin`-u. |
-| prevodni commit | `fc0a7b3fa9193d2c52bc8dfaacc94110e9e404d3` | Engleski prevod (`*.en.md`, `backlog.en.csv`, EN DOCX, `handoff/README.md`), 49 fajlova, roditelj `2758f4e5`. Lokalni commit, **nije** na `origin`-u. |
-| closure revizija | radno stablo na `fc0a7b3f` + izmene 1.2.1 DRAFT (30.09.2026) | Završno zatvaranje H-01..H-12 ([closure zapis](WAGGLE-V1.2-CLOSURE-RECORD.md)). **Nije commit-ovana**; commit i push traže zasebno odobrenje osnivača. SHA ne postoji; do commita identitet closure revizije su SHA-256 heševi iz §3. Posle odobrenog docs-only commita (closure zapis §4 D-3) njegov SHA se upisuje u ovaj red; to je vrednost koju proveravaju timski klon i bundle (01 §3.2, TSA-09). |
+| prevodni commit | `fc0a7b3fa9193d2c52bc8dfaacc94110e9e404d3` | Engleski prevod (`*.en.md`, `backlog.en.csv`, EN DOCX, `handoff/README.md`), 49 fajlova, roditelj `2758f4e5`. Na `origin`-u od 30.09.2026 (§1.2). |
+| closure revizija | `1613a81ee8b5a6e66e0b5da5a32c4c185c426814` (`1613a81e` = commit zatvaranja; posle njega na istoj grani samo docs/alat commitovi `c016e8de`, `1aad13b0` i commit ovog zapisa) | Završno zatvaranje H-01..H-12 ([closure zapis](WAGGLE-V1.2-CLOSURE-RECORD.md)), docs-only commit iznad `fc0a7b3f`, push-ovan 30.09.2026 odlukom osnivača (D-3, §1.2). Timski klon i bundle (01 §3.2, TSA-09) proveravaju da je `1613a81e` predak HEAD-a (`git merge-base --is-ancestor 1613a81e HEAD`, exit 0) i `manifest_hashes.mjs` bez argumenata (exit 0); HEAD grane se ne poredi direktno sa ovim SHA, jer su posle zatvaranja dodati commitovi alata i ovog zapisa. |
 | `implementation_sha` | — | Budući commit sa kodom v1.2 na `integration/waggle-next`. Ne postoji; nastaje tek posle odobrenja implementacije. Posle INT-01 ([03](../handoff/03-BACKLOG.md), kriterijum (1)) SHA integracione grane upisuje se u §1.1. |
 
-Provera (read-only, 30.09.2026): `git rev-parse HEAD` = `fc0a7b3f`; `git log --oneline -3` = `fc0a7b3f`, `2758f4e5`, `2af0904d`; `git diff --name-only 2af0904d 2758f4e5` = 59 fajlova, `git diff --name-only 2758f4e5 fc0a7b3f` = 49 fajlova, svi u `docs/`; `git status --porcelain` pokazuje izmene i nove fajlove samo u `docs/` (closure revizija, necommitovana).
+Provera (read-only, 30.09.2026): `git rev-parse HEAD` = `fc0a7b3f`; `git log --oneline -3` = `fc0a7b3f`, `2758f4e5`, `2af0904d`; `git diff --name-only 2af0904d 2758f4e5` = 59 fajlova, `git diff --name-only 2758f4e5 fc0a7b3f` = 49 fajlova, svi u `docs/`; `git status --porcelain` pokazuje izmene i nove fajlove samo u `docs/` (closure revizija, tada necommitovana). Dopuna 30.09.2026: closure revizija je commit `1613a81e` (roditelj `fc0a7b3f`); sveži klonovi grane sa `core.autocrlf=true` i `false` prolaze `manifest_hashes.mjs`, `check_trace.mjs` i `check_backlog.mjs` (exit 0).
 
 ### 1.1 Integraciona grana (popunjava INT-01)
 
 | Polje | Vrednost |
 |---|---|
-| `<ODOBRENI_TIMSKI_REMOTE>` | NEPOZNATO — čeka odluku osnivača (H-01; [00 §6](../handoff/00-START-HERE.md) (n)) |
+| `<ODOBRENI_TIMSKI_REMOTE>` | Za predaju 1.2.1: javni `origin` `https://github.com/marolinik/waggle-os.git`, grana `docs/waggle-v1.2-planning`, privremeno (odluka osnivača 30.09.2026, §1.2). Remote posle zatvaranja repoa i za `integration/waggle-next`: NEPOZNATO — čeka odluku osnivača ([00 §6](../handoff/00-START-HERE.md) (n)) |
 | SHA `integration/waggle-next` posle INT-01 | — (INT-01 nije izvršen) |
 
 ### 1.2 Status distribucije i ograničeni secret-scan (H-01)
 
 - Na `origin` (`github.com/marolinik/waggle-os`) grana `docs/waggle-v1.2-planning` pokazuje na `2758f4e5` (`git ls-remote`, 30.09.2026), a `gh api repos/marolinik/waggle-os` vraća `visibility: public`. Planski paket na `2758f4e5` je zato javno čitljiv. Push je izvršio osnivač lično (reflog 30.09.2026 00:04:18 +0200). — POTVRĐENO (stanje servisa 30.09.2026, ne svojstvo revizije).
-- `fc0a7b3f` i closure revizija 1.2.1 nisu na `origin`-u. Lokalna grana prati javni `origin`, pa bi goli `git push` objavio i njih ([closure zapis](WAGGLE-V1.2-CLOSURE-RECORD.md), H-01).
-- Da li je javna dostupnost namerna i kojim kanalom paket stiže do tima odlučuje osnivač. Do te odluke javna grana nije kanal predaje i niko ne push-uje na `origin`. — čeka stvarnu odluku osnivača.
+- `fc0a7b3f` i closure revizija 1.2.1 (`1613a81e`) push-ovani su na javni `origin` 30.09.2026 ([closure zapis](WAGGLE-V1.2-CLOSURE-RECORD.md), H-01).
+- Odluka osnivača 30.09.2026: paket se predaje timu preko javnog `origin`-a (grana `docs/waggle-v1.2-planning`), privremeno, dok tim ne klonira repo; osnivač zatim repo zatvara (privatan). Ta odluka zamenjuje pravilo H-01 „ne push-ovati interno planiranje na javni `origin`” za ovu predaju. Zatvaranje repoa zaustavlja samo novi pristup; postojeći klonovi, forkovi i keš ostaju. Posle zatvaranja niko od tima ne push-uje planske izmene na `origin` bez nove odluke osnivača. — ODLUKA OSNIVAČA (30.09.2026).
 - **Ograničeni secret-scan** (30.09.2026, nad 116 fajlova paketa iz `2af0904d..fc0a7b3f` i novih fajlova 1.2.1, pre dodavanja ovog manifesta i `manifest_hashes.mjs`; tekstualni fajlovi i `word/document.xml` svih 8 DOCX): regex za AWS ključeve (`AKIA…`), `sk-`/`sk-ant-`/`sk-proj-`, GitHub tokene (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`, `github_pat_`), Slack (`xox?-`), privatne ključeve (`-----BEGIN … PRIVATE KEY`), Stripe (`sk_live_`, `rk_live_`, `whsec_`), Google (`AIza…`) i Hugging Face (`hf_…`). Rezultat: **0 stvarnih kredencijala**; 1 pogodak je sintetički fixture `docs/plans/v1.2-evidence/phaseA/repro-gepa-delta.mjs:41` (`'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'`, test redakcije). Ograničenje: provera je obrazac-po-obrazac, nije pun secret scanner i ne pokriva git istoriju van ovih fajlova. Ponavlja se pre svake dalje distribucije (vlasnik: Release/Security, do imenovanja planer).
 
 ---
@@ -140,8 +140,8 @@ Uloge u koloni „Ko ga koristi”: **PM** (osnivač ili vlasnik odluka, planira
 | `docs/handoff/00-START-HERE.en.docx` | `33b1cdb89d55ccf6e17e111261f41c465a54b8cb486137f9a6467ccd48a1e40e` |
 | `docs/handoff/00-START-HERE.en.md` | `d46b7e7de03fca1b464d6c31a40761f36539bf4d078532071c2e810dd94abd9a` |
 | `docs/handoff/00-START-HERE.md` | `e72efa101cc695259c1a75a9b29c0ab57512215eed6a05116ff1a1f3ca921e7c` |
-| `docs/handoff/01-ONBOARDING-DEV-ENV.en.md` | `55cad597f7ca7ebe011c0407caadbd7207611e13dede7a6585f1a579a3daeb09` |
-| `docs/handoff/01-ONBOARDING-DEV-ENV.md` | `e276fc646dc6808ac5e9757a8ddd5bc05a5bd7028d66503a81ceea70c2a1c44a` |
+| `docs/handoff/01-ONBOARDING-DEV-ENV.en.md` | `2e9a95adbf9df5e22fea48c447db4533fd409cd84b508da2a855f965d7590a3f` |
+| `docs/handoff/01-ONBOARDING-DEV-ENV.md` | `dc8d5fd17b021d8e6282172b209b5ce4930201eb45577c6c82c5a4992b34ed26` |
 | `docs/handoff/02-WORKING-AGREEMENT.en.md` | `a27a62d367d390ae8519b4a3238648e487ab67dddc092e39ce474db08afb9e32` |
 | `docs/handoff/02-WORKING-AGREEMENT.md` | `f1e377ca161a381a9677467598c06e6ad72b0eb075df4480e1c6ae3f1bbea0ae` |
 | `docs/handoff/03-BACKLOG.en.md` | `79d1ce77527c834d5094863c3dcf8f467b10094430e212ef9a91042df544f48e` |
@@ -151,8 +151,8 @@ Uloge u koloni „Ko ga koristi”: **PM** (osnivač ili vlasnik odluka, planira
 | `docs/handoff/05-RISKS-DECISIONS-ESCALATION.en.md` | `62208e76fe4a1c4f489ad631370755ca9365fa0a6f1d1f2931abe65da7e07ca5` |
 | `docs/handoff/05-RISKS-DECISIONS-ESCALATION.md` | `5e17951767b2341a12aa8295676d794e1bff30dd8c3d03ba9740cb727a28d6c8` |
 | `docs/handoff/README.md` | `b31d0d433186ce783f741cc39d98dea4dafbd0840256d8571cb68d54d33e35ce` |
-| `docs/handoff/TEAM-START-AUTHORIZATION.en.md` | `1e0e587e89755e69f7a53e399b3dcb9be52e8471d8d29efd7f2e9c1c943fa4d6` |
-| `docs/handoff/TEAM-START-AUTHORIZATION.md` | `6c99a143af46baa48e5922cef8358cae3cf0d89ae3d5a4669b0016c1624b4a73` |
+| `docs/handoff/TEAM-START-AUTHORIZATION.en.md` | `f25f32cdc45e91032509554559b6a6ef5e0f51f9dae2013089a916763ecbb18b` |
+| `docs/handoff/TEAM-START-AUTHORIZATION.md` | `a86c27d1300f9863462f6b694e67e78edcfa5a5091149a95f2120eb1ef4d2fe2` |
 | `docs/handoff/backlog-gates.csv` | `649b4e23a20407ddad6a6bdde3cac51869983cbf2cf6ce18ce932a9794150cdb` |
 | `docs/handoff/backlog-gates.en.csv` | `b11e22c8dcfa4cbb48b909c80957ecc42f0e8e3a3f63cf157a4512af24bace53` |
 | `docs/handoff/backlog.csv` | `0ee2ac9d330b70eb09e250715ce7ce41ca2325036fa1dcd827ddcd9069072c27` |
@@ -173,8 +173,8 @@ Uloge u koloni „Ko ga koristi”: **PM** (osnivač ili vlasnik odluka, planira
 | `docs/plans/WAGGLE-DELIVERY-PLAN-v1.2.md` | `b9c2336e5d780f5322edcb488059bb857723b20f9f98bb3cc77179e0659b1af6` |
 | `docs/plans/WAGGLE-MIGRATIONS-v1.2.en.md` | `f05ed70ed939dbebca8343c5bcf2e5a89cdfaebc93d2505c5b4579a0478d72eb` |
 | `docs/plans/WAGGLE-MIGRATIONS-v1.2.md` | `fa02fe2fcb147fc8903596f13ee51c670099fae6c6280f36af02a353e03621d4` |
-| `docs/plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md` | `720b8ca2c70506f1c8339c77fdc2b51f1a5582d54cba9d716024f3208d040c6e` |
-| `docs/plans/WAGGLE-V1.2-CLOSURE-RECORD.md` | `9f1335a00bedabf537464e57d7c044bf7df6d5d51296fadf584b908ace12b1df` |
+| `docs/plans/WAGGLE-V1.2-CLOSURE-RECORD.en.md` | `c1ed96dad3e24226c52c55af5027949bb4a2f6765e9580499a95c44ca1d32e20` |
+| `docs/plans/WAGGLE-V1.2-CLOSURE-RECORD.md` | `aa76e08a957540201fc9f1761e4c2b51d56545f736ae8c36ed60e32eb7627cbd` |
 | `docs/plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.en.md` | `98b074aa67d3334dd06173c1506d3a3fc5b0b347857bd6b827ee5b4937771b0f` |
 | `docs/plans/WAGGLE-V1.2-OPEN-LOW-FINDINGS.md` | `d784ed6566927c2563b60a5f0a2985268361b494b79dab3db4141f36fd0f6ae3` |
 | `docs/plans/WAGGLE-V1.2-SAZETAK-ZA-OSNIVACA.en.md` | `33e6fcc8ec7f5a2a96018025d9c471eb5bf2d2c9e09cee052565fcc245f8819c` |

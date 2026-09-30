@@ -197,10 +197,10 @@ Variant B, commands (founder only, after the decision; local reading of history,
 Team (read-only check of the snapshot):
     git bundle verify waggle-v12-<planning_sha8>.bundle
     git clone -b docs/waggle-v1.2-planning waggle-v12-<planning_sha8>.bundle D:\waggle\waggle-read
-    git -C D:\waggle\waggle-read rev-parse HEAD                     # = SHA of the 1.2.1 closure commit from manifest §1 (after D-3)
+    git -C D:\waggle\waggle-read merge-base --is-ancestor 1613a81ee8b5a6e66e0b5da5a32c4c185c426814 HEAD   # exit 0: contains the 1.2.1 closure commit (manifest §1)
     git -C D:\waggle\waggle-read merge-base --is-ancestor 2af0904df01ca3d374cc78ba95b60dc579dd6a7a HEAD   # exit 0
     git -C D:\waggle\waggle-read diff --name-only 2af0904df01ca3d374cc78ba95b60dc579dd6a7a HEAD   # only docs/…
-Before creating the bundle, the founder checks that the branch points to the SHA of the 1.2.1 closure commit from manifest §1 (after D-3), not to `2758f4e5`. The snapshot has no remote to push to and does not replace Variant A for development.
+Before creating the bundle, the founder checks that the branch contains the 1.2.1 closure commit `1613a81e` from manifest §1 (`merge-base --is-ancestor`), not only `2758f4e5`. The snapshot has no remote to push to and does not replace Variant A for development.
 
 ### TSA-10 — Document hierarchy and security objectives
 

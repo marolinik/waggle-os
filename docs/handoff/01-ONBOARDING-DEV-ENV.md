@@ -183,7 +183,7 @@ Putanje ispod su PREDLOG.
 git clone <ODOBRENI_TIMSKI_REMOTE> D:\waggle\waggle-os
 git -C D:\waggle\waggle-os remote -v                     # jedini remote; fetch i push = <ODOBRENI_TIMSKI_REMOTE>
 git -C D:\waggle\waggle-os rev-parse origin/main         # = 2af0904df01ca3d374cc78ba95b60dc579dd6a7a (ili baseline koji osnivač zapiše)
-git -C D:\waggle\waggle-os rev-parse origin/docs/waggle-v1.2-planning   # = SHA commita zatvaranja 1.2.1 iz manifesta §1 (posle D-3), NE planning_package_sha 2758f4e5 (bez korekcija H-01..H-12)
+git -C D:\waggle\waggle-os merge-base --is-ancestor 1613a81ee8b5a6e66e0b5da5a32c4c185c426814 origin/docs/waggle-v1.2-planning   # exit 0: grana sadrži commit zatvaranja 1.2.1 (manifest §1), ne samo planning_package_sha 2758f4e5
 
 git -C D:\waggle\waggle-os worktree add -b integration/waggle-next D:\waggle\wt\integration 2af0904df01ca3d374cc78ba95b60dc579dd6a7a
 
