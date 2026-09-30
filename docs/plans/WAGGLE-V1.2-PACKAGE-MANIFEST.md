@@ -224,7 +224,7 @@ Uloge u koloni „Ko ga koristi”: **PM** (osnivač ili vlasnik odluka, planira
 | `docs/plans/v1.2-evidence/phaseA/tiers-kvark.md` | `89b3c0008c67f3ec0a9261bbbbb7ee40b18845a40984404e92538009c74cdec6` |
 | `docs/plans/v1.2-evidence/phaseA/ux-model.en.md` | `c7c432248f58fdac3fef7336b5cfc43ea4cb1230c6c63188b8e16f15150aa011` |
 | `docs/plans/v1.2-evidence/phaseA/ux-model.md` | `5744145ca6c84a32545745e3ba534411dbb2f583a2a993b1d86ea475c973fca4` |
-| `docs/plans/v1.2-evidence/tools/check_backlog.mjs` | `431d89a920e0898292fad00f059950bf7580b91b6040ecf13213722e1116b8c4` |
+| `docs/plans/v1.2-evidence/tools/check_backlog.mjs` | `43c67b14aee871e8d812ad45e09cc534abfd7fc8ce9040652c897382a97c68bd` |
 | `docs/plans/v1.2-evidence/tools/check_trace.mjs` | `494cb94731ceb029912a61d155ef30c8313e5ddd1e39ca3b55048a6e19070814` |
 | `docs/plans/v1.2-evidence/tools/manifest_hashes.mjs` | `a98e0a8820eeae99b6ef792e1a5474419e9645db647dd9551a233483f4979890` |
 <!-- HASHES:END -->

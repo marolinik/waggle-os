@@ -35,7 +35,8 @@ const info = (msg) => console.log(`INFO ${msg}`);
 function readText(file) {
   const buf = fs.readFileSync(path.join(DIR, file));
   if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) fail(`${file}: UTF-8 BOM`);
-  const text = buf.toString('utf8');
+  // CRLF comes from the clone's core.autocrlf (git stores LF), so normalize it; a lone CR is still an error.
+  const text = buf.toString('utf8').replace(/\r\n/g, '\n');
   if (text.includes('\r')) fail(`${file}: CR znak (očekuje se LF)`);
   if (!text.endsWith('\n')) fail(`${file}: nema završnog LF`);
   return text;
