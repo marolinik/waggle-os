@@ -52,8 +52,8 @@
     "@waggle/core": "*",
     "@waggle/agent": "*",
     "@waggle/weaver": "*",
-    "@anthropic-ai/sdk": "^0.128.0",
-    "chalk": "^6.0.0"
+    "@anthropic-ai/sdk": "^0.129.0",
+    "chalk": "^6.0.1"
   },
   "devDependencies": {
     "tsx": "^4.23.15",
