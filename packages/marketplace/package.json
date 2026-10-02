@@ -24,7 +24,7 @@
     "clean": "rm -rf dist/"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2"
+    "better-sqlite3": "^13.0.3"
   },
   "optionalDependencies": {
     "adm-zip": "^0.6.1",
