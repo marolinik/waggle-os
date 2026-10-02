@@ -42,7 +42,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "adm-zip": "^0.6.1",
     "archiver": "^7.0.1",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^13.0.3",
     "bullmq": "^5.0.0",
     "cron-parser": "^4.9.0",
     "docx": "^9.7.2",
