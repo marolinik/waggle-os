@@ -17,10 +17,10 @@
     "start:local": "tsx src/local/start.ts"
   },
   "dependencies": {
-    "@ax-llm/ax": "^24.0.20",
-    "@clerk/fastify": "^3.1.80",
+    "@ax-llm/ax": "^24.0.24",
+    "@clerk/fastify": "^3.1.83",
     "@fastify/cors": "^10.0.0",
-    "@fastify/static": "^10.1.4",
+    "@fastify/static": "^10.1.5",
     "@fastify/websocket": "^11.3.1",
     "@waggle/agent": "*",
     "@waggle/core": "*",
@@ -39,7 +39,7 @@
     "fastify": "^5.12.5",
     "fastify-plugin": "^6.0.0",
     "ioredis": "^6.0.0",
-    "mammoth": "^1.12.3",
+    "mammoth": "^1.13.0",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.0",
     "stripe": "^22.6.2",
@@ -48,7 +48,7 @@
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11"
   }
 }
