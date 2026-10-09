@@ -165,7 +165,7 @@ jobs:
 
       - name: Upload immutable Windows signing handoff
         id: upload-prebuilt
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-windows-prebuilt-${{ github.sha }}
           path: ${{ runner.temp }}\waggle-windows-signing-handoff
@@ -925,7 +925,7 @@ jobs:
 
       - name: Upload immutable prepared Windows signing handoff
         id: upload-prepared
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-windows-signing-prepared-${{ github.sha }}
           path: ${{ runner.temp }}\waggle-windows-signing-preparation
@@ -1537,7 +1537,7 @@ jobs:
 
       - name: Upload immutable signed Windows handoff
         id: upload-signed
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-windows-signed-${{ github.sha }}
           path: ${{ runner.temp }}\waggle-windows-signed
@@ -2045,7 +2045,7 @@ jobs:
 
       - name: Upload sealed Windows release outputs
         id: upload-sealed
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-windows-sealed-${{ github.sha }}
           path: ${{ runner.temp }}\waggle-windows-sealed
@@ -2536,7 +2536,7 @@ jobs:
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload macOS DMG verification artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-macos-dmg-verification-${{ matrix.target }}-${{ github.sha }}
           path: app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
@@ -2544,7 +2544,7 @@ jobs:
           retention-days: 7
 
       - name: Upload macOS app verification artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-macos-app-verification-${{ matrix.target }}-${{ github.sha }}
           path: app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
