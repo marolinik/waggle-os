@@ -202,7 +202,7 @@ jobs:
           & ./scripts/certify-windows-installer.ps1 -InstallerPath $installer.FullName -ExpectedSourceRevision $env:GITHUB_SHA
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-windows-${{ github.sha }}
           path: |
@@ -291,7 +291,7 @@ jobs:
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: waggle-macos-${{ matrix.target }}-${{ github.sha }}
           path: ${{ matrix.artifact_path }}
