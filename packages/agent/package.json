@@ -36,11 +36,11 @@
     "@waggle/core": "*",
     "@waggle/marketplace": "*",
     "@waggle/shared": "*",
-    "docx": "^9.7.2",
+    "docx": "^9.13.0",
     "exceljs": "^4.4.0",
     "glob": "^13.0.6",
     "jszip": "^3.10.1",
-    "pdfmake": "^0.3.11",
+    "pdfmake": "^0.3.12",
     "undici": "^8.11.2"
   },
   "license": "MIT",

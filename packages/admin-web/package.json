@@ -10,8 +10,8 @@
     "test:rendered": "npm run build && node ../../node_modules/playwright/cli.js test -c playwright.config.ts --project=chromium --reporter=list"
   },
   "dependencies": {
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
